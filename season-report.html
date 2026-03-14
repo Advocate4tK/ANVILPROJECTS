@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Season Report</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .report-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 15px; }
+        .report-table th {
+            background: #0f3460;
+            color: white;
+            padding: 10px 14px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .report-table td { padding: 9px 14px; border-bottom: 1px solid #e0e0e0; }
+        .report-table tr:nth-child(even) { background: #f5f5f5; }
+        .report-table tr:hover { background: #eaf0fb; }
+        .rank-badge {
+            display: inline-block;
+            width: 26px; height: 26px;
+            border-radius: 50%;
+            background: #0f3460;
+            color: white;
+            font-weight: 700;
+            font-size: 12px;
+            line-height: 26px;
+            text-align: center;
+        }
+        .rank-1 { background: #f1c40f; color: #333; }
+        .rank-2 { background: #aab7c4; }
+        .rank-3 { background: #cd7f32; }
+        .stat-pill {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .progress-bar-wrap { background: #ecf0f1; border-radius: 8px; height: 18px; margin-top: 15px; overflow: hidden; display: none; }
+        .progress-bar { height: 100%; background: #27ae60; width: 0%; transition: width 0.3s; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Season Report</h1>
+            <p class="subtitle">Games worked per referee by season</p>
+        </header>
+
+        <main>
+            <div class="form-container">
+                <fieldset>
+                    <legend>Select Season</legend>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="seasonType">Season</label>
+                            <select id="seasonType">
+                                <option value="spring">🌱 Spring (Mar 1 – Jun 30)</option>
+                                <option value="fall">🍂 Fall (Aug 15 – Nov 30)</option>
+                                <option value="summer">☀️ Summer (Jul 1 – Aug 14)</option>
+                                <option value="custom">📅 Custom Range</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="seasonYear">Year</label>
+                            <select id="seasonYear"></select>
+                        </div>
+                    </div>
+
+                    <!-- Custom date range (hidden by default) -->
+                    <div id="customRangeRow" class="form-row" style="display:none;">
+                        <div class="form-group">
+                            <label for="customFrom">From</label>
+                            <input type="date" id="customFrom">
+                        </div>
+                        <div class="form-group">
+                            <label for="customTo">To</label>
+                            <input type="date" id="customTo">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <button class="btn btn-primary" id="runBtn">Generate Report</button>
+                    </div>
+                </fieldset>
+
+                <div class="progress-bar-wrap" id="progressWrap">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <p id="progressText" style="display:none; text-align:center; font-size:14px; color:#555; margin-top:8px;"></p>
+
+                <!-- Results -->
+                <div id="reportSection" style="display:none;">
+                    <div id="reportHeader" style="margin: 20px 0 5px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <h3 id="reportTitle" style="margin:0; color:#0f3460;"></h3>
+                        <button class="btn btn-outline" id="downloadBtn" style="padding:6px 14px; font-size:13px;">⬇ Download CSV</button>
+                    </div>
+                    <div id="summaryRow" style="display:flex; gap:15px; flex-wrap:wrap; margin-bottom:15px;"></div>
+                    <div style="overflow-x:auto;">
+                        <table class="report-table" id="reportTable"></table>
+                    </div>
+                </div>
+
+                <div id="noDataMsg" style="display:none;" class="form-message warning">
+                    No assigned games found for this season.
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Referee Scheduling System by Anvil Arts</p>
+        </footer>
+    </div>
+
+    <script src="js/admin-auth.js"></script>
+    <script>checkAdminAccess();</script>
+    <script src="config.js"></script>
+    <script src="js/airtable-client.js"></script>
+    <script>
+        // ── Year selector ──────────────────────────────────────────────────────
+        const yearSelect = document.getElementById('seasonYear');
+        const currentYear = new Date().getFullYear();
+        for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            if (y === currentYear) opt.selected = true;
+            yearSelect.appendChild(opt);
+        }
+
+        // ── Show/hide custom range ─────────────────────────────────────────────
+        document.getElementById('seasonType').addEventListener('change', function() {
+            document.getElementById('customRangeRow').style.display =
+                this.value === 'custom' ? '' : 'none';
+            document.getElementById('seasonYear').style.display =
+                this.value === 'custom' ? 'none' : '';
+        });
+
+        // ── Date range helper ──────────────────────────────────────────────────
+        function getDateRange() {
+            const type = document.getElementById('seasonType').value;
+            const year = parseInt(document.getElementById('seasonYear').value);
+            if (type === 'custom') {
+                return {
+                    from:  document.getElementById('customFrom').value,
+                    to:    document.getElementById('customTo').value,
+                    label: 'Custom Range'
+                };
+            }
+            const ranges = {
+                spring: { from: `${year}-03-01`, to: `${year}-06-30`, label: `Spring ${year}` },
+                fall:   { from: `${year}-08-15`, to: `${year}-11-30`, label: `Fall ${year}` },
+                summer: { from: `${year}-07-01`, to: `${year}-08-14`, label: `Summer ${year}` }
+            };
+            return ranges[type];
+        }
+
+        // ── Generate report ────────────────────────────────────────────────────
+        let reportData = [];
+
+        document.getElementById('runBtn').addEventListener('click', async () => {
+            if (!airtableClient) { alert('Airtable not connected.'); return; }
+
+            const range = getDateRange();
+            if (!range.from || !range.to) { alert('Please select a date range.'); return; }
+
+            const runBtn = document.getElementById('runBtn');
+            runBtn.disabled = true;
+            document.getElementById('reportSection').style.display = 'none';
+            document.getElementById('noDataMsg').style.display = 'none';
+            document.getElementById('progressWrap').style.display = 'block';
+            document.getElementById('progressBar').style.width = '30%';
+            document.getElementById('progressText').style.display = 'block';
+            document.getElementById('progressText').textContent = 'Loading games...';
+
+            try {
+                const filter = `AND(IS_AFTER({Date}, '${range.from}'), IS_BEFORE({Date}, '${range.to}'), NOT({Center Ref} = ''))`;
+                const [games, referees] = await Promise.all([
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, {
+                        filterByFormula: filter,
+                        maxRecords: 2000
+                    }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 })
+                ]);
+
+                document.getElementById('progressBar').style.width = '80%';
+                document.getElementById('progressText').textContent = 'Counting games...';
+
+                // Build referee ID → name lookup
+                const refLookup = {};
+                referees.forEach(r => {
+                    const name = r.fields['Name'] ||
+                        ((r.fields['First Name'] || '') + ' ' + (r.fields['Last Name'] || '')).trim();
+                    refLookup[r.id] = name || 'Unknown';
+                });
+
+                // Count games per referee
+                const counts = {};
+                games.forEach(rec => {
+                    const centerRef = rec.fields['Center Ref'];
+                    if (!centerRef) return;
+                    const ids = Array.isArray(centerRef) ? centerRef : [centerRef];
+                    ids.forEach(id => {
+                        const name = refLookup[id] || id;
+                        counts[name] = (counts[name] || 0) + 1;
+                    });
+                });
+
+                reportData = Object.entries(counts)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([name, total], i) => ({ rank: i + 1, name, total }));
+
+                document.getElementById('progressBar').style.width = '100%';
+
+                if (reportData.length === 0) {
+                    document.getElementById('noDataMsg').style.display = 'block';
+                } else {
+                    renderReport(range.label, games.length, reportData);
+                    document.getElementById('reportSection').style.display = 'block';
+                }
+
+            } catch (err) {
+                alert('Failed to load report: ' + err.message);
+            } finally {
+                runBtn.disabled = false;
+                document.getElementById('progressWrap').style.display = 'none';
+                document.getElementById('progressText').style.display = 'none';
+                document.getElementById('progressBar').style.width = '0%';
+            }
+        });
+
+        // ── Render ─────────────────────────────────────────────────────────────
+        function renderReport(label, totalGames, rows) {
+            document.getElementById('reportTitle').textContent = `${label} — Referee Game Counts`;
+
+            const summaryRow = document.getElementById('summaryRow');
+            summaryRow.innerHTML = `
+                <div style="background:#f0f2f5; border-radius:8px; padding:12px 20px; text-align:center; min-width:130px;">
+                    <div style="font-size:1.8rem; font-weight:700; color:#0f3460;">${totalGames}</div>
+                    <div style="font-size:0.8rem; color:#555;">Assigned Games</div>
+                </div>
+                <div style="background:#f0f2f5; border-radius:8px; padding:12px 20px; text-align:center; min-width:130px;">
+                    <div style="font-size:1.8rem; font-weight:700; color:#0f3460;">${rows.length}</div>
+                    <div style="font-size:0.8rem; color:#555;">Referees Used</div>
+                </div>
+                <div style="background:#f0f2f5; border-radius:8px; padding:12px 20px; text-align:center; min-width:130px;">
+                    <div style="font-size:1.8rem; font-weight:700; color:#0f3460;">${rows[0]?.total || 0}</div>
+                    <div style="font-size:0.8rem; color:#555;">Most Games (1 ref)</div>
+                </div>`;
+
+            let html = `<thead><tr>
+                <th>Rank</th>
+                <th>Referee</th>
+                <th>Games Worked</th>
+                <th>Share</th>
+            </tr></thead><tbody>`;
+
+            rows.forEach(({ rank, name, total }) => {
+                const pct = ((total / totalGames) * 100).toFixed(1);
+                const badgeClass = rank <= 3 ? `rank-${rank}` : '';
+                const barWidth = Math.round((total / rows[0].total) * 100);
+                html += `<tr>
+                    <td><span class="rank-badge ${badgeClass}">${rank}</span></td>
+                    <td style="font-weight:600;">${name}</td>
+                    <td>
+                        <span class="stat-pill" style="background:#e8f4fd; color:#0f3460;">${total}</span>
+                        <div style="background:#e0e0e0; border-radius:4px; height:6px; margin-top:5px; width:120px;">
+                            <div style="background:#e94560; height:6px; border-radius:4px; width:${barWidth}%;"></div>
+                        </div>
+                    </td>
+                    <td style="color:#888; font-size:13px;">${pct}%</td>
+                </tr>`;
+            });
+
+            html += '</tbody>';
+            document.getElementById('reportTable').innerHTML = html;
+        }
+
+        // ── Download CSV ───────────────────────────────────────────────────────
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (!reportData.length) return;
+            const label = document.getElementById('reportTitle').textContent.replace(' — Referee Game Counts', '');
+            let csv = 'Rank,Referee,Games Worked\n';
+            reportData.forEach(({ rank, name, total }) => {
+                csv += `${rank},"${name}",${total}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `season-report-${label.replace(/\s+/g, '-').toLowerCase()}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>
