@@ -176,7 +176,7 @@
             document.getElementById('progressText').textContent = 'Loading games...';
 
             try {
-                const filter = `AND(IS_AFTER({Date}, '${range.from}'), IS_BEFORE({Date}, '${range.to}'), NOT({Center Ref} = ''))`;
+                const filter = `AND(IS_AFTER({Date}, '${range.from}'), IS_BEFORE({Date}, '${range.to}'))`;
                 const [games, referees] = await Promise.all([
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, {
                         filterByFormula: filter,
@@ -196,10 +196,11 @@
                     refLookup[r.id] = name || 'Unknown';
                 });
 
-                // Count games per referee
+                // Count games per referee — try common field name variants
                 const counts = {};
                 games.forEach(rec => {
-                    const centerRef = rec.fields['Center Ref'];
+                    const f = rec.fields;
+                    const centerRef = f['Center Ref'] || f['Referee'] || f['Center Referee'] || f['Assigned Referee'] || f['Ref'];
                     if (!centerRef) return;
                     const ids = Array.isArray(centerRef) ? centerRef : [centerRef];
                     ids.forEach(id => {
