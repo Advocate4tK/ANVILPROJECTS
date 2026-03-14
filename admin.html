@@ -42,6 +42,14 @@
                     </div>
 
                     <div class="card">
+                        <div class="card-icon">📈</div>
+                        <h2>System Stats</h2>
+                        <div id="statsContent" style="font-size:0.9rem; text-align:left;">
+                            <p style="color:#555;">Loading...</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
                         <div class="card-icon">📊</div>
                         <h2>Assignor Workstation</h2>
                         <p>View and manage all referees, games, and assignments</p>
@@ -63,6 +71,79 @@
         </footer>
     </div>
 
+    <script src="config.js"></script>
+    <script src="js/airtable-client.js"></script>
     <script src="js/admin-auth.js"></script>
+    <script>
+        async function loadStats() {
+            if (!airtableClient) return;
+            const statsEl = document.getElementById('statsContent');
+            if (!statsEl) return;
+
+            try {
+                // Get all games
+                const allGames = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 1000 });
+                const totalGames = allGames.length;
+
+                // Get this week's date range
+                const now = new Date();
+                const startOfWeek = new Date(now);
+                startOfWeek.setDate(now.getDate() - now.getDay());
+                startOfWeek.setHours(0,0,0,0);
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(startOfWeek.getDate() + 6);
+                endOfWeek.setHours(23,59,59,999);
+
+                // Find unassigned games this week grouped by club
+                const unassignedByClub = {};
+                allGames.forEach(rec => {
+                    const f = rec.fields;
+                    const gameDate = new Date(f['Date']);
+                    if (gameDate >= startOfWeek && gameDate <= endOfWeek) {
+                        if (!f['Center Ref'] || f['Center Ref'] === '' || (Array.isArray(f['Center Ref']) && f['Center Ref'].length === 0)) {
+                            const club = f['Club'] || 'Unknown Club';
+                            const clubName = Array.isArray(club) ? club.join(', ') : club;
+                            unassignedByClub[clubName] = (unassignedByClub[clubName] || 0) + 1;
+                        }
+                    }
+                });
+
+                const totalUnassigned = Object.values(unassignedByClub).reduce((a, b) => a + b, 0);
+
+                let html = `<p style="margin-bottom:8px;"><strong>Total Games in System:</strong> ${totalGames}</p>`;
+                html += `<p style="margin-bottom:8px;"><strong>Unassigned This Week:</strong> ${totalUnassigned}</p>`;
+
+                if (Object.keys(unassignedByClub).length > 0) {
+                    html += `<hr style="margin:8px 0; border-color:#eee;">`;
+                    html += `<p style="margin-bottom:6px; font-weight:600;">By Club:</p>`;
+                    Object.entries(unassignedByClub).sort().forEach(([club, count]) => {
+                        html += `<p style="margin-bottom:4px; color:#e94560;">⚠ ${club}: ${count} unassigned</p>`;
+                    });
+                } else {
+                    html += `<p style="color:#27ae60;">✅ All games this week are assigned!</p>`;
+                }
+
+                statsEl.innerHTML = html;
+            } catch (err) {
+                document.getElementById('statsContent').innerHTML = '<p style="color:#e74c3c;">Could not load stats.</p>';
+            }
+        }
+
+        // Load stats when dashboard becomes visible
+        const observer = new MutationObserver(() => {
+            if (document.getElementById('adminDashboard').style.display !== 'none') {
+                loadStats();
+                observer.disconnect();
+            }
+        });
+        observer.observe(document.getElementById('adminDashboard'), { attributes: true, attributeFilter: ['style'] });
+
+        // Also load if already logged in on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            if (document.getElementById('adminDashboard') && document.getElementById('adminDashboard').style.display !== 'none') {
+                loadStats();
+            }
+        });
+    </script>
 </body>
 </html>
