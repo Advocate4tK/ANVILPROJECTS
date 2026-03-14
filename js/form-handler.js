@@ -73,8 +73,8 @@ document.addEventListener('DOMContentLoaded', function() {
             'Years Reffing': parseInt(document.getElementById('yearsReffing').value) || 0,
             'Certification Level': document.getElementById('certificationLevel').value,
             'Date': dayRow.querySelector('input[name="availableDate[]"]').value,
-            'Start Time': dayRow.querySelector('input[name="startTime[]"]').value,
-            'End Time': dayRow.querySelector('input[name="endTime[]"]').value,
+            'Start Time': dayRow.querySelector('[name="startTime[]"]').value,
+            'End Time': dayRow.querySelector('[name="endTime[]"]').value,
             'Max Games': parseInt(dayRow.querySelector('input[name="maxGames[]"]').value) || 1,
             'Preferred Locations': getCheckboxValues('locations'),
             'AR Only': document.getElementById('arOnly').value,
@@ -120,8 +120,8 @@ document.addEventListener('DOMContentLoaded', function() {
         for (let i = 0; i < dayRows.length; i++) {
             const row = dayRows[i];
             const date = row.querySelector('input[name="availableDate[]"]').value;
-            const startTime = row.querySelector('input[name="startTime[]"]').value;
-            const endTime = row.querySelector('input[name="endTime[]"]').value;
+            const startTime = row.querySelector('[name="startTime[]"]').value;
+            const endTime = row.querySelector('[name="endTime[]"]').value;
             const dayNum = i + 1;
 
             if (!date) {
