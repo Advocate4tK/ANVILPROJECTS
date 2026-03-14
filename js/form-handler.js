@@ -32,8 +32,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
         try {
             const dayRows = document.querySelectorAll('.day-row');
-            const submissions = [];
 
+            // Upsert referee record (create if new, update if existing)
+            const firstName = document.getElementById('refereeFirstName').value.trim();
+            const lastName  = document.getElementById('refereeLastName').value.trim();
+            const refereeRecord = {
+                'First Name':          firstName,
+                'Last Name':           lastName,
+                'Name':                `${firstName} ${lastName}`,
+                'Email':               document.getElementById('refereeEmail').value.trim(),
+                'Phone':               document.getElementById('refereePhone').value.trim(),
+                'Years Reffing':       parseInt(document.getElementById('yearsReffing').value) || 0,
+                'Certification Level': document.getElementById('certificationLevel').value,
+                'AR Only':             document.getElementById('arOnly').value,
+                'Preferred Locations': getCheckboxValues('locations'),
+                'Age Groups Preferred':getCheckboxValues('ageGroups'),
+                'Status':              'Active',
+                'Last Submission':     new Date().toISOString().split('T')[0]
+            };
+            await airtableClient.upsertReferee(refereeRecord);
+
+            // Create one availability record per day
+            const submissions = [];
             dayRows.forEach(row => {
                 const formData = collectFormData(row);
                 submissions.push(airtableClient.createAvailability(formData));

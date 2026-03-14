@@ -216,6 +216,26 @@ class AirtableClient {
     }
 
     /**
+     * Upsert a referee — create if new, update if existing (matched by email)
+     *
+     * @param {object} refereeData - Referee fields
+     * @returns {Promise<object>} - Created or updated record
+     */
+    async upsertReferee(refereeData) {
+        try {
+            const existing = await this.findRefereeByEmail(refereeData['Email']);
+            if (existing) {
+                return await this.updateRecord(this.tables.REFEREES, existing.id, refereeData);
+            } else {
+                return await this.createRecord(this.tables.REFEREES, refereeData);
+            }
+        } catch (error) {
+            console.error('Error upserting referee:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Create an availability record
      *
      * @param {object} availabilityData - Availability form data
