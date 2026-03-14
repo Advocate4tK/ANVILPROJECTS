@@ -47,12 +47,16 @@ Soccer clubs and organizations that host games.
 | **Referees** | Link to Referees | No | Multiple | Referees working for this club |
 | **Fields** | Link to Fields | No | Multiple | Fields owned/managed by club |
 | **Games** | Link to Games | No | Multiple | Games hosted by this club |
+| **Payment Method** | Single select | No | Cash on Site, Check, Venmo, Zelle, Other | How the club pays referees |
+| **Payment Notes** | Long text | No | - | Venmo handle, who to make check out to, etc. |
 | **Notes** | Long text | No | - | Additional club information |
 
 ### Usage Notes:
 - **Assignor** information helps route communications
 - **Region** is useful for geographic filtering
 - Add/modify regions to match your area
+- **Payment Method** tracks how each club pays referees
+- **Payment Notes** captures details like Venmo handles or check payee name
 
 ---
 
