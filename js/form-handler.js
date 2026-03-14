@@ -1,7 +1,5 @@
 /**
  * Form Handler for Referee Availability Form
- *
- * Handles form submission and validation
  */
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -14,45 +12,37 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
-    // Check if Airtable client is available
     if (!airtableClient) {
         showMessage('error', 'Configuration error: Airtable client not initialized. Please check config.js');
         submitBtn.disabled = true;
         return;
     }
 
-    // Set minimum date to today
-    const dateInput = document.getElementById('availableDate');
-    if (dateInput) {
-        const today = new Date().toISOString().split('T')[0];
-        dateInput.setAttribute('min', today);
-    }
-
     // Form submission handler
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
 
-        // Validate form
         if (!validateForm()) {
             return;
         }
 
-        // Disable submit button and show loading
         submitBtn.disabled = true;
         const originalText = submitBtn.textContent;
         submitBtn.innerHTML = 'Submitting... <span class="spinner"></span>';
 
         try {
-            // Collect form data
-            const formData = collectFormData();
+            const dayRows = document.querySelectorAll('.day-row');
+            const submissions = [];
 
-            // Submit to Airtable
-            const result = await airtableClient.createAvailability(formData);
+            dayRows.forEach(row => {
+                const formData = collectFormData(row);
+                submissions.push(airtableClient.createAvailability(formData));
+            });
 
-            // Show success message
+            await Promise.all(submissions);
+
             showMessage('success', 'Thank you! Your availability has been submitted successfully. We will contact you soon.');
 
-            // Reset form after short delay
             setTimeout(() => {
                 form.reset();
                 hideMessage();
@@ -62,48 +52,40 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Submission error:', error);
             showMessage('error', `Failed to submit form: ${error.message}. Please try again or contact your assignor.`);
         } finally {
-            // Re-enable submit button
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
         }
     });
 
     /**
-     * Collect all form data
+     * Collect form data for a given day row
      */
-    function collectFormData() {
+    function collectFormData(dayRow) {
+        const firstName = document.getElementById('refereeFirstName').value.trim();
+        const lastName = document.getElementById('refereeLastName').value.trim();
+
         const formData = {
-            // Personal Information
-            'Referee Name': document.getElementById('refereeName').value.trim(),
+            'Referee Name': `${firstName} ${lastName}`,
+            'First Name': firstName,
+            'Last Name': lastName,
             'Referee Email': document.getElementById('refereeEmail').value.trim(),
             'Referee Phone': document.getElementById('refereePhone').value.trim(),
+            'Years Reffing': parseInt(document.getElementById('yearsReffing').value) || 0,
             'Certification Level': document.getElementById('certificationLevel').value,
-
-            // Availability
-            'Date': document.getElementById('availableDate').value,
-            'Start Time': document.getElementById('startTime').value,
-            'End Time': document.getElementById('endTime').value,
-
-            // Locations
+            'Date': dayRow.querySelector('input[name="availableDate[]"]').value,
+            'Start Time': dayRow.querySelector('input[name="startTime[]"]').value,
+            'End Time': dayRow.querySelector('input[name="endTime[]"]').value,
+            'Max Games': parseInt(dayRow.querySelector('input[name="maxGames[]"]').value) || 1,
             'Preferred Locations': getCheckboxValues('locations'),
-
-            // Positions
-            'Positions Willing': getCheckboxValues('positions'),
-
-            // Age Groups
+            'AR Only': document.getElementById('arOnly').value,
             'Age Groups Preferred': getCheckboxValues('ageGroups'),
-
-            // Additional
             'Notes': document.getElementById('notes').value.trim(),
-
-            // Status
             'Status': 'New'
         };
 
-        // Add travel distance if provided
-        const travelDistance = document.getElementById('travelDistance').value;
-        if (travelDistance) {
-            formData['Travel Distance'] = parseInt(travelDistance);
+        const travelDistance = document.getElementById('travelDistance');
+        if (travelDistance && travelDistance.value) {
+            formData['Travel Distance'] = parseInt(travelDistance.value);
         }
 
         return formData;
@@ -114,49 +96,55 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     function getCheckboxValues(name) {
         const checkboxes = document.querySelectorAll(`input[name="${name}"]:checked`);
-        const values = Array.from(checkboxes).map(cb => cb.value);
-        return values.length > 0 ? values : [];
+        return Array.from(checkboxes).map(cb => cb.value);
     }
 
     /**
      * Validate form data
      */
     function validateForm() {
-        // Check required checkboxes
         const locations = getCheckboxValues('locations');
         if (locations.length === 0) {
             showMessage('error', 'Please select at least one preferred location.');
             return false;
         }
 
-        const positions = getCheckboxValues('positions');
-        if (positions.length === 0) {
-            showMessage('error', 'Please select at least one position you are willing to work.');
+        const arOnly = document.getElementById('arOnly').value;
+        if (!arOnly) {
+            showMessage('error', 'Please select an option for AR Only.');
             return false;
         }
 
-        // Validate time range
-        const startTime = document.getElementById('startTime').value;
-        const endTime = document.getElementById('endTime').value;
+        // Validate each day row
+        const dayRows = document.querySelectorAll('.day-row');
+        for (let i = 0; i < dayRows.length; i++) {
+            const row = dayRows[i];
+            const date = row.querySelector('input[name="availableDate[]"]').value;
+            const startTime = row.querySelector('input[name="startTime[]"]').value;
+            const endTime = row.querySelector('input[name="endTime[]"]').value;
+            const dayNum = i + 1;
 
-        if (startTime && endTime) {
-            const start = new Date(`2000-01-01T${startTime}`);
-            const end = new Date(`2000-01-01T${endTime}`);
-
-            if (end <= start) {
-                showMessage('error', 'End time must be after start time.');
+            if (!date) {
+                showMessage('error', `Please select a date for Day ${dayNum}.`);
                 return false;
             }
-        }
 
-        // Validate date is not in the past
-        const selectedDate = new Date(document.getElementById('availableDate').value);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+            const selectedDate = new Date(date);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (selectedDate < today) {
+                showMessage('error', `Day ${dayNum}: Please select a date in the future.`);
+                return false;
+            }
 
-        if (selectedDate < today) {
-            showMessage('error', 'Please select a date in the future.');
-            return false;
+            if (startTime && endTime) {
+                const start = new Date(`2000-01-01T${startTime}`);
+                const end = new Date(`2000-01-01T${endTime}`);
+                if (end <= start) {
+                    showMessage('error', `Day ${dayNum}: End time must be after start time.`);
+                    return false;
+                }
+            }
         }
 
         return true;
@@ -169,8 +157,6 @@ document.addEventListener('DOMContentLoaded', function() {
         formMessage.className = `form-message ${type}`;
         formMessage.textContent = message;
         formMessage.style.display = 'block';
-
-        // Scroll to message
         formMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
@@ -181,14 +167,11 @@ document.addEventListener('DOMContentLoaded', function() {
         formMessage.style.display = 'none';
     }
 
-    /**
-     * Format phone number as user types
-     */
+    // Phone number formatting
     const phoneInput = document.getElementById('refereePhone');
     if (phoneInput) {
         phoneInput.addEventListener('input', function(e) {
             let value = e.target.value.replace(/\D/g, '');
-
             if (value.length > 0) {
                 if (value.length <= 3) {
                     value = `(${value}`;
@@ -198,37 +181,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     value = `(${value.slice(0, 3)}) ${value.slice(3, 6)}-${value.slice(6, 10)}`;
                 }
             }
-
             e.target.value = value;
         });
     }
 
-    /**
-     * Clear messages when user starts typing
-     */
+    // Clear messages when user starts typing
     form.addEventListener('input', function() {
         if (formMessage.style.display === 'block') {
             setTimeout(hideMessage, 3000);
         }
     });
 });
-
-/**
- * Helper function to format date for display
- */
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    return date.toLocaleDateString('en-US', options);
-}
-
-/**
- * Helper function to format time for display
- */
-function formatTime(timeString) {
-    const [hours, minutes] = timeString.split(':');
-    const hour = parseInt(hours);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour % 12 || 12;
-    return `${displayHour}:${minutes} ${ampm}`;
-}
