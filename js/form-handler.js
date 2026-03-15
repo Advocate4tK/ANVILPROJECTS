@@ -71,9 +71,9 @@ document.addEventListener('DOMContentLoaded', function() {
             'Start Time':           dayRow.querySelector('[name="startTime[]"]').value,
             'End Time':             dayRow.querySelector('[name="endTime[]"]').value,
             'Max Games':            dayRow.querySelector('input[name="maxGames[]"]').value || '1',
-            'Preferred Locations':  getCheckboxValues('locations'),
+            'Preferred Locations':  getCheckboxValues('locations').join(', '),
             'AR Only':              document.getElementById('arOnly').value,
-            'Age Groups Preferred': getCheckboxValues('ageGroups'),
+            'Age Groups Preferred': getCheckboxValues('ageGroups').join(', '),
             'Notes':                document.getElementById('notes').value.trim(),
             'Status':               'New'
         };
