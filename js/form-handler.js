@@ -52,8 +52,12 @@ document.addEventListener('DOMContentLoaded', function() {
             };
 
             const addressEl = document.getElementById('refereeAddress');
+            const cityEl    = document.getElementById('refereeCity');
+            const stateEl   = document.getElementById('refereeState');
             const zipEl     = document.getElementById('refereeZip');
             if (addressEl && addressEl.value.trim()) refereeRecord['Address']  = addressEl.value.trim();
+            if (cityEl    && cityEl.value.trim())    refereeRecord['City']     = cityEl.value.trim();
+            if (stateEl   && stateEl.value.trim())   refereeRecord['State']    = stateEl.value.trim().toUpperCase();
             if (zipEl     && zipEl.value.trim())     refereeRecord['Zip Code'] = zipEl.value.trim();
             await airtableClient.upsertReferee(refereeRecord);
 
