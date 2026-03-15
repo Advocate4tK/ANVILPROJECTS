@@ -216,6 +216,33 @@ class AirtableClient {
     }
 
     /**
+     * Delete multiple records at once (max 10 per call — Airtable limit)
+     *
+     * @param {string} tableName - Name of the table
+     * @param {string[]} recordIds - Array of record IDs to delete
+     * @returns {Promise<void>}
+     */
+    async deleteRecords(tableName, recordIds) {
+        // Airtable allows max 10 deletes per request
+        const batches = [];
+        for (let i = 0; i < recordIds.length; i += 10) {
+            batches.push(recordIds.slice(i, i + 10));
+        }
+        for (const batch of batches) {
+            const url = new URL(this.getTableUrl(tableName));
+            batch.forEach(id => url.searchParams.append('records[]', id));
+            const response = await fetch(url, {
+                method: 'DELETE',
+                headers: this.getHeaders()
+            });
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error?.message || 'Failed to delete records');
+            }
+        }
+    }
+
+    /**
      * Upsert a referee — create if new, update if existing (matched by email)
      *
      * @param {object} refereeData - Referee fields
