@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'Date':                 dayRow.querySelector('input[name="availableDate[]"]').value,
             'Start Time':           dayRow.querySelector('[name="startTime[]"]').value,
             'End Time':             dayRow.querySelector('[name="endTime[]"]').value,
-            'Max Games':            parseInt(dayRow.querySelector('input[name="maxGames[]"]').value) || 1,
+            'Max Games':            dayRow.querySelector('input[name="maxGames[]"]').value || '1',
             'Preferred Locations':  getCheckboxValues('locations'),
             'AR Only':              document.getElementById('arOnly').value,
             'Age Groups Preferred': getCheckboxValues('ageGroups'),
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const travelDistance = document.getElementById('travelDistance');
         if (travelDistance && travelDistance.value) {
-            formData['Travel Distance'] = parseInt(travelDistance.value);
+            formData['Travel Distance'] = travelDistance.value;
         }
 
         return formData;
