@@ -23,10 +23,13 @@
 
         <main>
             <!-- System Status -->
-            <div class="status-banner" style="padding:10px 20px; margin-bottom:20px; display:flex; align-items:center; gap:20px; text-align:left; justify-content:center;">
-                <h3 style="margin:0; font-size:0.9rem;">✅ System Status</h3>
-                <p id="status-message" style="margin:0; font-size:0.85rem;">All systems operational</p>
-                <p class="status-detail" style="margin:0; font-size:0.85rem;">Database: <span id="connection-status">Checking...</span></p>
+            <div class="status-banner" style="padding:12px 20px; margin-bottom:20px; text-align:center;">
+                <div style="display:flex; align-items:center; justify-content:center; gap:24px; flex-wrap:wrap; font-size:0.85rem;">
+                    <span>🗄 Database: <strong><span id="connection-status">Checking...</span></strong></span>
+                    <span>📆 Season: <strong><span id="season-status">—</span></strong></span>
+                    <span>⏱ Next Game: <strong><span id="next-game-status">Loading...</span></strong></span>
+                    <span>👤 Refs Available This Weekend: <strong><span id="refs-available-status">Loading...</span></strong></span>
+                </div>
             </div>
 
             <!-- Login Form -->
@@ -104,24 +107,91 @@
     <script src="js/airtable-client.js"></script>
     <script src="js/admin-auth.js"></script>
     <script>
-        // System status check
-        window.addEventListener('load', function() {
-            const statusElement = document.getElementById('connection-status');
-            if (!statusElement) return;
-            if (typeof CONFIG !== 'undefined' && CONFIG.AIRTABLE_BASE_ID) {
-                if (CONFIG.AIRTABLE_BASE_ID === 'your_base_id_here') {
-                    statusElement.textContent = '⚠️ Not configured yet';
-                    statusElement.style.color = '#f39c12';
-                    document.getElementById('status-message').textContent = 'Configuration needed';
-                } else {
-                    statusElement.textContent = '✅ Configured';
-                    statusElement.style.color = '#27ae60';
-                }
-            } else {
-                statusElement.textContent = '❌ config.js not found';
-                statusElement.style.color = '#e74c3c';
-                document.getElementById('status-message').textContent = 'Configuration file missing';
+        // System status
+        window.addEventListener('load', async function() {
+            const dbEl       = document.getElementById('connection-status');
+            const seasonEl   = document.getElementById('season-status');
+            const nextGameEl = document.getElementById('next-game-status');
+            const refsEl     = document.getElementById('refs-available-status');
+            const now        = new Date();
+
+            // Season
+            const m = now.getMonth() + 1, d = now.getDate(), y = now.getFullYear();
+            let season;
+            if (m >= 3 && m <= 6)                         season = '🌱 Spring ' + y;
+            else if (m === 7 || (m === 8 && d <= 14))     season = '☀️ Summer ' + y;
+            else if ((m === 8 && d >= 15) || (m >= 9 && m <= 11)) season = '🍂 Fall ' + y;
+            else                                           season = '❄️ Off-Season';
+            if (seasonEl) seasonEl.textContent = season;
+
+            // Config check
+            if (typeof CONFIG === 'undefined' || !CONFIG.AIRTABLE_BASE_ID) {
+                if (dbEl) { dbEl.textContent = '❌ config.js not found'; dbEl.style.color = '#e74c3c'; }
+                if (nextGameEl) nextGameEl.textContent = '—';
+                if (refsEl) refsEl.textContent = '—';
+                return;
             }
+            if (CONFIG.AIRTABLE_BASE_ID === 'your_base_id_here') {
+                if (dbEl) { dbEl.textContent = '⚠️ Not configured'; dbEl.style.color = '#f39c12'; }
+                if (nextGameEl) nextGameEl.textContent = '—';
+                if (refsEl) refsEl.textContent = '—';
+                return;
+            }
+
+            // Live DB ping
+            try {
+                await airtableClient.testConnection();
+                if (dbEl) { dbEl.textContent = '✅ Connected'; dbEl.style.color = '#27ae60'; }
+            } catch(e) {
+                if (dbEl) { dbEl.textContent = '❌ Unreachable'; dbEl.style.color = '#e74c3c'; }
+                if (nextGameEl) nextGameEl.textContent = '—';
+                if (refsEl) refsEl.textContent = '—';
+                return;
+            }
+
+            // Next game
+            try {
+                const todayStr = now.toISOString().split('T')[0];
+                const upcoming = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, {
+                    filterByFormula: `IS_AFTER({Date}, '${todayStr}')`,
+                    maxRecords: 500
+                });
+                if (!upcoming.length) {
+                    if (nextGameEl) nextGameEl.textContent = 'None scheduled';
+                } else {
+                    upcoming.sort((a, b) => new Date(a.fields['Date']) - new Date(b.fields['Date']));
+                    const nextDate = new Date(upcoming[0].fields['Date']);
+                    const diffDays = Math.ceil((nextDate - now) / 86400000);
+                    const dateStr  = nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    if (nextGameEl) nextGameEl.textContent =
+                        diffDays <= 0  ? `Today (${dateStr})` :
+                        diffDays === 1 ? `Tomorrow (${dateStr})` :
+                        `${dateStr} (${diffDays} days)`;
+                }
+            } catch(e) { if (nextGameEl) nextGameEl.textContent = '—'; }
+
+            // Refs available this weekend
+            try {
+                const daysToSat = ((6 - now.getDay()) + 7) % 7 || 7;
+                const sat = new Date(now); sat.setDate(now.getDate() + daysToSat);
+                const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
+                const satStr = sat.toISOString().split('T')[0];
+                const sunStr = sun.toISOString().split('T')[0];
+                const avail = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, {
+                    filterByFormula: `OR({Date} = '${satStr}', {Date} = '${sunStr}')`,
+                    maxRecords: 500
+                });
+                const unique = new Set();
+                avail.forEach(r => {
+                    const name = r.fields['Referee Name'] || r.fields['Name'] ||
+                        ((r.fields['First Name'] || '') + ' ' + (r.fields['Last Name'] || '')).trim();
+                    if (name) unique.add(name);
+                });
+                if (refsEl) {
+                    refsEl.textContent = `${unique.size} referee${unique.size !== 1 ? 's' : ''}`;
+                    refsEl.style.color = unique.size === 0 ? '#e74c3c' : '#27ae60';
+                }
+            } catch(e) { if (refsEl) refsEl.textContent = '—'; }
         });
 
         async function loadStats() {
