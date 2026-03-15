@@ -29,11 +29,17 @@ const loginBtn        = document.getElementById('loginBtn');
 const logoutBtn       = document.getElementById('logoutBtn');
 const loginError      = document.getElementById('loginError');
 
+function showSessionBadge(visible) {
+    const badge = document.getElementById('sessionBadge');
+    if (badge) badge.style.display = visible ? 'flex' : 'none';
+}
+
 if (loginSection) {
     // Already logged in — show dashboard
     if (isLoggedIn()) {
         loginSection.style.display = 'none';
         adminDashboard.style.display = 'block';
+        showSessionBadge(true);
     }
 
     // Login button
@@ -44,6 +50,7 @@ if (loginSection) {
             loginSection.style.display = 'none';
             adminDashboard.style.display = 'block';
             loginError.style.display = 'none';
+            showSessionBadge(true);
         } else {
             loginError.style.display = 'block';
         }
@@ -60,5 +67,6 @@ if (loginSection) {
         sessionStorage.removeItem('adminAuth');
         adminDashboard.style.display = 'none';
         loginSection.style.display = 'block';
+        showSessionBadge(false);
     });
 }
