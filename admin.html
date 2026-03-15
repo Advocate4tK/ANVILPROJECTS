@@ -347,17 +347,33 @@
                     html += `<p style="color:#27ae60; font-weight:600;">✅ No unassigned games in the next 48 hours.</p>`;
                 }
 
-                // Clubs being served
-                const sortedClubs = Object.entries(clubGameCount).sort((a, b) => a[0].localeCompare(b[0]));
-                if (sortedClubs.length > 0) {
-                    html += `<div style="margin-top:20px;">
-                        <p style="font-weight:600; margin-bottom:10px; font-size:0.95rem;">⚽ Clubs Being Served (${sortedClubs.length})</p>
-                        <div style="display:flex; flex-wrap:wrap; gap:10px;">`;
-                    sortedClubs.forEach(([club, count]) => {
-                        html += `<span style="background:#eaf0fb; color:#0f3460; padding:6px 14px; border-radius:20px; font-size:0.85rem; font-weight:600;">${club} <span style="font-weight:400; color:#555;">${count} game${count !== 1 ? 's' : ''}</span></span>`;
+                // Clubs being served — dropdown
+                const CLUBS_LIST = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
+                html += `<div style="margin-top:20px; border-top:1px solid #e0e0e0; padding-top:18px;">
+                    <p style="font-weight:600; margin-bottom:10px; font-size:0.95rem;">⚽ Clubs Being Served</p>
+                    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                        <select id="clubDropdown" style="padding:8px 14px; border-radius:8px; border:1px solid #ccc; font-size:0.9rem; color:#0f3460; min-width:200px;">
+                            <option value="">— Select a Club —</option>
+                            ${CLUBS_LIST.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
+                        <span id="clubStatDisplay" style="font-size:0.9rem; color:#555;"></span>
+                    </div>
+                </div>`;
+
+                // Wire up club dropdown after render
+                setTimeout(() => {
+                    const dd = document.getElementById('clubDropdown');
+                    const stat = document.getElementById('clubStatDisplay');
+                    if (!dd || !stat) return;
+                    dd.addEventListener('change', function() {
+                        const club = this.value;
+                        if (!club) { stat.textContent = ''; return; }
+                        const total = clubGameCount[club] || 0;
+                        const unassignedThisWeek = unassignedByClub[club] || 0;
+                        stat.innerHTML = `<strong style="color:#0f3460;">${total}</strong> game${total !== 1 ? 's' : ''} in system` +
+                            (unassignedThisWeek > 0 ? ` &nbsp;|&nbsp; <strong style="color:#e94560;">${unassignedThisWeek}</strong> unassigned this week` : ' &nbsp;|&nbsp; <span style="color:#27ae60;">✅ No unassigned this week</span>');
                     });
-                    html += `</div></div>`;
-                }
+                }, 0);
 
                 statsEl.innerHTML = html;
             } catch (err) {
