@@ -33,32 +33,6 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const dayRows = document.querySelectorAll('.day-row');
 
-            // Upsert referee record (create if new, update if existing)
-            const firstName = document.getElementById('refereeFirstName').value.trim();
-            const lastName  = document.getElementById('refereeLastName').value.trim();
-            const refereeRecord = {
-                'Name':                `${firstName} ${lastName}`,
-                'Email':               document.getElementById('refereeEmail').value.trim(),
-                'Phone':               document.getElementById('refereePhone').value.trim(),
-                'Years Reffing':       document.getElementById('yearsReffing').value,
-                'Certification Level': document.getElementById('certificationLevel').value,
-                'AR Only':             document.getElementById('arOnly').value,
-                'Preferred Locations': getCheckboxValues('locations'),
-                'Age Groups Preferred':getCheckboxValues('ageGroups'),
-                'Status':              'Active',
-                'Last Submission':     new Date().toISOString().split('T')[0]
-            };
-
-            const addressEl = document.getElementById('refereeAddress');
-            const cityEl    = document.getElementById('refereeCity');
-            const stateEl   = document.getElementById('refereeState');
-            const zipEl     = document.getElementById('refereeZip');
-            if (addressEl && addressEl.value.trim()) refereeRecord['Address']  = addressEl.value.trim();
-            if (cityEl    && cityEl.value.trim())    refereeRecord['City']     = cityEl.value.trim();
-            if (stateEl   && stateEl.value.trim())   refereeRecord['State']    = stateEl.value.trim().toUpperCase();
-            if (zipEl     && zipEl.value.trim())     refereeRecord['Zip Code'] = zipEl.value.trim();
-            await airtableClient.upsertReferee(refereeRecord);
-
             // Create one availability record per day
             const submissions = [];
             dayRows.forEach(row => {
