@@ -58,6 +58,7 @@
                                 required
                                 placeholder="john.smith@example.com"
                             >
+                            <div id="emailLookupStatus" style="margin-top:6px; font-size:0.85rem; min-height:18px;"></div>
                         </div>
 
                         <div class="form-group">
@@ -71,6 +72,33 @@
                                 required
                                 placeholder="(555) 123-4567"
                             >
+                        </div>
+
+                        <!-- New referee only: address fields -->
+                        <div id="newRefSection" style="display:none;">
+                            <div class="form-group">
+                                <label for="refereeAddress">
+                                    Street Address <span class="required">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    id="refereeAddress"
+                                    name="refereeAddress"
+                                    placeholder="123 Main St"
+                                >
+                            </div>
+                            <div class="form-group">
+                                <label for="refereeZip">
+                                    Zip Code <span class="required">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    id="refereeZip"
+                                    name="refereeZip"
+                                    placeholder="06000"
+                                    maxlength="10"
+                                >
+                            </div>
                         </div>
 
                         <div class="form-group">
@@ -346,6 +374,57 @@
             document.getElementById('addDayBtn').addEventListener('click', function() {
                 const count = document.querySelectorAll('.day-row').length + 1;
                 container.appendChild(createDayRow(count));
+            });
+
+            // Email lookup — returning vs new referee
+            document.getElementById('refereeEmail').addEventListener('blur', async function() {
+                const email = this.value.trim();
+                const status = document.getElementById('emailLookupStatus');
+                if (!email || !airtableClient) return;
+
+                status.textContent = 'Checking...';
+                status.style.color = '#888';
+
+                try {
+                    const referee = await airtableClient.findRefereeByEmail(email);
+
+                    if (referee) {
+                        const f = referee.fields;
+                        const firstName = f['First Name'] || '';
+                        const lastName  = f['Last Name']  || '';
+
+                        // Pre-fill name if fields are empty
+                        if (firstName && !document.getElementById('refereeFirstName').value)
+                            document.getElementById('refereeFirstName').value = firstName;
+                        if (lastName && !document.getElementById('refereeLastName').value)
+                            document.getElementById('refereeLastName').value = lastName;
+
+                        // Pre-fill phone if empty
+                        if (f['Phone'] && !document.getElementById('refereePhone').value)
+                            document.getElementById('refereePhone').value = f['Phone'];
+
+                        // Pre-fill years reffing and cert level
+                        if (f['Years Reffing'])
+                            document.getElementById('yearsReffing').value = f['Years Reffing'];
+                        if (f['Certification Level'])
+                            document.getElementById('certificationLevel').value = f['Certification Level'];
+
+                        // Hide address section — not needed for returning ref
+                        document.getElementById('newRefSection').style.display = 'none';
+
+                        const name = (firstName + ' ' + lastName).trim() || 'Referee';
+                        status.innerHTML = `✅ Welcome back, <strong>${name}</strong>! Your profile has been pre-filled.`;
+                        status.style.color = '#27ae60';
+
+                    } else {
+                        // New referee — show address fields
+                        document.getElementById('newRefSection').style.display = 'block';
+                        status.textContent = '👋 First time here — please fill in your address below.';
+                        status.style.color = '#0f3460';
+                    }
+                } catch(e) {
+                    status.textContent = '';
+                }
             });
         });
     </script>

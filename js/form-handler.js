@@ -50,6 +50,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Status':              'Active',
                 'Last Submission':     new Date().toISOString().split('T')[0]
             };
+
+            const addressEl = document.getElementById('refereeAddress');
+            const zipEl     = document.getElementById('refereeZip');
+            if (addressEl && addressEl.value.trim()) refereeRecord['Address']  = addressEl.value.trim();
+            if (zipEl     && zipEl.value.trim())     refereeRecord['Zip Code'] = zipEl.value.trim();
             await airtableClient.upsertReferee(refereeRecord);
 
             // Create one availability record per day
