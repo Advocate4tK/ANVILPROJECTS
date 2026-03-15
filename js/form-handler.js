@@ -75,11 +75,6 @@ document.addEventListener('DOMContentLoaded', function() {
             'Status':       'New'
         };
 
-        const travelDistance = document.getElementById('travelDistance');
-        if (travelDistance && travelDistance.value) {
-            formData['Travel Distance'] = travelDistance.value;
-        }
-
         return formData;
     }
 
