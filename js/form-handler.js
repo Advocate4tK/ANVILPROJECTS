@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Name':                `${firstName} ${lastName}`,
                 'Email':               document.getElementById('refereeEmail').value.trim(),
                 'Phone':               document.getElementById('refereePhone').value.trim(),
-                'Years Reffing':       parseInt(document.getElementById('yearsReffing').value) || 0,
+                'Years Reffing':       document.getElementById('yearsReffing').value,
                 'Certification Level': document.getElementById('certificationLevel').value,
                 'AR Only':             document.getElementById('arOnly').value,
                 'Preferred Locations': getCheckboxValues('locations'),
