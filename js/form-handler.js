@@ -66,14 +66,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const lastName  = document.getElementById('refereeLastName').value.trim();
 
         const formData = {
-            'Referee Name':        `${firstName} ${lastName}`,
-            'Date':                dayRow.querySelector('input[name="availableDate[]"]').value,
-            'Start Time':          dayRow.querySelector('[name="startTime[]"]').value,
-            'End Time':            dayRow.querySelector('[name="endTime[]"]').value,
-            'Max Games':           dayRow.querySelector('input[name="maxGames[]"]').value || '1',
-            'Preferred Locations': getCheckboxValues('locations').join(', '),
-            'Notes':               document.getElementById('notes').value.trim(),
-            'Status':              'New'
+            'Referee Name': `${firstName} ${lastName}`,
+            'Date':         dayRow.querySelector('input[name="availableDate[]"]').value,
+            'Start Time':   dayRow.querySelector('[name="startTime[]"]').value,
+            'End Time':     dayRow.querySelector('[name="endTime[]"]').value,
+            'Max Games':    dayRow.querySelector('input[name="maxGames[]"]').value || '1',
+            'Notes':        document.getElementById('notes').value.trim(),
+            'Status':       'New'
         };
 
         const travelDistance = document.getElementById('travelDistance');
