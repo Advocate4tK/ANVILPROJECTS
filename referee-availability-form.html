@@ -41,10 +41,17 @@
                         </div>
                     </fieldset>
 
+                    <!-- Returning referee welcome banner (replaces entry fieldset) -->
+                    <div id="returningWelcome" style="display:none; background:linear-gradient(135deg,#0f3460,#e94560); border-radius:12px; padding:20px 25px; margin-bottom:20px; color:white;">
+                        <div style="font-size:1.3rem; font-weight:700;" id="welcomeName"></div>
+                        <div style="font-size:0.85rem; opacity:0.9; margin-top:4px;">Just fill in your availability below — your profile is all set.</div>
+                        <button type="button" id="notMeBtn" style="margin-top:10px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:white; border-radius:8px; padding:4px 12px; font-size:0.8rem; cursor:pointer;">Not me?</button>
+                    </div>
+
                     <!-- Rest of form — hidden until doorway complete -->
                     <div id="formBody">
 
-                        <fieldset>
+                        <fieldset id="contactFieldset">
                             <legend>Contact Details</legend>
 
                             <div class="form-group">
@@ -383,42 +390,30 @@
 
                     if (referee) {
                         const f = referee.fields;
-                        const firstName = f['First Name'] || '';
-                        const lastName  = f['Last Name']  || '';
+                        const firstName = f['First Name'] || document.getElementById('refereeFirstName').value.trim();
+                        const lastName  = f['Last Name']  || document.getElementById('refereeLastName').value.trim();
+                        const fullName  = (firstName + ' ' + lastName).trim();
 
-                        // Pre-fill name if fields are empty
-                        if (firstName && !document.getElementById('refereeFirstName').value)
-                            document.getElementById('refereeFirstName').value = firstName;
-                        if (lastName && !document.getElementById('refereeLastName').value)
-                            document.getElementById('refereeLastName').value = lastName;
+                        // Pre-fill all profile fields silently
+                        document.getElementById('refereeFirstName').value = firstName;
+                        document.getElementById('refereeLastName').value  = lastName;
+                        if (f['Phone'])               document.getElementById('refereePhone').value          = f['Phone'];
+                        if (f['Years Reffing'])        document.getElementById('yearsReffing').value          = f['Years Reffing'];
+                        if (f['Certification Level'])  document.getElementById('certificationLevel').value    = f['Certification Level'];
+                        if (f['Address'])              document.getElementById('refereeAddress').value        = f['Address'];
+                        if (f['Zip Code'])             document.getElementById('refereeZip').value            = f['Zip Code'];
 
-                        // Pre-fill phone
-                        if (f['Phone'])
-                            document.getElementById('refereePhone').value = f['Phone'];
+                        // Swap entry fieldset for welcome banner
+                        document.getElementById('entryFieldset').style.display = 'none';
+                        document.getElementById('contactFieldset').style.display = 'none';
+                        document.getElementById('returningWelcome').style.display = 'block';
+                        document.getElementById('welcomeName').textContent = `👋 Welcome back, ${fullName}!`;
+                        status.textContent = '';
 
-                        // Pre-fill years reffing and cert level
-                        if (f['Years Reffing'])
-                            document.getElementById('yearsReffing').value = f['Years Reffing'];
-                        if (f['Certification Level'])
-                            document.getElementById('certificationLevel').value = f['Certification Level'];
-
-                        // Pre-fill address and zip
-                        if (f['Address'])
-                            document.getElementById('refereeAddress').value = f['Address'];
-                        if (f['Zip Code'])
-                            document.getElementById('refereeZip').value = f['Zip Code'];
-
-                        // Hide first-time fields, show profile note
-                        document.getElementById('firstTimeSection').style.display = 'none';
-                        document.getElementById('returningRefInfo').style.display = 'block';
-
-                        const name = (firstName + ' ' + lastName).trim() || 'Referee';
-                        status.innerHTML = `✅ Welcome back, <strong>${name}</strong>!`;
-                        status.style.color = '#27ae60';
-                        if (isReadyToUnlock()) unlockForm();
+                        unlockForm();
 
                     } else {
-                        // New referee — show first-time fields
+                        // New referee — show full form
                         document.getElementById('firstTimeSection').style.display = 'block';
                         document.getElementById('returningRefInfo').style.display = 'none';
                         status.textContent = '👋 First time here — please complete your profile below.';
@@ -431,11 +426,24 @@
                 }
             });
 
-            // "Update these?" link restores the fields for returning refs who want to change info
-            document.getElementById('editProfileLink').addEventListener('click', function(e) {
-                e.preventDefault();
+            // "Not me?" — reset to entry state
+            document.getElementById('notMeBtn').addEventListener('click', function() {
+                document.getElementById('returningWelcome').style.display = 'none';
+                document.getElementById('entryFieldset').style.display = 'block';
+                document.getElementById('contactFieldset').style.display = 'block';
                 document.getElementById('firstTimeSection').style.display = 'block';
                 document.getElementById('returningRefInfo').style.display = 'none';
+                const fb = document.getElementById('formBody');
+                fb.classList.remove('unlocked');
+                fb.style.display = 'none';
+                // Clear fields
+                ['refereeFirstName','refereeLastName','refereeEmail','refereePhone',
+                 'refereeAddress','refereeZip','yearsReffing','certificationLevel'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                document.getElementById('emailLookupStatus').textContent = '';
+                document.getElementById('refereeFirstName').focus();
             });
         });
     </script>
