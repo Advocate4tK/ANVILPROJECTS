@@ -200,11 +200,18 @@
             if (!statsEl) return;
 
             try {
-                // Fetch games and referees in parallel
-                const [allGames, allReferees] = await Promise.all([
+                // Fetch games, referees, and clubs in parallel
+                const [allGames, allReferees, allClubs] = await Promise.all([
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 1000 }),
-                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 })
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 })
                 ]);
+
+                // Build club ID → name lookup
+                const clubLookup = {};
+                allClubs.forEach(c => {
+                    clubLookup[c.id] = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || 'Unknown Club';
+                });
 
                 const totalGames = allGames.length;
                 const activeReferees = allReferees.filter(r => !r.fields['Status'] || r.fields['Status'] === 'Active').length;
@@ -232,7 +239,15 @@
 
                     // This week unassigned by club
                     if (gameDate >= startOfWeek && gameDate <= endOfWeek && isUnassigned) {
-                        const club = Array.isArray(f['Club']) ? f['Club'].join(', ') : (f['Club'] || 'Unknown Club');
+                        const rawClub = f['Club'];
+                        let club;
+                        if (Array.isArray(rawClub) && rawClub.length > 0) {
+                            club = rawClub.map(id => clubLookup[id] || id).join(', ');
+                        } else if (rawClub) {
+                            club = clubLookup[rawClub] || rawClub;
+                        } else {
+                            club = 'No Club Assigned';
+                        }
                         unassignedByClub[club] = (unassignedByClub[club] || 0) + 1;
                     }
 
