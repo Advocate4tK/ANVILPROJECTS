@@ -228,6 +228,7 @@
                 const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
                 const unassignedByClub = {};
+                const clubGameCount = {};
                 const urgent = [];
 
                 allGames.forEach(rec => {
@@ -235,18 +236,23 @@
                     const gameDate = new Date(f['Date']);
                     const isUnassigned = !f['Center Referee'] || (Array.isArray(f['Center Referee']) && f['Center Referee'].length === 0);
 
+                    // Resolve club name helper
+                    const rawClub = f['Club'];
+                    let clubName;
+                    if (Array.isArray(rawClub) && rawClub.length > 0) {
+                        clubName = rawClub.map(id => clubLookup[id] || id).join(', ');
+                    } else if (rawClub) {
+                        clubName = clubLookup[rawClub] || rawClub;
+                    } else {
+                        clubName = 'No Club Assigned';
+                    }
+
+                    // All clubs — total game count
+                    clubGameCount[clubName] = (clubGameCount[clubName] || 0) + 1;
+
                     // This week unassigned by club
                     if (gameDate >= startOfWeek && gameDate <= endOfWeek && isUnassigned) {
-                        const rawClub = f['Club'];
-                        let club;
-                        if (Array.isArray(rawClub) && rawClub.length > 0) {
-                            club = rawClub.map(id => clubLookup[id] || id).join(', ');
-                        } else if (rawClub) {
-                            club = clubLookup[rawClub] || rawClub;
-                        } else {
-                            club = 'No Club Assigned';
-                        }
-                        unassignedByClub[club] = (unassignedByClub[club] || 0) + 1;
+                        unassignedByClub[clubName] = (unassignedByClub[clubName] || 0) + 1;
                     }
 
                     // Urgent: next 48 hours unassigned
@@ -256,7 +262,7 @@
                             time: f['Time'] || '',
                             home: f['Home Team'] || '?',
                             away: f['Away Team'] || '?',
-                            club: Array.isArray(f['Club']) ? f['Club'].join(', ') : (f['Club'] || '')
+                            club: clubName
                         });
                     }
                 });
@@ -268,10 +274,10 @@
                 const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
                 const in72Hours = new Date(now.getTime() + 72 * 60 * 60 * 1000);
 
-                const has7h  = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Ref'] || (Array.isArray(r.fields['Center Ref']) && r.fields['Center Ref'].length === 0); return d >= now && d <= in7Hours && u; });
-                const has24h = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Ref'] || (Array.isArray(r.fields['Center Ref']) && r.fields['Center Ref'].length === 0); return d >= now && d <= in24Hours && u; });
-                const has48h = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Ref'] || (Array.isArray(r.fields['Center Ref']) && r.fields['Center Ref'].length === 0); return d >= now && d <= in48Hours && u; });
-                const has72h = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Ref'] || (Array.isArray(r.fields['Center Ref']) && r.fields['Center Ref'].length === 0); return d >= now && d <= in72Hours && u; });
+                const has7h  = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in7Hours && u; });
+                const has24h = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in24Hours && u; });
+                const has48h = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in48Hours && u; });
+                const has72h = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in72Hours && u; });
 
                 let heatColor, heatLabel, heatMsg;
                 if (has7h) {
@@ -339,6 +345,18 @@
                     html += `</div>`;
                 } else {
                     html += `<p style="color:#27ae60; font-weight:600;">✅ No unassigned games in the next 48 hours.</p>`;
+                }
+
+                // Clubs being served
+                const sortedClubs = Object.entries(clubGameCount).sort((a, b) => a[0].localeCompare(b[0]));
+                if (sortedClubs.length > 0) {
+                    html += `<div style="margin-top:20px;">
+                        <p style="font-weight:600; margin-bottom:10px; font-size:0.95rem;">⚽ Clubs Being Served (${sortedClubs.length})</p>
+                        <div style="display:flex; flex-wrap:wrap; gap:10px;">`;
+                    sortedClubs.forEach(([club, count]) => {
+                        html += `<span style="background:#eaf0fb; color:#0f3460; padding:6px 14px; border-radius:20px; font-size:0.85rem; font-weight:600;">${club} <span style="font-weight:400; color:#555;">${count} game${count !== 1 ? 's' : ''}</span></span>`;
+                    });
+                    html += `</div></div>`;
                 }
 
                 statsEl.innerHTML = html;
