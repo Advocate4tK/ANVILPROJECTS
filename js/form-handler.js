@@ -42,12 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             await Promise.all(submissions);
 
-            showMessage('success', 'Thank you! Your availability has been submitted successfully. We will contact you soon.');
-
-            setTimeout(() => {
-                form.reset();
-                hideMessage();
-            }, 3000);
+            window.location.href = 'submitted.html';
 
         } catch (error) {
             console.error('Submission error:', error);
