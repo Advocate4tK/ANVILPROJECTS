@@ -39,6 +39,9 @@
                             <input type="email" id="refereeEmail" name="refereeEmail" required placeholder="john.smith@example.com">
                             <div id="emailLookupStatus" style="margin-top:6px; font-size:0.85rem; min-height:18px;"></div>
                         </div>
+                        <div style="text-align:center; margin-top:10px;">
+                            <button type="button" id="entrySubmitBtn" class="btn btn-primary">Continue →</button>
+                        </div>
                     </fieldset>
 
                     <!-- Option 1: Returning referee — profile found -->
@@ -405,10 +408,21 @@
             }
 
             // Email lookup — returning vs new referee
-            document.getElementById('refereeEmail').addEventListener('blur', async function() {
-                const email = this.value.trim();
+            async function runEmailLookup() {
+                const email = document.getElementById('refereeEmail').value.trim();
                 const status = document.getElementById('emailLookupStatus');
-                if (!email || !airtableClient) return;
+                const first  = document.getElementById('refereeFirstName').value.trim();
+                const last   = document.getElementById('refereeLastName').value.trim();
+
+                if (!first || !last || !email) {
+                    status.style.color = '#c0392b';
+                    status.textContent = 'Please enter your first name, last name, and email.';
+                    return;
+                }
+                if (!airtableClient) return;
+
+                document.getElementById('entrySubmitBtn').disabled = true;
+                document.getElementById('entrySubmitBtn').textContent = 'Checking...';
 
                 status.textContent = 'Checking...';
                 status.style.color = '#888';
@@ -465,6 +479,14 @@
                     document.getElementById('contactSection').style.display   = 'block';
                     if (isReadyToUnlock()) unlockForm();
                 }
+
+                document.getElementById('entrySubmitBtn').disabled = false;
+                document.getElementById('entrySubmitBtn').textContent = 'Continue →';
+            }
+
+            document.getElementById('entrySubmitBtn').addEventListener('click', runEmailLookup);
+            document.getElementById('refereeEmail').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); runEmailLookup(); }
             });
 
             // ── Save & Continue button (new refs) ──────────────────────────────
