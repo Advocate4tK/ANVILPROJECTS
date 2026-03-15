@@ -37,8 +37,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const firstName = document.getElementById('refereeFirstName').value.trim();
             const lastName  = document.getElementById('refereeLastName').value.trim();
             const refereeRecord = {
-                'First Name':          firstName,
-                'Last Name':           lastName,
                 'Name':                `${firstName} ${lastName}`,
                 'Email':               document.getElementById('refereeEmail').value.trim(),
                 'Phone':               document.getElementById('refereePhone').value.trim(),
