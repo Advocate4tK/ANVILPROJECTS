@@ -57,36 +57,35 @@
                     <!-- Rest of form — hidden until doorway complete -->
                     <div id="formBody">
 
-                        <fieldset id="contactFieldset">
-                            <legend>Contact Details</legend>
+                        <!-- STEP 1: Contact Details (new refs only — save to DB before proceeding) -->
+                        <div id="contactSection">
+                            <fieldset id="contactFieldset">
+                                <legend>Contact Details</legend>
 
-                            <div class="form-group">
-                                <label for="refereePhone">Phone Number <span class="required">*</span></label>
-                                <input type="tel" id="refereePhone" name="refereePhone" required placeholder="(555) 123-4567">
-                            </div>
+                                <div class="form-group">
+                                    <label for="refereePhone">Phone Number <span class="required">*</span></label>
+                                    <input type="tel" id="refereePhone" name="refereePhone" required placeholder="(555) 123-4567">
+                                </div>
 
-                            <!-- Address — always visible; auto-populates for returning refs -->
-                            <div class="form-group">
-                                <label for="refereeAddress">Street Address <span class="required">*</span></label>
-                                <input type="text" id="refereeAddress" name="refereeAddress" placeholder="123 Main St">
-                            </div>
-                            <div class="form-row">
                                 <div class="form-group">
-                                    <label for="refereeCity">Town / City <span class="required">*</span></label>
-                                    <input type="text" id="refereeCity" name="refereeCity" placeholder="Hartford">
+                                    <label for="refereeAddress">Street Address <span class="required">*</span></label>
+                                    <input type="text" id="refereeAddress" name="refereeAddress" placeholder="123 Main St">
                                 </div>
-                                <div class="form-group">
-                                    <label for="refereeState">State <span class="required">*</span></label>
-                                    <input type="text" id="refereeState" name="refereeState" placeholder="CT" maxlength="2" style="text-transform:uppercase;">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="refereeCity">Town / City <span class="required">*</span></label>
+                                        <input type="text" id="refereeCity" name="refereeCity" placeholder="Hartford">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="refereeState">State <span class="required">*</span></label>
+                                        <input type="text" id="refereeState" name="refereeState" placeholder="CT" maxlength="2" style="text-transform:uppercase;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="refereeZip">Zip Code <span class="required">*</span></label>
+                                        <input type="text" id="refereeZip" name="refereeZip" placeholder="06000" maxlength="10">
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label for="refereeZip">Zip Code <span class="required">*</span></label>
-                                    <input type="text" id="refereeZip" name="refereeZip" placeholder="06000" maxlength="10">
-                                </div>
-                            </div>
 
-                            <!-- Shown first time only; hidden and pre-filled for returning refs -->
-                            <div id="firstTimeSection">
                                 <div class="form-group">
                                     <label for="yearsReffing">Number of Years Reffing <span class="required">*</span></label>
                                     <select id="yearsReffing" name="yearsReffing" required>
@@ -121,13 +120,19 @@
                                         <option value="National">National</option>
                                     </select>
                                 </div>
-                            </div>
+                            </fieldset>
 
-                            <!-- Shown for returning refs instead of the fields above -->
-                            <div id="returningRefInfo" style="display:none; background:#f0f7ff; border:1px solid #c3daf9; border-radius:8px; padding:12px 16px; font-size:0.875rem; color:#0f3460; margin-bottom:12px;">
-                                📋 Your profile info has been loaded — <strong>Phone</strong>, <strong>Years Reffing</strong>, and <strong>Certification Level</strong> are pre-filled from your last submission. <a href="#" id="editProfileLink" style="color:#e94560; text-decoration:underline;">Update these?</a>
+                            <!-- Save & Continue button (new refs only) -->
+                            <div class="form-actions" style="margin-top:0; padding-top:0;">
+                                <button type="button" id="saveContactBtn" class="btn btn-primary btn-large">
+                                    Save &amp; Continue to Availability →
+                                </button>
                             </div>
-                        </fieldset>
+                            <div id="contactSaveMessage" class="form-message" style="display:none;"></div>
+                        </div>
+
+                        <!-- STEP 2: Availability + remaining sections (hidden until contact saved) -->
+                        <div id="availabilitySection" style="display:none; opacity:0; transition:opacity 0.4s ease;">
 
                     <!-- Availability Details -->
                     <fieldset>
@@ -285,6 +290,7 @@
                     <!-- Status Messages -->
                     <div id="formMessage" class="form-message" style="display: none;"></div>
 
+                        </div><!-- end availabilitySection -->
                     </div><!-- end formBody -->
                 </form>
             </div>
@@ -390,6 +396,14 @@
                 container.appendChild(createDayRow(count));
             });
 
+            // Reveal the availability section with a fade
+            function unlockAvailability() {
+                const sec = document.getElementById('availabilitySection');
+                sec.style.display = 'block';
+                requestAnimationFrame(() => { sec.style.opacity = '1'; });
+                sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
             // Email lookup — returning vs new referee
             document.getElementById('refereeEmail').addEventListener('blur', async function() {
                 const email = this.value.trim();
@@ -403,6 +417,7 @@
                     const referee = await airtableClient.findRefereeByEmail(email);
 
                     if (referee) {
+                        // ── RETURNING REFEREE ─────────────────────────────
                         const f = referee.fields;
                         const firstName = f['First Name'] || document.getElementById('refereeFirstName').value.trim();
                         const lastName  = f['Last Name']  || document.getElementById('refereeLastName').value.trim();
@@ -411,48 +426,119 @@
                         // Pre-fill all profile fields silently
                         document.getElementById('refereeFirstName').value = firstName;
                         document.getElementById('refereeLastName').value  = lastName;
-                        if (f['Phone'])               document.getElementById('refereePhone').value          = f['Phone'];
-                        if (f['Years Reffing'])        document.getElementById('yearsReffing').value          = f['Years Reffing'];
-                        if (f['Certification Level'])  document.getElementById('certificationLevel').value    = f['Certification Level'];
-                        if (f['Address'])              document.getElementById('refereeAddress').value = f['Address'];
-                        if (f['City'])                 document.getElementById('refereeCity').value    = f['City'];
-                        if (f['State'])                document.getElementById('refereeState').value   = f['State'];
-                        if (f['Zip Code'])             document.getElementById('refereeZip').value     = f['Zip Code'];
+                        if (f['Phone'])               document.getElementById('refereePhone').value         = f['Phone'];
+                        if (f['Years Reffing'])        document.getElementById('yearsReffing').value         = f['Years Reffing'];
+                        if (f['Certification Level'])  document.getElementById('certificationLevel').value   = f['Certification Level'];
+                        if (f['Address'])              document.getElementById('refereeAddress').value       = f['Address'];
+                        if (f['City'])                 document.getElementById('refereeCity').value          = f['City'];
+                        if (f['State'])                document.getElementById('refereeState').value         = f['State'];
+                        if (f['Zip Code'])             document.getElementById('refereeZip').value           = f['Zip Code'];
 
-                        // Swap entry fieldset for welcome banner
-                        document.getElementById('entryFieldset').style.display = 'none';
-                        document.getElementById('contactFieldset').style.display = 'none';
+                        // Hide doorway, hide contact step, show welcome banner, go straight to availability
+                        document.getElementById('entryFieldset').style.display  = 'none';
+                        document.getElementById('contactSection').style.display = 'none';
                         document.getElementById('returningWelcome').style.display = 'block';
-                        document.getElementById('newRefWelcome').style.display = 'none';
+                        document.getElementById('newRefWelcome').style.display    = 'none';
                         document.getElementById('welcomeName').textContent = `🎉 Welcome back, ${fullName}!`;
                         status.textContent = '';
 
                         unlockForm();
+                        unlockAvailability();
 
                     } else {
-                        // New referee — show full form with new ref banner
-                        document.getElementById('firstTimeSection').style.display = 'block';
-                        document.getElementById('returningRefInfo').style.display = 'none';
-                        document.getElementById('newRefWelcome').style.display = 'block';
+                        // ── NEW REFEREE — show contact step first ─────────
+                        document.getElementById('newRefWelcome').style.display    = 'block';
                         document.getElementById('returningWelcome').style.display = 'none';
-                        document.getElementById('entryFieldset').style.display = 'none';
+                        document.getElementById('entryFieldset').style.display    = 'none';
+                        document.getElementById('contactSection').style.display   = 'block';
+                        document.getElementById('availabilitySection').style.display = 'none';
+                        document.getElementById('availabilitySection').style.opacity = '0';
                         status.textContent = '';
+
                         if (isReadyToUnlock()) unlockForm();
                     }
                 } catch(e) {
                     status.textContent = '';
+                    // On error, fall through to contact step like a new ref
+                    document.getElementById('newRefWelcome').style.display    = 'block';
+                    document.getElementById('entryFieldset').style.display    = 'none';
+                    document.getElementById('contactSection').style.display   = 'block';
                     if (isReadyToUnlock()) unlockForm();
+                }
+            });
+
+            // ── Save & Continue button (new refs) ──────────────────────────────
+            document.getElementById('saveContactBtn').addEventListener('click', async function() {
+                const msgEl = document.getElementById('contactSaveMessage');
+
+                // Basic validation
+                const phone = document.getElementById('refereePhone').value.trim();
+                const years = document.getElementById('yearsReffing').value;
+                const cert  = document.getElementById('certificationLevel').value;
+                const city  = document.getElementById('refereeCity').value.trim();
+                const zip   = document.getElementById('refereeZip').value.trim();
+
+                if (!phone || !years || !cert || !city || !zip) {
+                    msgEl.className = 'form-message error';
+                    msgEl.textContent = 'Please complete all required fields before continuing.';
+                    msgEl.style.display = 'block';
+                    return;
+                }
+
+                this.disabled = true;
+                this.innerHTML = 'Saving... <span class="spinner"></span>';
+                msgEl.style.display = 'none';
+
+                try {
+                    const firstName = document.getElementById('refereeFirstName').value.trim();
+                    const lastName  = document.getElementById('refereeLastName').value.trim();
+                    const refereeRecord = {
+                        'First Name':          firstName,
+                        'Last Name':           lastName,
+                        'Name':                `${firstName} ${lastName}`,
+                        'Email':               document.getElementById('refereeEmail').value.trim(),
+                        'Phone':               phone,
+                        'Years Reffing':       parseInt(years) || 0,
+                        'Certification Level': cert,
+                        'Status':              'Active',
+                        'Last Submission':     new Date().toISOString().split('T')[0]
+                    };
+                    const addr  = document.getElementById('refereeAddress').value.trim();
+                    const state = document.getElementById('refereeState').value.trim();
+                    if (addr)  refereeRecord['Address']  = addr;
+                    if (city)  refereeRecord['City']     = city;
+                    if (state) refereeRecord['State']    = state.toUpperCase();
+                    if (zip)   refereeRecord['Zip Code'] = zip;
+
+                    await airtableClient.upsertReferee(refereeRecord);
+
+                    msgEl.className = 'form-message success';
+                    msgEl.textContent = '✅ Profile saved! Now fill in your availability below.';
+                    msgEl.style.display = 'block';
+
+                    // Hide contact section, reveal availability
+                    setTimeout(() => {
+                        document.getElementById('contactSection').style.display = 'none';
+                        unlockAvailability();
+                    }, 800);
+
+                } catch(err) {
+                    msgEl.className = 'form-message error';
+                    msgEl.textContent = `Could not save profile: ${err.message}. Please try again.`;
+                    msgEl.style.display = 'block';
+                    this.disabled = false;
+                    this.textContent = 'Save & Continue to Availability →';
                 }
             });
 
             // "Not me?" — reset to entry state
             document.getElementById('notMeBtn').addEventListener('click', function() {
                 document.getElementById('returningWelcome').style.display = 'none';
-                document.getElementById('newRefWelcome').style.display = 'none';
-                document.getElementById('entryFieldset').style.display = 'block';
-                document.getElementById('contactFieldset').style.display = 'block';
-                document.getElementById('firstTimeSection').style.display = 'block';
-                document.getElementById('returningRefInfo').style.display = 'none';
+                document.getElementById('newRefWelcome').style.display    = 'none';
+                document.getElementById('entryFieldset').style.display    = 'block';
+                document.getElementById('contactSection').style.display   = 'none';
+                document.getElementById('availabilitySection').style.display = 'none';
+                document.getElementById('availabilitySection').style.opacity = '0';
                 const fb = document.getElementById('formBody');
                 fb.classList.remove('unlocked');
                 fb.style.display = 'none';
@@ -463,6 +549,9 @@
                     if (el) el.value = '';
                 });
                 document.getElementById('emailLookupStatus').textContent = '';
+                document.getElementById('contactSaveMessage').style.display = 'none';
+                document.getElementById('saveContactBtn').disabled = false;
+                document.getElementById('saveContactBtn').textContent = 'Save & Continue to Availability →';
                 document.getElementById('refereeFirstName').focus();
             });
         });

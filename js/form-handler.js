@@ -91,25 +91,19 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     function collectFormData(dayRow) {
         const firstName = document.getElementById('refereeFirstName').value.trim();
-        const lastName = document.getElementById('refereeLastName').value.trim();
+        const lastName  = document.getElementById('refereeLastName').value.trim();
 
         const formData = {
-            'Referee Name': `${firstName} ${lastName}`,
-            'First Name': firstName,
-            'Last Name': lastName,
-            'Referee Email': document.getElementById('refereeEmail').value.trim(),
-            'Referee Phone': document.getElementById('refereePhone').value.trim(),
-            'Years Reffing': parseInt(document.getElementById('yearsReffing').value) || 0,
-            'Certification Level': document.getElementById('certificationLevel').value,
-            'Date': dayRow.querySelector('input[name="availableDate[]"]').value,
-            'Start Time': dayRow.querySelector('[name="startTime[]"]').value,
-            'End Time': dayRow.querySelector('[name="endTime[]"]').value,
-            'Max Games': parseInt(dayRow.querySelector('input[name="maxGames[]"]').value) || 1,
-            'Preferred Locations': getCheckboxValues('locations'),
-            'AR Only': document.getElementById('arOnly').value,
+            'Referee Name':         `${firstName} ${lastName}`,
+            'Date':                 dayRow.querySelector('input[name="availableDate[]"]').value,
+            'Start Time':           dayRow.querySelector('[name="startTime[]"]').value,
+            'End Time':             dayRow.querySelector('[name="endTime[]"]').value,
+            'Max Games':            parseInt(dayRow.querySelector('input[name="maxGames[]"]').value) || 1,
+            'Preferred Locations':  getCheckboxValues('locations'),
+            'AR Only':              document.getElementById('arOnly').value,
             'Age Groups Preferred': getCheckboxValues('ageGroups'),
-            'Notes': document.getElementById('notes').value.trim(),
-            'Status': 'New'
+            'Notes':                document.getElementById('notes').value.trim(),
+            'Status':               'New'
         };
 
         const travelDistance = document.getElementById('travelDistance');
