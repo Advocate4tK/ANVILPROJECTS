@@ -42,6 +42,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             await Promise.all(submissions);
 
+            // Store session so returning to the form skips name/email step
+            sessionStorage.setItem('refSession', JSON.stringify({
+                firstName: document.getElementById('refereeFirstName').value.trim(),
+                lastName:  document.getElementById('refereeLastName').value.trim(),
+                email:     document.getElementById('refereeEmail').value.trim()
+            }));
             window.location.href = 'submitted.html';
 
         } catch (error) {
