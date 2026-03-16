@@ -184,6 +184,16 @@
                         <span><span class="legend-dot" style="background:#bbb;"></span>No availability</span>
                     </div>
                     <input type="text" class="ref-search" id="refSearch" placeholder="Search refs...">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <label style="font-size:0.78rem; color:#555; white-space:nowrap;">Min. Years:</label>
+                        <select id="yearsFilter" style="font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
+                            <option value="0">Any</option>
+                            <option value="1">1+</option>
+                            <option value="3">3+</option>
+                            <option value="5">5+</option>
+                            <option value="10">10+</option>
+                        </select>
+                    </div>
                     <div id="refsListWrap">
                         <p class="hint">Load games to see refs.</p>
                     </div>
@@ -242,6 +252,9 @@
             document.getElementById('loadBtn').addEventListener('click', loadAll);
             document.getElementById('refSearch').addEventListener('input', function() {
                 renderRefs(this.value.toLowerCase());
+            });
+            document.getElementById('yearsFilter').addEventListener('change', function() {
+                renderRefs(document.getElementById('refSearch').value.toLowerCase());
             });
         });
 
@@ -513,11 +526,17 @@
             const gameTime = selectedGame ? (selectedGame.fields['Time'] || '') : null;
             const gameDT   = gameDate ? `${gameDate}|${gameTime}` : null;
 
+            const minYears = parseInt(document.getElementById('yearsFilter').value) || 0;
+
             const filtered = allRefs.filter(r => {
-                if (!query) return true;
                 const name  = (r.fields['Name']  || '').toLowerCase();
                 const email = (r.fields['Email'] || '').toLowerCase();
-                return name.includes(query) || email.includes(query);
+                if (query && !name.includes(query) && !email.includes(query)) return false;
+                if (minYears > 0) {
+                    const yrs = parseInt(r.fields['Years Reffing']) || 0;
+                    if (yrs < minYears) return false;
+                }
+                return true;
             });
 
             // Sort: available first, conflict second, no-avail last
