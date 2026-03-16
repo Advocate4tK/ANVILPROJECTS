@@ -219,14 +219,23 @@
 
         // Maps town/sub-region names to their parent club pill name
         const CLUB_ALIASES = {
-            'NECONN (Woodstock)': 'NECONN',
-            'Woodstock':          'NECONN',
-            'Putnam':             'NECONN',
-            'Thompson':           'NECONN',
-            'Eastford':           'NECONN',
-            'Pomfret':            'NECONN',
-            'Killingly':          'NECONN',
-            'Brooklyn':           'NECONN',
+            // Plain town names
+            'Woodstock':            'NECONN',
+            'Putnam':               'NECONN',
+            'Thompson':             'NECONN',
+            'Eastford':             'NECONN',
+            'Pomfret':              'NECONN',
+            'Killingly':            'NECONN',
+            'Brooklyn':             'NECONN',
+            // "NECONN [Town]" prefixed team names
+            'NECONN Woodstock':     'NECONN',
+            'NECONN Putnam':        'NECONN',
+            'NECONN Thompson':      'NECONN',
+            'NECONN Eastford':      'NECONN',
+            'NECONN Pomfret':       'NECONN',
+            'NECONN Killingly':     'NECONN',
+            'NECONN Brooklyn':      'NECONN',
+            'NECONN (Woodstock)':   'NECONN',
         };
 
         // ── State ────────────────────────────────────────────────────────────
@@ -416,16 +425,18 @@
             const exactMatch = CLUBS_LIST.find(c => c.toLowerCase() === nameLower);
             if (exactMatch) return exactMatch;
 
-            // Fallback: try to match home team name against CLUBS_LIST
-            const homeTeam = (f['Home Team'] || '').toLowerCase();
-            for (const c of CLUBS_LIST) {
-                if (homeTeam.includes(c.toLowerCase()) || c.toLowerCase().includes(homeTeam)) {
-                    return c;
+            // Fallback: check home team then away team against CLUBS_LIST and aliases
+            for (const teamField of ['Home Team', 'Away Team']) {
+                const team = (f[teamField] || '').toLowerCase();
+                if (!team) continue;
+                // Check aliases first (e.g. "NECONN Thompson" → "NECONN")
+                for (const [alias, club] of Object.entries(CLUB_ALIASES)) {
+                    if (team.includes(alias.toLowerCase())) return club;
                 }
-            }
-            // Also check home team against aliases
-            for (const [alias, club] of Object.entries(CLUB_ALIASES)) {
-                if (homeTeam.includes(alias.toLowerCase())) return club;
+                // Then check against known club names
+                for (const c of CLUBS_LIST) {
+                    if (team.includes(c.toLowerCase())) return c;
+                }
             }
 
             return name;
