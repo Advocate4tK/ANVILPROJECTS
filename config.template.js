@@ -49,6 +49,17 @@ const CONFIG = {
     // API endpoint (don't change this)
     AIRTABLE_API_URL: 'https://api.airtable.com/v0',
 
+    // EmailJS — sends confirmation emails to referees after availability submission
+    // Setup: https://www.emailjs.com  (free tier = 200 emails/month)
+    //   1. Create account → Add Email Service (connect Gmail) → note the Service ID
+    //   2. Create Email Template → note the Template ID
+    //   3. Account → API Keys → copy your Public Key
+    EMAILJS: {
+        PUBLIC_KEY:  'your_emailjs_public_key',   // Account > API Keys
+        SERVICE_ID:  'your_emailjs_service_id',   // Email Services tab
+        TEMPLATE_ID: 'your_emailjs_template_id'   // Email Templates tab
+    },
+
     // Form settings
     FORM_SETTINGS: {
         // Show success message for this many milliseconds

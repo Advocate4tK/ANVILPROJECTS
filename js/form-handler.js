@@ -58,6 +58,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             await Promise.all(submissions);
 
+            // Send confirmation email (non-blocking — availability already saved)
+            try {
+                await sendConfirmationEmail();
+            } catch(emailErr) {
+                console.warn('Confirmation email not sent:', emailErr.message);
+            }
+
             // Store session so returning to the form skips name/email step
             sessionStorage.setItem('refSession', JSON.stringify({
                 firstName: document.getElementById('refereeFirstName').value.trim(),
@@ -169,6 +176,49 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     function hideMessage() {
         formMessage.style.display = 'none';
+    }
+
+    // ── Confirmation email ────────────────────────────────────────────────────
+    async function sendConfirmationEmail() {
+        if (typeof emailjs === 'undefined') return;
+        if (!CONFIG?.EMAILJS?.SERVICE_ID || !CONFIG?.EMAILJS?.TEMPLATE_ID) return;
+        if (CONFIG.EMAILJS.PUBLIC_KEY === 'your_emailjs_public_key') return;
+
+        const firstName = document.getElementById('refereeFirstName').value.trim();
+        const lastName  = document.getElementById('refereeLastName').value.trim();
+        const email     = document.getElementById('refereeEmail').value.trim();
+        if (!email) return;
+
+        // Format each availability day
+        const dayRows = document.querySelectorAll('.day-row');
+        const dayLines = Array.from(dayRows).map((row, i) => {
+            const date  = row.querySelector('input[name="availableDate[]"]').value;
+            const start = row.querySelector('[name="startTime[]"]').value;
+            const end   = row.querySelector('[name="endTime[]"]').value;
+            const max   = row.querySelector('input[name="maxGames[]"]').value || '1';
+            const fmt = t => {
+                if (!t) return '';
+                const [h, m] = t.split(':').map(Number);
+                const ap = h >= 12 ? 'PM' : 'AM';
+                return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ap}`;
+            };
+            return `  Day ${i + 1}: ${date}  |  ${fmt(start)} – ${fmt(end)}  |  Max games: ${max}`;
+        }).join('\n');
+
+        const clubs     = getCheckboxValues('locations').join(', ') || 'None selected';
+        const ageGroups = getCheckboxValues('ageGroups').join(', ') || 'No preference';
+        const arOnly    = document.getElementById('arOnly').value || '—';
+        const notes     = document.getElementById('notes').value.trim() || 'None';
+
+        await emailjs.send(CONFIG.EMAILJS.SERVICE_ID, CONFIG.EMAILJS.TEMPLATE_ID, {
+            to_name:              `${firstName} ${lastName}`,
+            to_email:             email,
+            availability_details: dayLines,
+            preferred_clubs:      clubs,
+            age_groups:           ageGroups,
+            ar_only:              arOnly,
+            notes:                notes,
+        });
     }
 
     // Phone number formatting
