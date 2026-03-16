@@ -266,19 +266,36 @@
                 const createdRefNames = [];
                 for (let i = 0; i < FAKE_REFS.length; i++) {
                     const r = FAKE_REFS[i];
+                    // Try full fields first; if any field is unknown, fall back to confirmed fields only
+                    let rec = null;
                     try {
-                        const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
+                        rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
                             'Name':             r.name,
                             'Years Reffing':    r.years,
                             'Phone':            r.phone,
                             'Age':              r.age,
                             'Club Preference':  r.prefs,
                         });
+                    } catch(e) {
+                        if (e.message.includes('Unknown field name')) {
+                            log(`  ⚠ ${r.name}: some fields missing in Airtable (${e.message}) — retrying with core fields`, 'warn');
+                            try {
+                                rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
+                                    'Name':          r.name,
+                                    'Years Reffing': r.years,
+                                    'Phone':         r.phone,
+                                });
+                            } catch(e2) {
+                                log(`  ✗ ${r.name}: ${e2.message}`, 'err');
+                            }
+                        } else {
+                            log(`  ✗ ${r.name}: ${e.message}`, 'err');
+                        }
+                    }
+                    if (rec) {
                         seededRefIds.push(rec.id);
                         createdRefNames.push(r.name);
                         log(`  ✓ ${r.name} — ${r.years} yr${r.years == 1 ? '' : 's'}`, 'ok');
-                    } catch(e) {
-                        log(`  ✗ ${r.name}: ${e.message}`, 'err');
                     }
                     setProgress(65 + (i / FAKE_REFS.length) * 15);
                     await delay(150);
