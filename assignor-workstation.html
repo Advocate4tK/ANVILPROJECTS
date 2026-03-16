@@ -404,11 +404,30 @@
             let name = '';
             if (Array.isArray(raw) && raw.length > 0) name = raw.map(id => clubLookup[id] || id).join(', ');
             else if (typeof raw === 'string') name = raw;
+
             // Resolve aliases (e.g. town names → parent club)
             if (CLUB_ALIASES[name]) return CLUB_ALIASES[name];
             for (const [alias, club] of Object.entries(CLUB_ALIASES)) {
-                if (name.includes(alias)) return club;
+                if (name.toLowerCase().includes(alias.toLowerCase())) return club;
             }
+
+            // If name exactly matches a known club, return it
+            const nameLower = name.toLowerCase();
+            const exactMatch = CLUBS_LIST.find(c => c.toLowerCase() === nameLower);
+            if (exactMatch) return exactMatch;
+
+            // Fallback: try to match home team name against CLUBS_LIST
+            const homeTeam = (f['Home Team'] || '').toLowerCase();
+            for (const c of CLUBS_LIST) {
+                if (homeTeam.includes(c.toLowerCase()) || c.toLowerCase().includes(homeTeam)) {
+                    return c;
+                }
+            }
+            // Also check home team against aliases
+            for (const [alias, club] of Object.entries(CLUB_ALIASES)) {
+                if (homeTeam.includes(alias.toLowerCase())) return club;
+            }
+
             return name;
         }
 
@@ -418,7 +437,12 @@
             const filtered = allGames.filter(g => {
                 if (selectedClubs.size === 0 || selectedClubs.size === CLUBS_LIST.length) return true;
                 const club = resolveGameClub(g.fields);
-                return selectedClubs.has(club) || [...selectedClubs].some(sc => club.includes(sc));
+                const clubLower = club.toLowerCase();
+                return [...selectedClubs].some(sc =>
+                    sc.toLowerCase() === clubLower ||
+                    clubLower.includes(sc.toLowerCase()) ||
+                    sc.toLowerCase().includes(clubLower)
+                );
             });
 
             document.getElementById('gameCountPill').textContent = `${filtered.length} game${filtered.length !== 1 ? 's' : ''}`;
