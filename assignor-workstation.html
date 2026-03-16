@@ -94,6 +94,8 @@
         .ref-card.available  { border-left-color: #27ae60; }
         .ref-card.conflict   { border-left-color: #bbb; background: #f5f5f5; opacity: 0.6; cursor: not-allowed; }
         .ref-card.no-avail   { border-left-color: #bbb; opacity: 0.65; }
+        .ref-card.prefers    { border-left-color: #f39c12; }
+        .pref-tag { font-size:0.71rem; color:#d68910; font-weight:600; }
         .ref-name { font-weight: 700; color: #0f3460; }
         .ref-meta { font-size: 0.75rem; color: #888; margin-top: 2px; }
         .cert-pill {
@@ -180,7 +182,7 @@
                     <div class="panel-title">👤 Referees</div>
                     <div class="conflict-legend">
                         <span><span class="legend-dot" style="background:#27ae60;"></span>Free</span>
-                        <span><span class="legend-dot" style="background:#f39c12;"></span>Time conflict</span>
+                        <span><span class="legend-dot" style="background:#f39c12;"></span>Prefers / conflict</span>
                         <span><span class="legend-dot" style="background:#bbb;"></span>No availability</span>
                     </div>
                     <input type="text" class="ref-search" id="refSearch" placeholder="Search refs...">
@@ -194,6 +196,24 @@
                             <option value="4">4</option>
                             <option value="5-10">5–10</option>
                             <option value="10+">10+</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <label style="font-size:0.78rem; color:#555; white-space:nowrap;">Prefers Club:</label>
+                        <select id="prefFilter" style="font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
+                            <option value="">Show All</option>
+                            <option value="East Haddam">East Haddam</option>
+                            <option value="Glastonbury">Glastonbury</option>
+                            <option value="Griswold">Griswold</option>
+                            <option value="Haddam-Killingworth">Haddam-Killingworth</option>
+                            <option value="Lebanon">Lebanon</option>
+                            <option value="NECONN">NECONN</option>
+                            <option value="New London">New London</option>
+                            <option value="Portland">Portland</option>
+                            <option value="RHAMYS">RHAMYS</option>
+                            <option value="Stonington">Stonington</option>
+                            <option value="Valley">Valley</option>
+                            <option value="WAM">WAM</option>
                         </select>
                     </div>
                     <div id="refsListWrap">
@@ -268,6 +288,9 @@
                 renderRefs(this.value.toLowerCase());
             });
             document.getElementById('yearsFilter').addEventListener('change', function() {
+                renderRefs(document.getElementById('refSearch').value.toLowerCase());
+            });
+            document.getElementById('prefFilter').addEventListener('change', function() {
                 renderRefs(document.getElementById('refSearch').value.toLowerCase());
             });
         });
@@ -590,19 +613,33 @@
         function selectGame(gameId) {
             selectedGame = allGames.find(g => g.id === gameId) || null;
             document.querySelectorAll('.game-card').forEach(c => c.classList.remove('selected'));
-            if (selectedGame) document.getElementById('card-' + gameId)?.classList.add('selected');
+            if (selectedGame) {
+                document.getElementById('card-' + gameId)?.classList.add('selected');
+                // Auto-set preference filter to this game's club so preferred refs float up
+                const gameClub = resolveGameClub(selectedGame.fields);
+                const sel = document.getElementById('prefFilter');
+                const matchingOpt = [...sel.options].find(o => o.value === gameClub);
+                sel.value = matchingOpt ? gameClub : '';
+            }
             renderRefs(document.getElementById('refSearch').value.toLowerCase());
         }
 
         // ── Render refs ───────────────────────────────────────────────────────
+        // Parse Club Preference — handles both Airtable multiple-select (array) and plain text (comma list)
+        function parsePreferences(raw) {
+            if (!raw) return [];
+            if (Array.isArray(raw)) return raw.map(s => s.trim()).filter(Boolean);
+            return String(raw).split(',').map(s => s.trim()).filter(Boolean);
+        }
+
         function renderRefs(query) {
             const wrap = document.getElementById('refsListWrap');
             if (!allRefs.length) { wrap.innerHTML = '<p class="hint">Load games first.</p>'; return; }
 
-            const gameDate = selectedGame ? selectedGame.fields['Date'] : null;
-            const gameTime = selectedGame ? (selectedGame.fields['Time'] || '') : null;
-            const gameDT   = gameDate ? `${gameDate}|${gameTime}` : null;
-
+            const gameDate  = selectedGame ? selectedGame.fields['Date'] : null;
+            const gameTime  = selectedGame ? (selectedGame.fields['Time'] || '') : null;
+            const gameDT    = gameDate ? `${gameDate}|${gameTime}` : null;
+            const prefClub  = document.getElementById('prefFilter').value;
             const yearsFilter = document.getElementById('yearsFilter').value;
 
             const filtered = allRefs.filter(r => {
@@ -621,16 +658,19 @@
                 return true;
             });
 
-            // Sort: available first, conflict second, no-avail last
+            // Classify: 0=available+prefers, 1=available, 2=conflict, 3=no-avail
             const classify = r => {
                 const name = (r.fields['Name'] || '').trim().toLowerCase();
                 const hasAvail = gameDate ? availByName[name]?.has(gameDate) : true;
                 const hasConflict = gameDT && assignedAt[r.id] ?
                     [...(assignedAt[r.id].get(gameDT) || [])].filter(gid => !selectedGame || gid !== selectedGame.id).length > 0
                     : false;
-                if (!hasAvail && gameDate) return 2;
-                if (hasConflict) return 1;
-                return 0;
+                const prefs = parsePreferences(r.fields['Club Preference']);
+                const prefMatch = prefClub && prefs.some(p => p.toLowerCase() === prefClub.toLowerCase());
+                if (!hasAvail && gameDate) return 3;
+                if (hasConflict) return 2;
+                if (prefMatch) return 0;
+                return 1;
             };
 
             filtered.sort((a, b) => classify(a) - classify(b));
@@ -644,19 +684,25 @@
                 const cert   = r.fields['Certification Level'] || '';
                 const phone  = r.fields['Phone'] || '';
                 const cls    = classify(r);
-                const cardClass = cls === 0 ? 'available' : cls === 1 ? 'conflict' : 'no-avail';
-                const status = cls === 0 ? '' : cls === 1
+                // cls 0=prefers+available, 1=available, 2=conflict, 3=no-avail
+                const cardClass = cls <= 1 ? (cls === 0 ? 'available prefers' : 'available') : cls === 2 ? 'conflict' : 'no-avail';
+                const status = cls <= 1 ? '' : cls === 2
                     ? '<span style="color:#999; font-size:0.72rem;">⚠ Already assigned this time</span>'
                     : '<span style="color:#bbb; font-size:0.72rem;">No availability submitted</span>';
                 const certCls = cert === 'National' ? 'cert-N' : cert === 'Regional' ? 'cert-R' : 'cert-G';
-
                 const years = r.fields['Years Reffing'] ? `${r.fields['Years Reffing']} yr${r.fields['Years Reffing'] == 1 ? '' : 's'}` : '';
 
-                html += `<div class="ref-card ${cardClass}" draggable="${cls !== 1}"
+                const prefs = parsePreferences(r.fields['Club Preference']);
+                const prefTag = prefs.length
+                    ? `<span class="pref-tag">⭐ ${prefs.join(', ')}</span>`
+                    : '';
+
+                html += `<div class="ref-card ${cardClass}" draggable="${cls !== 2}"
                     data-ref-id="${rid}" data-ref-name="${name}"
-                    ondragstart="if(${cls === 1}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
+                    ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
                     <div class="ref-name">${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}</div>
                     <div class="ref-meta">${[phone, years].filter(Boolean).join(' · ')}${status ? ' &nbsp;' + status : ''}</div>
+                    ${prefTag ? `<div class="ref-meta" style="margin-top:2px;">${prefTag}</div>` : ''}
                 </div>`;
             });
 
