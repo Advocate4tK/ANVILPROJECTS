@@ -221,8 +221,12 @@
                         'Field':       g.field,
                         'Game Status': 'Scheduled',
                     };
-                    // Only set Club if we resolved a record ID (it's a linked record field)
-                    if (clubRecordId) fields['Club'] = [clubRecordId];
+                    // Resolve club name as plain text (Games.Club is a text field)
+                    if (clubRecordId) {
+                        // Find the human-readable club name from clubByName
+                        const clubName = Object.keys(clubByName).find(k => clubByName[k] === clubRecordId) || '';
+                        if (clubName) fields['Club'] = clubName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    }
 
                     try {
                         const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
@@ -245,9 +249,7 @@
                     try {
                         const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
                             'Name':          r.name,
-                            'Phone':         r.phone,
                             'Years Reffing': r.years,
-                            'Status':        'Active',
                         });
                         seededRefIds.push(rec.id);
                         createdRefNames.push(r.name);
