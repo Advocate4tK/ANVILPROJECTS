@@ -236,6 +236,18 @@
             'NECONN Killingly':     'NECONN',
             'NECONN Brooklyn':      'NECONN',
             'NECONN (Woodstock)':   'NECONN',
+            // "FC" suffix variants
+            'NECONN FC':            'NECONN',
+            'East Haddam FC':       'East Haddam',
+            'Lebanon FC':           'Lebanon',
+            'Glastonbury FC':       'Glastonbury',
+            'Griswold FC':          'Griswold',
+            'Portland FC':          'Portland',
+            'Stonington FC':        'Stonington',
+            'New London FC':        'New London',
+            'Valley FC':            'Valley',
+            'WAM FC':               'WAM',
+            'RHAMYS FC':            'RHAMYS',
         };
 
         // ── State ────────────────────────────────────────────────────────────
@@ -448,6 +460,7 @@
             const filtered = allGames.filter(g => {
                 if (selectedClubs.size === 0 || selectedClubs.size === CLUBS_LIST.length) return true;
                 const club = resolveGameClub(g.fields);
+                if (!club) return false; // no club resolved — hide when filtering
                 const clubLower = club.toLowerCase();
                 return [...selectedClubs].some(sc =>
                     sc.toLowerCase() === clubLower ||
@@ -576,8 +589,11 @@
 
         function formatTime(t) {
             if (!t) return '';
-            const [h, m] = t.split(':').map(Number);
-            if (isNaN(h)) return t;
+            // Handle "HH:MM:SS", "HH:MM", or "H:MM AM/PM" formats
+            const clean = t.replace(/\s*(AM|PM)$/i, '').trim();
+            const parts = clean.split(':').map(Number);
+            const h = parts[0], m = parts[1] || 0;
+            if (isNaN(h) || isNaN(m)) return t;
             const ampm = h >= 12 ? 'PM' : 'AM';
             return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`;
         }
