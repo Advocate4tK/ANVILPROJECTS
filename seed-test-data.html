@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed Test Data</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .log { background:#1a1a2e; color:#e0e0e0; border-radius:8px; padding:16px; font-family:monospace; font-size:0.82rem; max-height:500px; overflow-y:auto; margin-top:16px; }
+        .log .ok  { color:#27ae60; }
+        .log .err { color:#e74c3c; }
+        .log .info { color:#74b9ff; }
+        .log .warn { color:#f39c12; }
+        .progress-bar { background:#eee; border-radius:6px; height:10px; margin:10px 0; }
+        .progress-fill { background:#0f3460; height:10px; border-radius:6px; transition:width 0.3s; width:0%; }
+        .section-card { background:white; border-radius:12px; padding:24px; box-shadow:0 4px 15px rgba(0,0,0,0.07); margin-bottom:20px; border-top:4px solid #e94560; }
+        .btn-danger { background:#e74c3c; }
+        .btn-danger:hover { background:#c0392b; }
+        .summary-box { background:#f0fff4; border:1px solid #27ae60; border-radius:8px; padding:14px; margin-top:14px; display:none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧪 Seed Test Data</h1>
+            <p class="subtitle">Generate test games &amp; availability for this weekend</p>
+        </header>
+
+        <main>
+            <div style="margin-bottom:20px;">
+                <a href="admin.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Back to Dashboard</a>
+            </div>
+
+            <div class="section-card">
+                <h2 style="color:#0f3460; margin-bottom:6px;">Weekend: March 21–22, 2026</h2>
+                <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">
+                    Creates <strong>20 games</strong> (10 Saturday + 10 Sunday) across U8–U19 age groups,
+                    each featuring one of your clubs vs an outside CT team.
+                    Also submits <strong>availability for all existing referees</strong> for both days.
+                </p>
+                <p style="color:#e74c3c; font-size:0.85rem; margin-bottom:20px;">
+                    ⚠ This will add records to your live Airtable base. Only run once.
+                </p>
+
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="seedBtn" onclick="runSeed()">🚀 Seed Test Data</button>
+                    <button class="btn btn-danger" id="clearBtn" onclick="clearData()" style="display:none;">🗑 Clear Seeded Data</button>
+                </div>
+
+                <div class="progress-bar" id="progressBar" style="display:none;">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+
+                <div class="summary-box" id="summaryBox"></div>
+                <div class="log" id="log" style="display:none;"></div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Referee Scheduling System by Anvil Arts</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="js/airtable-client.js"></script>
+    <script src="js/admin-auth.js"></script>
+    <script>
+        checkAdminAccess();
+
+        const SAT = '2026-03-21';
+        const SUN = '2026-03-22';
+
+        // Games: one of our clubs vs an outside CT club
+        const GAMES_TO_SEED = [
+            // ── Saturday ─────────────────────────────────────────────────────
+            { date: SAT, time: '09:00', home: 'Glastonbury',          away: 'Farmington SC',        age: 'U8',  field: 'Nevers Road Park'             },
+            { date: SAT, time: '09:00', home: 'WAM',                  away: 'Simsbury SC',          age: 'U8',  field: 'Cornerstone Park'              },
+            { date: SAT, time: '10:30', home: 'NECONN (Woodstock)',    away: 'Canton Cobras',        age: 'U10', field: 'Woodstock Academy Fields'      },
+            { date: SAT, time: '10:30', home: 'Griswold',             away: 'Avon Old Farms SC',    age: 'U10', field: 'Griswold Soccer Complex'        },
+            { date: SAT, time: '10:30', home: 'East Haddam',          away: 'Windsor FC',           age: 'U10', field: 'Nathan Hale Middle School'      },
+            { date: SAT, time: '12:00', home: 'Stonington',           away: 'South Windsor SC',     age: 'U12', field: 'Stonington High School Fields'  },
+            { date: SAT, time: '12:00', home: 'New London',           away: 'Manchester SC',        age: 'U12', field: 'Mitchell College Fields'        },
+            { date: SAT, time: '13:30', home: 'Portland',             away: 'Tolland SC',           age: 'U14', field: 'Brownstone Exploration Fields'  },
+            { date: SAT, time: '13:30', home: 'Haddam-Killingworth',  away: 'Coventry SC',          age: 'U14', field: 'HK Recreation Fields'           },
+            { date: SAT, time: '15:00', home: 'RHAMYS',               away: 'Stafford SC',          age: 'U16', field: 'Rocky Hill Town Park'           },
+            // ── Sunday ───────────────────────────────────────────────────────
+            { date: SUN, time: '09:00', home: 'Lebanon',              away: 'Farmington SC',        age: 'U8',  field: 'Lebanon Town Fields'           },
+            { date: SUN, time: '09:00', home: 'Valley',               away: 'Granby SC',            age: 'U8',  field: 'Deep River Recreational Fields'},
+            { date: SUN, time: '10:30', home: 'Glastonbury',          away: 'Suffield SC',          age: 'U10', field: 'Nevers Road Park'              },
+            { date: SUN, time: '10:30', home: 'Portland',             away: 'Canton Cobras',        age: 'U10', field: 'Brownstone Exploration Fields'  },
+            { date: SUN, time: '12:00', home: 'WAM',                  away: 'Avon Old Farms SC',    age: 'U12', field: 'Cornerstone Park'              },
+            { date: SUN, time: '12:00', home: 'Griswold',             away: 'Windsor FC',           age: 'U12', field: 'Griswold Soccer Complex'        },
+            { date: SUN, time: '13:30', home: 'Stonington',           away: 'South Windsor SC',     age: 'U14', field: 'Stonington High School Fields'  },
+            { date: SUN, time: '13:30', home: 'New London',           away: 'Tolland SC',           age: 'U14', field: 'Mitchell College Fields'        },
+            { date: SUN, time: '15:00', home: 'Haddam-Killingworth',  away: 'Ellington SC',         age: 'U16', field: 'HK Recreation Fields'           },
+            { date: SUN, time: '15:00', home: 'NECONN (Woodstock)',   away: 'East Hartford SC',     age: 'U19', field: 'Woodstock Academy Fields'       },
+        ];
+
+        let seededGameIds = [];
+        let seededAvailIds = [];
+
+        function log(msg, type = '') {
+            const el = document.getElementById('log');
+            el.style.display = 'block';
+            el.innerHTML += `<div class="${type}">${msg}</div>`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function setProgress(pct) {
+            document.getElementById('progressFill').style.width = pct + '%';
+        }
+
+        async function runSeed() {
+            const btn = document.getElementById('seedBtn');
+            btn.disabled = true;
+            btn.textContent = 'Seeding…';
+            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('log').innerHTML = '';
+            seededGameIds = [];
+            seededAvailIds = [];
+
+            try {
+                // ── Step 1: Load existing clubs ───────────────────────────────
+                log('Loading clubs from Airtable…', 'info');
+                const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+                const clubByName = {};
+                clubs.forEach(c => {
+                    const name = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || '';
+                    if (name) clubByName[name.toLowerCase()] = c.id;
+                });
+                log(`  Found ${clubs.length} clubs`, 'ok');
+
+                // ── Step 2: Create games ──────────────────────────────────────
+                log('Creating games…', 'info');
+                const total = GAMES_TO_SEED.length;
+                for (let i = 0; i < total; i++) {
+                    const g = GAMES_TO_SEED[i];
+
+                    // Resolve club: try exact match of home team name against clubs table
+                    const clubKey = g.home.toLowerCase();
+                    let clubField = g.home; // fallback: plain text
+                    // Check if any club name is contained in home team string
+                    for (const [name, id] of Object.entries(clubByName)) {
+                        if (clubKey.includes(name) || name.includes(clubKey.split(' ')[0].toLowerCase())) {
+                            clubField = name.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+                            break;
+                        }
+                    }
+
+                    const fields = {
+                        'Home Team':  g.home,
+                        'Away Team':  g.away,
+                        'Date':       g.date,
+                        'Time':       g.time,
+                        'Age Group':  g.age,
+                        'Field':      g.field,
+                        'Club':       clubField,
+                        'Game Status': 'Scheduled',
+                    };
+
+                    try {
+                        const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
+                        seededGameIds.push(rec.id);
+                        log(`  ✓ ${g.date} ${g.time} — ${g.home} vs ${g.away} (${g.age})`, 'ok');
+                    } catch(e) {
+                        log(`  ✗ ${g.home} vs ${g.away}: ${e.message}`, 'err');
+                    }
+
+                    setProgress(10 + (i / total) * 50);
+                    await delay(150); // stay under Airtable rate limit
+                }
+
+                // ── Step 3: Load existing referees ────────────────────────────
+                log('Loading referees…', 'info');
+                setProgress(65);
+                const refs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 });
+                log(`  Found ${refs.length} referee${refs.length !== 1 ? 's' : ''}`, 'ok');
+
+                if (refs.length === 0) {
+                    log('  No referees found — skipping availability seeding.', 'warn');
+                } else {
+                    // ── Step 4: Create availability for each ref ──────────────
+                    log('Creating availability records…', 'info');
+                    const dates = [SAT, SUN];
+                    let avCount = 0;
+                    const avTotal = refs.length * dates.length;
+
+                    for (const ref of refs) {
+                        const name = ref.fields['Name'] || '';
+                        if (!name) continue;
+
+                        for (const date of dates) {
+                            const fields = {
+                                'Referee Name': name,
+                                'Date':         date,
+                                'Start Time':   '08:00',
+                                'End Time':     '18:00',
+                                'Max Games':    '2',
+                                'Notes':        'Test data',
+                                'Status':       'Available',
+                            };
+                            try {
+                                const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.AVAILABILITY, fields);
+                                seededAvailIds.push(rec.id);
+                                avCount++;
+                                log(`  ✓ ${name} — ${date}`, 'ok');
+                            } catch(e) {
+                                log(`  ✗ ${name} ${date}: ${e.message}`, 'err');
+                            }
+
+                            setProgress(65 + (avCount / avTotal) * 33);
+                            await delay(150);
+                        }
+                    }
+                }
+
+                setProgress(100);
+                log('Done!', 'info');
+
+                const summary = document.getElementById('summaryBox');
+                summary.style.display = 'block';
+                summary.innerHTML = `
+                    <strong style="color:#27ae60;">✓ Seed complete</strong><br>
+                    <span style="font-size:0.88rem;">
+                        ${seededGameIds.length} games created &nbsp;·&nbsp;
+                        ${seededAvailIds.length} availability records created
+                    </span>`;
+
+                document.getElementById('clearBtn').style.display = 'inline-block';
+
+            } catch(e) {
+                log('Fatal error: ' + e.message, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Seed Test Data';
+            }
+        }
+
+        async function clearData() {
+            if (!confirm(`Delete ${seededGameIds.length} games and ${seededAvailIds.length} availability records that were just created?`)) return;
+
+            const btn = document.getElementById('clearBtn');
+            btn.disabled = true;
+            btn.textContent = 'Clearing…';
+            document.getElementById('progressFill').style.width = '0%';
+
+            const allIds = [
+                ...seededGameIds.map(id => ({ table: CONFIG.AIRTABLE_TABLES.GAMES, id })),
+                ...seededAvailIds.map(id => ({ table: CONFIG.AIRTABLE_TABLES.AVAILABILITY, id })),
+            ];
+
+            let done = 0;
+            for (const { table, id } of allIds) {
+                try {
+                    await deleteRecord(table, id);
+                    log(`  deleted ${id}`, 'warn');
+                } catch(e) {
+                    log(`  failed to delete ${id}: ${e.message}`, 'err');
+                }
+                done++;
+                setProgress((done / allIds.length) * 100);
+                await delay(150);
+            }
+
+            seededGameIds = [];
+            seededAvailIds = [];
+            document.getElementById('summaryBox').style.display = 'none';
+            btn.style.display = 'none';
+            btn.disabled = false;
+            btn.textContent = '🗑 Clear Seeded Data';
+            log('All seeded records deleted.', 'info');
+        }
+
+        async function deleteRecord(tableName, recordId) {
+            const url = `${CONFIG.AIRTABLE_API_URL}/${CONFIG.AIRTABLE_BASE_ID}/${encodeURIComponent(tableName)}/${recordId}`;
+            const res = await fetch(url, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${CONFIG.AIRTABLE_API_KEY}` }
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error?.message || res.statusText);
+            }
+        }
+
+        function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+    </script>
+</body>
+</html>
