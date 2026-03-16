@@ -78,6 +78,12 @@
                                 </div>
 
                                 <div class="form-group">
+                                    <label for="refereeBirthDate">Date of Birth <span class="required">*</span></label>
+                                    <input type="date" id="refereeBirthDate" name="refereeBirthDate" required>
+                                    <small style="color:#888; font-size:0.8rem;">Used to calculate your age for game assignment purposes</small>
+                                </div>
+
+                                <div class="form-group">
                                     <label for="refereeAddress">Street Address <span class="required">*</span></label>
                                     <input type="text" id="refereeAddress" name="refereeAddress" placeholder="123 Main St">
                                 </div>
@@ -401,7 +407,22 @@
             const container = document.getElementById('availabilityDays');
             container.appendChild(createDayRow(1));
 
-            // Resume session — skip entry step and go straight to availability
+            // ── Global state for returning ref age update ───────────────────────
+        window._foundRefId  = null; // Airtable record ID of returning ref
+        window._foundRefDob = null; // their stored Date of Birth (YYYY-MM-DD)
+
+        // ── Age from date of birth ───────────────────────────────────────────
+        window.calculateAge = function(dobStr) {
+            if (!dobStr) return null;
+            const dob = new Date(dobStr + 'T00:00:00');
+            const today = new Date();
+            let age = today.getFullYear() - dob.getFullYear();
+            const m = today.getMonth() - dob.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+            return age >= 0 ? age : null;
+        };
+
+        // Resume session — skip entry step and go straight to availability
             const session = sessionStorage.getItem('refSession');
             if (session) {
                 try {
@@ -477,6 +498,11 @@
                         if (f['City'])                 document.getElementById('refereeCity').value          = f['City'];
                         if (f['State'])                document.getElementById('refereeState').value         = f['State'];
                         if (f['Zip Code'])             document.getElementById('refereeZip').value           = f['Zip Code'];
+                        if (f['Date of Birth'])        document.getElementById('refereeBirthDate').value     = f['Date of Birth'];
+
+                        // Store for age recalculation on submit
+                        window._foundRefId  = referee.id;
+                        window._foundRefDob = f['Date of Birth'] || null;
 
                         // Hide doorway, hide contact step, show welcome banner, go straight to availability
                         document.getElementById('entryFieldset').style.display  = 'none';
@@ -549,12 +575,18 @@
                 try {
                     const firstName = document.getElementById('refereeFirstName').value.trim();
                     const lastName  = document.getElementById('refereeLastName').value.trim();
+                    const birthDate = document.getElementById('refereeBirthDate').value;
                     const refereeRecord = {
                         'Name':          `${firstName} ${lastName}`,
                         'Email':         document.getElementById('refereeEmail').value.trim(),
                         'Phone':         phone,
                         'Years Reffing': years
                     };
+                    if (birthDate) {
+                        refereeRecord['Date of Birth'] = birthDate;
+                        const age = window.calculateAge(birthDate);
+                        if (age !== null) refereeRecord['Age'] = age;
+                    }
 
                     await airtableClient.upsertReferee(refereeRecord);
 
@@ -593,8 +625,10 @@
                 fb.classList.remove('unlocked');
                 fb.style.display = 'none';
                 // Clear fields
+                window._foundRefId  = null;
+                window._foundRefDob = null;
                 ['refereeFirstName','refereeLastName','refereeEmail','refereePhone',
-                 'refereeAddress','refereeCity','refereeState','refereeZip','yearsReffing','certificationLevel'].forEach(id => {
+                 'refereeBirthDate','refereeAddress','refereeCity','refereeState','refereeZip','yearsReffing','certificationLevel'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.value = '';
                 });

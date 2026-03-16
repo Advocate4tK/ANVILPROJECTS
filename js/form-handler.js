@@ -31,6 +31,22 @@ document.addEventListener('DOMContentLoaded', function() {
         submitBtn.innerHTML = 'Submitting... <span class="spinner"></span>';
 
         try {
+            // For returning refs: recalculate age from DOB and update their record
+            if (window._foundRefId && window._foundRefDob && typeof window.calculateAge === 'function') {
+                const currentAge = window.calculateAge(window._foundRefDob);
+                if (currentAge !== null) {
+                    try {
+                        await airtableClient.updateRecord(
+                            CONFIG.AIRTABLE_TABLES.REFEREES,
+                            window._foundRefId,
+                            { 'Age': currentAge }
+                        );
+                    } catch(ageErr) {
+                        console.warn('Could not update age:', ageErr.message);
+                    }
+                }
+            }
+
             const dayRows = document.querySelectorAll('.day-row');
 
             // Create one availability record per day
