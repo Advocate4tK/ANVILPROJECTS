@@ -163,15 +163,35 @@
             seededAvailIds = [];
 
             try {
-                // ── Step 1: Load existing clubs ───────────────────────────────
-                log('Loading clubs from Airtable…', 'info');
-                const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+                // ── Step 1: Ensure all 12 clubs exist in Clubs table ─────────
+                log('Checking clubs table…', 'info');
+                const ALL_CLUBS = [
+                    'East Haddam','Glastonbury','Griswold','Haddam-Killingworth',
+                    'Lebanon','NECONN','New London','Portland',
+                    'RHAMYS','Stonington','Valley','WAM'
+                ];
+                const existingClubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
                 const clubByName = {};
-                clubs.forEach(c => {
+                existingClubs.forEach(c => {
                     const name = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || '';
                     if (name) clubByName[name.toLowerCase()] = c.id;
                 });
-                log(`  Found ${clubs.length} clubs`, 'ok');
+                log(`  Found ${existingClubs.length} existing club${existingClubs.length !== 1 ? 's' : ''}`, 'ok');
+
+                for (const clubName of ALL_CLUBS) {
+                    if (!clubByName[clubName.toLowerCase()]) {
+                        try {
+                            const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.CLUBS, { 'Name': clubName });
+                            clubByName[clubName.toLowerCase()] = rec.id;
+                            log(`  ✓ Created club: ${clubName}`, 'ok');
+                        } catch(e) {
+                            log(`  ✗ Could not create club ${clubName}: ${e.message}`, 'err');
+                        }
+                        await delay(150);
+                    } else {
+                        log(`  — ${clubName} already exists`, 'info');
+                    }
+                }
 
                 // ── Step 2: Create games ──────────────────────────────────────
                 log('Creating games…', 'info');
