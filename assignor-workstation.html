@@ -172,6 +172,16 @@
                         🗓 Games
                         <span class="count-pill" id="gameCountPill">0 games</span>
                     </div>
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+                        <label style="font-size:0.78rem; color:#555; white-space:nowrap;">Sort by:</label>
+                        <select id="gameSort" style="font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
+                            <option value="datetime">Date &amp; Time</option>
+                            <option value="age-asc">Age Group — youngest first</option>
+                            <option value="age-desc">Age Group — oldest first</option>
+                            <option value="time-asc">Time — earliest first</option>
+                            <option value="time-desc">Time — latest first</option>
+                        </select>
+                    </div>
                     <div id="gamesListWrap">
                         <p class="hint">Select clubs and load games.</p>
                     </div>
@@ -293,6 +303,7 @@
             document.getElementById('prefFilter').addEventListener('change', function() {
                 renderRefs(document.getElementById('refSearch').value.toLowerCase());
             });
+            document.getElementById('gameSort').addEventListener('change', renderGames);
         });
 
         function fmt(d) {
@@ -466,6 +477,9 @@
         }
 
         // ── Render games ──────────────────────────────────────────────────────
+        const AGE_ORDER = { 'U6':0,'U7':1,'U8':2,'U9':3,'U10':4,'U11':5,'U12':6,
+                            'U13':7,'U14':8,'U15':9,'U16':10,'U17':11,'U18':12,'U19':13 };
+
         function renderGames() {
             const wrap = document.getElementById('gamesListWrap');
             const filtered = allGames.filter(g => {
@@ -479,6 +493,23 @@
                     sc.toLowerCase().includes(clubLower)
                 );
             });
+
+            // Apply chosen sort
+            const sortMode = document.getElementById('gameSort')?.value || 'datetime';
+            if (sortMode === 'datetime') {
+                filtered.sort((a,b) =>
+                    (`${a.fields['Date']}|${a.fields['Time']||''}`).localeCompare(`${b.fields['Date']}|${b.fields['Time']||''}`));
+            } else if (sortMode === 'age-asc') {
+                filtered.sort((a,b) =>
+                    (AGE_ORDER[a.fields['Age Group']] ?? 99) - (AGE_ORDER[b.fields['Age Group']] ?? 99));
+            } else if (sortMode === 'age-desc') {
+                filtered.sort((a,b) =>
+                    (AGE_ORDER[b.fields['Age Group']] ?? 99) - (AGE_ORDER[a.fields['Age Group']] ?? 99));
+            } else if (sortMode === 'time-asc') {
+                filtered.sort((a,b) => (a.fields['Time']||'').localeCompare(b.fields['Time']||''));
+            } else if (sortMode === 'time-desc') {
+                filtered.sort((a,b) => (b.fields['Time']||'').localeCompare(a.fields['Time']||''));
+            }
 
             document.getElementById('gameCountPill').textContent = `${filtered.length} game${filtered.length !== 1 ? 's' : ''}`;
 
@@ -691,6 +722,7 @@
                     : '<span style="color:#bbb; font-size:0.72rem;">No availability submitted</span>';
                 const certCls = cert === 'National' ? 'cert-N' : cert === 'Regional' ? 'cert-R' : 'cert-G';
                 const years = r.fields['Years Reffing'] ? `${r.fields['Years Reffing']} yr${r.fields['Years Reffing'] == 1 ? '' : 's'}` : '';
+                const age   = r.fields['Age'] ? `age ${r.fields['Age']}` : '';
 
                 const prefs = parsePreferences(r.fields['Club Preference']);
                 const prefTag = prefs.length
@@ -701,7 +733,7 @@
                     data-ref-id="${rid}" data-ref-name="${name}"
                     ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
                     <div class="ref-name">${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}</div>
-                    <div class="ref-meta">${[phone, years].filter(Boolean).join(' · ')}${status ? ' &nbsp;' + status : ''}</div>
+                    <div class="ref-meta">${[phone, age, years].filter(Boolean).join(' · ')}${status ? ' &nbsp;' + status : ''}</div>
                     ${prefTag ? `<div class="ref-meta" style="margin-top:2px;">${prefTag}</div>` : ''}
                 </div>`;
             });
