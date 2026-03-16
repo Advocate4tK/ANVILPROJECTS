@@ -51,6 +51,7 @@ const progressBar   = document.getElementById('progressBar');
 const progressText  = document.getElementById('progressText');
 
 let loadedGames = [];
+let refIdLookup = {}; // Airtable record ID → Central Assign numeric ID
 
 // ── Load Games ────────────────────────────────────────────────────────────────
 loadBtn.addEventListener('click', async () => {
@@ -83,7 +84,19 @@ loadBtn.addEventListener('click', async () => {
         const options = { maxRecords: 500 };
         if (filter) options.filterByFormula = filter;
 
-        const records = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, options);
+        // Load referee CA IDs in parallel with games
+        progressText.textContent = 'Loading games and referee IDs...';
+        const [records, referees] = await Promise.all([
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, options),
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 })
+        ]);
+
+        // Build lookup: Airtable record ID → Central Assign numeric ID
+        refIdLookup = {};
+        referees.forEach(r => {
+            const caId = r.fields['Central Assign ID'];
+            if (caId) refIdLookup[r.id] = parseInt(caId) || caId;
+        });
 
         progressBar.style.width = '100%';
         progressText.textContent = 'Done!';
@@ -190,6 +203,13 @@ exportBtn.addEventListener('click', () => {
         const f = rec.fields;
         const venueId = resolveVenueId(f['Field'] || f['Venue'] || '');
 
+        // Resolve Center Referee → Central Assign numeric ID
+        const centerRefField = f['Center Referee'];
+        let refId = 0;
+        if (Array.isArray(centerRefField) && centerRefField.length > 0) {
+            refId = refIdLookup[centerRefField[0]] || 0;
+        }
+
         return [
             f['Home Team']  || '',
             f['Away Team']  || '',
@@ -202,7 +222,7 @@ exportBtn.addEventListener('click', () => {
             venueId || (f['Field'] || f['Venue'] || ''),
             '',
             f['League'] || DEFAULTS.league,
-            0, 0, 0, 0, 0,
+            refId, 0, 0, 0, 0,
             DEFAULTS.diagSysCtl,
             DEFAULTS.refRate,
             DEFAULTS.arRate,
