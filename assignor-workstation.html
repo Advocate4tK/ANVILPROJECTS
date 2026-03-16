@@ -96,6 +96,27 @@
         .ref-card.no-avail   { border-left-color: #bbb; opacity: 0.65; }
         .ref-card.prefers    { border-left-color: #f39c12; }
         .pref-tag { font-size:0.71rem; color:#d68910; font-weight:600; }
+
+        /* ── Field display dropdown ── */
+        .field-toggle-wrap { position:relative; margin-bottom:8px; }
+        .field-toggle-btn {
+            width:100%; text-align:left; background:white; border:1px solid #ccc;
+            border-radius:6px; padding:5px 10px; font-size:0.82rem; cursor:pointer;
+            display:flex; justify-content:space-between; align-items:center;
+            font-family:inherit; color:#333;
+        }
+        .field-toggle-btn:hover { border-color:#0f3460; }
+        .field-toggle-panel {
+            display:none; position:absolute; top:calc(100% + 4px); left:0; right:0;
+            background:white; border:1px solid #ddd; border-radius:8px; padding:8px 12px;
+            box-shadow:0 4px 15px rgba(0,0,0,0.12); z-index:200;
+        }
+        .field-toggle-panel.open { display:block; }
+        .field-toggle-panel label {
+            display:flex; align-items:center; gap:8px; font-size:0.82rem;
+            padding:5px 0; cursor:pointer; user-select:none; color:#333;
+        }
+        .field-toggle-panel label:not(:last-child) { border-bottom:1px solid #f0f0f0; }
         .ref-name { font-weight: 700; color: #0f3460; }
         .ref-meta { font-size: 0.75rem; color: #888; margin-top: 2px; }
         .cert-pill {
@@ -226,6 +247,18 @@
                             <option value="WAM">WAM</option>
                         </select>
                     </div>
+                    <div class="field-toggle-wrap">
+                        <button class="field-toggle-btn" id="fieldToggleBtn">
+                            <span>Show on card…</span><span>▾</span>
+                        </button>
+                        <div class="field-toggle-panel" id="fieldTogglePanel">
+                            <label><input type="checkbox" id="show-age"   checked> Age</label>
+                            <label><input type="checkbox" id="show-phone" checked> Phone</label>
+                            <label><input type="checkbox" id="show-email" checked> Email</label>
+                            <label><input type="checkbox" id="show-years" checked> Years Reffing</label>
+                            <label><input type="checkbox" id="show-prefs" checked> Club Preference</label>
+                        </div>
+                    </div>
                     <div id="refsListWrap">
                         <p class="hint">Load games to see refs.</p>
                     </div>
@@ -304,7 +337,55 @@
                 renderRefs(document.getElementById('refSearch').value.toLowerCase());
             });
             document.getElementById('gameSort').addEventListener('change', renderGames);
+
+            // ── Field display dropdown ──────────────────────────────────────
+            const FIELD_KEYS = ['age','phone','email','years','prefs'];
+            const saved = JSON.parse(localStorage.getItem('refCardFields') || 'null');
+            if (saved) {
+                FIELD_KEYS.forEach(k => {
+                    const el = document.getElementById('show-' + k);
+                    if (el) el.checked = saved.includes(k);
+                });
+            }
+            updateFieldToggleLabel();
+
+            document.getElementById('fieldToggleBtn').addEventListener('click', function(e) {
+                e.stopPropagation();
+                document.getElementById('fieldTogglePanel').classList.toggle('open');
+            });
+            document.addEventListener('click', function() {
+                document.getElementById('fieldTogglePanel').classList.remove('open');
+            });
+            document.getElementById('fieldTogglePanel').addEventListener('click', e => e.stopPropagation());
+
+            FIELD_KEYS.forEach(k => {
+                document.getElementById('show-' + k).addEventListener('change', function() {
+                    const checked = FIELD_KEYS.filter(f => document.getElementById('show-' + f).checked);
+                    localStorage.setItem('refCardFields', JSON.stringify(checked));
+                    updateFieldToggleLabel();
+                    renderRefs(document.getElementById('refSearch').value.toLowerCase());
+                });
+            });
         });
+
+        function updateFieldToggleLabel() {
+            const LABELS = { age:'Age', phone:'Phone', email:'Email', years:'Years Reffing', prefs:'Club Pref' };
+            const on = ['age','phone','email','years','prefs']
+                .filter(k => document.getElementById('show-' + k)?.checked)
+                .map(k => LABELS[k]);
+            const btn = document.getElementById('fieldToggleBtn');
+            if (btn) btn.querySelector('span').textContent = on.length ? on.join(', ') : 'None';
+        }
+
+        function getFieldDisplay() {
+            return {
+                age:   document.getElementById('show-age')?.checked   ?? true,
+                phone: document.getElementById('show-phone')?.checked ?? true,
+                email: document.getElementById('show-email')?.checked ?? true,
+                years: document.getElementById('show-years')?.checked ?? true,
+                prefs: document.getElementById('show-prefs')?.checked ?? true,
+            };
+        }
 
         function fmt(d) {
             return d.toISOString().split('T')[0];
@@ -721,11 +802,20 @@
                     ? '<span style="color:#999; font-size:0.72rem;">⚠ Already assigned this time</span>'
                     : '<span style="color:#bbb; font-size:0.72rem;">No availability submitted</span>';
                 const certCls = cert === 'National' ? 'cert-N' : cert === 'Regional' ? 'cert-R' : 'cert-G';
+                const show  = getFieldDisplay();
+                const email = r.fields['Email'] || '';
                 const years = r.fields['Years Reffing'] ? `${r.fields['Years Reffing']} yr${r.fields['Years Reffing'] == 1 ? '' : 's'}` : '';
                 const age   = r.fields['Age'] ? `age ${r.fields['Age']}` : '';
 
+                const metaParts = [
+                    show.age   && age   ? age   : '',
+                    show.phone && phone ? phone : '',
+                    show.email && email ? email : '',
+                    show.years && years ? years : '',
+                ].filter(Boolean);
+
                 const prefs = parsePreferences(r.fields['Club Preference']);
-                const prefTag = prefs.length
+                const prefTag = show.prefs && prefs.length
                     ? `<span class="pref-tag">⭐ ${prefs.join(', ')}</span>`
                     : '';
 
@@ -733,7 +823,7 @@
                     data-ref-id="${rid}" data-ref-name="${name}"
                     ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
                     <div class="ref-name">${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}</div>
-                    <div class="ref-meta">${[phone, age, years].filter(Boolean).join(' · ')}${status ? ' &nbsp;' + status : ''}</div>
+                    <div class="ref-meta">${metaParts.join(' · ')}${status ? (metaParts.length ? ' &nbsp;' : '') + status : ''}</div>
                     ${prefTag ? `<div class="ref-meta" style="margin-top:2px;">${prefTag}</div>` : ''}
                 </div>`;
             });
