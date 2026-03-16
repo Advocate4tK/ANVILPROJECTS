@@ -225,9 +225,19 @@
                         <div id="refFilterBody" style="border:1px solid #dde3f0; border-top:none; border-radius:0 0 8px 8px; padding:10px 10px 4px; background:#fafbfd;">
                             <input type="text" class="ref-search" id="refSearch" placeholder="Search refs..." style="margin-bottom:8px;">
                             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                <label style="font-size:0.78rem; color:#555; white-space:nowrap;">Age:</label>
+                                <select id="ageFilter" style="font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
+                                    <option value="any">Any</option>
+                                    <option value="u18">Under 18</option>
+                                    <option value="18-25">18–25</option>
+                                    <option value="26-35">26–35</option>
+                                    <option value="36+">36+</option>
+                                </select>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                                 <label style="font-size:0.78rem; color:#555; white-space:nowrap;">Years Reffing:</label>
                                 <select id="yearsFilter" style="font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
-                                    <option value="any">Show All</option>
+                                    <option value="any">Any</option>
                                     <option value="1">1</option>
                                     <option value="2">2</option>
                                     <option value="3">3</option>
@@ -235,6 +245,10 @@
                                     <option value="5-10">5–10</option>
                                     <option value="10+">10+</option>
                                 </select>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                <label style="font-size:0.78rem; color:#555; white-space:nowrap;">Date:</label>
+                                <input type="date" id="dateFilter" style="font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
                             </div>
                             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                                 <label style="font-size:0.78rem; color:#555; white-space:nowrap;">Prefers Club:</label>
@@ -259,9 +273,6 @@
                                     <span>Show on card…</span><span>▾</span>
                                 </button>
                                 <div class="field-toggle-panel" id="fieldTogglePanel">
-                                    <label><input type="checkbox" id="show-age"   checked> Age</label>
-                                    <label><input type="checkbox" id="show-phone" checked> Phone</label>
-                                    <label><input type="checkbox" id="show-email" checked> Email</label>
                                     <label><input type="checkbox" id="show-years" checked> Years Reffing</label>
                                     <label><input type="checkbox" id="show-prefs" checked> Club Preference</label>
                                 </div>
@@ -343,7 +354,13 @@
             document.getElementById('refSearch').addEventListener('input', function() {
                 renderRefs(this.value.toLowerCase());
             });
+            document.getElementById('ageFilter').addEventListener('change', function() {
+                renderRefs(document.getElementById('refSearch').value.toLowerCase());
+            });
             document.getElementById('yearsFilter').addEventListener('change', function() {
+                renderRefs(document.getElementById('refSearch').value.toLowerCase());
+            });
+            document.getElementById('dateFilter').addEventListener('change', function() {
                 renderRefs(document.getElementById('refSearch').value.toLowerCase());
             });
             document.getElementById('prefFilter').addEventListener('change', function() {
@@ -352,7 +369,7 @@
             document.getElementById('gameSort').addEventListener('change', renderGames);
 
             // ── Field display dropdown ──────────────────────────────────────
-            const FIELD_KEYS = ['age','phone','email','years','prefs'];
+            const FIELD_KEYS = ['years','prefs'];
             const saved = JSON.parse(localStorage.getItem('refCardFields') || 'null');
             if (saved) {
                 FIELD_KEYS.forEach(k => {
@@ -400,8 +417,8 @@
         }
 
         function updateFieldToggleLabel() {
-            const LABELS = { age:'Age', phone:'Phone', email:'Email', years:'Years Reffing', prefs:'Club Pref' };
-            const on = ['age','phone','email','years','prefs']
+            const LABELS = { years:'Years Reffing', prefs:'Club Pref' };
+            const on = ['years','prefs']
                 .filter(k => document.getElementById('show-' + k)?.checked)
                 .map(k => LABELS[k]);
             const btn = document.getElementById('fieldToggleBtn');
@@ -410,9 +427,6 @@
 
         function getFieldDisplay() {
             return {
-                age:   document.getElementById('show-age')?.checked   ?? true,
-                phone: document.getElementById('show-phone')?.checked ?? true,
-                email: document.getElementById('show-email')?.checked ?? true,
                 years: document.getElementById('show-years')?.checked ?? true,
                 prefs: document.getElementById('show-prefs')?.checked ?? true,
             };
@@ -783,8 +797,10 @@
             const gameDate  = selectedGame ? selectedGame.fields['Date'] : null;
             const gameTime  = selectedGame ? (selectedGame.fields['Time'] || '') : null;
             const gameDT    = gameDate ? `${gameDate}|${gameTime}` : null;
-            const prefClub  = document.getElementById('prefFilter').value;
+            const prefClub    = document.getElementById('prefFilter').value;
             const yearsFilter = document.getElementById('yearsFilter').value;
+            const ageFilter   = document.getElementById('ageFilter').value;
+            const dateFilter  = document.getElementById('dateFilter').value;
 
             const filtered = allRefs.filter(r => {
                 const name  = (r.fields['Name']  || '').toLowerCase();
@@ -792,12 +808,23 @@
                 if (query && !name.includes(query) && !email.includes(query)) return false;
                 if (yearsFilter !== 'any') {
                     const yrs = parseInt(r.fields['Years Reffing']) || 0;
-                    if (yearsFilter === '1'    && yrs !== 1)           return false;
-                    if (yearsFilter === '2'    && yrs !== 2)           return false;
-                    if (yearsFilter === '3'    && yrs !== 3)           return false;
-                    if (yearsFilter === '4'    && yrs !== 4)           return false;
+                    if (yearsFilter === '1'    && yrs !== 1)             return false;
+                    if (yearsFilter === '2'    && yrs !== 2)             return false;
+                    if (yearsFilter === '3'    && yrs !== 3)             return false;
+                    if (yearsFilter === '4'    && yrs !== 4)             return false;
                     if (yearsFilter === '5-10' && (yrs < 5 || yrs > 10)) return false;
-                    if (yearsFilter === '10+'  && yrs <= 10)           return false;
+                    if (yearsFilter === '10+'  && yrs <= 10)             return false;
+                }
+                if (ageFilter !== 'any') {
+                    const age = parseInt(r.fields['Age']) || 0;
+                    if (ageFilter === 'u18'   && age >= 18)             return false;
+                    if (ageFilter === '18-25' && (age < 18 || age > 25)) return false;
+                    if (ageFilter === '26-35' && (age < 26 || age > 35)) return false;
+                    if (ageFilter === '36+'   && age < 36)              return false;
+                }
+                if (dateFilter) {
+                    const refName = (r.fields['Name'] || '').trim().toLowerCase();
+                    if (!availByName[refName]?.has(dateFilter)) return false;
                 }
                 return true;
             });
@@ -835,14 +862,9 @@
                     : '<span style="color:#bbb; font-size:0.72rem;">No availability submitted</span>';
                 const certCls = cert === 'National' ? 'cert-N' : cert === 'Regional' ? 'cert-R' : 'cert-G';
                 const show  = getFieldDisplay();
-                const email = r.fields['Email'] || '';
                 const years = r.fields['Years Reffing'] ? `${r.fields['Years Reffing']} yr${r.fields['Years Reffing'] == 1 ? '' : 's'}` : '';
-                const age   = r.fields['Age'] ? `age ${r.fields['Age']}` : '';
 
                 const metaParts = [
-                    show.age   && age   ? age   : '',
-                    show.phone && phone ? phone : '',
-                    show.email && email ? email : '',
                     show.years && years ? years : '',
                 ].filter(Boolean);
 
