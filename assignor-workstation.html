@@ -236,9 +236,11 @@
         let assignedAt    = {}; // refId → Map<'date|time', Set<gameId>>
         let availByName   = {}; // ref name → Set<date>
         let selectedClubs = new Set(CLUBS_LIST); // default: all
-        let selectedGame  = null; // currently focused game record
-        let dragRefId     = null;
-        let dragRefName   = null;
+        let selectedGame        = null; // currently focused game record
+        let dragRefId           = null;
+        let dragRefName         = null;
+        let dragSourceGameId    = null; // set when drag starts from a slot
+        let dragSourcePosition  = null;
 
         // ── Init ─────────────────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
@@ -472,11 +474,34 @@
                 slot.addEventListener('drop', e => {
                     e.preventDefault();
                     slot.classList.remove('drag-over');
-                    const gameId   = slot.dataset.gameId;
-                    const position = slot.dataset.position;
-                    if (dragRefId && gameId && position) {
-                        assignRef(gameId, position, dragRefId, dragRefName);
+                    const targetGameId   = slot.dataset.gameId;
+                    const targetPosition = slot.dataset.position;
+                    if (!dragRefId || !targetGameId || !targetPosition) return;
+
+                    if (dragSourceGameId && dragSourcePosition &&
+                        (dragSourceGameId !== targetGameId || dragSourcePosition !== targetPosition)) {
+                        // Slot-to-slot move: check if target is occupied (swap)
+                        const targetGame = allGames.find(g => g.id === targetGameId);
+                        const targetLinked = targetGame ? targetGame.fields[targetPosition] : null;
+                        const targetRefId   = Array.isArray(targetLinked) && targetLinked.length > 0 ? targetLinked[0] : null;
+                        const targetRefName = targetRefId ? resolveRefName(targetLinked) : null;
+
+                        if (targetRefId) {
+                            // Swap: assign each ref to the other's slot
+                            assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
+                            assignRef(dragSourceGameId, dragSourcePosition, targetRefId, targetRefName);
+                        } else {
+                            // Move: assign to target, clear source
+                            assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
+                            unassignRef(dragSourceGameId, dragSourcePosition);
+                        }
+                    } else if (!dragSourceGameId) {
+                        // Drag from ref panel
+                        assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
                     }
+
+                    dragSourceGameId   = null;
+                    dragSourcePosition = null;
                 });
             });
         }
@@ -484,7 +509,9 @@
         function makeSlot(gameId, position, label, refName, linkedIds) {
             if (refName) {
                 const refId = Array.isArray(linkedIds) && linkedIds.length > 0 ? linkedIds[0] : '';
-                return `<div class="slot occupied" data-game-id="${gameId}" data-position="${position}">
+                const safeName = refName.replace(/'/g, "\\'");
+                return `<div class="slot occupied" draggable="true" data-game-id="${gameId}" data-position="${position}"
+                    ondragstart="onSlotDragStart(event, '${gameId}', '${position}', '${refId}', '${safeName}')">
                     <span class="slot-label">${label}</span>
                     <span style="font-size:0.8rem;">${refName}</span>
                     <button class="unassign-btn" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
@@ -494,6 +521,14 @@
                 <span class="slot-label">${label}</span>
                 <span>Drop ref here</span>
             </div>`;
+        }
+
+        function onSlotDragStart(e, gameId, position, refId, refName) {
+            dragRefId          = refId;
+            dragRefName        = refName;
+            dragSourceGameId   = gameId;
+            dragSourcePosition = position;
+            e.dataTransfer.effectAllowed = 'move';
         }
 
         function resolveRefName(linkedIds) {
@@ -588,8 +623,10 @@
 
         // ── Drag ─────────────────────────────────────────────────────────────
         function onRefDragStart(e, refId, refName) {
-            dragRefId   = refId;
-            dragRefName = refName;
+            dragRefId          = refId;
+            dragRefName        = refName;
+            dragSourceGameId   = null;
+            dragSourcePosition = null;
             e.dataTransfer.effectAllowed = 'move';
         }
 
