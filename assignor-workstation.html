@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assignor Workstation</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        /* ── Layout ── */
+        .workstation {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 16px;
+            align-items: start;
+        }
+        .games-panel {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.07);
+            border-top: 4px solid #e94560;
+            min-height: 400px;
+        }
+        .refs-panel {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.07);
+            border-top: 4px solid #0f3460;
+            position: sticky;
+            top: 20px;
+            max-height: calc(100vh - 60px);
+            overflow-y: auto;
+        }
+
+        /* ── Club Pills ── */
+        .club-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+        .club-pill {
+            padding: 5px 14px; border-radius: 20px; font-size: 0.82rem; font-weight: 600;
+            cursor: pointer; border: 2px solid #dee2e6; background: white; color: #555;
+            transition: all 0.2s; user-select: none;
+        }
+        .club-pill:hover { border-color: #0f3460; color: #0f3460; }
+        .club-pill.active { background: #0f3460; color: white; border-color: #0f3460; }
+
+        /* ── Game Cards ── */
+        .game-card {
+            border: 2px solid #e0e0e0; border-radius: 10px; padding: 12px 14px;
+            margin-bottom: 10px; cursor: pointer; transition: all 0.2s;
+        }
+        .game-card:hover { border-color: #0f3460; }
+        .game-card.selected { border-color: #e94560; background: #fff8f9; }
+        .game-card.fully-assigned { border-color: #27ae60; background: #f0faf4; }
+        .game-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 8px; flex-wrap: wrap; gap: 6px;
+        }
+        .game-title { font-weight: 700; color: #0f3460; font-size: 0.95rem; }
+        .game-meta { font-size: 0.78rem; color: #888; }
+        .game-badge {
+            font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+            background: #e8f0fe; color: #0f3460;
+        }
+
+        /* ── Assignment Slots ── */
+        .slots { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
+        .slot {
+            border: 2px dashed #ccc; border-radius: 8px; padding: 6px 8px;
+            min-height: 44px; font-size: 0.78rem; color: #aaa; text-align: center;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: all 0.2s; position: relative;
+        }
+        .slot .slot-label { font-size: 0.68rem; font-weight: 700; color: #999; margin-bottom: 2px; text-transform: uppercase; }
+        .slot.drag-over { border-color: #e94560; background: #fff0f3; border-style: solid; }
+        .slot.occupied { border: 2px solid #27ae60; background: #f0faf4; color: #1a6b3a; font-weight: 600; border-style: solid; }
+        .slot.occupied .slot-label { color: #27ae60; }
+        .unassign-btn {
+            position: absolute; top: 2px; right: 4px; background: none; border: none;
+            color: #e74c3c; cursor: pointer; font-size: 0.75rem; line-height: 1; padding: 0;
+            font-weight: 700;
+        }
+        .unassign-btn:hover { color: #c0392b; }
+
+        /* ── Ref Cards ── */
+        .ref-search { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.85rem; font-family: inherit; margin-bottom: 10px; }
+        .ref-search:focus { outline: none; border-color: #e94560; }
+        .ref-card {
+            border-left: 4px solid #dee2e6; background: #fafafa; border-radius: 8px;
+            padding: 9px 12px; margin-bottom: 7px; cursor: grab; transition: all 0.2s;
+            font-size: 0.85rem;
+        }
+        .ref-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); transform: translateX(2px); }
+        .ref-card:active { cursor: grabbing; }
+        .ref-card.available  { border-left-color: #27ae60; }
+        .ref-card.conflict   { border-left-color: #f39c12; background: #fffbf0; }
+        .ref-card.no-avail   { border-left-color: #bbb; opacity: 0.65; }
+        .ref-name { font-weight: 700; color: #0f3460; }
+        .ref-meta { font-size: 0.75rem; color: #888; margin-top: 2px; }
+        .cert-pill {
+            display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 1px 6px;
+            border-radius: 8px; margin-left: 4px;
+        }
+        .cert-G { background: #d4edda; color: #155724; }
+        .cert-R { background: #cce5ff; color: #004085; }
+        .cert-N { background: #fff3cd; color: #856404; }
+
+        /* ── Filters bar ── */
+        .filters-bar {
+            background: white; border-radius: 12px; padding: 16px 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.07); margin-bottom: 16px;
+        }
+        .filters-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+        .filters-row .form-group { margin-bottom: 0; }
+        .filters-row label { font-size: 0.82rem; margin-bottom: 4px; }
+        .filters-row input[type="date"] { padding: 7px 10px; font-size: 0.85rem; }
+
+        /* ── Misc ── */
+        .panel-title { font-size: 1rem; font-weight: 700; color: #0f3460; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .count-pill { font-size: 0.75rem; font-weight: 600; background: #e8f0fe; color: #0f3460; padding: 2px 10px; border-radius: 10px; }
+        .hint { font-size: 0.8rem; color: #aaa; text-align: center; padding: 20px; }
+        .conflict-legend { display: flex; gap: 12px; font-size: 0.75rem; margin-bottom: 10px; flex-wrap: wrap; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+        @media (max-width: 900px) {
+            .workstation { grid-template-columns: 1fr; }
+            .refs-panel { position: static; max-height: 400px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📋 Assignor Workstation</h1>
+            <p class="subtitle">Assign referees to games by club</p>
+        </header>
+
+        <main>
+            <div style="margin-bottom:16px;">
+                <a href="admin.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Back to Dashboard</a>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters-bar">
+                <div class="filters-row">
+                    <div class="form-group">
+                        <label>Date From</label>
+                        <input type="date" id="dateFrom">
+                    </div>
+                    <div class="form-group">
+                        <label>Date To</label>
+                        <input type="date" id="dateTo">
+                    </div>
+                    <button class="btn btn-primary" id="loadBtn">Load Games</button>
+                </div>
+                <div>
+                    <div style="font-size:0.8rem; font-weight:600; color:#555; margin-bottom:8px;">Filter by Club:</div>
+                    <div class="club-pills" id="clubPills"></div>
+                </div>
+            </div>
+
+            <!-- Loading msg -->
+            <div id="loadingMsg" style="display:none; text-align:center; padding:30px; color:#888;">Loading...</div>
+
+            <!-- Workstation -->
+            <div class="workstation" id="workstation" style="display:none;">
+
+                <!-- LEFT: Games -->
+                <div class="games-panel">
+                    <div class="panel-title">
+                        🗓 Games
+                        <span class="count-pill" id="gameCountPill">0 games</span>
+                    </div>
+                    <div id="gamesListWrap">
+                        <p class="hint">Select clubs and load games.</p>
+                    </div>
+                </div>
+
+                <!-- RIGHT: Refs -->
+                <div class="refs-panel">
+                    <div class="panel-title">👤 Referees</div>
+                    <div class="conflict-legend">
+                        <span><span class="legend-dot" style="background:#27ae60;"></span>Free</span>
+                        <span><span class="legend-dot" style="background:#f39c12;"></span>Time conflict</span>
+                        <span><span class="legend-dot" style="background:#bbb;"></span>No availability</span>
+                    </div>
+                    <input type="text" class="ref-search" id="refSearch" placeholder="Search refs...">
+                    <div id="refsListWrap">
+                        <p class="hint">Load games to see refs.</p>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Referee Scheduling System by Anvil Arts</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="js/airtable-client.js"></script>
+    <script src="js/admin-auth.js"></script>
+    <script>
+        checkAdminAccess();
+
+        const CLUBS_LIST = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
+
+        // ── State ────────────────────────────────────────────────────────────
+        let allGames      = [];
+        let allRefs       = [];
+        let allAvail      = [];
+        let clubLookup    = {}; // airtable record ID → club name
+        let refLookup     = {}; // airtable record ID → ref object
+        let assignedAt    = {}; // refId → Map<'date|time', Set<gameId>>
+        let availByName   = {}; // ref name → Set<date>
+        let selectedClubs = new Set(CLUBS_LIST); // default: all
+        let selectedGame  = null; // currently focused game record
+        let dragRefId     = null;
+        let dragRefName   = null;
+
+        // ── Init ─────────────────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', function() {
+            // Default date range: today → +21 days
+            const today = new Date();
+            const end   = new Date(today); end.setDate(today.getDate() + 21);
+            document.getElementById('dateFrom').value = fmt(today);
+            document.getElementById('dateTo').value   = fmt(end);
+
+            buildClubPills();
+
+            document.getElementById('loadBtn').addEventListener('click', loadAll);
+            document.getElementById('refSearch').addEventListener('input', function() {
+                renderRefs(this.value.toLowerCase());
+            });
+        });
+
+        function fmt(d) {
+            return d.toISOString().split('T')[0];
+        }
+
+        // ── Club pills ────────────────────────────────────────────────────────
+        function buildClubPills() {
+            const wrap = document.getElementById('clubPills');
+            // "All" toggle
+            const all = document.createElement('span');
+            all.className = 'club-pill active';
+            all.textContent = 'All Clubs';
+            all.dataset.club = '__all__';
+            all.addEventListener('click', () => {
+                if (selectedClubs.size === CLUBS_LIST.length) {
+                    selectedClubs.clear();
+                    document.querySelectorAll('.club-pill:not([data-club="__all__"])').forEach(p => p.classList.remove('active'));
+                    all.classList.remove('active');
+                } else {
+                    selectedClubs = new Set(CLUBS_LIST);
+                    document.querySelectorAll('.club-pill').forEach(p => p.classList.add('active'));
+                }
+                renderGames();
+            });
+            wrap.appendChild(all);
+
+            CLUBS_LIST.forEach(club => {
+                const pill = document.createElement('span');
+                pill.className = 'club-pill active';
+                pill.textContent = club;
+                pill.dataset.club = club;
+                pill.addEventListener('click', () => {
+                    if (selectedClubs.has(club)) {
+                        selectedClubs.delete(club);
+                        pill.classList.remove('active');
+                    } else {
+                        selectedClubs.add(club);
+                        pill.classList.add('active');
+                    }
+                    // Sync "All" pill
+                    document.querySelector('.club-pill[data-club="__all__"]').classList.toggle('active', selectedClubs.size === CLUBS_LIST.length);
+                    renderGames();
+                });
+                wrap.appendChild(pill);
+            });
+        }
+
+        // ── Load all data ─────────────────────────────────────────────────────
+        async function loadAll() {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo   = document.getElementById('dateTo').value;
+            const btn      = document.getElementById('loadBtn');
+
+            btn.disabled = true;
+            btn.textContent = 'Loading...';
+            document.getElementById('loadingMsg').style.display = 'block';
+            document.getElementById('workstation').style.display = 'none';
+
+            try {
+                let filter = '';
+                if (dateFrom && dateTo) {
+                    filter = `AND(IS_AFTER({Date}, '${dateFrom}'), IS_BEFORE({Date}, '${dateTo}'))`;
+                } else if (dateFrom) {
+                    filter = `IS_AFTER({Date}, '${dateFrom}')`;
+                } else if (dateTo) {
+                    filter = `IS_BEFORE({Date}, '${dateTo}')`;
+                }
+
+                const gameOpts = { maxRecords: 500 };
+                if (filter) gameOpts.filterByFormula = filter;
+
+                const availOpts = { maxRecords: 2000 };
+                if (filter) availOpts.filterByFormula = filter;
+
+                const [games, refs, avail, clubs] = await Promise.all([
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, gameOpts),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, availOpts),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 })
+                ]);
+
+                // Build club lookup
+                clubLookup = {};
+                clubs.forEach(c => {
+                    clubLookup[c.id] = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || c.id;
+                });
+
+                // Build ref lookup
+                refLookup = {};
+                refs.forEach(r => { refLookup[r.id] = r; });
+
+                // Build assignedAt: refId → Map<'date|time', Set<gameId>>
+                assignedAt = {};
+                games.forEach(g => {
+                    const dt = `${g.fields['Date']}|${g.fields['Time'] || ''}`;
+                    ['Center Referee', 'AR1', 'AR2'].forEach(pos => {
+                        const linked = g.fields[pos];
+                        if (!Array.isArray(linked)) return;
+                        linked.forEach(refId => {
+                            if (!assignedAt[refId]) assignedAt[refId] = new Map();
+                            if (!assignedAt[refId].has(dt)) assignedAt[refId].set(dt, new Set());
+                            assignedAt[refId].get(dt).add(g.id);
+                        });
+                    });
+                });
+
+                // Build availability by referee name
+                availByName = {};
+                avail.forEach(a => {
+                    const name = (a.fields['Referee Name'] || '').trim().toLowerCase();
+                    if (!name) return;
+                    if (!availByName[name]) availByName[name] = new Set();
+                    availByName[name].add(a.fields['Date']);
+                });
+
+                allGames = games.sort((a, b) => {
+                    const da = `${a.fields['Date']}|${a.fields['Time'] || ''}`;
+                    const db = `${b.fields['Date']}|${b.fields['Time'] || ''}`;
+                    return da.localeCompare(db);
+                });
+                allRefs  = refs;
+                allAvail = avail;
+
+                document.getElementById('workstation').style.display = 'grid';
+                renderGames();
+                renderRefs('');
+
+            } catch(e) {
+                alert('Failed to load: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Load Games';
+                document.getElementById('loadingMsg').style.display = 'none';
+            }
+        }
+
+        // ── Resolve club name from a game record ──────────────────────────────
+        function resolveGameClub(f) {
+            const raw = f['Club'] || f['Home Team Club'] || '';
+            if (Array.isArray(raw) && raw.length > 0) return raw.map(id => clubLookup[id] || id).join(', ');
+            if (typeof raw === 'string') return raw;
+            return '';
+        }
+
+        // ── Render games ──────────────────────────────────────────────────────
+        function renderGames() {
+            const wrap = document.getElementById('gamesListWrap');
+            const filtered = allGames.filter(g => {
+                const club = resolveGameClub(g.fields);
+                return selectedClubs.size === 0 || selectedClubs.has(club) ||
+                    [...selectedClubs].some(sc => club.includes(sc));
+            });
+
+            document.getElementById('gameCountPill').textContent = `${filtered.length} game${filtered.length !== 1 ? 's' : ''}`;
+
+            if (!filtered.length) {
+                wrap.innerHTML = '<p class="hint">No games for selected clubs/dates.</p>';
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(g => {
+                const f    = g.fields;
+                const gid  = g.id;
+                const date = f['Date'] ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '—';
+                const time = f['Time'] || '';
+                const home = f['Home Team'] || '?';
+                const away = f['Away Team'] || '?';
+                const age  = f['Age Group'] || '';
+                const club = resolveGameClub(f);
+
+                const cRef = resolveRefName(f['Center Referee']);
+                const ar1  = resolveRefName(f['AR1']);
+                const ar2  = resolveRefName(f['AR2']);
+                const fullyAssigned = cRef && ar1 && ar2;
+                const selected = selectedGame && selectedGame.id === gid;
+
+                html += `<div class="game-card ${fullyAssigned ? 'fully-assigned' : ''} ${selected ? 'selected' : ''}" onclick="selectGame('${gid}')" id="card-${gid}">
+                    <div class="game-header">
+                        <div>
+                            <span class="game-title">${home} vs ${away}</span>
+                            <span class="game-meta">&nbsp;— ${date} ${time ? '@ ' + formatTime(time) : ''}</span>
+                        </div>
+                        <div style="display:flex; gap:6px;">
+                            ${age  ? `<span class="game-badge">${age}</span>`  : ''}
+                            ${club ? `<span class="game-badge" style="background:#f0f0f0;">${club}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="slots">
+                        ${makeSlot(gid, 'Center Referee', 'Center', cRef, f['Center Referee'])}
+                        ${makeSlot(gid, 'AR1', 'AR1', ar1, f['AR1'])}
+                        ${makeSlot(gid, 'AR2', 'AR2', ar2, f['AR2'])}
+                    </div>
+                </div>`;
+            });
+
+            wrap.innerHTML = html;
+
+            // Wire drag events on slots
+            document.querySelectorAll('.slot').forEach(slot => {
+                slot.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    slot.classList.add('drag-over');
+                });
+                slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+                slot.addEventListener('drop', e => {
+                    e.preventDefault();
+                    slot.classList.remove('drag-over');
+                    const gameId   = slot.dataset.gameId;
+                    const position = slot.dataset.position;
+                    if (dragRefId && gameId && position) {
+                        assignRef(gameId, position, dragRefId, dragRefName);
+                    }
+                });
+            });
+        }
+
+        function makeSlot(gameId, position, label, refName, linkedIds) {
+            if (refName) {
+                const refId = Array.isArray(linkedIds) && linkedIds.length > 0 ? linkedIds[0] : '';
+                return `<div class="slot occupied" data-game-id="${gameId}" data-position="${position}">
+                    <span class="slot-label">${label}</span>
+                    <span style="font-size:0.8rem;">${refName}</span>
+                    <button class="unassign-btn" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
+                </div>`;
+            }
+            return `<div class="slot" data-game-id="${gameId}" data-position="${position}">
+                <span class="slot-label">${label}</span>
+                <span>Drop ref here</span>
+            </div>`;
+        }
+
+        function resolveRefName(linkedIds) {
+            if (!Array.isArray(linkedIds) || linkedIds.length === 0) return '';
+            const ref = refLookup[linkedIds[0]];
+            return ref ? (ref.fields['Name'] || '') : linkedIds[0];
+        }
+
+        function formatTime(t) {
+            if (!t) return '';
+            const [h, m] = t.split(':').map(Number);
+            if (isNaN(h)) return t;
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`;
+        }
+
+        // ── Select a game → update ref colors ─────────────────────────────────
+        function selectGame(gameId) {
+            selectedGame = allGames.find(g => g.id === gameId) || null;
+            document.querySelectorAll('.game-card').forEach(c => c.classList.remove('selected'));
+            if (selectedGame) document.getElementById('card-' + gameId)?.classList.add('selected');
+            renderRefs(document.getElementById('refSearch').value.toLowerCase());
+        }
+
+        // ── Render refs ───────────────────────────────────────────────────────
+        function renderRefs(query) {
+            const wrap = document.getElementById('refsListWrap');
+            if (!allRefs.length) { wrap.innerHTML = '<p class="hint">Load games first.</p>'; return; }
+
+            const gameDate = selectedGame ? selectedGame.fields['Date'] : null;
+            const gameTime = selectedGame ? (selectedGame.fields['Time'] || '') : null;
+            const gameDT   = gameDate ? `${gameDate}|${gameTime}` : null;
+
+            const filtered = allRefs.filter(r => {
+                if (!query) return true;
+                const name  = (r.fields['Name']  || '').toLowerCase();
+                const email = (r.fields['Email'] || '').toLowerCase();
+                return name.includes(query) || email.includes(query);
+            });
+
+            // Sort: available first, conflict second, no-avail last
+            const classify = r => {
+                const name = (r.fields['Name'] || '').trim().toLowerCase();
+                const hasAvail = gameDate ? availByName[name]?.has(gameDate) : true;
+                const hasConflict = gameDT && assignedAt[r.id] ?
+                    [...(assignedAt[r.id].get(gameDT) || [])].filter(gid => !selectedGame || gid !== selectedGame.id).length > 0
+                    : false;
+                if (!hasAvail && gameDate) return 2;
+                if (hasConflict) return 1;
+                return 0;
+            };
+
+            filtered.sort((a, b) => classify(a) - classify(b));
+
+            if (!filtered.length) { wrap.innerHTML = '<p class="hint">No refs found.</p>'; return; }
+
+            let html = '';
+            filtered.forEach(r => {
+                const rid    = r.id;
+                const name   = r.fields['Name'] || '—';
+                const cert   = r.fields['Certification Level'] || '';
+                const phone  = r.fields['Phone'] || '';
+                const cls    = classify(r);
+                const cardClass = cls === 0 ? 'available' : cls === 1 ? 'conflict' : 'no-avail';
+                const status = cls === 0 ? '' : cls === 1
+                    ? '<span style="color:#f39c12; font-size:0.72rem;">⚠ Time conflict</span>'
+                    : '<span style="color:#bbb; font-size:0.72rem;">No availability submitted</span>';
+                const certCls = cert === 'National' ? 'cert-N' : cert === 'Regional' ? 'cert-R' : 'cert-G';
+
+                html += `<div class="ref-card ${cardClass}" draggable="true"
+                    data-ref-id="${rid}" data-ref-name="${name}"
+                    ondragstart="onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
+                    <div class="ref-name">${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}</div>
+                    <div class="ref-meta">${phone}${status ? ' &nbsp;' + status : ''}</div>
+                </div>`;
+            });
+
+            wrap.innerHTML = html;
+        }
+
+        // ── Drag ─────────────────────────────────────────────────────────────
+        function onRefDragStart(e, refId, refName) {
+            dragRefId   = refId;
+            dragRefName = refName;
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        // ── Assign ref to slot ────────────────────────────────────────────────
+        async function assignRef(gameId, position, refId, refName) {
+            try {
+                const fields = {};
+                fields[position] = [refId]; // linked record
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, fields);
+
+                // Update local state
+                const game = allGames.find(g => g.id === gameId);
+                if (game) {
+                    game.fields[position] = [refId];
+                    // Update assignedAt
+                    const dt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
+                    if (!assignedAt[refId]) assignedAt[refId] = new Map();
+                    if (!assignedAt[refId].has(dt)) assignedAt[refId].set(dt, new Set());
+                    assignedAt[refId].get(dt).add(gameId);
+                }
+
+                renderGames();
+                renderRefs(document.getElementById('refSearch').value.toLowerCase());
+
+            } catch(e) {
+                alert(`Could not assign referee: ${e.message}`);
+            }
+        }
+
+        // ── Unassign ref from slot ────────────────────────────────────────────
+        async function unassignRef(gameId, position) {
+            try {
+                const fields = {};
+                fields[position] = [];
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, fields);
+
+                const game = allGames.find(g => g.id === gameId);
+                if (game) {
+                    const oldRefIds = game.fields[position] || [];
+                    game.fields[position] = [];
+                    const dt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
+                    oldRefIds.forEach(rid => {
+                        assignedAt[rid]?.get(dt)?.delete(gameId);
+                    });
+                }
+
+                renderGames();
+                renderRefs(document.getElementById('refSearch').value.toLowerCase());
+
+            } catch(e) {
+                alert(`Could not unassign referee: ${e.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
