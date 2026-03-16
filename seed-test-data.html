@@ -171,9 +171,21 @@
                     'RHAMYS','Stonington','Valley','WAM'
                 ];
                 const existingClubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
-                const clubByName = {};
+                const clubByName = {}; // lowercase name → record ID
+                let clubFieldName = 'Name'; // will detect actual field name from existing records
+
+                // Detect the correct field name from existing records
+                if (existingClubs.length > 0) {
+                    const sample = existingClubs[0].fields;
+                    if (sample['Club Name'] !== undefined)      clubFieldName = 'Club Name';
+                    else if (sample['Club'] !== undefined)      clubFieldName = 'Club';
+                    else if (sample['Name'] !== undefined)      clubFieldName = 'Name';
+                    else clubFieldName = Object.keys(sample)[0]; // fallback: first field
+                }
+                log(`  Club field name detected: "${clubFieldName}"`, 'info');
+
                 existingClubs.forEach(c => {
-                    const name = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || '';
+                    const name = c.fields[clubFieldName] || c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || '';
                     if (name) clubByName[name.toLowerCase()] = c.id;
                 });
                 log(`  Found ${existingClubs.length} existing club${existingClubs.length !== 1 ? 's' : ''}`, 'ok');
@@ -181,7 +193,7 @@
                 for (const clubName of ALL_CLUBS) {
                     if (!clubByName[clubName.toLowerCase()]) {
                         try {
-                            const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.CLUBS, { 'Name': clubName });
+                            const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.CLUBS, { [clubFieldName]: clubName });
                             clubByName[clubName.toLowerCase()] = rec.id;
                             log(`  ✓ Created club: ${clubName}`, 'ok');
                         } catch(e) {
@@ -199,27 +211,27 @@
                 for (let i = 0; i < total; i++) {
                     const g = GAMES_TO_SEED[i];
 
-                    // Resolve club: try exact match of home team name against clubs table
-                    const clubKey = g.home.toLowerCase();
-                    let clubField = g.home; // fallback: plain text
-                    // Check if any club name is contained in home team string
+                    // Resolve club: find matching club record ID from home team name
+                    const homeKey = g.home.toLowerCase();
+                    let clubRecordId = null;
                     for (const [name, id] of Object.entries(clubByName)) {
-                        if (clubKey.includes(name) || name.includes(clubKey.split(' ')[0].toLowerCase())) {
-                            clubField = name.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+                        if (homeKey.includes(name) || name.includes(homeKey.split(' ')[0])) {
+                            clubRecordId = id;
                             break;
                         }
                     }
 
                     const fields = {
-                        'Home Team':  g.home,
-                        'Away Team':  g.away,
-                        'Date':       g.date,
-                        'Time':       g.time,
-                        'Age Group':  g.age,
-                        'Field':      g.field,
-                        'Club':       clubField,
+                        'Home Team':   g.home,
+                        'Away Team':   g.away,
+                        'Date':        g.date,
+                        'Time':        g.time,
+                        'Age Group':   g.age,
+                        'Field':       g.field,
                         'Game Status': 'Scheduled',
                     };
+                    // Only set Club if we resolved a record ID (it's a linked record field)
+                    if (clubRecordId) fields['Club'] = [clubRecordId];
 
                     try {
                         const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
@@ -241,15 +253,14 @@
                     const r = FAKE_REFS[i];
                     try {
                         const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
-                            'Name':                r.name,
-                            'Phone':               r.phone,
-                            'Years Reffing':       r.years,
-                            'Certification Level': r.cert,
-                            'Status':              'Active',
+                            'Name':          r.name,
+                            'Phone':         r.phone,
+                            'Years Reffing': r.years,
+                            'Status':        'Active',
                         });
                         seededRefIds.push(rec.id);
                         createdRefNames.push(r.name);
-                        log(`  ✓ ${r.name} — ${r.years} yr${r.years == 1 ? '' : 's'} (${r.cert})`, 'ok');
+                        log(`  ✓ ${r.name} — ${r.years} yr${r.years == 1 ? '' : 's'}`, 'ok');
                     } catch(e) {
                         log(`  ✗ ${r.name}: ${e.message}`, 'err');
                     }
