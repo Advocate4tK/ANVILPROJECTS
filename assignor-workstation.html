@@ -205,6 +205,17 @@
 
         const CLUBS_LIST = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
 
+        // Maps town/sub-region names to their parent club pill name
+        const CLUB_ALIASES = {
+            'Woodstock':  'NECONN',
+            'Putnam':     'NECONN',
+            'Thompson':   'NECONN',
+            'Eastford':   'NECONN',
+            'Pomfret':    'NECONN',
+            'Killingly':  'NECONN',
+            'Brooklyn':   'NECONN',
+        };
+
         // ── State ────────────────────────────────────────────────────────────
         let allGames      = [];
         let allRefs       = [];
@@ -372,9 +383,15 @@
         // ── Resolve club name from a game record ──────────────────────────────
         function resolveGameClub(f) {
             const raw = f['Club'] || f['Home Team Club'] || '';
-            if (Array.isArray(raw) && raw.length > 0) return raw.map(id => clubLookup[id] || id).join(', ');
-            if (typeof raw === 'string') return raw;
-            return '';
+            let name = '';
+            if (Array.isArray(raw) && raw.length > 0) name = raw.map(id => clubLookup[id] || id).join(', ');
+            else if (typeof raw === 'string') name = raw;
+            // Resolve aliases (e.g. town names → parent club)
+            if (CLUB_ALIASES[name]) return CLUB_ALIASES[name];
+            for (const [alias, club] of Object.entries(CLUB_ALIASES)) {
+                if (name.includes(alias)) return club;
+            }
+            return name;
         }
 
         // ── Render games ──────────────────────────────────────────────────────
