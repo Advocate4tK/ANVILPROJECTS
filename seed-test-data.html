@@ -196,36 +196,55 @@
                     }
                 }
 
-                // ── Step 2: Create games ──────────────────────────────────────
+                // ── Step 2: Test each game field individually, then create games ──
+                // Club and Field are confirmed linked records — NOT sent.
+                // Testing each remaining field to find any other linked records.
+                log('Testing game fields one by one…', 'info');
+                const gameTableUrl = `${CONFIG.AIRTABLE_API_URL}/${CONFIG.AIRTABLE_BASE_ID}/${encodeURIComponent(CONFIG.AIRTABLE_TABLES.GAMES)}`;
+                const gameFieldTests = [
+                    ['Date',        '2026-03-21'],
+                    ['Home Team',   'TEST'],
+                    ['Away Team',   'TEST'],
+                    ['Time',        '09:00'],
+                    ['Age Group',   'U8'],
+                    ['Game Status', 'Scheduled'],
+                ];
+                const badGameFields = new Set();
+                for (const [fname, fval] of gameFieldTests) {
+                    try {
+                        const r = await fetch(gameTableUrl, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${CONFIG.AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ fields: { [fname]: fval } })
+                        });
+                        const j = await r.json();
+                        if (r.ok) {
+                            log(`  ✓ "${fname}" = plain text/date OK`, 'ok');
+                            await fetch(`${gameTableUrl}/${j.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${CONFIG.AIRTABLE_API_KEY}` } });
+                        } else {
+                            log(`  ✗ "${fname}" REJECTED: ${j.error?.message || JSON.stringify(j)}`, 'err');
+                            badGameFields.add(fname);
+                        }
+                    } catch(fe) {
+                        log(`  ✗ "${fname}" threw: ${fe.message}`, 'err');
+                        badGameFields.add(fname);
+                    }
+                    await delay(200);
+                }
+
                 log('Creating games…', 'info');
                 const total = GAMES_TO_SEED.length;
                 for (let i = 0; i < total; i++) {
                     const g = GAMES_TO_SEED[i];
 
-                    // Resolve club: find matching club record ID from home team name
-                    const homeKey = g.home.toLowerCase();
-                    let clubRecordId = null;
-                    for (const [name, id] of Object.entries(clubByName)) {
-                        if (homeKey.includes(name) || name.includes(homeKey.split(' ')[0])) {
-                            clubRecordId = id;
-                            break;
-                        }
-                    }
-
-                    const fields = {
-                        'Home Team':   g.home,
-                        'Away Team':   g.away,
-                        'Date':        g.date,
-                        'Time':        g.time,
-                        'Age Group':   g.age,
-                        'Game Status': 'Scheduled',
-                    };
-                    // Resolve club name as plain text (Games.Club is a text field)
-                    if (clubRecordId) {
-                        // Find the human-readable club name from clubByName
-                        const clubName = Object.keys(clubByName).find(k => clubByName[k] === clubRecordId) || '';
-                        if (clubName) fields['Club'] = clubName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    }
+                    // Only send fields that passed the field test
+                    const fields = {};
+                    if (!badGameFields.has('Home Team'))   fields['Home Team']   = g.home;
+                    if (!badGameFields.has('Away Team'))   fields['Away Team']   = g.away;
+                    if (!badGameFields.has('Date'))        fields['Date']        = g.date;
+                    if (!badGameFields.has('Time'))        fields['Time']        = g.time;
+                    if (!badGameFields.has('Age Group'))   fields['Age Group']   = g.age;
+                    if (!badGameFields.has('Game Status')) fields['Game Status'] = 'Scheduled';
 
                     try {
                         const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
@@ -236,7 +255,7 @@
                     }
 
                     setProgress(10 + (i / total) * 50);
-                    await delay(150); // stay under Airtable rate limit
+                    await delay(150);
                 }
 
                 // ── Step 3: Create fake referees ─────────────────────────────
@@ -247,7 +266,9 @@
                     const r = FAKE_REFS[i];
                     try {
                         const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
-                            'Name': r.name,
+                            'Name':          r.name,
+                            'Years Reffing': r.years,
+                            'Phone':         r.phone,
                         });
                         seededRefIds.push(rec.id);
                         createdRefNames.push(r.name);
@@ -275,7 +296,6 @@
                                 'End Time':     '18:00',
                                 'Max Games':    '2',
                                 'Notes':        'Test data',
-                                'Status':       'Available',
                             });
                             seededAvailIds.push(rec.id);
                             avCount++;
