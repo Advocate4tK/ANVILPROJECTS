@@ -37,7 +37,8 @@
                 <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">
                     Creates <strong>20 games</strong> (10 Saturday + 10 Sunday) across U8–U19 age groups,
                     each featuring one of your clubs vs an outside CT team.
-                    Also submits <strong>availability for all existing referees</strong> for both days.
+                    Also creates <strong>25 fake referees</strong> (10 with 1 year, tapering up to 18 years)
+                    and submits <strong>availability for all of them</strong> for both days.
                 </p>
                 <p style="color:#e74c3c; font-size:0.85rem; margin-bottom:20px;">
                     ⚠ This will add records to your live Airtable base. Only run once.
@@ -97,7 +98,37 @@
             { date: SUN, time: '15:00', home: 'NECONN (Woodstock)',   away: 'East Hartford SC',     age: 'U19', field: 'Woodstock Academy Fields'       },
         ];
 
-        let seededGameIds = [];
+        // 25 fake referees — heavily weighted toward year 1
+        const FAKE_REFS = [
+            { name: 'Tyler Benson',    phone: '860-555-0101', years: '1', cert: 'Grade 8' },
+            { name: 'Jordan Marsh',    phone: '860-555-0102', years: '1', cert: 'Grade 8' },
+            { name: 'Casey Hooper',    phone: '860-555-0103', years: '1', cert: 'Grade 8' },
+            { name: 'Devon Pratt',     phone: '860-555-0104', years: '1', cert: 'Grade 8' },
+            { name: 'Riley Sosa',      phone: '860-555-0105', years: '1', cert: 'Grade 8' },
+            { name: 'Morgan Taft',     phone: '860-555-0106', years: '1', cert: 'Grade 8' },
+            { name: 'Quinn Farley',    phone: '860-555-0107', years: '1', cert: 'Grade 8' },
+            { name: 'Avery Nolan',     phone: '860-555-0108', years: '1', cert: 'Grade 8' },
+            { name: 'Parker Dunn',     phone: '860-555-0109', years: '1', cert: 'Grade 8' },
+            { name: 'Reese Connelly',  phone: '860-555-0110', years: '1', cert: 'Grade 8' },
+            { name: 'Logan Stiles',    phone: '860-555-0111', years: '2', cert: 'Grade 8' },
+            { name: 'Hayden Cruz',     phone: '860-555-0112', years: '2', cert: 'Grade 8' },
+            { name: 'Peyton Vance',    phone: '860-555-0113', years: '2', cert: 'Grade 8' },
+            { name: 'Jamie Kelso',     phone: '860-555-0114', years: '3', cert: 'Grade 7' },
+            { name: 'Skyler Bloom',    phone: '860-555-0115', years: '3', cert: 'Grade 7' },
+            { name: 'Drew Holloway',   phone: '860-555-0116', years: '4', cert: 'Grade 7' },
+            { name: 'Blake Ingram',    phone: '860-555-0117', years: '4', cert: 'Grade 7' },
+            { name: 'Cameron Ford',    phone: '860-555-0118', years: '5', cert: 'Grade 7' },
+            { name: 'Spencer Wolfe',   phone: '860-555-0119', years: '6', cert: 'Grade 6' },
+            { name: 'Kendall Shore',   phone: '860-555-0120', years: '7', cert: 'Grade 6' },
+            { name: 'Alex Merritt',    phone: '860-555-0121', years: '8', cert: 'Grade 6' },
+            { name: 'Sam Whitfield',   phone: '860-555-0122', years: '10', cert: 'Regional' },
+            { name: 'Chris Okafor',    phone: '860-555-0123', years: '12', cert: 'Regional' },
+            { name: 'Dana Holbrook',   phone: '860-555-0124', years: '15', cert: 'Regional' },
+            { name: 'Robin Eastwood',  phone: '860-555-0125', years: '18', cert: 'National' },
+        ];
+
+        let seededGameIds  = [];
+        let seededRefIds   = [];
         let seededAvailIds = [];
 
         function log(msg, type = '') {
@@ -117,7 +148,8 @@
             btn.textContent = 'Seeding…';
             document.getElementById('progressBar').style.display = 'block';
             document.getElementById('log').innerHTML = '';
-            seededGameIds = [];
+            seededGameIds  = [];
+            seededRefIds   = [];
             seededAvailIds = [];
 
             try {
@@ -171,27 +203,40 @@
                     await delay(150); // stay under Airtable rate limit
                 }
 
-                // ── Step 3: Load existing referees ────────────────────────────
-                log('Loading referees…', 'info');
+                // ── Step 3: Create fake referees ─────────────────────────────
+                log('Creating fake referees…', 'info');
                 setProgress(65);
-                const refs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 });
-                log(`  Found ${refs.length} referee${refs.length !== 1 ? 's' : ''}`, 'ok');
+                const createdRefNames = [];
+                for (let i = 0; i < FAKE_REFS.length; i++) {
+                    const r = FAKE_REFS[i];
+                    try {
+                        const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
+                            'Name':                r.name,
+                            'Phone':               r.phone,
+                            'Years Reffing':       r.years,
+                            'Certification Level': r.cert,
+                            'Status':              'Active',
+                        });
+                        seededRefIds.push(rec.id);
+                        createdRefNames.push(r.name);
+                        log(`  ✓ ${r.name} — ${r.years} yr${r.years == 1 ? '' : 's'} (${r.cert})`, 'ok');
+                    } catch(e) {
+                        log(`  ✗ ${r.name}: ${e.message}`, 'err');
+                    }
+                    setProgress(65 + (i / FAKE_REFS.length) * 15);
+                    await delay(150);
+                }
 
-                if (refs.length === 0) {
-                    log('  No referees found — skipping availability seeding.', 'warn');
-                } else {
-                    // ── Step 4: Create availability for each ref ──────────────
-                    log('Creating availability records…', 'info');
-                    const dates = [SAT, SUN];
-                    let avCount = 0;
-                    const avTotal = refs.length * dates.length;
+                // ── Step 4: Create availability for all fake refs ─────────────
+                log('Creating availability records…', 'info');
+                const dates = [SAT, SUN];
+                let avCount = 0;
+                const avTotal = createdRefNames.length * dates.length;
 
-                    for (const ref of refs) {
-                        const name = ref.fields['Name'] || '';
-                        if (!name) continue;
-
-                        for (const date of dates) {
-                            const fields = {
+                for (const name of createdRefNames) {
+                    for (const date of dates) {
+                        try {
+                            const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.AVAILABILITY, {
                                 'Referee Name': name,
                                 'Date':         date,
                                 'Start Time':   '08:00',
@@ -199,19 +244,15 @@
                                 'Max Games':    '2',
                                 'Notes':        'Test data',
                                 'Status':       'Available',
-                            };
-                            try {
-                                const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.AVAILABILITY, fields);
-                                seededAvailIds.push(rec.id);
-                                avCount++;
-                                log(`  ✓ ${name} — ${date}`, 'ok');
-                            } catch(e) {
-                                log(`  ✗ ${name} ${date}: ${e.message}`, 'err');
-                            }
-
-                            setProgress(65 + (avCount / avTotal) * 33);
-                            await delay(150);
+                            });
+                            seededAvailIds.push(rec.id);
+                            avCount++;
+                            log(`  ✓ ${name} — ${date}`, 'ok');
+                        } catch(e) {
+                            log(`  ✗ ${name} ${date}: ${e.message}`, 'err');
                         }
+                        setProgress(80 + (avCount / avTotal) * 18);
+                        await delay(150);
                     }
                 }
 
@@ -223,8 +264,9 @@
                 summary.innerHTML = `
                     <strong style="color:#27ae60;">✓ Seed complete</strong><br>
                     <span style="font-size:0.88rem;">
-                        ${seededGameIds.length} games created &nbsp;·&nbsp;
-                        ${seededAvailIds.length} availability records created
+                        ${seededGameIds.length} games &nbsp;·&nbsp;
+                        ${seededRefIds.length} referees (10× year-1, 3× year-2, 2× year-3, then 4–18 yrs) &nbsp;·&nbsp;
+                        ${seededAvailIds.length} availability records
                     </span>`;
 
                 document.getElementById('clearBtn').style.display = 'inline-block';
@@ -246,7 +288,8 @@
             document.getElementById('progressFill').style.width = '0%';
 
             const allIds = [
-                ...seededGameIds.map(id => ({ table: CONFIG.AIRTABLE_TABLES.GAMES, id })),
+                ...seededGameIds.map(id  => ({ table: CONFIG.AIRTABLE_TABLES.GAMES,        id })),
+                ...seededRefIds.map(id   => ({ table: CONFIG.AIRTABLE_TABLES.REFEREES,     id })),
                 ...seededAvailIds.map(id => ({ table: CONFIG.AIRTABLE_TABLES.AVAILABILITY, id })),
             ];
 
