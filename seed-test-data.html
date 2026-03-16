@@ -174,18 +174,24 @@
                 const clubByName = {}; // lowercase name → record ID
                 let clubFieldName = 'Name'; // will detect actual field name from existing records
 
-                // Detect the correct field name from existing records
+                // Detect the correct text field name from existing records
                 if (existingClubs.length > 0) {
                     const sample = existingClubs[0].fields;
-                    if (sample['Club Name'] !== undefined)      clubFieldName = 'Club Name';
-                    else if (sample['Club'] !== undefined)      clubFieldName = 'Club';
-                    else if (sample['Name'] !== undefined)      clubFieldName = 'Name';
-                    else clubFieldName = Object.keys(sample)[0]; // fallback: first field
+                    const allFields = Object.keys(sample);
+                    log(`  Clubs table fields found: ${allFields.join(', ')}`, 'info');
+                    // Pick the first field whose value is a non-empty string
+                    for (const f of allFields) {
+                        if (typeof sample[f] === 'string' && sample[f].length > 0) {
+                            clubFieldName = f;
+                            break;
+                        }
+                    }
                 }
-                log(`  Club field name detected: "${clubFieldName}"`, 'info');
+                log(`  Using club field: "${clubFieldName}"`, 'info');
 
                 existingClubs.forEach(c => {
-                    const name = c.fields[clubFieldName] || c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || '';
+                    const raw = c.fields[clubFieldName] || '';
+                    const name = typeof raw === 'string' ? raw : String(raw);
                     if (name) clubByName[name.toLowerCase()] = c.id;
                 });
                 log(`  Found ${existingClubs.length} existing club${existingClubs.length !== 1 ? 's' : ''}`, 'ok');
