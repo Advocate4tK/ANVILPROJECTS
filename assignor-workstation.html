@@ -811,16 +811,18 @@
                         const venueOpts = venuesFiltered.map(v =>
                             `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
                         ).join('');
-                        const fieldOpts = allFields
-                            .filter(fi => !curVenueId || fi.venueId == curVenueId)
-                            .map(fi => `<option value="${fi.fieldId}" ${fi.fieldId == curFieldId ? 'selected' : ''}>${fi.name}</option>`)
-                            .join('');
+                        const fieldOpts = curVenueId
+                            ? allFields
+                                .filter(fi => fi.venueId == curVenueId)
+                                .map(fi => `<option value="${fi.fieldId}" ${fi.fieldId == curFieldId ? 'selected' : ''}>${fi.name}</option>`)
+                                .join('')
+                            : '';
                         return `<div class="venue-field-row" onclick="event.stopPropagation()">
                             <span style="font-size:0.72rem;color:#888;">📍</span>
                             <select class="vf-select" onchange="onVenueChange('${gid}', this)" style="flex:2;">
                                 <option value="">Venue…</option>${venueOpts}
                             </select>
-                            <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;">
+                            <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;" ${!curVenueId ? 'disabled' : ''}>
                                 <option value="">Field…</option>${fieldOpts}
                             </select>
                         </div>`;
@@ -1130,13 +1132,17 @@
         // ── Unassign ref from slot ────────────────────────────────────────────
         function onVenueChange(gameId, venueSelect) {
             const venueId = parseInt(venueSelect.value) || 0;
-            // Repopulate field dropdown for this game
             const fieldSel = document.getElementById(`fieldSel-${gameId}`);
             if (!fieldSel) return;
-            const fieldsForVenue = allFields.filter(f => !venueId || f.venueId == venueId);
-            fieldSel.innerHTML = `<option value="">Field…</option>` +
-                fieldsForVenue.map(f => `<option value="${f.fieldId}">${f.name}</option>`).join('');
-            // Save venue immediately; clear field
+            if (venueId) {
+                const fieldsForVenue = allFields.filter(f => f.venueId == venueId);
+                fieldSel.innerHTML = `<option value="">Field…</option>` +
+                    fieldsForVenue.map(f => `<option value="${f.fieldId}">${f.name}</option>`).join('');
+                fieldSel.disabled = false;
+            } else {
+                fieldSel.innerHTML = `<option value="">Field…</option>`;
+                fieldSel.disabled = true;
+            }
             saveVenueField(gameId, venueId, 0);
         }
 
