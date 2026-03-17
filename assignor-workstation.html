@@ -783,11 +783,11 @@
             const unassignedOnly = document.getElementById('unassignedOnlyFilter')?.checked || false;
 
             const filtered = allGames.filter(g => {
+                // Cancelled games always show regardless of any filter
+                if (g.fields['Status'] === 'Cancelled') return true;
                 if (gameDateF && g.fields['Date'] !== gameDateF) return false;
                 if (gameTimeF && (g.fields['Time'] || '') !== gameTimeF) return false;
                 if (gameAgeF  && g.fields['Age Group'] !== gameAgeF) return false;
-                // Cancelled games always show (stamped), skip assignment filter
-                if (g.fields['Status'] === 'Cancelled') return true;
                 if (unassignedOnly) {
                     const cr  = g.fields['Center Referee'];
                     const ar1 = g.fields['AR 1'];
@@ -1449,14 +1449,14 @@
 
         async function cancelGame(gameId, label) {
             if (!confirm(`Cancel "${label}"?\n\nThe game will remain visible with a CANCELLED stamp.`)) return;
+            // Mark locally immediately so stamp shows even if Airtable save fails
+            const game = allGames.find(g => g.id === gameId);
+            if (game) game.fields['Status'] = 'Cancelled';
+            renderGames();
             try {
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Status': 'Cancelled' });
-                const game = allGames.find(g => g.id === gameId);
-                if (game) game.fields['Status'] = 'Cancelled';
-                renderGames();
-                renderRefs(document.getElementById('refSearch').value.toLowerCase());
             } catch(e) {
-                alert(`Could not cancel game: ${e.message}`);
+                alert(`Cancellation shown locally but could not save to Airtable: ${e.message}\n\nMake sure a "Status" text field exists in your Games table.`);
             }
         }
 
