@@ -53,18 +53,38 @@ const progressText   = document.getElementById('progressText');
 let loadedGames = [];
 let refIdLookup = {}; // Airtable record ID → Central Assign numeric ID
 
-// ── Week picker — auto-fills Mon/Sun of the chosen week ───────────────────────
-document.getElementById('weekPicker').addEventListener('change', function() {
-    if (!this.value) return;
-    const d    = new Date(this.value + 'T12:00:00'); // noon avoids DST edge cases
-    const day  = d.getDay(); // 0=Sun … 6=Sat
-    const diffToMon = day === 0 ? -6 : 1 - day;
-    const mon  = new Date(d); mon.setDate(d.getDate() + diffToMon);
-    const sun  = new Date(mon); sun.setDate(mon.getDate() + 6);
-    const fmt  = dt => dt.toISOString().split('T')[0];
+// ── Week picker — month + week dropdowns auto-fill Mon–Sun ────────────────────
+function applyWeekPicker() {
+    const monthVal = document.getElementById('pickMonth').value;
+    const weekVal  = document.getElementById('pickWeek').value;
+    if (monthVal === '' || weekVal === '') return;
+
+    const year  = new Date().getFullYear();
+    const month = parseInt(monthVal);
+    const week  = parseInt(weekVal);
+
+    // Find first Monday of the month
+    const firstDay = new Date(year, month, 1);
+    const dayOfWeek = firstDay.getDay(); // 0=Sun,1=Mon...
+    const daysToMon = dayOfWeek === 0 ? 1 : dayOfWeek === 1 ? 0 : 8 - dayOfWeek;
+    const firstMon  = new Date(year, month, 1 + daysToMon);
+
+    // Week N = firstMon + (N-1)*7 days
+    const mon = new Date(firstMon);
+    mon.setDate(firstMon.getDate() + (week - 1) * 7);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+
+    const fmt = dt => dt.toISOString().split('T')[0];
+    const display = dt => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
     document.getElementById('dateFrom').value = fmt(mon);
     document.getElementById('dateTo').value   = fmt(sun);
-});
+    document.getElementById('weekRangeDisplay').textContent = `${display(mon)} — ${display(sun)}`;
+}
+
+document.getElementById('pickMonth').addEventListener('change', applyWeekPicker);
+document.getElementById('pickWeek').addEventListener('change',  applyWeekPicker);
 
 // ── Load clubs into checkboxes ────────────────────────────────────────────────
 async function loadClubCheckboxes() {
