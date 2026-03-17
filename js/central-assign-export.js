@@ -20,11 +20,12 @@ const DEFAULTS = {
 };
 
 // ── Period lengths by age group ────────────────────────────────────────────────
-// durationTime = (2 × period) + halftime  (U8/U10/U12 = 5 min HT, U15/U19 = 10 min HT)
+// durationTime = (2 × period) + halftime  (U8/U10/U12 = 5 min HT, U13/U15/U19 = 10 min HT)
 const DURATION_BY_AGE = {
     'U8':  { duration: '2 x 20', durationTime: 45  },  // 40 + 5
     'U10': { duration: '2 x 30', durationTime: 65  },  // 60 + 5
     'U12': { duration: '2 x 35', durationTime: 75  },  // 70 + 5
+    'U13': { duration: '2 x 40', durationTime: 90  },  // 80 + 10  (comp — same as U15)
     'U15': { duration: '2 x 40', durationTime: 90  },  // 80 + 10
     'U19': { duration: '2 x 45', durationTime: 100 },  // 90 + 10
 };
