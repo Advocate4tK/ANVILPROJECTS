@@ -11,9 +11,7 @@
             display: grid;
             grid-template-columns: 1fr 300px;
             gap: 16px;
-            align-items: stretch;
-            height: calc(100vh - 320px);
-            min-height: 500px;
+            align-items: start;
         }
         .games-panel {
             background: white;
@@ -21,13 +19,7 @@
             padding: 20px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.07);
             border-top: 4px solid #e94560;
-            display: flex;
-            flex-direction: column;
-        }
-        #gamesListWrap {
-            flex: 1;
-            overflow-y: auto;
-            min-height: 0;
+            min-height: 400px;
         }
         .refs-panel {
             background: white;
@@ -35,13 +27,10 @@
             padding: 16px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.07);
             border-top: 4px solid #0f3460;
-            display: flex;
-            flex-direction: column;
-        }
-        #refsListWrap {
-            flex: 1;
+            position: sticky;
+            top: 20px;
+            max-height: calc(100vh - 60px);
             overflow-y: auto;
-            min-height: 0;
         }
 
         /* ── Club Pills ── */
@@ -159,9 +148,8 @@
         .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 
         @media (max-width: 900px) {
-            .workstation { grid-template-columns: 1fr; height: auto; min-height: unset; }
-            .games-panel { min-height: 400px; max-height: 60vh; }
-            .refs-panel  { min-height: 300px; max-height: 50vh; }
+            .workstation { grid-template-columns: 1fr; }
+            .refs-panel { position: static; max-height: 400px; }
         }
     </style>
 </head>
@@ -988,7 +976,14 @@
             selectedGame = allGames.find(g => g.id === gameId) || null;
             document.querySelectorAll('.game-card').forEach(c => c.classList.remove('selected'));
             if (selectedGame) {
-                document.getElementById('card-' + gameId)?.classList.add('selected');
+                const card = document.getElementById('card-' + gameId);
+                card?.classList.add('selected');
+                // Scroll page so the selected card sits near the top of the viewport
+                // (aligned with the sticky refs panel) to make drag-and-drop easy
+                if (card) {
+                    const offset = card.getBoundingClientRect().top + window.scrollY - 80;
+                    window.scrollTo({ top: offset, behavior: 'smooth' });
+                }
                 // Auto-set preference filter to this game's club so preferred refs float up
                 const gameClub = resolveGameClub(selectedGame.fields);
                 const sel = document.getElementById('prefFilter');
