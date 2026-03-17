@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Central Assign Import</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .log { font-family: monospace; font-size: 0.82rem; background: #1a1a2e; color: #e0e0e0;
+               border-radius: 8px; padding: 16px; max-height: 420px; overflow-y: auto; margin-top: 16px; }
+        .log-ok   { color: #2ecc71; }
+        .log-new  { color: #3498db; }
+        .log-warn { color: #f1c40f; }
+        .log-err  { color: #e74c3c; }
+        .log-head { color: #aaa; }
+        table { width:100%; border-collapse:collapse; font-size:0.85rem; margin-top:16px; }
+        th { background:#0f3460; color:white; padding:8px 10px; text-align:left; }
+        td { padding:7px 10px; border-bottom:1px solid #eee; vertical-align:top; }
+        tr:hover td { background:#f8f9ff; }
+        .badge-new    { background:#d5f0ff; color:#0f6ea1; padding:2px 7px; border-radius:10px; font-size:0.75rem; font-weight:700; }
+        .badge-update { background:#d5ffe8; color:#1a7a40; padding:2px 7px; border-radius:10px; font-size:0.75rem; font-weight:700; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>🔐 Admin Portal</h1>
+        <p class="subtitle">Central Assign Import</p>
+    </header>
+
+    <main>
+        <div style="margin-bottom:20px;">
+            <a href="admin.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Back to Dashboard</a>
+        </div>
+
+        <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #e94560;">
+            <h2 style="color:#0f3460; margin-bottom:6px;">📥 Central Assign Referee Import</h2>
+            <p style="color:#666; font-size:0.9rem; margin-bottom:20px;">
+                Matches each Central Assign referee to an existing Airtable record by email, then updates their
+                phone number, CA Name, and CA ID. Referees not yet in Airtable will be created as new records.
+            </p>
+
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px;">
+                <button id="previewBtn" onclick="runPreview()" class="btn btn-secondary">Preview Changes</button>
+                <button id="importBtn" onclick="runImport()" class="btn" style="background:#27ae60; color:white; border:none;" disabled>Run Import</button>
+            </div>
+
+            <div id="previewTable"></div>
+            <div id="logBox" class="log" style="display:none;"></div>
+        </div>
+    </main>
+
+    <footer><p>&copy; 2026 Referee Scheduling System by Anvil Arts</p></footer>
+</div>
+
+<script src="config.js"></script>
+<script src="js/airtable-client.js"></script>
+<script src="js/admin-auth.js"></script>
+<script>
+    checkAdminAccess();
+
+    // ── Central Assign data (imported March 2026) ──────────────────────────────
+    const CA_REFS = [
+        { caId:'40011', name:'Jordyn Alexandria Aponte', cell:'(508) 287-4481', home:'(774) 222-1506', email1:'jaaponte310@gmail.com',           email2:'arpartridg@gmail.com' },
+        { caId:'3901',  name:'Eric Baughman',            cell:'',               home:'(860) 883-2762', email1:'ct.ref.assignor@gmail.com',        email2:'erbman61@gmail.com' },
+        { caId:'40012', name:'Shyla Beckett',            cell:'(860) 207-5490', home:'(860) 207-5490', email1:'jenneratepro@gmail.com',           email2:'jennnn01@aol.com' },
+        { caId:'39882', name:'Owen Benedict',            cell:'(860) 315-0846', home:'(860) 315-0846', email1:'obenedict27@marianapolis.org',     email2:'jbenedict@marianapolis.org' },
+        { caId:'39372', name:'Reilly Botelho',           cell:'(959) 444-1913', home:'(959) 444-1913', email1:'rjb29211@gmail.com',              email2:'christineannbotelho@gmail.com' },
+        { caId:'37192', name:'Benjamin Riley Brunson',   cell:'8609338785',     home:'',               email1:'gmb10606@gmail.com',              email2:'' },
+        { caId:'37810', name:'Gary Bulmer',              cell:'(860) 933-6498', home:'(860) 933-6498', email1:'bulmerg86@gmail.com',             email2:'' },
+        { caId:'39996', name:'Kira Bulmer',              cell:'(860) 576-6672', home:'(860) 576-6672', email1:'kacbulmer8@gmail.com',            email2:'bulmerg86@gmail.com' },
+        { caId:'37259', name:'Donna Coombs',             cell:'(959) 247-0581', home:'(860) 546-2076', email1:'dcoombs900@gmail.com',            email2:'suesherbalheaven07@yahoo.com' },
+        { caId:'39218', name:'Chase Costa',              cell:'9592423135',     home:'(959) 242-3135', email1:'costachase62@gmail.com',           email2:'mikeyosu78@yahoo.com' },
+        { caId:'39256', name:'Michael Costa',            cell:'',               home:'(860) 941-0984', email1:'mikeyosu78@yahoo.com',            email2:'michael.a.costa20.mil@us.navy.mil' },
+        { caId:'38732', name:'Gabriel Covington',        cell:'(860) 208-4785', home:'(860) 908-9808', email1:'gabrielsoccer133@gmail.com',      email2:'michaelcovington133@gmail.com' },
+        { caId:'37401', name:'Michael Covington',        cell:'',               home:'(860) 908-9808', email1:'michaelcovington133@gmail.com',   email2:'' },
+        { caId:'40249', name:'Lochlan Curran',           cell:'6318711646',     home:'',               email1:'lochlan.curran@icloud.com',       email2:'reagansiobhan@hotmail.com' },
+        { caId:'35246', name:'Ronan Curran',             cell:'',               home:'(631) 871-1646', email1:'ronan.curran@icloud.com',         email2:'reagansiobhan@hotmail.com' },
+        { caId:'34967', name:'Tiernan Curran',           cell:'',               home:'(631) 871-1646', email1:'reagansiobhan@hotmail.com',       email2:'currancy@hotmail.com' },
+        { caId:'38711', name:'Timothy Curran',           cell:'(631) 871-1647', home:'(631) 871-1647', email1:'tcurran815@gmail.com',            email2:'reagansiobhan@hotmail.com' },
+        { caId:'39881', name:'Brayden De Oliveira',      cell:'',               home:'(860) 428-9027', email1:'bombboy3656@yahoo.com',           email2:'roxiesash@yahoo.com' },
+        { caId:'37431', name:'Maura Drake',              cell:'',               home:'(508) 341-7087', email1:'mbpul@yahoo.com',                 email2:'' },
+        { caId:'37500', name:'Nathaniel Drake',          cell:'(860) 338-9821', home:'(508) 341-7087', email1:'nrdrake8@gmail.com',              email2:'mbpul@yahoo.com' },
+        { caId:'37447', name:'Harrison Durand',          cell:'(860) 428-0145', home:'(860) 377-8056', email1:'harrisondurand6608@gmail.com',    email2:'jmdurand77@gmail.com' },
+        { caId:'37415', name:'Jackson Durand',           cell:'860-207-6998',   home:'860-377-8056',   email1:'jacksondurand409@gmail.com',      email2:'jmdurand77@gmail.com' },
+        { caId:'39876', name:'Cooper Florence-Kirk',     cell:'(860) 835-4482', home:'(860) 303-5375', email1:'coopf77@gmail.com',               email2:'kirkste1358@gmail.com' },
+        { caId:'39886', name:'Liam Forsyth',             cell:'(959) 242-3363', home:'(860) 373-8571', email1:'corey.forsyth87@gmail.com',       email2:'taryne.forsyth@yahoo.com' },
+        { caId:'36307', name:'Steve Gemboski',           cell:'',               home:'(508) 867-3974', email1:'sgembos71@yahoo.com',             email2:'' },
+        { caId:'39907', name:'Brayden Graves',           cell:'',               home:'(860) 315-4315', email1:'bgraves2027@woodstockacademy.org',email2:'kellygen@hotmail.com' },
+        { caId:'39328', name:'Lillian Gregorzek',        cell:'9599951968',     home:'9599951968',     email1:'lgregorzek@gmail.com',            email2:'csmarcy@yahoo.com' },
+        { caId:'24626', name:'Kwesi Isaacs',             cell:'',               home:'(973) 652-2678', email1:'kaceyokecey12@gmail.com',         email2:'' },
+        { caId:'37490', name:'Michael Lee',              cell:'(860) 372-5400', home:'(860) 643-5571', email1:'milee98@yahoo.com',               email2:'' },
+        { caId:'37491', name:'Morgan Lee',               cell:'',               home:'(860) 643-5571', email1:'jl704m@gmail.com',                email2:'milee98@yahoo.com' },
+        { caId:'2136',  name:'Matthew Lindell',          cell:'',               home:'(860) 455-3355', email1:'lindellmatt12@yahoo.com',         email2:'klindell2@charter.net' },
+        { caId:'33853', name:'Collin Manuilow',          cell:'',               home:'(774) 757-7342', email1:'collinmanuilow@gmail.com',        email2:'christinamanuilow@gmail.com' },
+        { caId:'36889', name:'Kasey OBrien',             cell:'(860) 334-0011', home:'(860) 334-0011', email1:'kasey29tractor@gmail.com',        email2:'sarahhanover@yahoo.com' },
+        { caId:'39083', name:'David Paquette',           cell:'(860) 204-2520', home:'(860) 204-2520', email1:'davepaq1122@gmail.com',           email2:'' },
+        { caId:'39908', name:'Hannah Perkins',           cell:'',               home:'(860) 207-0388', email1:'jverraneault@yahoo.com',          email2:'perkinsacres@yahoo.com' },
+        { caId:'39332', name:'Bryce Quinn',              cell:'',               home:'(860) 867-0223', email1:'forestboy12345@gmail.com',        email2:'jquinn358@gmail.com' },
+        { caId:'5414',  name:'Francis Senat',            cell:'(860) 237-0410', home:'(860) 546-9291', email1:'sjbf28@gmail.com',               email2:'sjbf28@yahoo.fr' },
+        { caId:'40174', name:'Aliyah Simas',             cell:'(860) 377-2450', home:'(401) 651-8924', email1:'shawnamsimas@gmail.com',          email2:'smwaltz82@yahoo.com' },
+        { caId:'31744', name:'Tod L Smith',              cell:'',               home:'(203) 465-9877', email1:'nectassignor@gmail.com',          email2:'' },
+        { caId:'28059', name:'Ross Sward',               cell:'',               home:'(860) 208-5234', email1:'ross4sccr@gmail.com',             email2:'' },
+        { caId:'39862', name:'Leah Talaga',              cell:'(860) 230-3444', home:'(860) 207-6353', email1:'leahtalaga222@gmail.com',         email2:'nwmgxm@gmail.com' },
+        { caId:'39929', name:'Emily Tessier',            cell:'(860) 639-3773', home:'(860) 303-9263', email1:'emilytess20@gmail.com',           email2:'julietess6@yahoo.com' },
+        { caId:'39970', name:'Nehemiah Lucas Tharel',    cell:'6463735618',     home:'6463735618',     email1:'nehemiahtharel@gmail.com',        email2:'zuleikatharel@gmail.com' },
+        { caId:'38712', name:'Nora Tharel',              cell:'',               home:'(646) 373-5618', email1:'noratharel@gmail.com',            email2:'zuleikatharel@gmail.com' },
+        { caId:'39190', name:'Caleb Ward',               cell:'860-460-0333',   home:'(860) 460-0333', email1:'aeward1981@gmail.com',            email2:'warda@putnam.k12.ct.us' },
+    ];
+
+    // Best phone: cell first, home as fallback
+    function bestPhone(ref) { return ref.cell.trim() || ref.home.trim() || ''; }
+
+    let previewData = []; // filled by runPreview, used by runImport
+
+    function log(msg, cls = '') {
+        const box = document.getElementById('logBox');
+        box.style.display = 'block';
+        box.innerHTML += `<div class="${cls}">${msg}</div>`;
+        box.scrollTop = box.scrollHeight;
+    }
+
+    async function runPreview() {
+        document.getElementById('previewBtn').disabled = true;
+        document.getElementById('previewBtn').textContent = 'Loading…';
+        document.getElementById('previewTable').innerHTML = '<p style="color:#888;">Loading Airtable records…</p>';
+        document.getElementById('logBox').style.display = 'none';
+        document.getElementById('logBox').innerHTML = '';
+        previewData = [];
+
+        try {
+            const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 2000 });
+
+            // Build email → record map (lowercase, check both primary fields)
+            const emailMap = {};
+            existing.forEach(r => {
+                const e = (r.fields['Email'] || '').toLowerCase();
+                if (e) emailMap[e] = r;
+            });
+
+            // Build name → record map (lowercase, trimmed)
+            const nameMap = {};
+            existing.forEach(r => {
+                const n = (r.fields['Name'] || '').toLowerCase().trim();
+                if (n) nameMap[n] = r;
+            });
+
+            CA_REFS.forEach(ca => {
+                const phone = bestPhone(ca);
+                // Try matching by email1, email2, then name
+                let match = emailMap[ca.email1.toLowerCase()]
+                         || (ca.email2 ? emailMap[ca.email2.toLowerCase()] : null)
+                         || nameMap[ca.name.toLowerCase()];
+
+                previewData.push({ ca, match, phone });
+            });
+
+            // Render preview table
+            const updates = previewData.filter(p => p.match);
+            const creates = previewData.filter(p => !p.match);
+
+            let html = `<p style="font-size:0.9rem; color:#555; margin-bottom:8px;">
+                <strong style="color:#1a7a40;">${updates.length} records to update</strong> &nbsp;·&nbsp;
+                <strong style="color:#0f6ea1;">${creates.length} new records to create</strong>
+            </p>
+            <div style="overflow-x:auto;">
+            <table>
+                <thead><tr>
+                    <th>Action</th><th>CA ID</th><th>Name</th><th>Phone</th><th>Primary Email</th><th>Matched To</th>
+                </tr></thead><tbody>`;
+
+            previewData.forEach(({ ca, match, phone }) => {
+                const action = match
+                    ? `<span class="badge-update">UPDATE</span>`
+                    : `<span class="badge-new">CREATE</span>`;
+                const matchedTo = match ? (match.fields['Name'] || match.fields['Email'] || match.id) : '—';
+                html += `<tr>
+                    <td>${action}</td>
+                    <td>${ca.caId}</td>
+                    <td>${ca.name}</td>
+                    <td>${phone || '<span style="color:#aaa;">—</span>'}</td>
+                    <td style="font-size:0.8rem;">${ca.email1}</td>
+                    <td style="font-size:0.8rem; color:#555;">${matchedTo}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table></div>';
+            document.getElementById('previewTable').innerHTML = html;
+            document.getElementById('importBtn').disabled = false;
+
+        } catch(e) {
+            document.getElementById('previewTable').innerHTML = `<p style="color:#e74c3c;">Failed to load: ${e.message}</p>`;
+        }
+
+        document.getElementById('previewBtn').disabled = false;
+        document.getElementById('previewBtn').textContent = 'Preview Changes';
+    }
+
+    async function runImport() {
+        if (!previewData.length) { alert('Run Preview first.'); return; }
+        document.getElementById('importBtn').disabled = true;
+        document.getElementById('importBtn').textContent = 'Importing…';
+
+        const logBox = document.getElementById('logBox');
+        logBox.style.display = 'block';
+        logBox.innerHTML = '';
+
+        log(`Starting import of ${previewData.length} referees…`, 'log-head');
+
+        let updated = 0, created = 0, failed = 0;
+
+        for (const { ca, match, phone } of previewData) {
+            try {
+                if (match) {
+                    // Update existing record
+                    const fields = {
+                        'Central Assign Name': ca.name,
+                        'Central Assign ID':   ca.caId,
+                    };
+                    if (phone) fields['Phone'] = phone;
+                    // Fill email if blank
+                    if (!match.fields['Email'] && ca.email1) fields['Email'] = ca.email1;
+
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, match.id, fields);
+                    log(`✓ Updated: ${ca.name} (CA #${ca.caId})`, 'log-ok');
+                    updated++;
+                } else {
+                    // Create new record
+                    const fields = {
+                        'Name':                ca.name,
+                        'Email':               ca.email1,
+                        'Phone':               phone,
+                        'Central Assign Name': ca.name,
+                        'Central Assign ID':   ca.caId,
+                    };
+                    await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, fields);
+                    log(`+ Created: ${ca.name} (CA #${ca.caId})`, 'log-new');
+                    created++;
+                }
+            } catch(e) {
+                log(`✗ Failed: ${ca.name} — ${e.message}`, 'log-err');
+                failed++;
+            }
+
+            // Small delay to stay within Airtable rate limits (5 req/sec)
+            await new Promise(r => setTimeout(r, 220));
+        }
+
+        log('', '');
+        log(`Done. Updated: ${updated}  Created: ${created}  Failed: ${failed}`, 'log-head');
+        document.getElementById('importBtn').textContent = 'Import Complete';
+    }
+</script>
+</body>
+</html>
