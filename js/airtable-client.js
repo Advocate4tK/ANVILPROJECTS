@@ -203,7 +203,7 @@ class AirtableClient {
      */
     async findRefereeByEmail(email) {
         try {
-            const formula = `{Email} = "${email}"`;
+            const formula = `OR({Email} = "${email}", {Email 2} = "${email}")`;
             const records = await this.getRecords(this.tables.REFEREES, {
                 filterByFormula: formula,
                 maxRecords: 1
