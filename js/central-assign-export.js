@@ -167,14 +167,29 @@ loadBtn.addEventListener('click', async () => {
             if (caId) refIdLookup[r.id] = parseInt(caId) || caId;
         });
 
-        // Build lookups from Venues table
+        // Build lookups from Venues table.
+        // The Games table links to the Fields table (f['Field']), not directly to Venues.
+        // The Venues table has a 'Fields' back-link column, so we map each
+        // linked Field record ID → this venue's name and CA ID.
         venueCAId    = {};
         venueNameMap = {};
         venues.forEach(v => {
             const name = v.fields['Venue Name'] || '';
             const caId = v.fields['Venue ID'];
+            const caIdNum = caId ? (parseInt(caId) || caId) : null;
+
+            // Index by Venue record ID (for any direct Venue links)
             if (name) venueNameMap[v.id] = name;
-            if (caId) venueCAId[v.id]    = parseInt(caId) || caId;
+            if (caIdNum) venueCAId[v.id] = caIdNum;
+
+            // Index by each linked Field record ID so Game → Field → Venue resolves
+            const linkedFields = v.fields['Fields'];
+            if (Array.isArray(linkedFields)) {
+                linkedFields.forEach(fid => {
+                    if (name)     venueNameMap[fid] = name;
+                    if (caIdNum)  venueCAId[fid]    = caIdNum;
+                });
+            }
         });
 
         progressBar.style.width = '100%';
@@ -356,18 +371,17 @@ exportBtn.addEventListener('click', () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Resolve a Games Venue field value (linked record array or plain text)
-// Returns { name, caId } — caId is null if not found in Venues table
+// Resolve a game's venue from either f['Field'] or f['Venue'] (both may be
+// linked record arrays whose IDs are indexed in venueCAId / venueNameMap).
+// Returns { name, caId } — caId is null if not found.
 function resolveVenue(fieldValue) {
     if (!fieldValue) return { name: '', caId: null };
-    // Linked record — array of Airtable venue record IDs
     if (Array.isArray(fieldValue) && fieldValue.length > 0) {
         const rid = fieldValue[0];
         return { name: venueNameMap[rid] || '', caId: venueCAId[rid] || null };
     }
-    // Plain text — shouldn't normally occur but handle gracefully
-    const name = String(fieldValue);
-    return { name, caId: null };
+    // Plain text fallback
+    return { name: String(fieldValue), caId: null };
 }
 
 function formatDate(dateStr) {
