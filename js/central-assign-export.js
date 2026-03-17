@@ -327,7 +327,7 @@ exportBtn.addEventListener('click', () => {
     // Headers matched exactly to CA template
     const headers = [
         'Home Team', 'Visiting Team', 'Duration', 'Duration Time',
-        'Game Date', 'Start Time', 'Type (League/Cup/Other)', 'Gender',
+        'Game Date', 'Start Time', 'Type (League/Cup/Other)', 'Age Group', 'Gender',
         'Venue', 'Venue Field', 'League', 'Referee Id', 'AR1', 'AR2',
         '4th', 'Assessor', 'Diag Sys Ctl', 'Referee Rate', 'AR Rate',
         '4th Rate', 'Assessor Rate', 'External Game Id'
@@ -351,6 +351,11 @@ exportBtn.addEventListener('click', () => {
         const ageGroup = f['Age Group'] || '';
         const { duration, durationTime } = DURATION_BY_AGE[ageGroup] || { duration: '2 x 40', durationTime: 90 };
 
+        // Convert U8/U10/U12/U15/U19 → CA birth year (game year − age number)
+        const ageMatch = ageGroup.match(/U(\d+)/i);
+        const gameYear = f['Date'] ? parseInt(f['Date'].split('-')[0]) : new Date().getFullYear();
+        const birthYear = ageMatch ? (gameYear - parseInt(ageMatch[1])) : '';
+
         return [
             f['Home Team']  || '',
             f['Away Team']  || '',
@@ -359,6 +364,7 @@ exportBtn.addEventListener('click', () => {
             formatDateForExport(f['Date'] || ''),
             formatTimeForExport(f['Time'] || ''),
             DEFAULTS.type,
+            birthYear,
             gameGender,
             venueId || venueName,
             '',
