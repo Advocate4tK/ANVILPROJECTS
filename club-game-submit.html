@@ -220,23 +220,30 @@
     <div class="container">
         <header>
             <h1>⚽ Submit Games</h1>
-            <p class="subtitle">Enter your home games for referee scheduling</p>
+            <p class="subtitle" id="pageSubtitle">Enter your home games for referee scheduling</p>
         </header>
 
         <main>
             <div class="form-container">
 
                 <div class="page-intro">
-                    Select your club, fill in each game, and click <strong>Create Game</strong> to add it to your list.
+                    Fill in each game and click <strong>Create Game</strong> to add it to your list.
                     When all games are entered, click <strong>Submit All Games</strong> to send them to the assignor.
                 </div>
 
-                <!-- Club -->
-                <div class="club-select-wrap">
+                <!-- Club — shown as locked label when URL param present, dropdown otherwise -->
+                <div class="club-select-wrap" id="clubSelectWrap">
                     <label for="clubSelect">Your Club <span style="color:#e74c3c">*</span></label>
                     <select id="clubSelect">
                         <option value="">— Loading clubs… —</option>
                     </select>
+                </div>
+                <div id="clubLockedWrap" style="display:none; margin-bottom:24px;">
+                    <div style="font-size:18px; font-weight:700; color:#2c3e50;" id="clubLockedName"></div>
+                    <div style="font-size:13px; color:#888; margin-top:2px;">Submitting games for this club</div>
+                </div>
+                <div id="clubNotFoundMsg" style="display:none; background:#fadbd8; color:#922b21; padding:16px; border-radius:8px; margin-bottom:20px;">
+                    Club not found. Please check your link or contact your assignor.
                 </div>
 
                 <!-- Entry form -->
@@ -363,7 +370,33 @@
     window.addEventListener('load', async () => {
         if (!airtableClient) { alert('Airtable client not initialized.'); return; }
         await loadReferenceData();
-        populateClubDropdown();
+
+        // Check for ?club= URL parameter
+        const urlParam = new URLSearchParams(window.location.search).get('club');
+        if (urlParam) {
+            // Match club by slug (lowercase, spaces/dashes normalized)
+            const slug = s => s.toLowerCase().replace(/[\s-]+/g, '');
+            const match = allClubs.find(c => slug(c.name) === slug(urlParam));
+            if (match) {
+                // Lock the club — hide dropdown, show name
+                document.getElementById('clubSelectWrap').style.display = 'none';
+                document.getElementById('clubLockedWrap').style.display = 'block';
+                document.getElementById('clubLockedName').textContent = match.name;
+                document.getElementById('pageSubtitle').textContent =
+                    `${match.name} — Home Game Submission`;
+                // Set the hidden select so existing logic still works
+                const sel = document.getElementById('clubSelect');
+                sel.innerHTML = `<option value="${match.id}" selected>${match.name}</option>`;
+                populateVenues();
+                updateCreateBtn();
+            } else {
+                document.getElementById('clubSelectWrap').style.display = 'none';
+                document.getElementById('clubNotFoundMsg').style.display = 'block';
+            }
+        } else {
+            // No param — show dropdown (admin/testing mode)
+            populateClubDropdown();
+        }
     });
 
     // ── Load reference data ───────────────────────────────────────────────────
