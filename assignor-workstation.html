@@ -64,6 +64,9 @@
 
         /* ── Assignment Slots ── */
         .slots { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
+        .venue-field-row { display:flex; align-items:center; gap:6px; margin-top:6px; }
+        .vf-select { font-size:0.75rem; padding:3px 6px; border:1px solid #dde3f0; border-radius:6px; background:#f4f6fa; color:#333; font-family:inherit; cursor:pointer; }
+        .vf-select:focus { outline:none; border-color:#0f3460; }
         .slot {
             border: 2px dashed #ccc; border-radius: 8px; padding: 6px 8px;
             min-height: 44px; font-size: 0.78rem; color: #aaa; text-align: center;
@@ -387,6 +390,8 @@
         let allGames      = [];
         let allRefs       = [];
         let allAvail      = [];
+        let allVenues     = []; // { id, name } sorted by name
+        let allFields     = []; // { fieldId, name, venueId }
         let clubLookup    = {}; // airtable record ID → club name
         let refLookup     = {}; // airtable record ID → ref object
         let assignedAt    = {}; // refId → Map<'date|time', Set<gameId>>
@@ -585,11 +590,13 @@
                 const availOpts = { maxRecords: 2000 };
                 if (filter) availOpts.filterByFormula = filter;
 
-                const [games, refs, avail, clubs] = await Promise.all([
+                const [games, refs, avail, clubs, venues, fields] = await Promise.all([
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, gameOpts),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, availOpts),
-                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 })
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
                 ]);
 
                 // Build club lookup
@@ -635,8 +642,16 @@
                     const db = `${b.fields['Date']}|${b.fields['Time'] || ''}`;
                     return da.localeCompare(db);
                 });
-                allRefs  = refs;
-                allAvail = avail;
+                allRefs   = refs;
+                allAvail  = avail;
+                allVenues = venues
+                    .map(v => ({ id: v.fields['Venue ID'], name: v.fields['Venue Name'] }))
+                    .filter(v => v.id && v.name)
+                    .sort((a, b) => a.name.localeCompare(b.name));
+                allFields = fields
+                    .map(f => ({ fieldId: f.fields['Field ID'], name: f.fields['Field Name'], venueId: f.fields['Venue ID'] }))
+                    .filter(f => f.fieldId && f.name)
+                    .sort((a, b) => a.fieldId - b.fieldId);
 
                 document.getElementById('workstation').style.display = 'grid';
                 renderGames();
@@ -772,6 +787,26 @@
                         ${hideARs ? '' : makeSlot(gid, 'AR 1', 'AR 1', ar1, f['AR 1'])}
                         ${hideARs ? '' : makeSlot(gid, 'AR 2', 'AR 2', ar2, f['AR 2'])}
                     </div>`;
+                    })()}
+                    ${(() => {
+                        const curVenueId = f['Venue ID'] || '';
+                        const curFieldId = f['Field ID'] || '';
+                        const venueOpts = allVenues.map(v =>
+                            `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
+                        ).join('');
+                        const fieldOpts = allFields
+                            .filter(fi => !curVenueId || fi.venueId == curVenueId)
+                            .map(fi => `<option value="${fi.fieldId}" ${fi.fieldId == curFieldId ? 'selected' : ''}>${fi.name}</option>`)
+                            .join('');
+                        return `<div class="venue-field-row" onclick="event.stopPropagation()">
+                            <span style="font-size:0.72rem;color:#888;">📍</span>
+                            <select class="vf-select" onchange="onVenueChange('${gid}', this)" style="flex:2;">
+                                <option value="">Venue…</option>${venueOpts}
+                            </select>
+                            <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;">
+                                <option value="">Field…</option>${fieldOpts}
+                            </select>
+                        </div>`;
                     })()}
                 </div>`;
             });
@@ -1076,6 +1111,41 @@
         }
 
         // ── Unassign ref from slot ────────────────────────────────────────────
+        function onVenueChange(gameId, venueSelect) {
+            const venueId = parseInt(venueSelect.value) || 0;
+            // Repopulate field dropdown for this game
+            const fieldSel = document.getElementById(`fieldSel-${gameId}`);
+            if (!fieldSel) return;
+            const fieldsForVenue = allFields.filter(f => !venueId || f.venueId == venueId);
+            fieldSel.innerHTML = `<option value="">Field…</option>` +
+                fieldsForVenue.map(f => `<option value="${f.fieldId}">${f.name}</option>`).join('');
+            // Save venue immediately; clear field
+            saveVenueField(gameId, venueId, 0);
+        }
+
+        function onFieldChange(gameId, fieldSelect) {
+            const fieldId  = parseInt(fieldSelect.value) || 0;
+            const venueSelect = fieldSelect.closest('.venue-field-row')?.querySelector('.vf-select');
+            const venueId  = parseInt(venueSelect?.value) || 0;
+            saveVenueField(gameId, venueId, fieldId);
+        }
+
+        async function saveVenueField(gameId, venueId, fieldId) {
+            try {
+                const updates = {};
+                if (venueId) updates['Venue ID'] = venueId; else updates['Venue ID'] = null;
+                if (fieldId) updates['Field ID'] = fieldId; else updates['Field ID'] = null;
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, updates);
+                const game = allGames.find(g => g.id === gameId);
+                if (game) {
+                    game.fields['Venue ID'] = venueId || null;
+                    game.fields['Field ID'] = fieldId || null;
+                }
+            } catch(e) {
+                console.warn('Could not save venue/field:', e.message);
+            }
+        }
+
         async function unassignRef(gameId, position) {
             try {
                 const fields = {};
