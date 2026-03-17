@@ -509,6 +509,44 @@
                 sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
 
+            // Hide form groups for fields already on file so returning refs only see what's missing
+            function hideFilledFields(f) {
+                const single = [
+                    { val: f['Phone'],               id: 'refereePhone'       },
+                    { val: f['Date of Birth'],        id: 'refereeBirthDate'   },
+                    { val: f['Address'],              id: 'refereeAddress'     },
+                    { val: f['Years Reffing'],        id: 'yearsReffing'       },
+                    { val: f['Certification Level'],  id: 'certificationLevel' },
+                    { val: f['Gender'],               id: 'refereeGender'      },
+                ];
+                single.forEach(({ val, id }) => {
+                    if (!val) return; // missing — keep visible
+                    const input = document.getElementById(id);
+                    if (!input) return;
+                    const group = input.closest('.form-group');
+                    if (group) { group.style.display = 'none'; input.removeAttribute('required'); }
+                });
+
+                // City / State / Zip live in a shared .form-row — hide the whole row if all present
+                if (f['City'] && f['State'] && f['Zip Code']) {
+                    const row = document.getElementById('refereeCity')?.closest('.form-row');
+                    if (row) {
+                        row.style.display = 'none';
+                        ['refereeCity', 'refereeState', 'refereeZip'].forEach(id =>
+                            document.getElementById(id)?.removeAttribute('required'));
+                    }
+                }
+
+                // Guardian section: only relevant for under-18 refs
+                // If DOB is already on file and they're 18+, hide the guardian section entirely
+                if (f['Date of Birth']) {
+                    const age = window.calculateAge(f['Date of Birth']);
+                    if (age !== null && age >= 18) {
+                        document.getElementById('guardianSection').style.display = 'none';
+                    }
+                }
+            }
+
             // Email lookup — returning vs new referee
             async function runEmailLookup() {
                 const email = document.getElementById('refereeEmail').value.trim();
@@ -556,12 +594,15 @@
                         window._foundRefId  = referee.id;
                         window._foundRefDob = f['Date of Birth'] || null;
 
-                        // Check if critical fields are missing (CA-imported refs won't have these)
+                        // Check ALL profile fields — catches early refs who pre-date newly added fields
                         const missingFields = [
-                            !f['Date of Birth']      && 'Date of Birth',
-                            !f['Years Reffing']      && 'Years Reffing',
-                            !f['Certification Level']&& 'Certification Level',
-                            !f['Gender']             && 'Gender',
+                            !f['Phone']               && 'Phone',
+                            !f['Date of Birth']       && 'Date of Birth',
+                            !f['Address']             && 'Address',
+                            !(f['City'] && f['Zip Code']) && 'City / Zip',
+                            !f['Years Reffing']       && 'Years Reffing',
+                            !f['Certification Level'] && 'Certification Level',
+                            !f['Gender']              && 'Gender',
                         ].filter(Boolean);
 
                         document.getElementById('entryFieldset').style.display    = 'none';
@@ -573,9 +614,10 @@
                         unlockForm();
 
                         if (missingFields.length > 0) {
-                            // Incomplete profile — show contact section to collect missing info
+                            // Show only the fields that are actually missing — hide everything already on file
+                            hideFilledFields(f);
                             document.getElementById('welcomeName').textContent    = `👋 Welcome back, ${fullName}!`;
-                            document.getElementById('welcomeSubtitle').textContent = `Before you continue, we need a few more details: ${missingFields.join(', ')}.`;
+                            document.getElementById('welcomeSubtitle').textContent = `We just need a couple more details: ${missingFields.join(', ')}.`;
                             document.getElementById('contactSection').style.display = 'block';
                             document.getElementById('availabilitySection').style.display = 'none';
                             document.getElementById('availabilitySection').style.opacity = '0';
@@ -623,17 +665,20 @@
             document.getElementById('saveContactBtn').addEventListener('click', async function() {
                 const msgEl = document.getElementById('contactSaveMessage');
 
-                // Basic validation
+                // Validate only the fields currently visible (hidden ones were already on file)
                 const phone = document.getElementById('refereePhone').value.trim();
                 const years = document.getElementById('yearsReffing').value;
                 const cert  = document.getElementById('certificationLevel').value;
                 const city  = document.getElementById('refereeCity').value.trim();
                 const zip   = document.getElementById('refereeZip').value.trim();
 
-                if (!phone || !years || !cert || !city || !zip) {
+                const emptyRequired = [...document.querySelectorAll('#contactFieldset [required]')]
+                    .filter(el => !el.value.trim());
+                if (emptyRequired.length > 0) {
                     msgEl.className = 'form-message error';
                     msgEl.textContent = 'Please complete all required fields before continuing.';
                     msgEl.style.display = 'block';
+                    emptyRequired[0].focus();
                     return;
                 }
 
