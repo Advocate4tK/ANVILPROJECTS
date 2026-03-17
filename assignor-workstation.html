@@ -447,6 +447,7 @@
         let clubLookup    = {}; // airtable record ID → club name
         let refLookup     = {}; // airtable record ID → ref object
         let assignedAt    = {}; // refId → Map<'date|time', Set<gameId>>
+        const cancelledGameIds = new Set(); // belt-and-suspenders for cancelled state
         let availByName   = {}; // ref name → Set<date>
         let availTimeByName = {}; // ref name → { date → { start, end } }
         let selectedClubs = new Set(CLUBS_LIST); // default: all
@@ -699,6 +700,9 @@
                     const db = `${b.fields['Date']}|${b.fields['Time'] || ''}`;
                     return da.localeCompare(db);
                 });
+                // Seed cancelledGameIds from Airtable Status field (persists across reloads)
+                cancelledGameIds.clear();
+                allGames.forEach(g => { if (g.fields['Status'] === 'Cancelled') cancelledGameIds.add(g.id); });
                 allRefs   = refs;
                 allAvail  = avail;
                 allVenues = venues
@@ -784,7 +788,7 @@
 
             const filtered = allGames.filter(g => {
                 // Cancelled games always show regardless of any filter
-                if (g.fields['Status'] === 'Cancelled') return true;
+                if (cancelledGameIds.has(g.id) || g.fields['Status'] === 'Cancelled') return true;
                 if (gameDateF && g.fields['Date'] !== gameDateF) return false;
                 if (gameTimeF && (g.fields['Time'] || '') !== gameTimeF) return false;
                 if (gameAgeF  && g.fields['Age Group'] !== gameAgeF) return false;
@@ -852,7 +856,7 @@
                 const ar2  = resolveRefName(f['AR 2']);
                 const fullyAssigned = cRef && ar1 && ar2;
                 const selected    = selectedGame && selectedGame.id === gid;
-                const isCancelled = f['Status'] === 'Cancelled';
+                const isCancelled = cancelledGameIds.has(gid) || f['Status'] === 'Cancelled';
 
                 html += `<div class="game-card ${fullyAssigned ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''}" onclick="selectGame('${gid}')" id="card-${gid}">
                     ${isCancelled ? '<div class="cancelled-stamp">CANCELLED</div>' : ''}
@@ -1449,26 +1453,28 @@
 
         async function cancelGame(gameId, label) {
             if (!confirm(`Cancel "${label}"?\n\nThe game will remain visible with a CANCELLED stamp.`)) return;
-            // Mark locally immediately so stamp shows even if Airtable save fails
+            // Mark via Set and field mutation — belt and suspenders
+            cancelledGameIds.add(gameId);
             const game = allGames.find(g => g.id === gameId);
             if (game) game.fields['Status'] = 'Cancelled';
             renderGames();
             try {
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Status': 'Cancelled' });
             } catch(e) {
-                alert(`Cancellation shown locally but could not save to Airtable: ${e.message}\n\nMake sure a "Status" text field exists in your Games table.`);
+                console.warn('Could not persist cancellation to Airtable:', e.message);
             }
         }
 
         async function restoreGame(gameId) {
+            cancelledGameIds.delete(gameId);
+            const game = allGames.find(g => g.id === gameId);
+            if (game) game.fields['Status'] = '';
+            renderGames();
+            renderRefs(document.getElementById('refSearch').value.toLowerCase());
             try {
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Status': '' });
-                const game = allGames.find(g => g.id === gameId);
-                if (game) game.fields['Status'] = '';
-                renderGames();
-                renderRefs(document.getElementById('refSearch').value.toLowerCase());
             } catch(e) {
-                alert(`Could not restore game: ${e.message}`);
+                console.warn('Could not persist restore to Airtable:', e.message);
             }
         }
     </script>
