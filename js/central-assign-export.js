@@ -316,6 +316,9 @@ exportBtn.addEventListener('click', () => {
             refId = refIdLookup[centerRefField[0]] || 0;
         }
 
+        // Map Airtable Gender field to CA format (M/F), fall back to default
+        const gameGender = f['Gender'] === 'Male' ? 'M' : f['Gender'] === 'Female' ? 'F' : DEFAULTS.gender;
+
         return [
             f['Home Team']  || '',
             f['Away Team']  || '',
@@ -324,7 +327,7 @@ exportBtn.addEventListener('click', () => {
             formatDateForExport(f['Date'] || ''),
             formatTimeForExport(f['Time'] || ''),
             DEFAULTS.type,
-            DEFAULTS.gender,
+            gameGender,
             venueId || (f['Field'] || f['Venue'] || ''),
             '',
             f['League'] || DEFAULTS.league,
