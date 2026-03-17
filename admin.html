@@ -418,18 +418,25 @@
                         // Referees
                         allReferees.forEach(r => {
                             const f = r.fields;
-                            const name  = f['Name']  || '';
-                            const email = f['Email'] || '';
-                            const phone = f['Phone'] || '';
-                            if (name.toLowerCase().includes(q) || email.toLowerCase().includes(q) || phone.replace(/\D/g,'').includes(q.replace(/\D/g,''))) {
+                            const name         = f['Name']           || '';
+                            const email        = f['Email']          || '';
+                            const phone        = f['Phone']          || '';
+                            const guardianName = f['Guardian Name']  || '';
+                            const guardianEmail= f['Guardian Email'] || '';
+                            const searchStr = [name, email, phone, guardianName, guardianEmail].join(' ').toLowerCase();
+                            const phoneDigits = phone.replace(/\D/g,'');
+                            if (searchStr.includes(q) || (phoneDigits && phoneDigits.includes(q.replace(/\D/g,'')))) {
                                 hits.push({
                                     type:  'referee',
                                     name,  email, phone,
                                     cert:  f['Certification Level'] || '',
-                                    age:   f['Age']          || '',
-                                    years: f['Years Reffing'] || '',
-                                    clubs: f['Club Preference'] || '',
-                                    gender: f['Gender'] || ''
+                                    dob:   f['Date of Birth']       || '',
+                                    age:   f['Age']                 || '',
+                                    years: f['Years Reffing']       || '',
+                                    clubs: f['Club Preference']     || '',
+                                    gender: f['Gender']             || '',
+                                    guardianName,
+                                    guardianEmail
                                 });
                             }
                         });
@@ -455,22 +462,30 @@
                         resultsDiv.innerHTML = hits.slice(0, 15).map(p => {
                             if (p.type === 'referee') {
                                 const meta = [
-                                    p.age   ? `Age ${p.age}`        : '',
-                                    p.years ? `${p.years} yrs reffing` : '',
+                                    p.age    ? `Age ${p.age}`           : '',
+                                    p.dob    ? `DOB: ${p.dob}`          : '',
+                                    p.years  ? `${p.years} yrs reffing` : '',
                                     p.gender
                                 ].filter(Boolean).join(' · ');
+                                const isMinor = !!(p.guardianName || p.guardianEmail);
                                 return `<div style="background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
                                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:5px;">
                                         <span style="background:#0f3460; color:white; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:12px; letter-spacing:0.5px;">REFEREE</span>
                                         <span style="font-weight:700; font-size:0.95rem; color:#0f3460;">${p.name}</span>
-                                        ${p.cert ? `<span style="background:#e8f4fd; color:#0f3460; font-size:0.75rem; padding:2px 8px; border-radius:10px;">${p.cert}</span>` : ''}
+                                        ${p.cert    ? `<span style="background:#e8f4fd; color:#0f3460; font-size:0.75rem; padding:2px 8px; border-radius:10px;">${p.cert}</span>` : ''}
+                                        ${isMinor   ? `<span style="background:#fff3cd; color:#856404; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:10px;">MINOR</span>` : ''}
                                     </div>
-                                    <div style="font-size:0.85rem; color:#444; display:flex; flex-wrap:wrap; gap:16px;">
+                                    <div style="font-size:0.85rem; color:#444; display:flex; flex-wrap:wrap; gap:16px; margin-bottom:${isMinor ? '6px' : '0'};">
                                         ${p.phone ? `<span>📞 ${p.phone}</span>` : ''}
                                         ${p.email ? `<span>✉️ <a href="mailto:${p.email}" style="color:#0f3460;">${p.email}</a></span>` : ''}
                                         ${meta    ? `<span style="color:#666;">${meta}</span>` : ''}
                                         ${p.clubs ? `<span>⭐ ${p.clubs}</span>` : ''}
                                     </div>
+                                    ${isMinor ? `<div style="font-size:0.82rem; color:#666; background:#fff8e1; border-radius:6px; padding:5px 10px; display:flex; flex-wrap:wrap; gap:14px;">
+                                        <span style="font-weight:600; color:#856404;">Guardian:</span>
+                                        ${p.guardianName  ? `<span>${p.guardianName}</span>` : ''}
+                                        ${p.guardianEmail ? `<span>✉️ <a href="mailto:${p.guardianEmail}" style="color:#0f3460;">${p.guardianEmail}</a></span>` : ''}
+                                    </div>` : ''}
                                 </div>`;
                             } else {
                                 return `<div style="background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
