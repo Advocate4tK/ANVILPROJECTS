@@ -45,7 +45,8 @@
                 </p>
 
                 <div style="display:flex; gap:12px; flex-wrap:wrap;">
-                    <button class="btn btn-primary" id="seedBtn" onclick="runSeed()" style="background:#27ae60;">🚀 Seed Test Data</button>
+                    <button class="btn btn-primary" id="seedBtn" onclick="runSeed()" style="background:#27ae60;">🚀 Seed All Test Data</button>
+                    <button class="btn btn-primary" id="seedGamesBtn" onclick="seedGamesOnly()" style="background:#0f3460;">📅 Seed Games Only</button>
                     <button class="btn btn-danger" id="clearBtn" onclick="clearData()">🗑 Clear Seeded Data</button>
                 </div>
 
@@ -367,6 +368,80 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🚀 Seed Test Data';
+            }
+        }
+
+        async function seedGamesOnly() {
+            const btn = document.getElementById('seedGamesBtn');
+            btn.disabled = true;
+            btn.textContent = 'Seeding…';
+            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('log').innerHTML = '';
+            seededGameIds = [];
+
+            try {
+                // Ensure clubs exist
+                log('Checking clubs table…', 'info');
+                const ALL_CLUBS = [
+                    'East Haddam','Glastonbury','Griswold','Haddam-Killingworth',
+                    'Lebanon','NECONN','New London','Portland',
+                    'RHAMYS','Stonington','Valley','WAM'
+                ];
+                const existingClubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+                const clubByName = {};
+                existingClubs.forEach(c => {
+                    const name = c.fields['Club Name'] || '';
+                    if (name) clubByName[name.toLowerCase()] = c.id;
+                });
+                for (const clubName of ALL_CLUBS) {
+                    if (!clubByName[clubName.toLowerCase()]) {
+                        try {
+                            const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.CLUBS, { 'Club Name': clubName });
+                            clubByName[clubName.toLowerCase()] = rec.id;
+                            log(`  ✓ Created club: ${clubName}`, 'ok');
+                        } catch(e) {
+                            log(`  ✗ Could not create club ${clubName}: ${e.message}`, 'err');
+                        }
+                        await delay(150);
+                    } else {
+                        log(`  — ${clubName} already exists`, 'info');
+                    }
+                }
+
+                // Create games
+                log('Creating games…', 'info');
+                const total = GAMES_TO_SEED.length;
+                for (let i = 0; i < total; i++) {
+                    const g = GAMES_TO_SEED[i];
+                    try {
+                        const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, {
+                            'Home Team': g.home,
+                            'Away Team': g.away,
+                            'Date':      g.date,
+                            'Time':      g.time,
+                            'Age Group': g.age,
+                        });
+                        seededGameIds.push(rec.id);
+                        log(`  ✓ ${g.date} ${g.time} — ${g.home} vs ${g.away} (${g.age})`, 'ok');
+                    } catch(e) {
+                        log(`  ✗ ${g.home} vs ${g.away}: ${e.message}`, 'err');
+                    }
+                    setProgress(10 + (i / total) * 90);
+                    await delay(150);
+                }
+
+                setProgress(100);
+                log('Done!', 'info');
+                const summary = document.getElementById('summaryBox');
+                summary.style.display = 'block';
+                summary.innerHTML = `<strong style="color:#27ae60;">✓ Games seeded</strong><br>
+                    <span style="font-size:0.88rem;">${seededGameIds.length} games created. Referees and availability unchanged.</span>`;
+
+            } catch(e) {
+                log('Fatal error: ' + e.message, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📅 Seed Games Only';
             }
         }
 
