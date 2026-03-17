@@ -652,7 +652,9 @@
                         let nameMatch = null;
                         try {
                             const nameResults = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, {
-                                filterByFormula: `{Name} = "${typedName}"`,
+                                // Word-boundary search handles middle initials (e.g. "Tod L Smith" matched by "Tod Smith")
+                                // Padding Name with spaces lets FIND detect word edges without regex
+                                filterByFormula: `AND(FIND("${typedFirst} ", {Name} & " ") > 0, FIND(" ${typedLast}", " " & {Name}) > 0)`,
                                 maxRecords: 1
                             });
                             if (nameResults.length > 0) nameMatch = nameResults[0];
