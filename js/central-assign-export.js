@@ -152,26 +152,15 @@ loadBtn.addEventListener('click', async () => {
     noGamesMsg.style.display = 'none';
 
     try {
-        // Build date filter — IS_AFTER/IS_BEFORE with ±1 day offset makes both ends inclusive
+        // Build date filter only — club filtering is done client-side to avoid
+        // Airtable formula quoting issues with club names
         const dateParts = [];
         if (dateFrom) dateParts.push(`NOT(IS_BEFORE({Date}, '${dateFrom}'))`);
         if (dateTo)   dateParts.push(`NOT(IS_AFTER({Date}, '${dateTo}'))`);
 
-        // Build club filter — matches home OR away team containing the club name
-        let clubFilter = '';
-        if (selectedClubs.length > 0) {
-            const clubConditions = selectedClubs.map(c =>
-                `OR(FIND("${c}", {Home Team}) > 0, FIND("${c}", {Away Team}) > 0)`
-            );
-            clubFilter = clubConditions.length === 1
-                ? clubConditions[0]
-                : `OR(${clubConditions.join(', ')})`;
-        }
-
-        const allParts = [...dateParts, ...(clubFilter ? [clubFilter] : [])];
         let filter = '';
-        if (allParts.length === 1)      filter = allParts[0];
-        else if (allParts.length > 1)   filter = `AND(${allParts.join(', ')})`;
+        if (dateParts.length === 1)    filter = dateParts[0];
+        else if (dateParts.length > 1) filter = `AND(${dateParts.join(', ')})`;
 
         const options = { maxRecords: 500 };
         if (filter) options.filterByFormula = filter;
@@ -193,14 +182,24 @@ loadBtn.addEventListener('click', async () => {
         progressBar.style.width = '100%';
         progressText.textContent = 'Done!';
 
+        // Club filter — client-side substring match (case-insensitive)
+        const byClub = selectedClubs.length === 0 ? records : records.filter(r => {
+            const home = (r.fields['Home Team'] || '').toLowerCase();
+            const away = (r.fields['Away Team'] || '').toLowerCase();
+            return selectedClubs.some(c => {
+                const cl = c.toLowerCase();
+                return home.includes(cl) || away.includes(cl);
+            });
+        });
+
         // Filter to assigned-only if checkbox is checked
         const assignedOnly = document.getElementById('assignedOnly').checked;
         const filtered = assignedOnly
-            ? records.filter(r => {
+            ? byClub.filter(r => {
                 const cr = r.fields['Center Referee'];
                 return Array.isArray(cr) && cr.length > 0 && refIdLookup[cr[0]];
               })
-            : records;
+            : byClub;
 
         if (filtered.length === 0) {
             noGamesMsg.textContent = assignedOnly
