@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submit Games</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .page-intro {
+            background: #eaf4fb;
+            border-left: 4px solid #3498db;
+            padding: 14px 18px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 28px;
+            font-size: 14px;
+            color: #2c3e50;
+        }
+
+        /* ── Club selector ── */
+        .club-select-wrap {
+            margin-bottom: 28px;
+        }
+        .club-select-wrap label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            font-size: 15px;
+        }
+        .club-select-wrap select {
+            width: 100%;
+            max-width: 340px;
+            padding: 10px 14px;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            font-size: 15px;
+            background: #fff;
+        }
+
+        /* ── Game card ── */
+        .game-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px 22px;
+            margin-bottom: 16px;
+            position: relative;
+        }
+        .game-card .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .game-card .card-num {
+            font-weight: 700;
+            font-size: 14px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .remove-btn {
+            background: none;
+            border: none;
+            color: #e74c3c;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: 1;
+        }
+        .remove-btn:hover { background: #fadbd8; }
+
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 14px;
+        }
+        .game-grid .field-wide {
+            grid-column: span 2;
+        }
+
+        .field-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 4px;
+        }
+        .field-group input,
+        .field-group select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+            background: #fff;
+        }
+        .field-group input:focus,
+        .field-group select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52,152,219,0.15);
+        }
+        .field-group select:disabled {
+            background: #f0f0f0;
+            color: #999;
+        }
+
+        /* ── Add game button ── */
+        .add-game-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+            border: 2px dashed #3498db;
+            color: #3498db;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 14px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            justify-content: center;
+            margin-bottom: 24px;
+            transition: background 0.15s;
+        }
+        .add-game-btn:hover { background: #eaf4fb; }
+
+        /* ── Submit area ── */
+        .submit-area {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .game-tally {
+            font-size: 14px;
+            color: #555;
+        }
+
+        /* ── Progress ── */
+        .progress-bar-wrap {
+            background: #ecf0f1;
+            border-radius: 8px;
+            height: 20px;
+            margin-top: 18px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #27ae60;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        #progressText {
+            text-align: center;
+            font-size: 14px;
+            color: #555;
+            margin-top: 8px;
+            display: none;
+        }
+
+        /* ── Results ── */
+        .summary-box {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin: 18px 0 10px;
+            font-weight: bold;
+            display: none;
+        }
+        .summary-box.all-good   { background: #d5f5e3; color: #1e8449; }
+        .summary-box.some-errors { background: #fdebd0; color: #935116; }
+
+        .result-item {
+            padding: 8px 14px;
+            border-radius: 5px;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+        .result-item.success { background: #d5f5e3; color: #1e8449; }
+        .result-item.error   { background: #fadbd8; color: #922b21; }
+        .result-item.skipped { background: #fef9e7; color: #9a7d0a; }
+
+        #resultsList { margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚽ Submit Games</h1>
+            <p class="subtitle">Enter your home games for the upcoming weekend</p>
+        </header>
+
+        <main>
+            <div class="form-container">
+
+                <div class="page-intro">
+                    Fill in each game below, then click <strong>Submit All Games</strong>.
+                    Fields marked with <span style="color:#e74c3c">*</span> are required.
+                    Your games will go directly to the assignor for referee scheduling.
+                </div>
+
+                <!-- Club selector -->
+                <div class="club-select-wrap">
+                    <label for="clubSelect">Your Club <span style="color:#e74c3c">*</span></label>
+                    <select id="clubSelect">
+                        <option value="">— Loading clubs… —</option>
+                    </select>
+                </div>
+
+                <!-- Game cards -->
+                <div id="gameCards"></div>
+
+                <!-- Add game button -->
+                <button class="add-game-btn" id="addGameBtn" disabled>
+                    + Add Another Game
+                </button>
+
+                <!-- Submit -->
+                <div class="submit-area">
+                    <button class="btn btn-primary btn-large" id="submitBtn" disabled>Submit All Games</button>
+                    <span class="game-tally" id="gameTally"></span>
+                </div>
+
+                <!-- Progress -->
+                <div class="progress-bar-wrap" id="progressWrap">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <p id="progressText"></p>
+
+                <!-- Summary -->
+                <div class="summary-box" id="summaryBox"></div>
+                <div id="resultsList"></div>
+
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Referee Scheduling System by Anvil Arts</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="js/airtable-client.js"></script>
+    <script>
+    // ── Data loaded from Airtable ─────────────────────────────────────────────
+    let allClubs   = []; // { id, name }
+    let allVenues  = []; // { id, name, clubIds[] }
+    let allFields  = []; // { id, name, venueId }
+    let clubLeagueMap = {}; // clubId → league number
+
+    let gameCount = 0;
+    const AGE_GROUPS = ['U8','U10','U12','U13','U15','U16','U19'];
+
+    // ── Bootstrap ─────────────────────────────────────────────────────────────
+    window.addEventListener('load', async () => {
+        if (!airtableClient) {
+            alert('Airtable client not initialized.');
+            return;
+        }
+        await loadReferenceData();
+        populateClubDropdown();
+        addGameCard();
+    });
+
+    async function loadReferenceData() {
+        try {
+            const [clubs, venues, fieldRecs] = await Promise.all([
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,  { maxRecords: 200 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
+            ]);
+
+            allClubs = clubs.map(c => ({
+                id:     c.id,
+                name:   c.fields['Club Name'] || c.fields['Name'] || '',
+                league: c.fields['League'] || 21
+            })).filter(c => c.name).sort((a, b) => a.name.localeCompare(b.name));
+
+            allClubs.forEach(c => { clubLeagueMap[c.id] = c.league; });
+
+            // Build venue name lookup first
+            const venueNameById = {};
+            venues.forEach(v => { venueNameById[v.id] = v.fields['Venue Name'] || ''; });
+
+            allVenues = venues.map(v => ({
+                id:       v.id,
+                name:     v.fields['Venue Name'] || '',
+                clubIds:  Array.isArray(v.fields['Clubs']) ? v.fields['Clubs'] : []
+            })).filter(v => v.name);
+
+            allFields = fieldRecs.map(f => {
+                const linkedVenue = f.fields['Venue'];
+                const venueId = Array.isArray(linkedVenue) && linkedVenue.length > 0 ? linkedVenue[0] : null;
+                return {
+                    id:      f.id,
+                    name:    f.fields['Field Name'] || '',
+                    venueId: venueId
+                };
+            }).filter(f => f.name);
+
+        } catch (err) {
+            alert('Could not load data from Airtable: ' + err.message);
+        }
+    }
+
+    function populateClubDropdown() {
+        const sel = document.getElementById('clubSelect');
+        sel.innerHTML = '<option value="">— Select your club —</option>'
+            + allClubs.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        sel.addEventListener('change', onClubChange);
+    }
+
+    function onClubChange() {
+        const hasClub = !!document.getElementById('clubSelect').value;
+        document.getElementById('addGameBtn').disabled = !hasClub;
+        document.getElementById('submitBtn').disabled  = !hasClub || gameCount === 0;
+        // Refresh venue dropdowns on all existing cards
+        document.querySelectorAll('.venue-select').forEach(vs => populateVenues(vs));
+    }
+
+    // ── Game cards ────────────────────────────────────────────────────────────
+    function addGameCard() {
+        gameCount++;
+        const idx = gameCount;
+        const card = document.createElement('div');
+        card.className = 'game-card';
+        card.dataset.idx = idx;
+
+        card.innerHTML = `
+            <div class="card-header">
+                <span class="card-num">Game ${idx}</span>
+                ${idx > 1 ? `<button class="remove-btn" onclick="removeCard(this)" title="Remove">✕</button>` : ''}
+            </div>
+            <div class="game-grid">
+                <div class="field-group">
+                    <label>Date <span style="color:#e74c3c">*</span></label>
+                    <input type="date" class="g-date" required>
+                </div>
+                <div class="field-group">
+                    <label>Time <span style="color:#e74c3c">*</span></label>
+                    <input type="time" class="g-time" required>
+                </div>
+                <div class="field-group field-wide">
+                    <label>Home Team <span style="color:#e74c3c">*</span></label>
+                    <input type="text" class="g-home" placeholder="e.g. Griswold FC Girls" required>
+                </div>
+                <div class="field-group field-wide">
+                    <label>Away Team <span style="color:#e74c3c">*</span></label>
+                    <input type="text" class="g-away" placeholder="e.g. Stonington SC Girls" required>
+                </div>
+                <div class="field-group">
+                    <label>Age Group <span style="color:#e74c3c">*</span></label>
+                    <select class="g-age" required>
+                        <option value="">— Select —</option>
+                        ${AGE_GROUPS.map(a => `<option value="${a}">${a}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label>Gender <span style="color:#e74c3c">*</span></label>
+                    <select class="g-gender" required>
+                        <option value="">— Select —</option>
+                        <option value="Female">Female</option>
+                        <option value="Male">Male</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label>Venue</label>
+                    <select class="venue-select">
+                        <option value="">— Select venue —</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label>Field</label>
+                    <select class="field-select" disabled>
+                        <option value="">— Select venue first —</option>
+                    </select>
+                </div>
+                <div class="field-group field-wide">
+                    <label>Notes</label>
+                    <input type="text" class="g-notes" placeholder="Optional">
+                </div>
+            </div>
+        `;
+
+        document.getElementById('gameCards').appendChild(card);
+
+        const venueEl = card.querySelector('.venue-select');
+        const fieldEl = card.querySelector('.field-select');
+        populateVenues(venueEl);
+        venueEl.addEventListener('change', () => populateFields(venueEl, fieldEl));
+
+        updateTally();
+        document.getElementById('submitBtn').disabled =
+            !document.getElementById('clubSelect').value;
+    }
+
+    function removeCard(btn) {
+        btn.closest('.game-card').remove();
+        // Re-number cards
+        document.querySelectorAll('.game-card').forEach((c, i) => {
+            c.querySelector('.card-num').textContent = `Game ${i + 1}`;
+        });
+        gameCount = document.querySelectorAll('.game-card').length;
+        updateTally();
+    }
+
+    function populateVenues(venueEl) {
+        const clubId = document.getElementById('clubSelect').value;
+        const filtered = clubId
+            ? allVenues.filter(v => v.clubIds.includes(clubId))
+            : allVenues;
+
+        const current = venueEl.value;
+        venueEl.innerHTML = '<option value="">— Select venue —</option>'
+            + filtered.map(v => `<option value="${v.id}" ${v.id === current ? 'selected' : ''}>${v.name}</option>`).join('');
+
+        // Reset field dropdown if venue changed
+        const card = venueEl.closest('.game-card');
+        const fieldEl = card.querySelector('.field-select');
+        populateFields(venueEl, fieldEl);
+    }
+
+    function populateFields(venueEl, fieldEl) {
+        const venueId = venueEl.value;
+        if (!venueId) {
+            fieldEl.innerHTML = '<option value="">— Select venue first —</option>';
+            fieldEl.disabled = true;
+            return;
+        }
+        const fields = allFields.filter(f => f.venueId === venueId);
+        fieldEl.innerHTML = '<option value="">— Select field —</option>'
+            + fields.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+        fieldEl.disabled = fields.length === 0;
+    }
+
+    function updateTally() {
+        const n = document.querySelectorAll('.game-card').length;
+        document.getElementById('gameTally').textContent =
+            n === 1 ? '1 game ready' : `${n} games ready`;
+    }
+
+    // ── Submit ────────────────────────────────────────────────────────────────
+    document.getElementById('addGameBtn').addEventListener('click', addGameCard);
+
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+        const clubId = document.getElementById('clubSelect').value;
+        if (!clubId) { alert('Please select your club first.'); return; }
+
+        const cards = document.querySelectorAll('.game-card');
+        const games = [];
+
+        // Validate & collect
+        for (const card of cards) {
+            const date   = card.querySelector('.g-date').value;
+            const time   = card.querySelector('.g-time').value;
+            const home   = card.querySelector('.g-home').value.trim();
+            const away   = card.querySelector('.g-away').value.trim();
+            const age    = card.querySelector('.g-age').value;
+            const gender = card.querySelector('.g-gender').value;
+            const venueId  = card.querySelector('.venue-select').value;
+            const fieldId  = card.querySelector('.field-select').value;
+            const notes  = card.querySelector('.g-notes').value.trim();
+            const cardNum = card.querySelector('.card-num').textContent;
+
+            if (!date || !time || !home || !away || !age || !gender) {
+                alert(`${cardNum}: please fill in all required fields.`);
+                return;
+            }
+            games.push({ date, time, home, away, age, gender, venueId, fieldId, notes });
+        }
+
+        // Lock UI
+        document.getElementById('submitBtn').disabled  = true;
+        document.getElementById('addGameBtn').disabled = true;
+        document.getElementById('progressWrap').style.display = 'block';
+        document.getElementById('progressText').style.display = 'block';
+        document.getElementById('resultsList').innerHTML = '';
+        document.getElementById('summaryBox').style.display = 'none';
+
+        const league = clubLeagueMap[clubId] || 21;
+        let successCount = 0, errorCount = 0, skipCount = 0;
+
+        // Fetch existing games for duplicate check
+        document.getElementById('progressText').textContent = 'Checking for duplicates...';
+        let existingKeys = new Set();
+        try {
+            const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 1000 });
+            existing.forEach(r => {
+                existingKeys.add(`${r.fields['Date']}|${(r.fields['Home Team']||'').toLowerCase()}|${(r.fields['Away Team']||'').toLowerCase()}`);
+            });
+        } catch(e) { console.warn('Duplicate check failed:', e); }
+
+        for (let i = 0; i < games.length; i++) {
+            const g = games[i];
+            const label = `"${g.home} vs ${g.away}"`;
+            document.getElementById('progressText').textContent = `Submitting ${i + 1} of ${games.length}…`;
+            document.getElementById('progressBar').style.width = Math.round((i / games.length) * 100) + '%';
+
+            const dupKey = `${g.date}|${g.home.toLowerCase()}|${g.away.toLowerCase()}`;
+            if (existingKeys.has(dupKey)) {
+                skipCount++;
+                addResult('skipped', `Game ${i + 1}: ${label} skipped — already exists.`);
+                continue;
+            }
+
+            try {
+                const fields = {
+                    'Date':       g.date,
+                    'Time':       g.time,
+                    'Home Team':  g.home,
+                    'Away Team':  g.away,
+                    'Age Group':  g.age,
+                    'Gender':     g.gender,
+                    'League':     league
+                };
+                if (g.fieldId) fields['Field'] = [g.fieldId];
+                if (g.notes)   fields['Notes'] = g.notes;
+
+                await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
+                existingKeys.add(dupKey);
+                successCount++;
+                addResult('success', `Game ${i + 1}: ${label} submitted.`);
+            } catch(err) {
+                errorCount++;
+                addResult('error', `Game ${i + 1}: ${label} failed — ${err.message}`);
+            }
+        }
+
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressText').textContent = 'Done!';
+
+        // Summary
+        const box = document.getElementById('summaryBox');
+        const parts = [];
+        if (successCount) parts.push(`${successCount} submitted`);
+        if (skipCount)    parts.push(`${skipCount} skipped (duplicates)`);
+        if (errorCount)   parts.push(`${errorCount} failed`);
+        box.textContent = parts.join(', ') + '.';
+        box.className = 'summary-box ' + (errorCount ? 'some-errors' : 'all-good');
+        box.style.display = 'block';
+        box.scrollIntoView({ behavior: 'smooth' });
+
+        document.getElementById('submitBtn').disabled  = false;
+        document.getElementById('addGameBtn').disabled = false;
+    });
+
+    function addResult(type, message) {
+        const div = document.createElement('div');
+        div.className = `result-item ${type}`;
+        const icon = type === 'success' ? '✅' : type === 'skipped' ? '⏭️' : '❌';
+        div.textContent = `${icon} ${message}`;
+        document.getElementById('resultsList').appendChild(div);
+    }
+    </script>
+</body>
+</html>
