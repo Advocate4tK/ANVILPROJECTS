@@ -152,12 +152,13 @@ loadBtn.addEventListener('click', async () => {
         const options = { maxRecords: 500 };
         if (filter) options.filterByFormula = filter;
 
-        // Load games, referee CA IDs, and venues in parallel
-        progressText.textContent = 'Loading games, referee IDs, and venues...';
-        const [records, referees, venues] = await Promise.all([
-            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, options),
+        // Load games, referee CA IDs, venues, and fields in parallel
+        progressText.textContent = 'Loading games, referees, venues, and fields...';
+        const [records, referees, venues, fieldRecs] = await Promise.all([
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    options),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
-            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 500 })
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 500 }),
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 500 })
         ]);
 
         // Build lookup: Airtable record ID → Central Assign numeric ID
@@ -167,29 +168,30 @@ loadBtn.addEventListener('click', async () => {
             if (caId) refIdLookup[r.id] = parseInt(caId) || caId;
         });
 
-        // Build lookups from Venues table.
-        // The Games table links to the Fields table (f['Field']), not directly to Venues.
-        // The Venues table has a 'Fields' back-link column, so we map each
-        // linked Field record ID → this venue's name and CA ID.
+        // Build lookups keyed by Airtable record ID.
         venueCAId    = {};
         venueNameMap = {};
+
+        // From Venues table — index by Venue record ID
         venues.forEach(v => {
-            const name = v.fields['Venue Name'] || '';
-            const caId = v.fields['Venue ID'];
-            const caIdNum = caId ? (parseInt(caId) || caId) : null;
+            const name    = v.fields['Venue Name'] || '';
+            const caIdNum = v.fields['Venue ID'] ? (parseInt(v.fields['Venue ID']) || null) : null;
+            if (name)     venueNameMap[v.id] = name;
+            if (caIdNum)  venueCAId[v.id]    = caIdNum;
+        });
 
-            // Index by Venue record ID (for any direct Venue links)
-            if (name) venueNameMap[v.id] = name;
-            if (caIdNum) venueCAId[v.id] = caIdNum;
-
-            // Index by each linked Field record ID so Game → Field → Venue resolves
-            const linkedFields = v.fields['Fields'];
-            if (Array.isArray(linkedFields)) {
-                linkedFields.forEach(fid => {
-                    if (name)     venueNameMap[fid] = name;
-                    if (caIdNum)  venueCAId[fid]    = caIdNum;
-                });
-            }
+        // From Fields table — index by Field record ID using that record's Venue ID
+        // (Games link to Field records, not directly to Venues)
+        fieldRecs.forEach(f => {
+            const caIdNum = f.fields['Venue ID'] ? (parseInt(f.fields['Venue ID']) || null) : null;
+            const name    = f.fields['Field Name'] || '';
+            // Prefer the parent venue's name for display; fall back to field name
+            const linkedVenue = f.fields['Venue'];
+            const venueName   = (Array.isArray(linkedVenue) && linkedVenue.length > 0)
+                ? (venueNameMap[linkedVenue[0]] || name)
+                : name;
+            if (venueName) venueNameMap[f.id] = venueName;
+            if (caIdNum)   venueCAId[f.id]    = caIdNum;
         });
 
         progressBar.style.width = '100%';
