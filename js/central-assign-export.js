@@ -47,8 +47,9 @@ const progressText   = document.getElementById('progressText');
 
 let loadedGames = [];
 let refIdLookup  = {}; // Airtable ref record ID  → Central Assign numeric ID
-let venueCAId    = {}; // Airtable venue record ID → Central Assign venue ID (number)
-let venueNameMap = {}; // Airtable venue record ID → Venue Name (for display)
+let venueCAId    = {}; // Airtable record ID → Central Assign venue ID (number)
+let venueNameMap = {}; // Airtable record ID → venue name
+let fieldNameMap = {}; // Airtable field record ID → field name (e.g. "Field 1")
 
 // ── Mode toggle — show only the selected filter panel ─────────────────────────
 document.querySelectorAll('input[name="filterMode"]').forEach(radio => {
@@ -192,15 +193,17 @@ loadBtn.addEventListener('click', async () => {
 
         // From Fields table — index by Field record ID using that record's Venue ID
         // (Games link to Field records, not directly to Venues)
+        fieldNameMap = {};
         fieldRecs.forEach(f => {
-            const caIdNum = f.fields['Venue ID'] ? (parseInt(f.fields['Venue ID']) || null) : null;
-            const name    = f.fields['Field Name'] || '';
+            const caIdNum   = f.fields['Venue ID'] ? (parseInt(f.fields['Venue ID']) || null) : null;
+            const fieldName = f.fields['Field Name'] || '';
             // Prefer the parent venue's name for display; fall back to field name
             const linkedVenue = f.fields['Venue'];
             const venueName   = (Array.isArray(linkedVenue) && linkedVenue.length > 0)
-                ? (venueNameMap[linkedVenue[0]] || name)
-                : name;
-            if (venueName) venueNameMap[f.id] = venueName;
+                ? (venueNameMap[linkedVenue[0]] || fieldName)
+                : fieldName;
+            if (venueName)  venueNameMap[f.id] = venueName;
+            if (fieldName)  fieldNameMap[f.id] = fieldName;
             if (caIdNum)   venueCAId[f.id]    = caIdNum;
         });
 
@@ -260,7 +263,7 @@ function renderGamesTable(records) {
 
     records.forEach((rec, i) => {
         const f = rec.fields;
-        const { name: venueName, caId: venueId } = resolveVenue(f['Venue'] || f['Field']);
+        const { name: venueName, caId: venueId, fieldName } = resolveVenue(f['Venue'] || f['Field']);
         const venueDisplay = venueId
             ? `<span style="color:#27ae60">✓ ${venueName} (ID: ${venueId})</span>`
             : `<span style="color:#e74c3c">⚠ No ID: ${venueName || 'Unknown'}</span>`;
@@ -340,7 +343,7 @@ exportBtn.addEventListener('click', () => {
 
     const rows = selected.map(rec => {
         const f = rec.fields;
-        const { name: venueName, caId: venueId } = resolveVenue(f['Venue'] || f['Field']);
+        const { name: venueName, caId: venueId, fieldName } = resolveVenue(f['Venue'] || f['Field']);
 
         // Resolve Center Referee → Central Assign numeric ID
         const centerRefField = f['Center Referee'];
@@ -366,7 +369,7 @@ exportBtn.addEventListener('click', () => {
             DEFAULTS.type,
             gameGender,
             venueId || venueName,
-            '',
+            fieldName,
             f['League'] || DEFAULTS.league,
             refId, 0, 0, 0, 0,
             DEFAULTS.diagSysCtl,
@@ -390,17 +393,19 @@ exportBtn.addEventListener('click', () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Resolve a game's venue from either f['Field'] or f['Venue'] (both may be
-// linked record arrays whose IDs are indexed in venueCAId / venueNameMap).
-// Returns { name, caId } — caId is null if not found.
+// Resolve a game's venue from either f['Field'] or f['Venue'].
+// Returns { name, caId, fieldName } — caId/fieldName are null if not found.
 function resolveVenue(fieldValue) {
-    if (!fieldValue) return { name: '', caId: null };
+    if (!fieldValue) return { name: '', caId: null, fieldName: '' };
     if (Array.isArray(fieldValue) && fieldValue.length > 0) {
         const rid = fieldValue[0];
-        return { name: venueNameMap[rid] || '', caId: venueCAId[rid] || null };
+        return {
+            name:      venueNameMap[rid] || '',
+            caId:      venueCAId[rid]    || null,
+            fieldName: fieldNameMap[rid] || ''
+        };
     }
-    // Plain text fallback
-    return { name: String(fieldValue), caId: null };
+    return { name: String(fieldValue), caId: null, fieldName: '' };
 }
 
 function formatDate(dateStr) {
