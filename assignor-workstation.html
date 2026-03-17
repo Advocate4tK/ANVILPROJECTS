@@ -958,11 +958,24 @@
                 const age   = r.fields['Age'] ? `age ${r.fields['Age']}` : '';
                 const refNameKey = (r.fields['Name'] || '').trim().toLowerCase();
                 const lookupDate = gameDate || document.getElementById('dateFilter').value;
-                const availSlot  = lookupDate ? availTimeByName[refNameKey]?.[lookupDate] : null;
                 const fmtT = t => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; };
-                const timeWindow = availSlot?.start && availSlot?.end
-                    ? `🕐 ${fmtT(availSlot.start)} – ${fmtT(availSlot.end)}`
-                    : availSlot?.start ? `🕐 from ${fmtT(availSlot.start)}` : '';
+                const fmtD = d => { const dt = new Date(d + 'T12:00:00'); return dt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }); };
+
+                let timeLines = '';
+                if (lookupDate) {
+                    // Game selected or date filter — show just that date's window
+                    const slot = availTimeByName[refNameKey]?.[lookupDate];
+                    if (slot?.start && slot?.end) timeLines = `🕐 ${fmtT(slot.start)} – ${fmtT(slot.end)}`;
+                    else if (slot?.start)         timeLines = `🕐 from ${fmtT(slot.start)}`;
+                } else {
+                    // No game selected — show all available dates + windows
+                    const slots = availTimeByName[refNameKey] || {};
+                    const lines = Object.entries(slots).sort(([a],[b]) => a.localeCompare(b)).map(([d, slot]) => {
+                        const window = (slot.start && slot.end) ? `${fmtT(slot.start)} – ${fmtT(slot.end)}` : slot.start ? `from ${fmtT(slot.start)}` : '';
+                        return `🕐 ${fmtD(d)}${window ? ': ' + window : ''}`;
+                    });
+                    timeLines = lines.join('<br>');
+                }
 
                 const metaParts = [age, years].filter(Boolean);
 
@@ -974,7 +987,7 @@
                     ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
                     <div class="ref-name">${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}</div>
                     ${metaParts.length ? `<div class="ref-meta">${metaParts.join(' · ')}</div>` : ''}
-                    ${timeWindow ? `<div class="ref-meta" style="margin-top:2px;">${timeWindow}</div>` : ''}
+                    ${timeLines  ? `<div class="ref-meta" style="margin-top:2px;">${timeLines}</div>`  : ''}
                     ${clubLine   ? `<div class="ref-meta" style="margin-top:2px; color:#0f3460; font-weight:600;">${clubLine}</div>` : ''}
                     ${status     ? `<div class="ref-meta" style="margin-top:2px;">${status}</div>` : ''}
                 </div>`;
