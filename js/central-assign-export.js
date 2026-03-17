@@ -187,11 +187,23 @@ loadBtn.addEventListener('click', async () => {
         progressBar.style.width = '100%';
         progressText.textContent = 'Done!';
 
-        if (records.length === 0) {
+        // Filter to assigned-only if checkbox is checked
+        const assignedOnly = document.getElementById('assignedOnly').checked;
+        const filtered = assignedOnly
+            ? records.filter(r => {
+                const cr = r.fields['Center Referee'];
+                return Array.isArray(cr) && cr.length > 0 && refIdLookup[cr[0]];
+              })
+            : records;
+
+        if (filtered.length === 0) {
+            noGamesMsg.textContent = assignedOnly
+                ? 'No assigned games found for the selected filters. Try unchecking "Assigned games only" to see all games.'
+                : 'No games found for the selected date range.';
             noGamesMsg.style.display = 'block';
         } else {
-            loadedGames = records;
-            renderGamesTable(records);
+            loadedGames = filtered;
+            renderGamesTable(filtered);
             gamesSection.style.display = 'block';
         }
 
@@ -213,7 +225,7 @@ function renderGamesTable(records) {
         <th><input type="checkbox" id="masterCheck"></th>
         <th>#</th><th>Date</th><th>Time</th>
         <th>Home Team</th><th>Away Team</th>
-        <th>Venue</th><th>Age Group</th>
+        <th>Venue</th><th>Age Group</th><th>Center Ref</th>
     </tr></thead><tbody>`;
 
     records.forEach((rec, i) => {
@@ -222,6 +234,12 @@ function renderGamesTable(records) {
         const venueDisplay = venueId
             ? `<span style="color:#27ae60">✓ ID: ${venueId}</span>`
             : `<span style="color:#e74c3c">⚠ No ID: ${f['Field'] || f['Venue'] || 'Unknown'}</span>`;
+
+        const cr = f['Center Referee'];
+        const hasRef = Array.isArray(cr) && cr.length > 0 && refIdLookup[cr[0]];
+        const refDisplay = hasRef
+            ? `<span style="color:#27ae60">✓ ID: ${refIdLookup[cr[0]]}</span>`
+            : `<span style="color:#e74c3c">⚠ Unassigned</span>`;
 
         html += `<tr>
             <td><input type="checkbox" class="game-check" data-index="${i}" checked></td>
@@ -232,6 +250,7 @@ function renderGamesTable(records) {
             <td>${f['Away Team'] || ''}</td>
             <td>${venueDisplay}</td>
             <td>${f['Age Group'] || ''}</td>
+            <td>${refDisplay}</td>
         </tr>`;
     });
 
