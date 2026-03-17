@@ -11,7 +11,7 @@
 const DEFAULTS = {
     type:         'League',
     gender:       'F',
-    league:       'Southeast District (21)',
+    league:       21,
     diagSysCtl:   1,
     refRate:      40,
     arRate:       25,
