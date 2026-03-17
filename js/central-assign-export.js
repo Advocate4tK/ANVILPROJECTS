@@ -53,6 +53,20 @@ const progressText   = document.getElementById('progressText');
 let loadedGames = [];
 let refIdLookup = {}; // Airtable record ID → Central Assign numeric ID
 
+// ── Mode toggle — show only the selected filter panel ─────────────────────────
+document.querySelectorAll('input[name="filterMode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.getElementById('panelWeek').style.display  = this.value === 'week'  ? 'block' : 'none';
+        document.getElementById('panelRange').style.display = this.value === 'range' ? 'block' : 'none';
+        // Clear dates when switching modes
+        document.getElementById('dateFrom').value = '';
+        document.getElementById('dateTo').value   = '';
+        document.getElementById('weekRangeDisplay').textContent = '';
+        document.getElementById('pickMonth').value = '';
+        document.getElementById('pickWeek').value  = '';
+    });
+});
+
 // ── Week picker — month + week dropdowns auto-fill Mon–Sun ────────────────────
 function applyWeekPicker() {
     const monthVal = document.getElementById('pickMonth').value;
