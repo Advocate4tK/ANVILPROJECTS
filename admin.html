@@ -144,6 +144,8 @@
             if (q.length < 2) { resultsDiv.innerHTML = ''; return; }
 
             const hits = [];
+            const cleanQ = q.replace(/\D/g, ''); // digits only, for phone matching
+            const hasDigits = cleanQ.length > 0;
 
             personSearchRefs.forEach(r => {
                 const f = r.fields;
@@ -154,8 +156,15 @@
                 const phone         = f['Phone']          || '';
                 const guardianName  = f['Guardian Name']  || '';
                 const guardianEmail = f['Guardian Email'] || '';
-                const searchStr = [name, firstName, lastName, email, phone, guardianName, guardianEmail].join(' ').toLowerCase();
-                if (searchStr.includes(q) || phone.replace(/\D/g,'').includes(q.replace(/\D/g,''))) {
+
+                const nameMatch     = name.toLowerCase().includes(q) ||
+                                      firstName.toLowerCase().includes(q) ||
+                                      lastName.toLowerCase().includes(q) ||
+                                      guardianName.toLowerCase().includes(q);
+                const emailMatch    = email.toLowerCase().includes(q) || guardianEmail.toLowerCase().includes(q);
+                const phoneMatch    = hasDigits && phone.replace(/\D/g,'').includes(cleanQ);
+
+                if (nameMatch || emailMatch || phoneMatch) {
                     hits.push({
                         type: 'referee', name, email, phone,
                         cert:  f['Certification Level'] || '',
@@ -164,7 +173,8 @@
                         years: f['Years Reffing']       || '',
                         clubs: f['Club Preference']     || '',
                         gender: f['Gender']             || '',
-                        guardianName, guardianEmail
+                        guardianName, guardianEmail,
+                        nameMatch // used for sort priority
                     });
                 }
             });
@@ -175,11 +185,16 @@
                 const presName = f['President'] || f['President Name'] || f['Contact Name'] || f['Contact'] || '';
                 const email    = f['Email'] || f['President Email'] || f['Contact Email'] || '';
                 const phone    = f['Phone'] || f['President Phone'] || f['Contact Phone'] || '';
-                if (clubName.toLowerCase().includes(q) || presName.toLowerCase().includes(q) ||
-                    email.toLowerCase().includes(q) || phone.replace(/\D/g,'').includes(q.replace(/\D/g,''))) {
-                    hits.push({ type: 'club', clubName, presName, email, phone });
+                const nameMatch = clubName.toLowerCase().includes(q) || presName.toLowerCase().includes(q);
+                const emailMatch = email.toLowerCase().includes(q);
+                const phoneMatch = hasDigits && phone.replace(/\D/g,'').includes(cleanQ);
+                if (nameMatch || emailMatch || phoneMatch) {
+                    hits.push({ type: 'club', clubName, presName, email, phone, nameMatch });
                 }
             });
+
+            // Name matches first, then email/phone matches
+            hits.sort((a, b) => (b.nameMatch ? 1 : 0) - (a.nameMatch ? 1 : 0));
 
             if (!hits.length) {
                 resultsDiv.innerHTML = `<p style="color:#888; font-size:0.85rem;">No results for "${val}"</p>`;
