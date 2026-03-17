@@ -228,8 +228,8 @@ loadBtn.addEventListener('click', async () => {
 
         if (filtered.length === 0) {
             noGamesMsg.textContent = assignedOnly
-                ? 'No assigned games found for the selected filters. Try unchecking "Assigned games only" to see all games.'
-                : 'No games found for the selected date range.';
+                ? 'No games with a referee CA ID found. Try unchecking "Assigned games only" — refs may be assigned but missing a Central Assign ID.'
+                : 'No games found for the selected filters.';
             noGamesMsg.style.display = 'block';
         } else {
             loadedGames = filtered;
@@ -266,10 +266,13 @@ function renderGamesTable(records) {
             : `<span style="color:#e74c3c">⚠ No ID: ${venueName || 'Unknown'}</span>`;
 
         const cr = f['Center Referee'];
-        const hasRef = Array.isArray(cr) && cr.length > 0 && refIdLookup[cr[0]];
-        const refDisplay = hasRef
-            ? `<span style="color:#27ae60">✓ ID: ${refIdLookup[cr[0]]}</span>`
-            : `<span style="color:#e74c3c">⚠ Unassigned</span>`;
+        const crAssigned = Array.isArray(cr) && cr.length > 0;
+        const crCaId = crAssigned ? refIdLookup[cr[0]] : null;
+        const refDisplay = crCaId
+            ? `<span style="color:#27ae60">✓ ID: ${crCaId}</span>`
+            : crAssigned
+                ? `<span style="color:#e67e22">⚠ Assigned — no CA ID</span>`
+                : `<span style="color:#e74c3c">⚠ No ref assigned</span>`;
 
         html += `<tr>
             <td><input type="checkbox" class="game-check" data-index="${i}" checked></td>
