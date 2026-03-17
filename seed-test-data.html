@@ -258,6 +258,15 @@
                     await delay(200);
                 }
 
+                // Build field name → Airtable record ID lookup
+                log('Loading fields…', 'info');
+                const fieldRecs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 });
+                const fieldByName = {};
+                fieldRecs.forEach(r => {
+                    const name = r.fields['Name'] || r.fields['Field Name'] || '';
+                    if (name) fieldByName[name.toLowerCase()] = r.id;
+                });
+
                 log('Creating games…', 'info');
                 const total = GAMES_TO_SEED.length;
                 for (let i = 0; i < total; i++) {
@@ -272,6 +281,8 @@
                     if (!badGameFields.has('Age Group'))   fields['Age Group']   = g.age;
                     if (!badGameFields.has('Game Status')) fields['Game Status'] = 'Scheduled';
                     if (g.gender)                          fields['Gender']      = g.gender;
+                    const fieldId = g.field ? fieldByName[g.field.toLowerCase()] : null;
+                    if (fieldId) fields['Field'] = [fieldId];
 
                     try {
                         const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
@@ -407,11 +418,21 @@
                     }
                 }
 
+                // Build field name → Airtable record ID lookup
+                log('Loading fields…', 'info');
+                const fieldRecs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 });
+                const fieldByName = {};
+                fieldRecs.forEach(r => {
+                    const name = r.fields['Name'] || r.fields['Field Name'] || '';
+                    if (name) fieldByName[name.toLowerCase()] = r.id;
+                });
+
                 // Create games
                 log('Creating games…', 'info');
                 const total = GAMES_TO_SEED.length;
                 for (let i = 0; i < total; i++) {
                     const g = GAMES_TO_SEED[i];
+                    const fieldId = g.field ? fieldByName[g.field.toLowerCase()] : null;
                     try {
                         const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, {
                             'Home Team': g.home,
@@ -419,10 +440,11 @@
                             'Date':      g.date,
                             'Time':      g.time,
                             'Age Group': g.age,
-                            ...(g.gender ? { 'Gender': g.gender } : {}),
+                            ...(g.gender  ? { 'Gender': g.gender }   : {}),
+                            ...(fieldId   ? { 'Field':  [fieldId] }   : {}),
                         });
                         seededGameIds.push(rec.id);
-                        log(`  ✓ ${g.date} ${g.time} — ${g.home} vs ${g.away} (${g.age})`, 'ok');
+                        log(`  ✓ ${g.date} ${g.time} — ${g.home} vs ${g.away} (${g.age})${fieldId ? '' : ' ⚠ no field linked'}`, 'ok');
                     } catch(e) {
                         log(`  ✗ ${g.home} vs ${g.away}: ${e.message}`, 'err');
                     }
