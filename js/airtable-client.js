@@ -73,36 +73,37 @@ class AirtableClient {
      */
     async getRecords(tableName, options = {}) {
         try {
-            const url = new URL(this.getTableUrl(tableName));
+            const allRecords = [];
+            let offset = undefined;
 
-            // Add query parameters
-            if (options.filterByFormula) {
-                url.searchParams.append('filterByFormula', options.filterByFormula);
-            }
-            if (options.maxRecords) {
-                url.searchParams.append('maxRecords', options.maxRecords);
-            }
-            if (options.view) {
-                url.searchParams.append('view', options.view);
-            }
-            if (options.sort) {
-                options.sort.forEach(sort => {
-                    url.searchParams.append('sort[]', JSON.stringify(sort));
+            do {
+                const url = new URL(this.getTableUrl(tableName));
+
+                if (options.filterByFormula) url.searchParams.append('filterByFormula', options.filterByFormula);
+                if (options.maxRecords)      url.searchParams.append('maxRecords', options.maxRecords);
+                if (options.view)            url.searchParams.append('view', options.view);
+                if (options.sort) {
+                    options.sort.forEach(sort => url.searchParams.append('sort[]', JSON.stringify(sort)));
+                }
+                if (offset) url.searchParams.append('offset', offset);
+
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: this.getHeaders()
                 });
-            }
 
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: this.getHeaders()
-            });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || 'Failed to get records');
+                }
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error?.message || 'Failed to get records');
-            }
+                const data = await response.json();
+                allRecords.push(...(data.records || []));
+                offset = data.offset; // undefined when no more pages
 
-            const data = await response.json();
-            return data.records;
+            } while (offset);
+
+            return allRecords;
         } catch (error) {
             console.error('Error getting records:', error);
             throw error;
