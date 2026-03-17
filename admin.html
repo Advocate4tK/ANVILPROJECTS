@@ -344,13 +344,18 @@
 
             // Refs available this weekend
             try {
-                const daysToSat = ((6 - now.getDay()) + 7) % 7 || 7;
-                const sat = new Date(now); sat.setDate(now.getDate() + daysToSat);
+                // Use local dates (not UTC) to avoid timezone shifts
+                const localStr = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                const day = now.getDay(); // 0=Sun … 6=Sat
+                const sat = new Date(now);
+                if      (day === 0) sat.setDate(now.getDate() - 1); // Sunday → back to Saturday
+                else if (day !== 6) sat.setDate(now.getDate() + (6 - day)); // weekday → coming Saturday
+                // day === 6: sat stays as today
                 const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
-                const satStr = sat.toISOString().split('T')[0];
-                const sunStr = sun.toISOString().split('T')[0];
+                const satStr = localStr(sat);
+                const sunStr = localStr(sun);
                 const avail = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, {
-                    filterByFormula: `OR({Date} = '${satStr}', {Date} = '${sunStr}')`,
+                    filterByFormula: `OR(IS_SAME({Date},'${satStr}','day'), IS_SAME({Date},'${sunStr}','day'))`,
                     maxRecords: 500
                 });
                 const unique = new Set();
