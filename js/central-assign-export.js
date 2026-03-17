@@ -20,12 +20,13 @@ const DEFAULTS = {
 };
 
 // ── Period lengths by age group ────────────────────────────────────────────────
+// durationTime = (2 × period) + halftime  (U8/U10/U12 = 5 min HT, U15/U19 = 10 min HT)
 const DURATION_BY_AGE = {
-    'U8':  { duration: '2 x 20', durationTime: 40 },
-    'U10': { duration: '2 x 30', durationTime: 60 },
-    'U12': { duration: '2 x 35', durationTime: 70 },
-    'U15': { duration: '2 x 40', durationTime: 80 },
-    'U19': { duration: '2 x 45', durationTime: 90 },
+    'U8':  { duration: '2 x 20', durationTime: 45  },  // 40 + 5
+    'U10': { duration: '2 x 30', durationTime: 65  },  // 60 + 5
+    'U12': { duration: '2 x 35', durationTime: 75  },  // 70 + 5
+    'U15': { duration: '2 x 40', durationTime: 90  },  // 80 + 10
+    'U19': { duration: '2 x 45', durationTime: 100 },  // 90 + 10
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -348,7 +349,7 @@ exportBtn.addEventListener('click', () => {
 
         // Period length by age group
         const ageGroup = f['Age Group'] || '';
-        const { duration, durationTime } = DURATION_BY_AGE[ageGroup] || { duration: '2 x 40', durationTime: 80 };
+        const { duration, durationTime } = DURATION_BY_AGE[ageGroup] || { duration: '2 x 40', durationTime: 90 };
 
         return [
             f['Home Team']  || '',
