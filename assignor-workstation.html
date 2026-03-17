@@ -590,14 +590,18 @@
                 const availOpts = { maxRecords: 2000 };
                 if (filter) availOpts.filterByFormula = filter;
 
-                const [games, refs, avail, clubs, venues, fields] = await Promise.all([
+                const [games, refs, avail, clubs] = await Promise.all([
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, gameOpts),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, availOpts),
-                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 }),
-                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 })
+                ]);
+                const [venueRes, fieldRes] = await Promise.allSettled([
+                    CONFIG.AIRTABLE_TABLES.VENUES ? airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }) : Promise.resolve([]),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
                 ]);
+                const venues = venueRes.status === 'fulfilled' ? venueRes.value : [];
+                const fields = fieldRes.status === 'fulfilled' ? fieldRes.value : [];
 
                 // Build club lookup
                 clubLookup = {};
