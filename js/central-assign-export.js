@@ -375,15 +375,15 @@ exportBtn.addEventListener('click', () => {
             DEFAULTS.fourthRate,
             DEFAULTS.assessorRate,
             ''  // External Game Id — blank, CA assigns on import
-        ].join(',');
+        ].join('\t');
     });
 
-    const content = [headers.join(','), ...rows].join('\r\n');
-    const blob = new Blob([content], { type: 'text/csv' });
+    const content = [headers.join('\t'), ...rows].join('\r\n');
+    const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `central-assign-export-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `central-assign-export-${new Date().toISOString().split('T')[0]}.txt`;
     a.click();
     URL.revokeObjectURL(url);
 });
