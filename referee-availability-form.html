@@ -64,6 +64,20 @@
                         <div style="font-size:0.875rem; color:#555; margin-top:6px;">Please complete all fields below. Your information will be saved to our database so future submissions are faster.</div>
                     </div>
 
+                    <!-- Option 3: Name match found under a different email — offer to merge -->
+                    <div id="mergePrompt" style="display:none; background:#fff3e0; border:2px solid #e67e22; border-radius:12px; padding:20px 25px; margin-bottom:20px;">
+                        <div style="font-size:1.1rem; font-weight:700; color:#0f3460;">🔍 We found an existing profile</div>
+                        <div style="font-size:0.875rem; color:#555; margin-top:8px; line-height:1.6;">
+                            There is already a profile for <strong id="mergeFoundName"></strong> in our system,
+                            registered under a different email address (<span id="mergeFoundEmail" style="font-family:monospace;"></span>).
+                            <br>Is this you?
+                        </div>
+                        <div style="display:flex; gap:10px; margin-top:14px;">
+                            <button type="button" id="mergeYesBtn" style="background:#27ae60; color:white; border:none; border-radius:8px; padding:8px 22px; font-size:0.9rem; font-weight:700; cursor:pointer;">✅ Yes, that's me — link my accounts</button>
+                            <button type="button" id="mergeNoBtn"  style="background:#eee; color:#555; border:1px solid #ccc; border-radius:8px; padding:8px 18px; font-size:0.9rem; cursor:pointer;">No, create a new profile</button>
+                        </div>
+                    </div>
+
                     <!-- Rest of form — hidden until doorway complete -->
                     <div id="formBody">
 
@@ -629,19 +643,49 @@
                         }
 
                     } else {
-                        // ── NEW REFEREE — show contact step first ─────────
-                        document.getElementById('newRefWelcome').style.display    = 'block';
-                        document.getElementById('returningWelcome').style.display = 'none';
-                        document.getElementById('entryFieldset').style.display    = 'none';
-                        document.getElementById('contactSection').style.display   = 'block';
-                        const newName = document.getElementById('refereeFirstName').value.trim() + ' ' + document.getElementById('refereeLastName').value.trim();
-                        document.getElementById('loggingName').textContent = newName.trim();
-                        document.getElementById('loggingBadge').style.display = 'block';
-                        document.getElementById('availabilitySection').style.display = 'none';
-                        document.getElementById('availabilitySection').style.opacity = '0';
-                        status.textContent = '';
+                        // ── EMAIL NOT FOUND — check if name matches an existing record ──
+                        const typedFirst = document.getElementById('refereeFirstName').value.trim();
+                        const typedLast  = document.getElementById('refereeLastName').value.trim();
+                        const typedName  = `${typedFirst} ${typedLast}`.trim();
+                        const typedEmail = email;
 
-                        if (isReadyToUnlock()) unlockForm();
+                        let nameMatch = null;
+                        try {
+                            const nameResults = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, {
+                                filterByFormula: `{Name} = "${typedName}"`,
+                                maxRecords: 1
+                            });
+                            if (nameResults.length > 0) nameMatch = nameResults[0];
+                        } catch(e) { /* ignore — fall through to new ref */ }
+
+                        if (nameMatch) {
+                            // ── NAME MATCH — offer to merge ───────────────
+                            const existingEmail = nameMatch.fields['Email'] || '';
+                            const masked = existingEmail.replace(/^(.).*@/, (_, c) => `${c}***@`);
+                            document.getElementById('mergeFoundName').textContent  = typedName;
+                            document.getElementById('mergeFoundEmail').textContent = masked;
+                            document.getElementById('mergePrompt').style.display   = 'block';
+                            document.getElementById('entryFieldset').style.display = 'none';
+                            document.getElementById('loggingName').textContent     = typedName;
+                            document.getElementById('loggingBadge').style.display  = 'block';
+                            status.textContent = '';
+
+                            // Store for merge handlers
+                            window._mergeRecord    = nameMatch;
+                            window._mergeNewEmail  = typedEmail;
+                        } else {
+                            // ── GENUINELY NEW REFEREE ─────────────────────
+                            document.getElementById('newRefWelcome').style.display    = 'block';
+                            document.getElementById('returningWelcome').style.display = 'none';
+                            document.getElementById('entryFieldset').style.display    = 'none';
+                            document.getElementById('contactSection').style.display   = 'block';
+                            document.getElementById('loggingName').textContent = typedName;
+                            document.getElementById('loggingBadge').style.display = 'block';
+                            document.getElementById('availabilitySection').style.display = 'none';
+                            document.getElementById('availabilitySection').style.opacity = '0';
+                            status.textContent = '';
+                            if (isReadyToUnlock()) unlockForm();
+                        }
                     }
                 } catch(e) {
                     status.textContent = '';
@@ -774,6 +818,87 @@
                 document.getElementById('saveContactBtn').disabled = false;
                 document.getElementById('saveContactBtn').textContent = 'Save & Continue to Availability Page →';
                 document.getElementById('refereeFirstName').focus();
+            });
+
+            // ── Merge: Yes — link new email to existing record and continue ──
+            document.getElementById('mergeYesBtn').addEventListener('click', async function() {
+                const rec   = window._mergeRecord;
+                const email = window._mergeNewEmail;
+                if (!rec || !email) return;
+
+                this.disabled = true;
+                this.textContent = 'Linking…';
+
+                try {
+                    // Save the new email into Email 2 on the existing record
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rec.id, { 'Email 2': email });
+
+                    // Now continue exactly like a returning ref
+                    window._foundRefId  = rec.id;
+                    window._foundRefDob = rec.fields['Date of Birth'] || null;
+
+                    const f = rec.fields;
+                    const fullName = (f['Name'] || '').trim();
+
+                    // Pre-fill all profile fields
+                    const fill = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+                    fill('refereePhone',        f['Phone']);
+                    fill('yearsReffing',        f['Years Reffing']);
+                    fill('certificationLevel',  f['Certification Level']);
+                    fill('refereeGender',       f['Gender']);
+                    fill('refereeAddress',      f['Address']);
+                    fill('refereeCity',         f['City']);
+                    fill('refereeState',        f['State']);
+                    fill('refereeZip',          f['Zip Code']);
+                    fill('refereeBirthDate',    f['Date of Birth']);
+
+                    document.getElementById('mergePrompt').style.display        = 'none';
+                    document.getElementById('returningWelcome').style.display   = 'block';
+                    document.getElementById('loggingName').textContent          = fullName;
+                    document.getElementById('loggingBadge').style.display       = 'block';
+
+                    const missingFields = [
+                        !f['Phone']               && 'Phone',
+                        !f['Date of Birth']       && 'Date of Birth',
+                        !f['Address']             && 'Address',
+                        !(f['City'] && f['Zip Code']) && 'City / Zip',
+                        !f['Years Reffing']       && 'Years Reffing',
+                        !f['Certification Level'] && 'Certification Level',
+                        !f['Gender']              && 'Gender',
+                    ].filter(Boolean);
+
+                    unlockForm();
+
+                    if (missingFields.length > 0) {
+                        hideFilledFields(f);
+                        document.getElementById('welcomeName').textContent     = `👋 Welcome back, ${fullName}!`;
+                        document.getElementById('welcomeSubtitle').textContent = `Accounts linked! We just need a couple more details: ${missingFields.join(', ')}.`;
+                        document.getElementById('contactSection').style.display = 'block';
+                        document.getElementById('availabilitySection').style.display = 'none';
+                        document.getElementById('availabilitySection').style.opacity = '0';
+                    } else {
+                        document.getElementById('welcomeName').textContent     = `🎉 Accounts linked! Welcome back, ${fullName}!`;
+                        document.getElementById('welcomeSubtitle').textContent = `Your profiles have been merged. Fill in your availability below.`;
+                        document.getElementById('contactSection').style.display = 'none';
+                        unlockAvailability();
+                    }
+                } catch(err) {
+                    this.disabled = false;
+                    this.textContent = '✅ Yes, that\'s me — link my accounts';
+                    alert(`Could not link accounts: ${err.message}`);
+                }
+            });
+
+            // ── Merge: No — treat as a brand new referee ──────────────────────
+            document.getElementById('mergeNoBtn').addEventListener('click', function() {
+                window._mergeRecord   = null;
+                window._mergeNewEmail = null;
+                document.getElementById('mergePrompt').style.display      = 'none';
+                document.getElementById('newRefWelcome').style.display    = 'block';
+                document.getElementById('contactSection').style.display   = 'block';
+                document.getElementById('availabilitySection').style.display = 'none';
+                document.getElementById('availabilitySection').style.opacity = '0';
+                if (isReadyToUnlock()) unlockForm();
             });
         });
     </script>
