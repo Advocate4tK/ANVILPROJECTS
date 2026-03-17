@@ -202,32 +202,37 @@ document.addEventListener('DOMContentLoaded', function() {
         formMessage.style.display = 'none';
     }
 
-    // ── Confirmation email ────────────────────────────────────────────────────
-    async function sendConfirmationEmail() {
-        if (typeof emailjs === 'undefined') return;
-        if (!CONFIG?.EMAILJS?.SERVICE_ID || !CONFIG?.EMAILJS?.TEMPLATE_ID) return;
-        if (CONFIG.EMAILJS.PUBLIC_KEY === 'your_emailjs_public_key') return;
+    // ── Shared email helper ───────────────────────────────────────────────────
+    function emailReady() {
+        if (typeof emailjs === 'undefined') return false;
+        if (!CONFIG?.EMAILJS?.SERVICE_ID || !CONFIG?.EMAILJS?.TEMPLATE_ID) return false;
+        if (CONFIG.EMAILJS.PUBLIC_KEY === 'your_emailjs_public_key') return false;
+        return true;
+    }
 
-        const firstName = document.getElementById('refereeFirstName').value.trim();
-        const lastName  = document.getElementById('refereeLastName').value.trim();
-        const email     = document.getElementById('refereeEmail').value.trim();
-        if (!email) return;
-
-        // Format each availability day
-        const dayRows = document.querySelectorAll('.day-row');
-        const dayLines = Array.from(dayRows).map((row, i) => {
+    function buildDayLines(includMax = true) {
+        const fmt = t => {
+            if (!t) return '';
+            const [h, m] = t.split(':').map(Number);
+            return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
+        };
+        return Array.from(document.querySelectorAll('.day-row')).map((row, i) => {
             const date  = row.querySelector('input[name="availableDate[]"]').value;
             const start = row.querySelector('[name="startTime[]"]').value;
             const end   = row.querySelector('[name="endTime[]"]').value;
             const max   = row.querySelector('input[name="maxGames[]"]').value || '1';
-            const fmt = t => {
-                if (!t) return '';
-                const [h, m] = t.split(':').map(Number);
-                const ap = h >= 12 ? 'PM' : 'AM';
-                return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ap}`;
-            };
-            return `  Day ${i + 1}: ${date}  |  ${fmt(start)} – ${fmt(end)}  |  Max games: ${max}`;
+            const maxPart = includMax ? `  |  Max games: ${max}` : '';
+            return `  Day ${i + 1}: ${date}  |  ${fmt(start)} – ${fmt(end)}${maxPart}`;
         }).join('\n');
+    }
+
+    // ── Confirmation email ────────────────────────────────────────────────────
+    async function sendConfirmationEmail() {
+        if (!emailReady()) return;
+        const firstName = document.getElementById('refereeFirstName').value.trim();
+        const lastName  = document.getElementById('refereeLastName').value.trim();
+        const email     = document.getElementById('refereeEmail').value.trim();
+        if (!email) return;
 
         const clubs     = getCheckboxValues('locations').join(', ') || 'None selected';
         const ageGroups = getCheckboxValues('ageGroups').join(', ') || 'No preference';
@@ -237,51 +242,32 @@ document.addEventListener('DOMContentLoaded', function() {
         await emailjs.send(CONFIG.EMAILJS.SERVICE_ID, CONFIG.EMAILJS.TEMPLATE_ID, {
             to_name:              `${firstName} ${lastName}`,
             to_email:             email,
-            availability_details: dayLines,
+            intro:                'Your availability has been submitted. Here\'s what we have on file:',
+            availability_details: buildDayLines(true),
             preferred_clubs:      clubs,
-            age_groups:           ageGroups,
-            ar_only:              arOnly,
-            notes:                notes,
+            extra_lines:          `Age groups: ${ageGroups}\nAR Only: ${arOnly}\nNotes: ${notes}`,
         });
     }
 
     // ── Parent / Guardian email ───────────────────────────────────────────────
     async function sendParentEmail() {
-        if (typeof emailjs === 'undefined') return;
-        if (!CONFIG?.EMAILJS?.SERVICE_ID || !CONFIG?.EMAILJS?.PARENT_TEMPLATE_ID) return;
-        if (CONFIG.EMAILJS.PUBLIC_KEY === 'your_emailjs_public_key') return;
-        if (CONFIG.EMAILJS.PARENT_TEMPLATE_ID === 'your_parent_template_id') return;
-
+        if (!emailReady()) return;
         const guardianEmail = document.getElementById('guardianEmail')?.value.trim();
-        if (!guardianEmail) return; // not under 18 or section hidden
+        if (!guardianEmail) return;
 
-        const firstName = document.getElementById('refereeFirstName').value.trim();
-        const lastName  = document.getElementById('refereeLastName').value.trim();
+        const firstName     = document.getElementById('refereeFirstName').value.trim();
+        const lastName      = document.getElementById('refereeLastName').value.trim();
         const guardianFirst = document.getElementById('guardianFirstName')?.value.trim() || '';
         const guardianLast  = document.getElementById('guardianLastName')?.value.trim()  || '';
+        const clubs         = getCheckboxValues('locations').join(', ') || 'None selected';
 
-        const dayRows = document.querySelectorAll('.day-row');
-        const dayLines = Array.from(dayRows).map((row, i) => {
-            const date  = row.querySelector('input[name="availableDate[]"]').value;
-            const start = row.querySelector('[name="startTime[]"]').value;
-            const end   = row.querySelector('[name="endTime[]"]').value;
-            const fmt = t => {
-                if (!t) return '';
-                const [h, m] = t.split(':').map(Number);
-                return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
-            };
-            return `  Day ${i + 1}: ${date}  |  ${fmt(start)} – ${fmt(end)}`;
-        }).join('\n');
-
-        const clubs = getCheckboxValues('locations').join(', ') || 'None selected';
-
-        await emailjs.send(CONFIG.EMAILJS.SERVICE_ID, CONFIG.EMAILJS.PARENT_TEMPLATE_ID, {
-            guardian_name:        `${guardianFirst} ${guardianLast}`.trim(),
+        await emailjs.send(CONFIG.EMAILJS.SERVICE_ID, CONFIG.EMAILJS.TEMPLATE_ID, {
+            to_name:              `${guardianFirst} ${guardianLast}`.trim(),
             to_email:             guardianEmail,
-            referee_name:         `${firstName} ${lastName}`,
-            availability_details: dayLines,
+            intro:                `${firstName} ${lastName} has submitted referee availability for the upcoming weekend.`,
+            availability_details: buildDayLines(false),
             preferred_clubs:      clubs,
-            assignor_email:       CONFIG.ASSIGNOR_EMAIL || '',
+            extra_lines:          `Questions? Contact the assignor at ${CONFIG.ASSIGNOR_EMAIL || ''}`,
         });
     }
 
