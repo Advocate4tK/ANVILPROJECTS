@@ -876,6 +876,7 @@
             const gameDate  = selectedGame ? selectedGame.fields['Date'] : null;
             const gameTime  = selectedGame ? (selectedGame.fields['Time'] || '') : null;
             const gameDT    = gameDate ? `${gameDate}|${gameTime}` : null;
+            const gameClub  = selectedGame ? (resolveGameClub(selectedGame.fields) || '').toLowerCase() : '';
             const prefClub    = document.getElementById('prefFilter').value;
             const yearsFilter = document.getElementById('yearsFilter').value;
             const ageFilter   = document.getElementById('ageFilter').value;
@@ -886,6 +887,12 @@
                 const name  = (r.fields['Name']  || '').toLowerCase();
                 const email = (r.fields['Email'] || '').toLowerCase();
                 if (query && !name.includes(query) && !email.includes(query)) return false;
+                // Club preference gate: if a game is selected and the ref has preferences,
+                // only show them if one of their preferences matches the game's club.
+                if (gameClub) {
+                    const prefs = parsePreferences(r.fields['Club Preference']);
+                    if (prefs.length > 0 && !prefs.some(p => p.toLowerCase() === gameClub)) return false;
+                }
                 if (yearsFilter !== 'any') {
                     const yrs = parseInt(r.fields['Years Reffing']) || 0;
                     if (yearsFilter === '1'    && yrs !== 1)             return false;
