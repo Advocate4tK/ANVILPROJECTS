@@ -250,6 +250,12 @@
                                     <option value="time-desc">Latest games first</option>
                                 </select>
                             </div>
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">Show:</label>
+                                <label style="font-size:0.78rem; color:#555; display:flex; align-items:center; gap:5px; cursor:pointer;">
+                                    <input type="checkbox" id="unassignedOnlyFilter"> Unassigned games only
+                                </label>
+                            </div>
                             <div style="text-align:right; margin-top:4px; padding-bottom:8px;">
                                 <button onclick="clearGameFilters()" style="background:#eee; color:#555; border:1px solid #ccc; border-radius:6px; padding:6px 14px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; margin-right:6px;">Clear</button>
                                 <button onclick="applyGameFilters()" style="background:#0f3460; color:#fff; border:none; border-radius:6px; padding:6px 20px; font-size:0.85rem; font-weight:700; cursor:pointer; font-family:inherit;">Go</button>
@@ -486,8 +492,9 @@
             document.getElementById('gameDateFilter').value = '';
             document.getElementById('gameTimeFilter').value = '';
             document.getElementById('gameAgeFilter').value  = '';
-
             document.getElementById('gameSort').value = 'datetime';
+            const unassignedEl = document.getElementById('unassignedOnlyFilter');
+            if (unassignedEl) unassignedEl.checked = false;
             renderGames();
         }
 
@@ -664,6 +671,13 @@
                     .sort((a, b) => a.fieldId - b.fieldId);
 
                 document.getElementById('workstation').style.display = 'grid';
+
+                // If launched with ?filter=unassigned, pre-check the filter
+                if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
+                    const cb = document.getElementById('unassignedOnlyFilter');
+                    if (cb) cb.checked = true;
+                }
+
                 renderGames();
                 renderRefs('');
 
@@ -717,14 +731,19 @@
 
         function renderGames() {
             const wrap = document.getElementById('gamesListWrap');
-            const gameDateF  = document.getElementById('gameDateFilter')?.value || '';
-            const gameTimeF  = document.getElementById('gameTimeFilter')?.value || '';
-            const gameAgeF   = document.getElementById('gameAgeFilter')?.value  || '';
+            const gameDateF      = document.getElementById('gameDateFilter')?.value || '';
+            const gameTimeF      = document.getElementById('gameTimeFilter')?.value || '';
+            const gameAgeF       = document.getElementById('gameAgeFilter')?.value  || '';
+            const unassignedOnly = document.getElementById('unassignedOnlyFilter')?.checked || false;
 
             const filtered = allGames.filter(g => {
                 if (gameDateF && g.fields['Date'] !== gameDateF) return false;
                 if (gameTimeF && (g.fields['Time'] || '') !== gameTimeF) return false;
                 if (gameAgeF  && g.fields['Age Group'] !== gameAgeF) return false;
+                if (unassignedOnly) {
+                    const cr = g.fields['Center Referee'];
+                    if (cr && Array.isArray(cr) && cr.length > 0) return false;
+                }
                 if (selectedClubs.size > 0 && selectedClubs.size < CLUBS_LIST.length) {
                     const club = resolveGameClub(g.fields);
                     if (!club) return false;
