@@ -959,24 +959,24 @@
                 const refNameKey = (r.fields['Name'] || '').trim().toLowerCase();
                 const lookupDate = gameDate || document.getElementById('dateFilter').value;
                 const availSlot  = lookupDate ? availTimeByName[refNameKey]?.[lookupDate] : null;
-                const startTime  = availSlot?.start ? (() => {
-                    const [h, m] = availSlot.start.split(':').map(Number);
-                    return `avail ${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
-                })() : '';
+                const fmtT = t => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; };
+                const timeWindow = availSlot?.start && availSlot?.end
+                    ? `🕐 ${fmtT(availSlot.start)} – ${fmtT(availSlot.end)}`
+                    : availSlot?.start ? `🕐 from ${fmtT(availSlot.start)}` : '';
 
-                const metaParts = [age, years, startTime].filter(Boolean);
+                const metaParts = [age, years].filter(Boolean);
 
                 const prefs = parsePreferences(r.fields['Club Preference']);
-                const prefTag = prefs.length
-                    ? `<span class="pref-tag">⭐ ${prefs.join(', ')}</span>`
-                    : '';
+                const clubLine = prefs.length ? `⭐ ${prefs.join(', ')}` : '';
 
                 html += `<div class="ref-card ${cardClass}" draggable="${cls !== 2}"
                     data-ref-id="${rid}" data-ref-name="${name}"
                     ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
                     <div class="ref-name">${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}</div>
-                    <div class="ref-meta">${metaParts.join(' · ')}${status ? (metaParts.length ? ' &nbsp;' : '') + status : ''}</div>
-                    ${prefTag ? `<div class="ref-meta" style="margin-top:2px;">${prefTag}</div>` : ''}
+                    ${metaParts.length ? `<div class="ref-meta">${metaParts.join(' · ')}</div>` : ''}
+                    ${timeWindow ? `<div class="ref-meta" style="margin-top:2px;">${timeWindow}</div>` : ''}
+                    ${clubLine   ? `<div class="ref-meta" style="margin-top:2px; color:#0f3460; font-weight:600;">${clubLine}</div>` : ''}
+                    ${status     ? `<div class="ref-meta" style="margin-top:2px;">${status}</div>` : ''}
                 </div>`;
             });
 
