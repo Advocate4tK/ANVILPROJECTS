@@ -266,31 +266,26 @@
                 const createdRefNames = [];
                 for (let i = 0; i < FAKE_REFS.length; i++) {
                     const r = FAKE_REFS[i];
-                    // Try full fields first; if any field is unknown, fall back to confirmed fields only
                     let rec = null;
                     try {
+                        // Create with confirmed core fields first
                         rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
-                            'Name':             r.name,
-                            'Years Reffing':    r.years,
-                            'Phone':            r.phone,
-                            'Age':              r.age,
-                            'Club Preference':  r.prefs,
+                            'Name':          r.name,
+                            'Years Reffing': r.years,
+                            'Phone':         r.phone,
                         });
-                    } catch(e) {
-                        if (e.message.includes('Unknown field name')) {
-                            log(`  ⚠ ${r.name}: some fields missing in Airtable (${e.message}) — retrying with core fields`, 'warn');
+                        // Then try each optional field individually so one missing field can't block the others
+                        for (const [key, val] of [['Age', r.age], ['Club Preference', r.prefs]]) {
                             try {
-                                rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
-                                    'Name':          r.name,
-                                    'Years Reffing': r.years,
-                                    'Phone':         r.phone,
-                                });
-                            } catch(e2) {
-                                log(`  ✗ ${r.name}: ${e2.message}`, 'err');
+                                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rec.id, { [key]: val });
+                            } catch(optErr) {
+                                if (optErr.message.includes('Unknown field name')) {
+                                    log(`  ⚠ "${key}" field not found in Airtable — skipped for ${r.name}`, 'warn');
+                                }
                             }
-                        } else {
-                            log(`  ✗ ${r.name}: ${e.message}`, 'err');
                         }
+                    } catch(e) {
+                        log(`  ✗ ${r.name}: ${e.message}`, 'err');
                     }
                     if (rec) {
                         seededRefIds.push(rec.id);
