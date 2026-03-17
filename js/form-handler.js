@@ -42,9 +42,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 // Save Club Preference from location checkboxes
+                // Send as array (works for Airtable multi-select); fall back to
+                // comma string if the field is a plain text type.
                 const locations = getCheckboxValues('locations');
                 if (locations.length > 0) {
-                    refUpdates['Club Preference'] = locations.join(', ');
+                    refUpdates['Club Preference'] = locations; // array for multi-select
                 }
 
                 // Save Certification Level if present
@@ -59,7 +61,23 @@ document.addEventListener('DOMContentLoaded', function() {
                             refUpdates
                         );
                     } catch(updateErr) {
-                        console.warn('Could not update referee profile:', updateErr.message);
+                        // If array was rejected (text field instead of multi-select), retry as string
+                        if (locations.length > 0) {
+                            try {
+                                await airtableClient.updateRecord(
+                                    CONFIG.AIRTABLE_TABLES.REFEREES,
+                                    window._foundRefId,
+                                    { ...refUpdates, 'Club Preference': locations.join(', ') }
+                                );
+                            } catch(retryErr) {
+                                showMessage('error', `Could not save location preferences: ${retryErr.message}. Please try again.`);
+                                submitBtn.disabled = false;
+                                submitBtn.innerHTML = originalText;
+                                return;
+                            }
+                        } else {
+                            console.warn('Could not update referee profile:', updateErr.message);
+                        }
                     }
                 }
             }
