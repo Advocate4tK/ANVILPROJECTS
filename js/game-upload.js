@@ -4,6 +4,7 @@
  */
 
 let parsedRows = [];
+let clubLeagueMap = {}; // club name (lowercase) → league string
 
 // ── CSV field name → Airtable field name mapping ──────────────────────────────
 const FIELD_MAP = {
@@ -18,7 +19,7 @@ const FIELD_MAP = {
     'Game Status':    'Game Status',
     'Notes':          'Notes'
 };
-// Note: 'Club' and 'Field' are linked record fields in Airtable and must be linked manually.
+// Note: 'Club' column auto-fills League. 'Field' is a linked record and must be linked manually.
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const dropZone      = document.getElementById('dropZone');
@@ -145,6 +146,20 @@ uploadBtn.addEventListener('click', async () => {
     let skipCount = 0;
     const total = parsedRows.length;
 
+    // Load clubs to build Club → League auto-fill map
+    progressText.textContent = 'Loading club data...';
+    clubLeagueMap = {};
+    try {
+        const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+        clubs.forEach(c => {
+            const name   = (c.fields['Club Name'] || c.fields['Name'] || '').toLowerCase();
+            const league = c.fields['League'] || 'Southeast District (21)';
+            if (name) clubLeagueMap[name] = league;
+        });
+    } catch (err) {
+        console.warn('Could not load clubs for league auto-fill:', err);
+    }
+
     // Fetch existing games to detect duplicates
     progressText.textContent = 'Checking for existing games...';
     let existingKeys = new Set();
@@ -233,6 +248,17 @@ function buildFields(row) {
             fields[airtableField] = value;
         }
     });
+
+    // Auto-fill League from Club column if League is blank
+    if (!fields['League'] && row['Club'] && row['Club'].trim() !== '') {
+        const clubKey = row['Club'].trim().toLowerCase();
+        // Try exact match first, then partial match
+        const league = clubLeagueMap[clubKey]
+            || Object.entries(clubLeagueMap).find(([k]) => k.includes(clubKey) || clubKey.includes(k))?.[1]
+            || 'Southeast District (21)';
+        fields['League'] = league;
+    }
+
     return fields;
 }
 
