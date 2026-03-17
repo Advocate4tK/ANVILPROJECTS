@@ -31,18 +31,35 @@ document.addEventListener('DOMContentLoaded', function() {
         submitBtn.innerHTML = 'Submitting... <span class="spinner"></span>';
 
         try {
-            // For returning refs: recalculate age from DOB and update their record
-            if (window._foundRefId && window._foundRefDob && typeof window.calculateAge === 'function') {
-                const currentAge = window.calculateAge(window._foundRefDob);
-                if (currentAge !== null) {
+            // Update referee record with latest profile data on every submission
+            if (window._foundRefId) {
+                const refUpdates = {};
+
+                // Recalculate age from DOB
+                if (window._foundRefDob && typeof window.calculateAge === 'function') {
+                    const currentAge = window.calculateAge(window._foundRefDob);
+                    if (currentAge !== null) refUpdates['Age'] = currentAge;
+                }
+
+                // Save Club Preference from location checkboxes
+                const locations = getCheckboxValues('locations');
+                if (locations.length > 0) {
+                    refUpdates['Club Preference'] = locations.join(', ');
+                }
+
+                // Save Certification Level if present
+                const certEl = document.getElementById('certificationLevel');
+                if (certEl?.value) refUpdates['Certification Level'] = certEl.value;
+
+                if (Object.keys(refUpdates).length > 0) {
                     try {
                         await airtableClient.updateRecord(
                             CONFIG.AIRTABLE_TABLES.REFEREES,
                             window._foundRefId,
-                            { 'Age': currentAge }
+                            refUpdates
                         );
-                    } catch(ageErr) {
-                        console.warn('Could not update age:', ageErr.message);
+                    } catch(updateErr) {
+                        console.warn('Could not update referee profile:', updateErr.message);
                     }
                 }
             }
