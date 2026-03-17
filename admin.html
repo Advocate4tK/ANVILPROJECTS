@@ -444,9 +444,13 @@
                 // Next 48 hours range
                 const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
-                const unassignedByClub = {};
-                const clubGameCount   = {};
-                const thisWeekByClub  = {};
+                const unassignedByClub  = {};
+                const clubGameCount     = {};
+                const thisWeekByClub    = {};
+                // ID-keyed versions — bypass name-matching issues
+                const gameCountById     = {};
+                const thisWeekById      = {};
+                const unassignedById    = {};
                 const urgent = [];
 
                 allGames.forEach(rec => {
@@ -454,29 +458,31 @@
                     const gameDate = new Date(f['Date']);
                     const isUnassigned = !f['Center Referee'] || (Array.isArray(f['Center Referee']) && f['Center Referee'].length === 0);
 
-                    // Resolve club name helper
+                    // Resolve club IDs and name
                     const rawClub = f['Club'];
+                    const clubIds = Array.isArray(rawClub) ? rawClub : (rawClub ? [rawClub] : []);
                     let clubName;
-                    if (Array.isArray(rawClub) && rawClub.length > 0) {
-                        clubName = rawClub.map(id => clubLookup[id] || id).join(', ');
-                    } else if (rawClub) {
-                        clubName = clubLookup[rawClub] || rawClub;
+                    if (clubIds.length > 0) {
+                        clubName = clubIds.map(id => clubLookup[id] || id).join(', ');
                     } else {
                         clubName = 'No Club Assigned';
                     }
 
-                    // All clubs — total game count
+                    // Count by name (for heat meter / unassigned summary)
                     clubGameCount[clubName] = (clubGameCount[clubName] || 0) + 1;
-
-                    // This week games by club
                     if (gameDate >= startOfWeek && gameDate <= endOfWeek) {
                         thisWeekByClub[clubName] = (thisWeekByClub[clubName] || 0) + 1;
+                        if (isUnassigned) unassignedByClub[clubName] = (unassignedByClub[clubName] || 0) + 1;
                     }
 
-                    // This week unassigned by club
-                    if (gameDate >= startOfWeek && gameDate <= endOfWeek && isUnassigned) {
-                        unassignedByClub[clubName] = (unassignedByClub[clubName] || 0) + 1;
-                    }
+                    // Count by club record ID (reliable for detail card)
+                    clubIds.forEach(id => {
+                        gameCountById[id] = (gameCountById[id] || 0) + 1;
+                        if (gameDate >= startOfWeek && gameDate <= endOfWeek) {
+                            thisWeekById[id] = (thisWeekById[id] || 0) + 1;
+                            if (isUnassigned) unassignedById[id] = (unassignedById[id] || 0) + 1;
+                        }
+                    });
 
                     // Urgent: next 48 hours unassigned
                     if (gameDate >= now && gameDate <= in48Hours && isUnassigned) {
@@ -611,9 +617,9 @@
                         const email     = f['President Email'] || f['Email'] || f['Contact Email'] || '';
                         const phone     = f['President Phone'] || f['Phone'] || f['Contact Phone'] || '';
 
-                        const totalGames     = clubGameCount[clubName]  || 0;
-                        const thisWeek       = thisWeekByClub[clubName] || 0;
-                        const unassigned     = unassignedByClub[clubName] || 0;
+                        const totalGames = (cid ? gameCountById[cid]  : 0) || clubGameCount[clubName]  || 0;
+                        const thisWeek   = (cid ? thisWeekById[cid]   : 0) || thisWeekByClub[clubName] || 0;
+                        const unassigned = (cid ? unassignedById[cid] : 0) || unassignedByClub[clubName] || 0;
                         const venueCount     = cid ? (venueCountByClubId[cid] || 0) : 0;
                         const fieldCount     = cid ? (fieldCountByClubId[cid] || 0) : 0;
 
