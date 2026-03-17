@@ -37,21 +37,60 @@ const DEFAULTS = {
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-const loadBtn       = document.getElementById('loadBtn');
-const exportBtn     = document.getElementById('exportBtn');
-const selectAllBtn  = document.getElementById('selectAllBtn');
+const loadBtn        = document.getElementById('loadBtn');
+const exportBtn      = document.getElementById('exportBtn');
+const selectAllBtn   = document.getElementById('selectAllBtn');
 const deselectAllBtn = document.getElementById('deselectAllBtn');
-const gamesSection  = document.getElementById('gamesSection');
-const gamesTable    = document.getElementById('gamesTable');
-const gameCount     = document.getElementById('gameCount');
-const noGamesMsg    = document.getElementById('noGamesMsg');
-const limitWarning  = document.getElementById('limitWarning');
-const progressWrap  = document.getElementById('progressWrap');
-const progressBar   = document.getElementById('progressBar');
-const progressText  = document.getElementById('progressText');
+const gamesSection   = document.getElementById('gamesSection');
+const gamesTable     = document.getElementById('gamesTable');
+const gameCount      = document.getElementById('gameCount');
+const noGamesMsg     = document.getElementById('noGamesMsg');
+const limitWarning   = document.getElementById('limitWarning');
+const progressWrap   = document.getElementById('progressWrap');
+const progressBar    = document.getElementById('progressBar');
+const progressText   = document.getElementById('progressText');
 
 let loadedGames = [];
 let refIdLookup = {}; // Airtable record ID → Central Assign numeric ID
+
+// ── Week picker — auto-fills Mon/Sun of the chosen week ───────────────────────
+document.getElementById('weekPicker').addEventListener('change', function() {
+    if (!this.value) return;
+    const d    = new Date(this.value + 'T12:00:00'); // noon avoids DST edge cases
+    const day  = d.getDay(); // 0=Sun … 6=Sat
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const mon  = new Date(d); mon.setDate(d.getDate() + diffToMon);
+    const sun  = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const fmt  = dt => dt.toISOString().split('T')[0];
+    document.getElementById('dateFrom').value = fmt(mon);
+    document.getElementById('dateTo').value   = fmt(sun);
+});
+
+// ── Load clubs into checkboxes ────────────────────────────────────────────────
+async function loadClubCheckboxes() {
+    if (!airtableClient) return;
+    try {
+        const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+        const names = clubs
+            .map(c => c.fields['Club Name'] || '')
+            .filter(Boolean)
+            .sort();
+        const wrap = document.getElementById('clubCheckboxes');
+        wrap.innerHTML = names.map(n => `
+            <label style="display:flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" class="club-cb" value="${n}"> ${n}
+            </label>`).join('');
+    } catch(e) {
+        document.getElementById('clubCheckboxes').innerHTML =
+            '<span style="color:#e74c3c; font-size:13px;">Could not load clubs.</span>';
+    }
+}
+loadClubCheckboxes();
+
+document.getElementById('clubSelectAll').addEventListener('click', () =>
+    document.querySelectorAll('.club-cb').forEach(cb => cb.checked = true));
+document.getElementById('clubClearAll').addEventListener('click', () =>
+    document.querySelectorAll('.club-cb').forEach(cb => cb.checked = false));
 
 // ── Load Games ────────────────────────────────────────────────────────────────
 loadBtn.addEventListener('click', async () => {
@@ -60,8 +99,9 @@ loadBtn.addEventListener('click', async () => {
         return;
     }
 
-    const dateFrom = document.getElementById('dateFrom').value;
-    const dateTo   = document.getElementById('dateTo').value;
+    const dateFrom     = document.getElementById('dateFrom').value;
+    const dateTo       = document.getElementById('dateTo').value;
+    const selectedClubs = Array.from(document.querySelectorAll('.club-cb:checked')).map(cb => cb.value);
 
     loadBtn.disabled = true;
     progressWrap.style.display = 'block';
@@ -72,14 +112,26 @@ loadBtn.addEventListener('click', async () => {
     noGamesMsg.style.display = 'none';
 
     try {
-        let filter = '';
-        if (dateFrom && dateTo) {
-            filter = `AND(IS_AFTER({Date}, '${dateFrom}'), IS_BEFORE({Date}, '${dateTo}'))`;
-        } else if (dateFrom) {
-            filter = `IS_AFTER({Date}, '${dateFrom}')`;
-        } else if (dateTo) {
-            filter = `IS_BEFORE({Date}, '${dateTo}')`;
+        // Build date filter (inclusive of both boundary dates)
+        const dateParts = [];
+        if (dateFrom) dateParts.push(`{Date} >= '${dateFrom}'`);
+        if (dateTo)   dateParts.push(`{Date} <= '${dateTo}'`);
+
+        // Build club filter — matches home OR away team containing the club name
+        let clubFilter = '';
+        if (selectedClubs.length > 0) {
+            const clubConditions = selectedClubs.map(c =>
+                `OR(FIND("${c}", {Home Team}) > 0, FIND("${c}", {Away Team}) > 0)`
+            );
+            clubFilter = clubConditions.length === 1
+                ? clubConditions[0]
+                : `OR(${clubConditions.join(', ')})`;
         }
+
+        const allParts = [...dateParts, ...(clubFilter ? [clubFilter] : [])];
+        let filter = '';
+        if (allParts.length === 1)      filter = allParts[0];
+        else if (allParts.length > 1)   filter = `AND(${allParts.join(', ')})`;
 
         const options = { maxRecords: 500 };
         if (filter) options.filterByFormula = filter;
