@@ -58,34 +58,34 @@
 
                 <div class="danger-box">
                     <h2>⚠️ Warning — This Cannot Be Undone</h2>
-                    <p>This tool permanently deletes <strong>all records</strong> from the selected tables. Use this only to clear test/dummy data before going live. There is no recovery once deleted.</p>
+                    <p>This tool deletes <strong>all games</strong> and the <strong>25 seeded test referees</strong> (by name). Real referees imported from Central Assign are <strong>not touched</strong>. There is no recovery once deleted.</p>
                 </div>
 
                 <!-- Step 1: Load counts -->
                 <fieldset>
                     <legend>Step 1 — Check Record Counts</legend>
-                    <p style="font-size:14px; color:#555; margin-bottom:15px;">Click below to see how many records are currently in each table.</p>
+                    <p style="font-size:14px; color:#555; margin-bottom:15px;">Click below to see how many records will be affected.</p>
                     <button class="btn btn-outline" id="loadCountsBtn">Load Record Counts</button>
 
                     <div id="tableList" style="margin-top:18px; display:none;">
                         <div class="table-row">
                             <label>
                                 <input type="checkbox" id="chkGames" checked>
-                                🎮 Games Table
+                                🎮 All Games
                             </label>
                             <span class="record-count" id="countGames">—</span>
                         </div>
                         <div class="table-row">
                             <label>
-                                <input type="checkbox" id="chkReferees" checked>
-                                👤 Referees Table
+                                <input type="checkbox" id="chkFakeRefs" checked>
+                                🧪 Test Referees Only
                             </label>
-                            <span class="record-count" id="countReferees">—</span>
+                            <span class="record-count" id="countFakeRefs">—</span>
                         </div>
                         <div class="table-row">
                             <label>
                                 <input type="checkbox" id="chkAvailability" checked>
-                                📅 Availability Table
+                                📅 All Availability Records
                             </label>
                             <span class="record-count" id="countAvailability">—</span>
                         </div>
@@ -95,12 +95,12 @@
                 <!-- Step 2: Confirm and purge -->
                 <fieldset id="confirmSection" style="display:none;">
                     <legend>Step 2 — Confirm Purge</legend>
-                    <p style="font-size:14px; color:#555;">Type <strong>PURGE</strong> in the box below and click the button to permanently delete all records in the selected tables.</p>
+                    <p style="font-size:14px; color:#555;">Type <strong>PURGE</strong> in the box below and click the button to delete the selected records. Real CA-imported referees will not be affected.</p>
                     <div class="confirm-section">
                         <input type="text" class="confirm-input" id="confirmInput" placeholder="Type PURGE">
                         <div style="margin-top:15px;">
                             <button class="btn" id="purgeBtn" style="background:#e74c3c; color:white; padding:10px 28px; font-size:1rem; font-weight:700; border:none; border-radius:8px; cursor:pointer;">
-                                🗑️ Purge Selected Tables
+                                🗑️ Purge Selected Data
                             </button>
                         </div>
                     </div>
@@ -132,7 +132,18 @@
     <script src="config.js"></script>
     <script src="js/airtable-client.js"></script>
     <script>
-        let recordIds = { games: [], referees: [], availability: [] };
+        // The 25 seeded test referees — matched by exact name
+        const FAKE_REF_NAMES = new Set([
+            'Biff Whistledown', 'Muffin Thistleby', 'Clod Noodleman', 'Dingus McFlag',
+            'Wanda Blorpstein', 'Flopsy Grumbull', 'Poot Cranberry', 'Greta Fumblebox',
+            'Snorkel Briggs', 'Lulu Squelchworth', 'Chump Benderby', 'Dolly Sprocketton',
+            'Rando Quigley', 'Babs Wobbleston', 'Gump Flannigan', 'Dork Cabbagehead',
+            'Norbert Fleebish', 'Trish Noodlehat', 'Slab Beefpudding', 'Velma Chortlebury',
+            'Grub Muttonfist', 'Patsy Wobblehorn', 'Bobo Crumplehorn', 'Marge Blunderpuss',
+            'Thud Biscuitpants'
+        ]);
+
+        let recordIds = { games: [], fakeRefs: [], availability: [] };
 
         // ── Load counts ────────────────────────────────────────────────────────
         document.getElementById('loadCountsBtn').addEventListener('click', async () => {
@@ -149,13 +160,15 @@
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, { maxRecords: 2000 })
                 ]);
 
-                recordIds.games        = games.map(r => r.id);
-                recordIds.referees     = referees.map(r => r.id);
+                recordIds.games       = games.map(r => r.id);
+                recordIds.fakeRefs    = referees
+                    .filter(r => FAKE_REF_NAMES.has((r.fields['Name'] || '').trim()))
+                    .map(r => r.id);
                 recordIds.availability = availability.map(r => r.id);
 
-                setCount('countGames',        games.length,        'game');
-                setCount('countReferees',     referees.length,     'referee');
-                setCount('countAvailability', availability.length, 'availability record');
+                setCount('countGames',        recordIds.games.length,        'game');
+                setCount('countFakeRefs',     recordIds.fakeRefs.length,     'test referee');
+                setCount('countAvailability', recordIds.availability.length, 'availability record');
 
                 document.getElementById('tableList').style.display = 'block';
                 document.getElementById('confirmSection').style.display = 'block';
@@ -181,13 +194,13 @@
                 return;
             }
 
-            const tables = [];
-            if (document.getElementById('chkGames').checked        && recordIds.games.length)        tables.push({ name: 'Games',        table: CONFIG.AIRTABLE_TABLES.GAMES,        ids: recordIds.games,        label: 'game' });
-            if (document.getElementById('chkReferees').checked     && recordIds.referees.length)     tables.push({ name: 'Referees',     table: CONFIG.AIRTABLE_TABLES.REFEREES,     ids: recordIds.referees,     label: 'referee' });
-            if (document.getElementById('chkAvailability').checked && recordIds.availability.length) tables.push({ name: 'Availability', table: CONFIG.AIRTABLE_TABLES.AVAILABILITY, ids: recordIds.availability, label: 'availability record' });
+            const tasks = [];
+            if (document.getElementById('chkGames').checked        && recordIds.games.length)        tasks.push({ name: 'Games',                table: CONFIG.AIRTABLE_TABLES.GAMES,        ids: recordIds.games,        label: 'game' });
+            if (document.getElementById('chkFakeRefs').checked      && recordIds.fakeRefs.length)     tasks.push({ name: 'Test Referees',        table: CONFIG.AIRTABLE_TABLES.REFEREES,     ids: recordIds.fakeRefs,     label: 'test referee' });
+            if (document.getElementById('chkAvailability').checked  && recordIds.availability.length) tasks.push({ name: 'Availability Records', table: CONFIG.AIRTABLE_TABLES.AVAILABILITY, ids: recordIds.availability, label: 'availability record' });
 
-            if (tables.length === 0) {
-                alert('No tables selected or all tables are already empty.');
+            if (tasks.length === 0) {
+                alert('No items selected or all are already empty.');
                 return;
             }
 
@@ -198,12 +211,10 @@
             document.getElementById('resultsSection').style.display = 'none';
             document.getElementById('resultsList').innerHTML = '';
 
-            const totalTables = tables.length;
             let done = 0;
-
-            for (const { name, table, ids, label } of tables) {
+            for (const { name, table, ids, label } of tasks) {
                 document.getElementById('progressText').textContent = `Deleting ${name}... (${ids.length} records)`;
-                document.getElementById('progressBar').style.width = Math.round((done / totalTables) * 100) + '%';
+                document.getElementById('progressBar').style.width = Math.round((done / tasks.length) * 100) + '%';
                 try {
                     await airtableClient.deleteRecords(table, ids);
                     addResult('success', `✅ ${name}: ${ids.length} ${label}${ids.length !== 1 ? 's' : ''} deleted.`);
