@@ -365,8 +365,9 @@ function resolveVenueId(venueName) {
 
 function formatDate(dateStr) {
     if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return isNaN(d) ? dateStr : d.toLocaleDateString('en-US');
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    return `${parseInt(parts[1])}/${parseInt(parts[2])}/${parts[0]}`;
 }
 
 function formatDateForExport(dateStr) {
