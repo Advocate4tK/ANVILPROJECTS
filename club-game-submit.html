@@ -183,6 +183,40 @@
         .result-item.skipped { background: #fef9e7; color: #9a7d0a; }
 
         #resultsList { margin-top: 4px; }
+
+        /* ── Submitted games table ── */
+        .submitted-section {
+            margin-top: 28px;
+            display: none;
+        }
+        .submitted-section h3 {
+            font-size: 16px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .submitted-table-wrap { overflow-x: auto; }
+        .submitted-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .submitted-table th {
+            background: #2c3e50;
+            color: white;
+            padding: 8px 12px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .submitted-table td {
+            padding: 7px 12px;
+            border-bottom: 1px solid #e0e0e0;
+            white-space: nowrap;
+        }
+        .submitted-table tr:nth-child(even) { background: #f5f5f5; }
+        .submitted-table .skipped-row td { color: #9a7d0a; background: #fef9e7; }
     </style>
 </head>
 <body>
@@ -232,6 +266,30 @@
                 <!-- Summary -->
                 <div class="summary-box" id="summaryBox"></div>
                 <div id="resultsList"></div>
+
+                <!-- Submitted games table -->
+                <div class="submitted-section" id="submittedSection">
+                    <h3>Games Submitted This Session</h3>
+                    <div class="submitted-table-wrap">
+                        <table class="submitted-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Home Team</th>
+                                    <th>Away Team</th>
+                                    <th>Age</th>
+                                    <th>Gender</th>
+                                    <th>Venue</th>
+                                    <th>Field</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="submittedBody"></tbody>
+                        </table>
+                    </div>
+                </div>
 
             </div>
         </main>
@@ -477,6 +535,8 @@
         document.getElementById('progressWrap').style.display = 'block';
         document.getElementById('progressText').style.display = 'block';
         document.getElementById('resultsList').innerHTML = '';
+        document.getElementById('submittedBody').innerHTML = '';
+        document.getElementById('submittedSection').style.display = 'none';
         document.getElementById('summaryBox').style.display = 'none';
 
         const league = clubLeagueMap[clubId] || 21;
@@ -502,6 +562,7 @@
             if (existingKeys.has(dupKey)) {
                 skipCount++;
                 addResult('skipped', `Game ${i + 1}: ${label} skipped — already exists.`);
+                addSubmittedRow(i + 1, g, 'skipped');
                 continue;
             }
 
@@ -522,9 +583,11 @@
                 existingKeys.add(dupKey);
                 successCount++;
                 addResult('success', `Game ${i + 1}: ${label} submitted.`);
+                addSubmittedRow(i + 1, g, 'success');
             } catch(err) {
                 errorCount++;
                 addResult('error', `Game ${i + 1}: ${label} failed — ${err.message}`);
+                addSubmittedRow(i + 1, g, 'error');
             }
         }
 
@@ -540,6 +603,7 @@
         box.textContent = parts.join(', ') + '.';
         box.className = 'summary-box ' + (errorCount ? 'some-errors' : 'all-good');
         box.style.display = 'block';
+        document.getElementById('submittedSection').style.display = 'block';
         box.scrollIntoView({ behavior: 'smooth' });
 
         document.getElementById('submitBtn').disabled  = false;
@@ -552,6 +616,36 @@
         const icon = type === 'success' ? '✅' : type === 'skipped' ? '⏭️' : '❌';
         div.textContent = `${icon} ${message}`;
         document.getElementById('resultsList').appendChild(div);
+    }
+
+    function addSubmittedRow(num, g, status) {
+        const venueName = g.venueId ? (allVenues.find(v => v.id === g.venueId)?.name || '') : '';
+        const fieldName = g.fieldId ? (allFields.find(f => f.id === g.fieldId)?.name || '') : '';
+        const timeDisplay = g.time ? g.time.replace(/^(\d+):(\d+)$/, (_, h, m) => {
+            const h24 = parseInt(h);
+            const period = h24 >= 12 ? 'PM' : 'AM';
+            const h12 = h24 % 12 || 12;
+            return `${h12}:${m} ${period}`;
+        }) : '';
+        const dateDisplay = g.date ? g.date.replace(/^(\d{4})-(\d{2})-(\d{2})$/, (_, y, m, d) =>
+            `${parseInt(m)}/${parseInt(d)}/${y}`) : '';
+        const statusIcon = status === 'success' ? '✅ Submitted' : status === 'skipped' ? '⏭️ Duplicate' : '❌ Failed';
+
+        const tr = document.createElement('tr');
+        if (status === 'skipped') tr.className = 'skipped-row';
+        tr.innerHTML = `
+            <td>${num}</td>
+            <td>${dateDisplay}</td>
+            <td>${timeDisplay}</td>
+            <td>${g.home}</td>
+            <td>${g.away}</td>
+            <td>${g.age}</td>
+            <td>${g.gender}</td>
+            <td>${venueName}</td>
+            <td>${fieldName}</td>
+            <td>${statusIcon}</td>
+        `;
+        document.getElementById('submittedBody').appendChild(tr);
     }
     </script>
 </body>
