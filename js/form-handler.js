@@ -82,6 +82,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.warn('Confirmation email not sent:', emailErr.message);
             }
 
+            // Send parent/guardian email if referee is under 18
+            try {
+                await sendParentEmail();
+            } catch(parentErr) {
+                console.warn('Parent email not sent:', parentErr.message);
+            }
+
             // Store session so returning to the form skips name/email step
             sessionStorage.setItem('refSession', JSON.stringify({
                 firstName: document.getElementById('refereeFirstName').value.trim(),
@@ -235,6 +242,46 @@ document.addEventListener('DOMContentLoaded', function() {
             age_groups:           ageGroups,
             ar_only:              arOnly,
             notes:                notes,
+        });
+    }
+
+    // ── Parent / Guardian email ───────────────────────────────────────────────
+    async function sendParentEmail() {
+        if (typeof emailjs === 'undefined') return;
+        if (!CONFIG?.EMAILJS?.SERVICE_ID || !CONFIG?.EMAILJS?.PARENT_TEMPLATE_ID) return;
+        if (CONFIG.EMAILJS.PUBLIC_KEY === 'your_emailjs_public_key') return;
+        if (CONFIG.EMAILJS.PARENT_TEMPLATE_ID === 'your_parent_template_id') return;
+
+        const guardianEmail = document.getElementById('guardianEmail')?.value.trim();
+        if (!guardianEmail) return; // not under 18 or section hidden
+
+        const firstName = document.getElementById('refereeFirstName').value.trim();
+        const lastName  = document.getElementById('refereeLastName').value.trim();
+        const guardianFirst = document.getElementById('guardianFirstName')?.value.trim() || '';
+        const guardianLast  = document.getElementById('guardianLastName')?.value.trim()  || '';
+
+        const dayRows = document.querySelectorAll('.day-row');
+        const dayLines = Array.from(dayRows).map((row, i) => {
+            const date  = row.querySelector('input[name="availableDate[]"]').value;
+            const start = row.querySelector('[name="startTime[]"]').value;
+            const end   = row.querySelector('[name="endTime[]"]').value;
+            const fmt = t => {
+                if (!t) return '';
+                const [h, m] = t.split(':').map(Number);
+                return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
+            };
+            return `  Day ${i + 1}: ${date}  |  ${fmt(start)} – ${fmt(end)}`;
+        }).join('\n');
+
+        const clubs = getCheckboxValues('locations').join(', ') || 'None selected';
+
+        await emailjs.send(CONFIG.EMAILJS.SERVICE_ID, CONFIG.EMAILJS.PARENT_TEMPLATE_ID, {
+            guardian_name:        `${guardianFirst} ${guardianLast}`.trim(),
+            to_email:             guardianEmail,
+            referee_name:         `${firstName} ${lastName}`,
+            availability_details: dayLines,
+            preferred_clubs:      clubs,
+            assignor_email:       CONFIG.ASSIGNOR_EMAIL || '',
         });
     }
 

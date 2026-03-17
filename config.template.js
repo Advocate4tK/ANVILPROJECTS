@@ -54,10 +54,14 @@ const CONFIG = {
     //   1. Create account → Add Email Service (connect Gmail) → note the Service ID
     //   2. Create Email Template → note the Template ID
     //   3. Account → API Keys → copy your Public Key
+    // Your email address — included in parent/guardian notification emails
+    ASSIGNOR_EMAIL: 'your_email@example.com',
+
     EMAILJS: {
-        PUBLIC_KEY:  'your_emailjs_public_key',   // Account > API Keys
-        SERVICE_ID:  'your_emailjs_service_id',   // Email Services tab
-        TEMPLATE_ID: 'your_emailjs_template_id'   // Email Templates tab
+        PUBLIC_KEY:        'your_emailjs_public_key',    // Account > API Keys
+        SERVICE_ID:        'your_emailjs_service_id',    // Email Services tab
+        TEMPLATE_ID:       'your_emailjs_template_id',   // Referee confirmation template
+        PARENT_TEMPLATE_ID:'your_parent_template_id'     // Parent/guardian notification template
     },
 
     // Form settings
