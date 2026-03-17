@@ -320,7 +320,14 @@
 
                 const throbClass = (has7h || has24h) ? 'heat-throb' : '';
 
-                let html = `<div style="margin-bottom:8px;">
+                let html = `<div style="margin-bottom:24px; padding-bottom:20px; border-bottom:1px solid #e0e0e0;">
+                    <p style="font-weight:700; font-size:0.95rem; margin-bottom:10px; color:#0f3460;">🔍 Person Search</p>
+                    <input type="text" id="personSearch" placeholder="Search referees &amp; club contacts by name, email, or phone…"
+                        style="width:100%; padding:10px 14px; border:1px solid #ccc; border-radius:8px; font-size:0.9rem; box-sizing:border-box; font-family:inherit;">
+                    <div id="personResults" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;"></div>
+                </div>
+
+                <div style="margin-bottom:8px;">
                     <span style="font-size:1.1rem; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:#555;">🌡 Heat Meter</span>
                 </div>
                 <div class="${throbClass}" style="background:${heatColor}; border-radius:10px; padding:8px 20px; margin-bottom:20px; display:flex; align-items:center; gap:16px;">
@@ -381,18 +388,104 @@
                     </div>
                 </div>`;
 
-                // Wire up club dropdown after render
+                // Wire up club dropdown and person search after render
                 setTimeout(() => {
+                    // Club dropdown
                     const dd = document.getElementById('clubDropdown');
                     const stat = document.getElementById('clubStatDisplay');
-                    if (!dd || !stat) return;
-                    dd.addEventListener('change', function() {
-                        const club = this.value;
-                        if (!club) { stat.textContent = ''; return; }
-                        const total = clubGameCount[club] || 0;
-                        const unassignedThisWeek = unassignedByClub[club] || 0;
-                        stat.innerHTML = `<strong style="color:#0f3460;">${total}</strong> game${total !== 1 ? 's' : ''} in system` +
-                            (unassignedThisWeek > 0 ? ` &nbsp;|&nbsp; <strong style="color:#e94560;">${unassignedThisWeek}</strong> unassigned this week` : ' &nbsp;|&nbsp; <span style="color:#27ae60;">✅ No unassigned this week</span>');
+                    if (dd && stat) {
+                        dd.addEventListener('change', function() {
+                            const club = this.value;
+                            if (!club) { stat.textContent = ''; return; }
+                            const total = clubGameCount[club] || 0;
+                            const unassignedThisWeek = unassignedByClub[club] || 0;
+                            stat.innerHTML = `<strong style="color:#0f3460;">${total}</strong> game${total !== 1 ? 's' : ''} in system` +
+                                (unassignedThisWeek > 0 ? ` &nbsp;|&nbsp; <strong style="color:#e94560;">${unassignedThisWeek}</strong> unassigned this week` : ' &nbsp;|&nbsp; <span style="color:#27ae60;">✅ No unassigned this week</span>');
+                        });
+                    }
+
+                    // Person search
+                    const searchInput = document.getElementById('personSearch');
+                    const resultsDiv  = document.getElementById('personResults');
+                    if (!searchInput || !resultsDiv) return;
+
+                    searchInput.addEventListener('input', function() {
+                        const q = this.value.trim().toLowerCase();
+                        if (q.length < 2) { resultsDiv.innerHTML = ''; return; }
+
+                        const hits = [];
+
+                        // Referees
+                        allReferees.forEach(r => {
+                            const f = r.fields;
+                            const name  = f['Name']  || '';
+                            const email = f['Email'] || '';
+                            const phone = f['Phone'] || '';
+                            if (name.toLowerCase().includes(q) || email.toLowerCase().includes(q) || phone.replace(/\D/g,'').includes(q.replace(/\D/g,''))) {
+                                hits.push({
+                                    type:  'referee',
+                                    name,  email, phone,
+                                    cert:  f['Certification Level'] || '',
+                                    age:   f['Age']          || '',
+                                    years: f['Years Reffing'] || '',
+                                    clubs: f['Club Preference'] || '',
+                                    gender: f['Gender'] || ''
+                                });
+                            }
+                        });
+
+                        // Club contacts — try several common field name patterns
+                        allClubs.forEach(c => {
+                            const f = c.fields;
+                            const clubName = f['Name'] || f['Club Name'] || f['Club'] || '';
+                            const presName = f['President'] || f['President Name'] || f['Contact Name'] || f['Contact'] || '';
+                            const email    = f['Email'] || f['President Email'] || f['Contact Email'] || '';
+                            const phone    = f['Phone'] || f['President Phone'] || f['Contact Phone'] || '';
+                            if (clubName.toLowerCase().includes(q) || presName.toLowerCase().includes(q) ||
+                                email.toLowerCase().includes(q) || phone.replace(/\D/g,'').includes(q.replace(/\D/g,''))) {
+                                hits.push({ type: 'club', clubName, presName, email, phone });
+                            }
+                        });
+
+                        if (!hits.length) {
+                            resultsDiv.innerHTML = `<p style="color:#888; font-size:0.85rem;">No results for "${this.value}"</p>`;
+                            return;
+                        }
+
+                        resultsDiv.innerHTML = hits.slice(0, 15).map(p => {
+                            if (p.type === 'referee') {
+                                const meta = [
+                                    p.age   ? `Age ${p.age}`        : '',
+                                    p.years ? `${p.years} yrs reffing` : '',
+                                    p.gender
+                                ].filter(Boolean).join(' · ');
+                                return `<div style="background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
+                                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:5px;">
+                                        <span style="background:#0f3460; color:white; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:12px; letter-spacing:0.5px;">REFEREE</span>
+                                        <span style="font-weight:700; font-size:0.95rem; color:#0f3460;">${p.name}</span>
+                                        ${p.cert ? `<span style="background:#e8f4fd; color:#0f3460; font-size:0.75rem; padding:2px 8px; border-radius:10px;">${p.cert}</span>` : ''}
+                                    </div>
+                                    <div style="font-size:0.85rem; color:#444; display:flex; flex-wrap:wrap; gap:16px;">
+                                        ${p.phone ? `<span>📞 ${p.phone}</span>` : ''}
+                                        ${p.email ? `<span>✉️ <a href="mailto:${p.email}" style="color:#0f3460;">${p.email}</a></span>` : ''}
+                                        ${meta    ? `<span style="color:#666;">${meta}</span>` : ''}
+                                        ${p.clubs ? `<span>⭐ ${p.clubs}</span>` : ''}
+                                    </div>
+                                </div>`;
+                            } else {
+                                return `<div style="background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
+                                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:5px;">
+                                        <span style="background:#e94560; color:white; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:12px; letter-spacing:0.5px;">CLUB</span>
+                                        <span style="font-weight:700; font-size:0.95rem; color:#0f3460;">${p.clubName}</span>
+                                        ${p.presName ? `<span style="color:#555; font-size:0.9rem;">— ${p.presName}</span>` : ''}
+                                    </div>
+                                    <div style="font-size:0.85rem; color:#444; display:flex; flex-wrap:wrap; gap:16px;">
+                                        ${p.phone ? `<span>📞 ${p.phone}</span>` : ''}
+                                        ${p.email ? `<span>✉️ <a href="mailto:${p.email}" style="color:#0f3460;">${p.email}</a></span>` : ''}
+                                    </div>
+                                </div>`;
+                            }
+                        }).join('');
                     });
                 }, 0);
 
