@@ -1150,14 +1150,38 @@
 
         // ── Assign ref to slot ────────────────────────────────────────────────
         async function assignRef(gameId, position, refId, refName) {
-            // Block if ref already has a game at this date/time (excluding this game)
             const targetGame = allGames.find(g => g.id === gameId);
             if (targetGame) {
-                const dt = `${targetGame.fields['Date']}|${targetGame.fields['Time'] || ''}`;
+                const gameDate = targetGame.fields['Date'];
+                const dt = `${gameDate}|${targetGame.fields['Time'] || ''}`;
+
+                // Block: scheduling conflict
                 const conflicts = assignedAt[refId] ? [...(assignedAt[refId].get(dt) || [])].filter(gid => gid !== gameId) : [];
                 if (conflicts.length > 0) {
                     alert(`${refName} already has a game assigned at this time and cannot be assigned.`);
                     return;
+                }
+
+                // Block: ref has not submitted availability for this date
+                const refNameKey = (refLookup[refId]?.fields['Name'] || refName).trim().toLowerCase();
+                if (gameDate && !availByName[refNameKey]?.has(gameDate)) {
+                    alert(`${refName} has not submitted availability for ${gameDate} and cannot be assigned.`);
+                    return;
+                }
+
+                // Block: ref has not listed this game's location in their preferences
+                const ref = refLookup[refId];
+                const gameClub = resolveGameClub(targetGame.fields);
+                if (ref && gameClub) {
+                    const prefs = parsePreferences(ref.fields['Club Preference']);
+                    if (prefs.length === 0) {
+                        alert(`${refName} has no preferred locations listed and cannot be assigned. They must submit their availability form first.`);
+                        return;
+                    }
+                    if (!prefs.some(p => p.toLowerCase() === gameClub.toLowerCase())) {
+                        alert(`${refName} has not listed "${gameClub}" as a preferred location and cannot be assigned.`);
+                        return;
+                    }
                 }
             }
             try {
