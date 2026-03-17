@@ -405,27 +405,31 @@
                 });
 
                 // Build club ID → venue count
+                // Venues table uses 'Clubs' (linked record array) to link to a club
                 const venueCountByClubId = {};
-                // Build venue ID → club ID (for field→club lookup)
-                const venueToClubId = {};
+                // Map numeric Venue ID → club record ID (for field→club lookup)
+                // Fields table stores 'Venue ID' as a plain number, not a linked record
+                const numericVenueIdToClubId = {};
                 allVenues.forEach(v => {
-                    const ids = v.fields['Club'] || v.fields['Club ID'] || [];
-                    const arr = Array.isArray(ids) ? ids : (ids ? [ids] : []);
-                    arr.forEach(id => {
-                        venueCountByClubId[id] = (venueCountByClubId[id] || 0) + 1;
-                        venueToClubId[v.id] = id;
+                    const linked = v.fields['Clubs'] || v.fields['Club'] || [];
+                    const arr = Array.isArray(linked) ? linked : (linked ? [linked] : []);
+                    arr.forEach(clubRecId => {
+                        venueCountByClubId[clubRecId] = (venueCountByClubId[clubRecId] || 0) + 1;
                     });
+                    // Build numeric Venue ID → first linked club record ID
+                    const numVenueId = v.fields['Venue ID'];
+                    if (numVenueId !== undefined && numVenueId !== null && arr.length > 0) {
+                        numericVenueIdToClubId[numVenueId] = arr[0];
+                    }
                 });
 
                 // Build club ID → field count
+                // Fields table stores numeric 'Venue ID', look it up via numericVenueIdToClubId
                 const fieldCountByClubId = {};
                 allFields.forEach(fi => {
-                    const vids = fi.fields['Venue'] || fi.fields['Venue ID'] || [];
-                    const arr = Array.isArray(vids) ? vids : (vids ? [vids] : []);
-                    arr.forEach(vid => {
-                        const cid = venueToClubId[vid];
-                        if (cid) fieldCountByClubId[cid] = (fieldCountByClubId[cid] || 0) + 1;
-                    });
+                    const numVenueId = fi.fields['Venue ID'];
+                    const cid = numericVenueIdToClubId[numVenueId];
+                    if (cid) fieldCountByClubId[cid] = (fieldCountByClubId[cid] || 0) + 1;
                 });
 
                 const totalGames = allGames.length;
