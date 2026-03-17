@@ -51,7 +51,8 @@ const progressBar    = document.getElementById('progressBar');
 const progressText   = document.getElementById('progressText');
 
 let loadedGames = [];
-let refIdLookup = {}; // Airtable record ID → Central Assign numeric ID
+let refIdLookup = {};     // Airtable record ID → Central Assign numeric ID
+let venueNameLookup = {}; // Airtable venue record ID → venue name
 
 // ── Mode toggle — show only the selected filter panel ─────────────────────────
 document.querySelectorAll('input[name="filterMode"]').forEach(radio => {
@@ -165,11 +166,12 @@ loadBtn.addEventListener('click', async () => {
         const options = { maxRecords: 500 };
         if (filter) options.filterByFormula = filter;
 
-        // Load referee CA IDs in parallel with games
-        progressText.textContent = 'Loading games and referee IDs...';
-        const [records, referees] = await Promise.all([
+        // Load games, referee CA IDs, and venues in parallel
+        progressText.textContent = 'Loading games, referee IDs, and venues...';
+        const [records, referees, venues] = await Promise.all([
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, options),
-            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 })
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 500 })
         ]);
 
         // Build lookup: Airtable record ID → Central Assign numeric ID
@@ -177,6 +179,13 @@ loadBtn.addEventListener('click', async () => {
         referees.forEach(r => {
             const caId = r.fields['Central Assign ID'];
             if (caId) refIdLookup[r.id] = parseInt(caId) || caId;
+        });
+
+        // Build lookup: venue record ID → venue name
+        venueNameLookup = {};
+        venues.forEach(v => {
+            const name = v.fields['Name'] || v.fields['Venue Name'] || '';
+            if (name) venueNameLookup[v.id] = name;
         });
 
         progressBar.style.width = '100%';
@@ -235,10 +244,11 @@ function renderGamesTable(records) {
 
     records.forEach((rec, i) => {
         const f = rec.fields;
-        const venueId = resolveVenueId(f['Field'] || f['Venue'] || '');
+        const venueName = getVenueName(f['Venue'] || f['Field'] || '');
+        const venueId = resolveVenueId(venueName);
         const venueDisplay = venueId
             ? `<span style="color:#27ae60">✓ ID: ${venueId}</span>`
-            : `<span style="color:#e74c3c">⚠ No ID: ${f['Field'] || f['Venue'] || 'Unknown'}</span>`;
+            : `<span style="color:#e74c3c">⚠ No ID: ${venueName || 'Unknown'}</span>`;
 
         const cr = f['Center Referee'];
         const hasRef = Array.isArray(cr) && cr.length > 0 && refIdLookup[cr[0]];
@@ -312,7 +322,8 @@ exportBtn.addEventListener('click', () => {
 
     const rows = selected.map(rec => {
         const f = rec.fields;
-        const venueId = resolveVenueId(f['Field'] || f['Venue'] || '');
+        const venueName = getVenueName(f['Venue'] || f['Field'] || '');
+        const venueId = resolveVenueId(venueName);
 
         // Resolve Center Referee → Central Assign numeric ID
         const centerRefField = f['Center Referee'];
@@ -333,7 +344,7 @@ exportBtn.addEventListener('click', () => {
             formatTimeForExport(f['Time'] || ''),
             DEFAULTS.type,
             gameGender,
-            venueId || (f['Field'] || f['Venue'] || ''),
+            venueId || venueName,
             '',
             f['League'] || DEFAULTS.league,
             refId, 0, 0, 0, 0,
@@ -357,6 +368,18 @@ exportBtn.addEventListener('click', () => {
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Resolve a Games field value (may be a linked record array or plain string) to a venue name
+function getVenueName(fieldValue) {
+    if (!fieldValue) return '';
+    // Linked record — array of record IDs
+    if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+        return venueNameLookup[fieldValue[0]] || '';
+    }
+    // Plain text
+    return String(fieldValue);
+}
+
 function resolveVenueId(venueName) {
     if (!venueName) return null;
     // Try exact match first
