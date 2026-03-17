@@ -743,6 +743,7 @@
                     const refState = document.getElementById('refereeState').value.trim();
                     const refZip   = document.getElementById('refereeZip').value.trim();
 
+                    // Core fields — always safe to send
                     const refereeRecord = {
                         'Name':          `${firstName} ${lastName}`,
                         'Email':         document.getElementById('refereeEmail').value.trim(),
@@ -753,8 +754,6 @@
                     if (refCity)  refereeRecord['City']     = refCity;
                     if (refState) refereeRecord['State']    = refState;
                     if (refZip)   refereeRecord['Zip Code'] = refZip;
-                    if (cert)     refereeRecord['Certification Level'] = cert;
-                    if (gender)   refereeRecord['Gender']   = gender;
                     if (birthDate) {
                         refereeRecord['Date of Birth'] = birthDate;
                         const age = window.calculateAge(birthDate);
@@ -768,10 +767,23 @@
                     if (guardianFirst || guardianLast) refereeRecord['Guardian Name'] = `${guardianFirst} ${guardianLast}`.trim();
                     if (guardianEmail) refereeRecord['Guardian Email'] = guardianEmail;
 
+                    // Save core fields — this must succeed
                     const savedRef = await airtableClient.upsertReferee(refereeRecord);
 
                     // Store ID so form submit can update Club Preference
                     if (savedRef?.id) window._foundRefId = savedRef.id;
+
+                    // Save select fields individually — if one fails it won't block the others
+                    if (savedRef?.id) {
+                        for (const [key, val] of [['Certification Level', cert], ['Gender', gender]]) {
+                            if (!val) continue;
+                            try {
+                                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, savedRef.id, { [key]: val });
+                            } catch(patchErr) {
+                                console.warn(`Could not save ${key}:`, patchErr.message);
+                            }
+                        }
+                    }
 
                     msgEl.className = 'form-message success';
                     msgEl.textContent = '✅ Profile saved! Now fill in your availability below.';
