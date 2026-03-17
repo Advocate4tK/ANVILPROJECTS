@@ -301,16 +301,24 @@
                     const v = venuesWithClub[i];
                     const clubId = clubNameToId[v.club.toLowerCase()];
                     if (!clubId) {
-                        plog(`⚠ Club "${v.club}" not found for ${v.name} — skipped`, 'warn');
+                        plog(`<span style="color:#bbb;">— ${v.name}: club "${v.club}" not found — skipped</span>`);
                         skipped++;
                         continue;
                     }
                     try {
-                        // Find venue record by Venue ID
                         const recs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, {
                             filterByFormula: `{Venue ID} = ${v.id}`, maxRecords: 1
                         });
-                        if (!recs.length) { plog(`⚠ Venue ${v.id} not found in Airtable`, 'warn'); skipped++; continue; }
+                        if (!recs.length) { plog(`<span style="color:#bbb;">— Venue ${v.id} not found — skipped</span>`); skipped++; continue; }
+
+                        // Skip if already patched
+                        const alreadyLinked = recs[0].fields['Clubs'];
+                        if (alreadyLinked && alreadyLinked.length > 0) {
+                            plog(`<span style="color:#bbb;">— ${v.name} already linked to ${v.club} — skipped</span>`);
+                            skipped++;
+                            continue;
+                        }
+
                         await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.VENUES, recs[0].id, { 'Clubs': [clubId] });
                         plog(`<span class="ok">✓ ${v.name} → ${v.club}</span>`);
                         patched++;
@@ -325,13 +333,23 @@
                 plog('Done!', 'info');
                 const summary = document.getElementById('patchSummaryBox');
                 summary.style.display = 'block';
-                summary.innerHTML = `<strong style="color:#27ae60;">Patch complete</strong><br>
-                    <span style="font-size:0.88rem;">${patched} patched &nbsp;·&nbsp; ${skipped} skipped &nbsp;·&nbsp; ${errors} error${errors !== 1 ? 's' : ''}</span>`;
+                if (patched === 0 && errors === 0) {
+                    summary.innerHTML = `<strong style="color:#888;">All venues already patched</strong><br>
+                        <span style="font-size:0.88rem;">Nothing new to do — ${skipped} already linked.</span>`;
+                } else {
+                    summary.innerHTML = `<strong style="color:#27ae60;">Patch complete</strong><br>
+                        <span style="font-size:0.88rem;">${patched} patched &nbsp;·&nbsp; ${skipped} already done &nbsp;·&nbsp; ${errors} error${errors !== 1 ? 's' : ''}</span>`;
+                }
             } catch(e) {
                 plog('Fatal error: ' + e.message, 'err');
             } finally {
-                btn.disabled = false;
-                btn.textContent = 'Patch Club Links';
+                if (errors === 0 && patched >= 0) {
+                    btn.textContent = patched === 0 ? '✓ Already Patched' : '✓ Done';
+                    btn.style.background = '#888';
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = 'Patch Club Links';
+                }
             }
         }
 
