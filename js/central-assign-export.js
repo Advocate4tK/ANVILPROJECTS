@@ -146,10 +146,10 @@ loadBtn.addEventListener('click', async () => {
     noGamesMsg.style.display = 'none';
 
     try {
-        // Build date filter (inclusive of both boundary dates)
+        // Build date filter — IS_AFTER/IS_BEFORE with ±1 day offset makes both ends inclusive
         const dateParts = [];
-        if (dateFrom) dateParts.push(`{Date} >= '${dateFrom}'`);
-        if (dateTo)   dateParts.push(`{Date} <= '${dateTo}'`);
+        if (dateFrom) dateParts.push(`NOT(IS_BEFORE({Date}, '${dateFrom}'))`);
+        if (dateTo)   dateParts.push(`NOT(IS_AFTER({Date}, '${dateTo}'))`);
 
         // Build club filter — matches home OR away team containing the club name
         let clubFilter = '';
