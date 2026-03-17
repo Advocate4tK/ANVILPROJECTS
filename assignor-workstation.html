@@ -811,12 +811,21 @@
                         const venueOpts = venuesFiltered.map(v =>
                             `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
                         ).join('');
-                        const fieldOpts = curVenueId
-                            ? allFields
+                        const fieldOpts = (() => {
+                            if (!curVenueId) return '';
+                            const takenFieldIds = new Set(
+                                allGames
+                                    .filter(og => og.id !== gid && og.fields['Field ID'] && gamesOverlap(g, og))
+                                    .map(og => String(og.fields['Field ID']))
+                            );
+                            return allFields
                                 .filter(fi => fi.venueId == curVenueId)
-                                .map(fi => `<option value="${fi.fieldId}" ${fi.fieldId == curFieldId ? 'selected' : ''}>${fi.name}</option>`)
-                                .join('')
-                            : '';
+                                .map(fi => {
+                                    const taken = takenFieldIds.has(String(fi.fieldId));
+                                    return `<option value="${fi.fieldId}" ${fi.fieldId == curFieldId ? 'selected' : ''} ${taken ? 'disabled style="color:#bbb;"' : ''}>${fi.name}${taken ? ' — in use' : ''}</option>`;
+                                })
+                                .join('');
+                        })();
                         return `<div class="venue-field-row" onclick="event.stopPropagation()">
                             <span style="font-size:0.72rem;color:#888;">📍</span>
                             <select class="vf-select" onchange="onVenueChange('${gid}', this)" style="flex:2;">
@@ -1193,16 +1202,17 @@
         }
 
         async function saveVenueField(gameId, venueId, fieldId) {
+            // Update local state immediately so conflict detection is current for other games
+            const game = allGames.find(g => g.id === gameId);
+            if (game) {
+                game.fields['Venue ID'] = venueId || null;
+                game.fields['Field ID'] = fieldId || null;
+            }
             try {
                 const updates = {};
                 if (venueId) updates['Venue ID'] = venueId; else updates['Venue ID'] = null;
                 if (fieldId) updates['Field ID'] = fieldId; else updates['Field ID'] = null;
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, updates);
-                const game = allGames.find(g => g.id === gameId);
-                if (game) {
-                    game.fields['Venue ID'] = venueId || null;
-                    game.fields['Field ID'] = fieldId || null;
-                }
             } catch(e) {
                 console.warn('Could not save venue/field:', e.message);
             }
