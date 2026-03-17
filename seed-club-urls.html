@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed Club Game Upload URLs</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .log { background:#1a1a2e; color:#e0e0e0; border-radius:8px; padding:16px; font-family:monospace; font-size:0.82rem; max-height:400px; overflow-y:auto; margin-top:16px; }
+        .log .ok   { color:#27ae60; }
+        .log .err  { color:#e74c3c; }
+        .log .info { color:#74b9ff; }
+        .preview-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:16px; }
+        .preview-table th { background:#2c3e50; color:white; padding:8px 12px; text-align:left; }
+        .preview-table td { padding:7px 12px; border-bottom:1px solid #e0e0e0; }
+        .preview-table tr:nth-child(even) { background:#f5f5f5; }
+        .url-cell { color:#3498db; font-size:12px; word-break:break-all; }
+        .no-match { color:#e74c3c; font-style:italic; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔗 Seed Club Game Upload URLs</h1>
+            <p class="subtitle">Populates the "Club Game Upload" field in the Clubs table</p>
+        </header>
+        <main>
+            <div class="form-container">
+                <p style="margin-bottom:20px; color:#555;">
+                    This tool loads all clubs from Airtable, generates each club's unique
+                    game submission URL, and saves it to the <strong>Club Game Upload</strong> field.
+                    Run it once — or re-run any time the site URL changes.
+                </p>
+
+                <button class="btn btn-primary" id="previewBtn">Preview URLs</button>
+                <button class="btn btn-primary" id="runBtn" style="display:none; margin-left:12px;">
+                    Write to Airtable
+                </button>
+
+                <div id="previewWrap" style="display:none;">
+                    <table class="preview-table">
+                        <thead><tr><th>Club</th><th>Game Upload URL</th></tr></thead>
+                        <tbody id="previewBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="log" id="log" style="display:none;"></div>
+            </div>
+        </main>
+        <footer><p>&copy; 2026 Referee Scheduling System by Anvil Arts</p></footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="js/airtable-client.js"></script>
+    <script>
+    const BASE_URL = 'https://ref-availabilityform.netlify.app/club-game-submit.html?club=';
+
+    function toSlug(name) {
+        return name.toLowerCase().replace(/\s+/g, '-');
+    }
+
+    function log(msg, cls = '') {
+        const el = document.getElementById('log');
+        el.style.display = 'block';
+        el.innerHTML += `<div class="${cls}">${msg}</div>`;
+        el.scrollTop = el.scrollHeight;
+    }
+
+    let clubs = [];
+
+    document.getElementById('previewBtn').addEventListener('click', async () => {
+        if (!airtableClient) { alert('Airtable client not initialized.'); return; }
+
+        document.getElementById('previewBtn').disabled = true;
+        document.getElementById('previewBtn').textContent = 'Loading…';
+
+        try {
+            const records = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+            clubs = records
+                .map(r => ({ id: r.id, name: r.fields['Club Name'] || r.fields['Name'] || '' }))
+                .filter(c => c.name)
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            const tbody = document.getElementById('previewBody');
+            tbody.innerHTML = clubs.map(c => `
+                <tr>
+                    <td><strong>${c.name}</strong></td>
+                    <td class="url-cell">${BASE_URL}${toSlug(c.name)}</td>
+                </tr>`).join('');
+
+            document.getElementById('previewWrap').style.display = 'block';
+            document.getElementById('runBtn').style.display = 'inline-block';
+            document.getElementById('previewBtn').textContent = 'Preview URLs';
+            document.getElementById('previewBtn').disabled = false;
+        } catch (err) {
+            alert('Failed to load clubs: ' + err.message);
+            document.getElementById('previewBtn').disabled = false;
+            document.getElementById('previewBtn').textContent = 'Preview URLs';
+        }
+    });
+
+    document.getElementById('runBtn').addEventListener('click', async () => {
+        if (clubs.length === 0) { alert('Preview first.'); return; }
+
+        document.getElementById('runBtn').disabled = true;
+        document.getElementById('runBtn').textContent = 'Writing…';
+
+        log('Starting — writing URLs to Clubs table…', 'info');
+
+        let ok = 0, fail = 0;
+        for (const club of clubs) {
+            const url = BASE_URL + toSlug(club.name);
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.CLUBS, club.id, {
+                    'Club Game Upload': url
+                });
+                log(`✓ ${club.name}`, 'ok');
+                ok++;
+            } catch (err) {
+                log(`✗ ${club.name} — ${err.message}`, 'err');
+                fail++;
+            }
+        }
+
+        log(`─── Done: ${ok} updated, ${fail} failed ───`, 'info');
+        document.getElementById('runBtn').disabled = false;
+        document.getElementById('runBtn').textContent = 'Write to Airtable';
+    });
+    </script>
+</body>
+</html>
