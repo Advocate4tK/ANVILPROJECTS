@@ -770,6 +770,7 @@
                     const savedRef = await airtableClient.upsertReferee(refereeRecord);
 
                     // Patch optional fields individually so one bad field can't block the save
+                    const patchWarnings = [];
                     if (savedRef?.id) {
                         for (const [key, val] of [['Certification Level', cert], ['Gender', gender]]) {
                             if (!val) continue;
@@ -777,6 +778,7 @@
                                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, savedRef.id, { [key]: val });
                             } catch(patchErr) {
                                 console.warn(`Could not save ${key}:`, patchErr.message);
+                                patchWarnings.push(key);
                             }
                         }
                     }
@@ -784,7 +786,12 @@
                     if (savedRef?.id) window._foundRefId = savedRef.id;
 
                     msgEl.className = 'form-message success';
-                    msgEl.textContent = '✅ Profile saved! Now fill in your availability below.';
+                    if (patchWarnings.length > 0) {
+                        msgEl.className = 'form-message warning';
+                        msgEl.textContent = `⚠️ Profile mostly saved, but could not save: ${patchWarnings.join(', ')}. Please contact your assignor to update these fields manually.`;
+                    } else {
+                        msgEl.textContent = '✅ Profile saved! Now fill in your availability below.';
+                    }
                     msgEl.style.display = 'block';
 
                     // Remove required from hidden contact fields so they don't block form submit
