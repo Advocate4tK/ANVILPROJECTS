@@ -11,6 +11,12 @@ const config = `const CONFIG = {
         AVAILABILITY: 'Availability'
     },
     AIRTABLE_API_URL: 'https://api.airtable.com/v0',
+    ASSIGNOR_EMAIL: '${process.env.ASSIGNOR_EMAIL}',
+    EMAILJS: {
+        PUBLIC_KEY:  '${process.env.EMAILJS_PUBLIC_KEY}',
+        SERVICE_ID:  '${process.env.EMAILJS_SERVICE_ID}',
+        TEMPLATE_ID: '${process.env.EMAILJS_TEMPLATE_ID}',
+    },
     FORM_SETTINGS: {
         successMessageDuration: 5000,
         redirectAfterSubmit: '',
