@@ -916,6 +916,33 @@
             return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`;
         }
 
+        function getGameDuration(ageGroup) {
+            const num = parseInt((ageGroup || '').match(/\d+/)?.[0]) || 0;
+            if (num <= 8)  return 45;
+            if (num <= 10) return 65;
+            if (num <= 12) return 75;
+            if (num <= 15) return 90;
+            return 100; // U19+
+        }
+
+        function timeToMinutes(t) {
+            if (!t) return null;
+            const clean = t.replace(/\s*(AM|PM)$/i, '').trim();
+            const parts = clean.split(':').map(Number);
+            if (isNaN(parts[0])) return null;
+            return parts[0] * 60 + (parts[1] || 0);
+        }
+
+        function gamesOverlap(gameA, gameB) {
+            if (gameA.fields['Date'] !== gameB.fields['Date']) return false;
+            const startA = timeToMinutes(gameA.fields['Time']);
+            const startB = timeToMinutes(gameB.fields['Time']);
+            if (startA === null || startB === null) return false;
+            const endA = startA + getGameDuration(gameA.fields['Age Group']);
+            const endB = startB + getGameDuration(gameB.fields['Age Group']);
+            return startA < endB && startB < endA;
+        }
+
         // ── Select a game → update ref colors ─────────────────────────────────
         function selectGame(gameId) {
             selectedGame = allGames.find(g => g.id === gameId) || null;
@@ -1135,9 +1162,21 @@
             const fieldSel = document.getElementById(`fieldSel-${gameId}`);
             if (!fieldSel) return;
             if (venueId) {
+                const currentGame = allGames.find(g => g.id === gameId);
+                // Fields booked by other games that overlap this game's time window
+                const takenFieldIds = new Set(
+                    allGames
+                        .filter(g => g.id !== gameId
+                            && g.fields['Field ID']
+                            && gamesOverlap(currentGame, g))
+                        .map(g => String(g.fields['Field ID']))
+                );
                 const fieldsForVenue = allFields.filter(f => f.venueId == venueId);
                 fieldSel.innerHTML = `<option value="">Field…</option>` +
-                    fieldsForVenue.map(f => `<option value="${f.fieldId}">${f.name}</option>`).join('');
+                    fieldsForVenue.map(f => {
+                        const taken = takenFieldIds.has(String(f.fieldId));
+                        return `<option value="${f.fieldId}" ${taken ? 'disabled style="color:#bbb;"' : ''}>${f.name}${taken ? ' — in use' : ''}</option>`;
+                    }).join('');
                 fieldSel.disabled = false;
             } else {
                 fieldSel.innerHTML = `<option value="">Field…</option>`;
