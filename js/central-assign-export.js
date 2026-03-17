@@ -296,12 +296,13 @@ exportBtn.addEventListener('click', () => {
         return;
     }
 
+    // Headers matched exactly to CA template
     const headers = [
-        'Home Team', 'Away Team', 'Duration', 'DurationTime',
-        'Date', 'Time', 'Type', 'Gender', 'Venue', 'FieldID',
-        'League', 'Referee ID', 'AR1 Id', 'AR2 Id', '4th Id',
-        'Assessor Id', 'Diag Sys Ctl', 'Ref Rate', 'AR Rate',
-        '4th Rate', 'Assessor Rate'
+        'Home Team', 'Visiting Team', 'Duration', 'Duration Time',
+        'Game Date', 'Start Time', 'Type (League/Cup/Other)', 'Gender',
+        'Venue', 'Venue Field', 'League', 'Referee Id', 'AR1', 'AR2',
+        '4th', 'Assessor', 'Diag Sys Ctl', 'Referee Rate', 'AR Rate',
+        '4th Rate', 'Assessor Rate', 'External Game Id'
     ];
 
     const rows = selected.map(rec => {
@@ -332,16 +333,17 @@ exportBtn.addEventListener('click', () => {
             DEFAULTS.refRate,
             DEFAULTS.arRate,
             DEFAULTS.fourthRate,
-            DEFAULTS.assessorRate
-        ].join('\t');
+            DEFAULTS.assessorRate,
+            ''  // External Game Id — blank, CA assigns on import
+        ].join(',');
     });
 
-    const content = [headers.join('\t'), ...rows].join('\r\n');
-    const blob = new Blob([content], { type: 'text/plain' });
+    const content = [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([content], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `central-assign-export-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `central-assign-export-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 });
@@ -369,8 +371,10 @@ function formatDate(dateStr) {
 
 function formatDateForExport(dateStr) {
     if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return isNaN(d) ? dateStr : `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [y, m, d] = parts;
+    return `${parseInt(m)}/${parseInt(d)}/${y}`;
 }
 
 function formatTimeForExport(timeStr) {
