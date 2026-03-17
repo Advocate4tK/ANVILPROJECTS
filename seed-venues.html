@@ -59,6 +59,24 @@
                 <div class="summary-box" id="summaryBox"></div>
                 <div class="log" id="log" style="display:none;"></div>
             </div>
+
+            <!-- Fields seeder -->
+            <div class="section-card">
+                <h2 style="color:#0f3460; margin-bottom:6px;">Seed Fields</h2>
+                <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">
+                    Creates individual field records (Field #1, #2, etc.) within each venue.
+                    Currently includes: <strong>Addison Park (Glastonbury)</strong> — Fields 68–72.
+                    Safe to re-run — duplicates are skipped by Field ID.
+                </p>
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="seedFieldsBtn" onclick="runFieldSeed()" style="background:#27ae60;">Seed Fields</button>
+                </div>
+                <div class="progress-bar" id="fieldsProgressBar" style="display:none;">
+                    <div class="progress-fill" id="fieldsProgressFill"></div>
+                </div>
+                <div class="summary-box" id="fieldsSummaryBox"></div>
+                <div class="log" id="fieldsLog" style="display:none;"></div>
+            </div>
         </main>
 
         <footer>
@@ -220,6 +238,77 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Seed Venues';
+            }
+        }
+
+        // ── Fields data ───────────────────────────────────────────────────────
+        const FIELDS_TO_SEED = [
+            // Addison Park (Venue ID 123) — Glastonbury
+            { fieldId: 68, name: 'Field #1', venueId: 123, venueName: 'Addison Park', address: '450 Addison Road', city: 'Glastonbury', state: 'CT', club: 'Glastonbury' },
+            { fieldId: 69, name: 'Field #2', venueId: 123, venueName: 'Addison Park', address: '450 Addison Road', city: 'Glastonbury', state: 'CT', club: 'Glastonbury' },
+            { fieldId: 70, name: 'Field #3', venueId: 123, venueName: 'Addison Park', address: '450 Addison Road', city: 'Glastonbury', state: 'CT', club: 'Glastonbury' },
+            { fieldId: 71, name: 'Field #4', venueId: 123, venueName: 'Addison Park', address: '450 Addison Road', city: 'Glastonbury', state: 'CT', club: 'Glastonbury' },
+            { fieldId: 72, name: 'Field #5', venueId: 123, venueName: 'Addison Park', address: '450 Addison Road', city: 'Glastonbury', state: 'CT', club: 'Glastonbury' },
+        ];
+
+        function flog(msg, type = '') {
+            const el = document.getElementById('fieldsLog');
+            el.style.display = 'block';
+            el.innerHTML += `<div class="${type}">${msg}</div>`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        async function runFieldSeed() {
+            const btn = document.getElementById('seedFieldsBtn');
+            btn.disabled = true;
+            btn.textContent = 'Seeding…';
+            document.getElementById('fieldsProgressBar').style.display = 'block';
+            document.getElementById('fieldsLog').innerHTML = '';
+
+            let created = 0, skipped = 0, errors = 0;
+            const total = FIELDS_TO_SEED.length;
+
+            try {
+                for (let i = 0; i < total; i++) {
+                    const f = FIELDS_TO_SEED[i];
+                    try {
+                        const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, {
+                            filterByFormula: `{Field ID} = ${f.fieldId}`,
+                            maxRecords: 1
+                        });
+                        if (existing.length > 0) {
+                            flog(`— [${f.fieldId}] ${f.name} at ${f.venueName} already exists — skipped`, 'info');
+                            skipped++;
+                        } else {
+                            await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.FIELDS, {
+                                'Field ID':  f.fieldId,
+                                'Field Name': f.name,
+                                'Venue ID':  f.venueId,
+                                'Address':   f.address,
+                                'City':      f.city,
+                                'State':     f.state,
+                            });
+                            flog(`<span class="ok">+ Created: [${f.fieldId}] ${f.name} — ${f.venueName}, ${f.city}</span>`);
+                            created++;
+                        }
+                    } catch(e) {
+                        flog(`<span class="err">✗ [${f.fieldId}] ${f.name}: ${e.message}</span>`);
+                        errors++;
+                    }
+                    document.getElementById('fieldsProgressFill').style.width = (((i + 1) / total) * 100) + '%';
+                    await delay(150);
+                }
+
+                flog('Done!', 'info');
+                const summary = document.getElementById('fieldsSummaryBox');
+                summary.style.display = 'block';
+                summary.innerHTML = `<strong style="color:#27ae60;">Fields seed complete</strong><br>
+                    <span style="font-size:0.88rem;">${created} created &nbsp;·&nbsp; ${skipped} skipped &nbsp;·&nbsp; ${errors} error${errors !== 1 ? 's' : ''}</span>`;
+            } catch(e) {
+                flog('Fatal error: ' + e.message, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Seed Fields';
             }
         }
     </script>
