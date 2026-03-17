@@ -4,7 +4,8 @@
  */
 
 let parsedRows = [];
-let clubLeagueMap = {}; // club name (lowercase) → league string
+let clubLeagueMap = {}; // club name (lowercase) → league number
+let fieldLookup   = {}; // "venuename|fieldname" (lowercase) → Airtable Field record ID
 
 // ── CSV field name → Airtable field name mapping ──────────────────────────────
 const FIELD_MAP = {
@@ -146,18 +147,45 @@ uploadBtn.addEventListener('click', async () => {
     let skipCount = 0;
     const total = parsedRows.length;
 
-    // Load clubs to build Club → League auto-fill map
-    progressText.textContent = 'Loading club data...';
+    // Load clubs and fields in parallel for auto-fill lookups
+    progressText.textContent = 'Loading club and field data...';
     clubLeagueMap = {};
+    fieldLookup   = {};
     try {
-        const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+        const [clubs, venues, fieldRecs] = await Promise.all([
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,  { maxRecords: 200 }),
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }),
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
+        ]);
+
+        // Club name → league number
         clubs.forEach(c => {
             const name   = (c.fields['Club Name'] || c.fields['Name'] || '').toLowerCase();
-            const league = c.fields['League'] || 'Southeast District (21)';
+            const league = c.fields['League'] || 21;
             if (name) clubLeagueMap[name] = league;
         });
+
+        // Venue record ID → venue name
+        const venueNames = {};
+        venues.forEach(v => {
+            venueNames[v.id] = (v.fields['Venue Name'] || '').toLowerCase();
+        });
+
+        // "venuename|fieldname" → Field record ID
+        fieldRecs.forEach(f => {
+            const fieldName  = (f.fields['Field Name'] || '').toLowerCase();
+            const linkedVenue = f.fields['Venue'];
+            const venueName  = (Array.isArray(linkedVenue) && linkedVenue.length > 0)
+                ? (venueNames[linkedVenue[0]] || '')
+                : '';
+            if (fieldName) {
+                // Index by venue+field and by field alone (fallback)
+                if (venueName) fieldLookup[`${venueName}|${fieldName}`] = f.id;
+                fieldLookup[`|${fieldName}`] = f.id; // field-only fallback
+            }
+        });
     } catch (err) {
-        console.warn('Could not load clubs for league auto-fill:', err);
+        console.warn('Could not load lookup data:', err);
     }
 
     // Fetch existing games to detect duplicates
@@ -252,11 +280,18 @@ function buildFields(row) {
     // Auto-fill League from Club column if League is blank
     if (!fields['League'] && row['Club'] && row['Club'].trim() !== '') {
         const clubKey = row['Club'].trim().toLowerCase();
-        // Try exact match first, then partial match
         const league = clubLeagueMap[clubKey]
             || Object.entries(clubLeagueMap).find(([k]) => k.includes(clubKey) || clubKey.includes(k))?.[1]
-            || 'Southeast District (21)';
+            || 21;
         fields['League'] = league;
+    }
+
+    // Resolve Field linked record from Venue + Field columns
+    const venueCol = (row['Venue'] || '').trim().toLowerCase();
+    const fieldCol = (row['Field'] || '').trim().toLowerCase();
+    if (fieldCol) {
+        const fieldId = fieldLookup[`${venueCol}|${fieldCol}`] || fieldLookup[`|${fieldCol}`];
+        if (fieldId) fields['Field'] = [fieldId];
     }
 
     return fields;
