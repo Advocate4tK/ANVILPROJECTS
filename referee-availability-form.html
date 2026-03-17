@@ -629,13 +629,12 @@
                     const lastName  = document.getElementById('refereeLastName').value.trim();
                     const birthDate = document.getElementById('refereeBirthDate').value;
                     const gender = document.getElementById('refereeGender').value;
+                    // Core fields — known-safe types
                     const refereeRecord = {
-                        'Name':                `${firstName} ${lastName}`,
-                        'Email':               document.getElementById('refereeEmail').value.trim(),
-                        'Phone':               phone,
-                        'Years Reffing':       years,
-                        'Certification Level': cert,
-                        ...(gender && { 'Gender': gender }),
+                        'Name':          `${firstName} ${lastName}`,
+                        'Email':         document.getElementById('refereeEmail').value.trim(),
+                        'Phone':         phone,
+                        'Years Reffing': years,
                     };
                     if (birthDate) {
                         refereeRecord['Date of Birth'] = birthDate;
@@ -651,6 +650,18 @@
                     if (guardianEmail) refereeRecord['Guardian Email'] = guardianEmail;
 
                     const savedRef = await airtableClient.upsertReferee(refereeRecord);
+
+                    // Patch optional fields individually so one bad field can't block the save
+                    if (savedRef?.id) {
+                        for (const [key, val] of [['Certification Level', cert], ['Gender', gender]]) {
+                            if (!val) continue;
+                            try {
+                                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, savedRef.id, { [key]: val });
+                            } catch(patchErr) {
+                                console.warn(`Could not save ${key}:`, patchErr.message);
+                            }
+                        }
+                    }
                     // Store ID so form submit can update Club Preference
                     if (savedRef?.id) window._foundRefId = savedRef.id;
 
