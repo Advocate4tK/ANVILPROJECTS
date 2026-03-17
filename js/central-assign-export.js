@@ -100,6 +100,12 @@ function applyWeekPicker() {
 document.getElementById('pickMonth').addEventListener('change', applyWeekPicker);
 document.getElementById('pickWeek').addEventListener('change',  applyWeekPicker);
 
+// Auto-fill Date To when Date From is picked and Date To is empty
+document.getElementById('dateFrom').addEventListener('change', function() {
+    const dateTo = document.getElementById('dateTo');
+    if (!dateTo.value) dateTo.value = this.value;
+});
+
 // ── Load clubs into checkboxes ────────────────────────────────────────────────
 async function loadClubCheckboxes() {
     if (!airtableClient) return;
