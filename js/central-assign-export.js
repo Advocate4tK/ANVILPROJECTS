@@ -27,6 +27,7 @@ const DURATION_BY_AGE = {
     'U12': { duration: '2 x 35', durationTime: 75  },  // 70 + 5
     'U13': { duration: '2 x 40', durationTime: 90  },  // 80 + 10  (comp — same as U15)
     'U15': { duration: '2 x 40', durationTime: 90  },  // 80 + 10
+    'U16': { duration: '2 x 40', durationTime: 90  },  // 80 + 10  (same as U15)
     'U19': { duration: '2 x 45', durationTime: 100 },  // 90 + 10
 };
 
