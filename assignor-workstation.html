@@ -649,7 +649,13 @@
                 allRefs   = refs;
                 allAvail  = avail;
                 allVenues = venues
-                    .map(v => ({ id: v.fields['Venue ID'], name: v.fields['Venue Name'] }))
+                    .map(v => {
+                        const linkedClubs = v.fields['Clubs'] || [];
+                        const clubNames = Array.isArray(linkedClubs)
+                            ? linkedClubs.map(id => clubLookup[id]).filter(Boolean).map(c => c.toLowerCase())
+                            : [];
+                        return { id: v.fields['Venue ID'], name: v.fields['Venue Name'], clubs: clubNames };
+                    })
                     .filter(v => v.id && v.name)
                     .sort((a, b) => a.name.localeCompare(b.name));
                 allFields = fields
@@ -795,7 +801,11 @@
                     ${(() => {
                         const curVenueId = f['Venue ID'] || '';
                         const curFieldId = f['Field ID'] || '';
-                        const venueOpts = allVenues.map(v =>
+                        const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
+                        const venuesFiltered = allVenues.filter(v =>
+                            !gameClubLower || v.clubs.length === 0 || v.clubs.includes(gameClubLower)
+                        );
+                        const venueOpts = venuesFiltered.map(v =>
                             `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
                         ).join('');
                         const fieldOpts = allFields
