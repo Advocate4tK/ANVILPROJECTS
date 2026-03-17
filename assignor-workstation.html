@@ -321,6 +321,10 @@
                                 <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">Date:</label>
                                 <input type="date" id="dateFilter" style="flex:1; font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
                             </div>
+                            <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px;">
+                                <input type="checkbox" id="showAllRefs" onchange="renderRefs(document.getElementById('refSearch').value.toLowerCase())">
+                                <label for="showAllRefs" style="font-size:0.78rem; color:#555; cursor:pointer;">Show all refs (ignore club preference)</label>
+                            </div>
                             <div style="text-align:right; margin-top:4px; padding-bottom:8px;">
                                 <button onclick="clearFilters()" style="background:#eee; color:#555; border:1px solid #ccc; border-radius:6px; padding:6px 14px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; margin-right:6px;">Clear</button>
                                 <button onclick="applyFilters()" style="background:#0f3460; color:#fff; border:none; border-radius:6px; padding:6px 20px; font-size:0.85rem; font-weight:700; cursor:pointer; font-family:inherit;">Go</button>
@@ -493,6 +497,7 @@
             document.getElementById('timeFilter').value = '';
             document.getElementById('prefFilter').value = '';
             document.getElementById('dateFilter').value = '';
+            document.getElementById('showAllRefs').checked = false;
             renderRefs('');
         }
 
@@ -876,7 +881,14 @@
             const gameDate  = selectedGame ? selectedGame.fields['Date'] : null;
             const gameTime  = selectedGame ? (selectedGame.fields['Time'] || '') : null;
             const gameDT    = gameDate ? `${gameDate}|${gameTime}` : null;
-            const gameClub  = selectedGame ? (resolveGameClub(selectedGame.fields) || '').toLowerCase() : '';
+            const gameClub    = selectedGame ? (resolveGameClub(selectedGame.fields) || '').toLowerCase() : '';
+            const showAllRefs = document.getElementById('showAllRefs')?.checked ?? false;
+            // Build the set of clubs currently in focus (selected game OR club pill filter)
+            const focusClubs  = gameClub
+                ? [gameClub]
+                : (selectedClubs.size > 0 && selectedClubs.size < CLUBS_LIST.length)
+                    ? [...selectedClubs].map(c => c.toLowerCase())
+                    : [];
             const prefClub    = document.getElementById('prefFilter').value;
             const yearsFilter = document.getElementById('yearsFilter').value;
             const ageFilter   = document.getElementById('ageFilter').value;
@@ -887,11 +899,11 @@
                 const name  = (r.fields['Name']  || '').toLowerCase();
                 const email = (r.fields['Email'] || '').toLowerCase();
                 if (query && !name.includes(query) && !email.includes(query)) return false;
-                // Club preference gate: if a game is selected and the ref has preferences,
-                // only show them if one of their preferences matches the game's club.
-                if (gameClub) {
+                // Club preference gate: hide refs whose preferences don't include any focused club.
+                // Refs with no preference set are always shown (they work anywhere).
+                if (!showAllRefs && focusClubs.length > 0) {
                     const prefs = parsePreferences(r.fields['Club Preference']);
-                    if (prefs.length > 0 && !prefs.some(p => p.toLowerCase() === gameClub)) return false;
+                    if (prefs.length > 0 && !prefs.some(p => focusClubs.includes(p.toLowerCase()))) return false;
                 }
                 if (yearsFilter !== 'any') {
                     const yrs = parseInt(r.fields['Years Reffing']) || 0;
