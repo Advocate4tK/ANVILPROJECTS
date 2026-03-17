@@ -8,7 +8,8 @@ const config = `const CONFIG = {
         CLUBS: 'Clubs',
         FIELDS: 'Fields',
         GAMES: 'Games',
-        AVAILABILITY: 'Availability'
+        AVAILABILITY: 'Availability',
+        VENUES: 'Venues'
     },
     AIRTABLE_API_URL: 'https://api.airtable.com/v0',
     ASSIGNOR_EMAIL: '${process.env.ASSIGNOR_EMAIL}',

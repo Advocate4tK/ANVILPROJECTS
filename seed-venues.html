@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed Venues</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .log { background:#1a1a2e; color:#e0e0e0; border-radius:8px; padding:16px; font-family:monospace; font-size:0.82rem; max-height:500px; overflow-y:auto; margin-top:16px; }
+        .log .ok   { color:#27ae60; }
+        .log .err  { color:#e74c3c; }
+        .log .info { color:#74b9ff; }
+        .log .warn { color:#f39c12; }
+        .progress-bar { background:#eee; border-radius:6px; height:10px; margin:10px 0; }
+        .progress-fill { background:#0f3460; height:10px; border-radius:6px; transition:width 0.3s; width:0%; }
+        .section-card { background:white; border-radius:12px; padding:24px; box-shadow:0 4px 15px rgba(0,0,0,0.07); margin-bottom:20px; border-top:4px solid #e94560; }
+        .summary-box { background:#f0fff4; border:1px solid #27ae60; border-radius:8px; padding:14px; margin-top:14px; display:none; }
+        .notice-box { background:#fff8e1; border:1px solid #f39c12; border-radius:8px; padding:14px; margin-bottom:20px; font-size:0.88rem; line-height:1.6; }
+        .notice-box code { background:#ffe082; padding:1px 5px; border-radius:3px; font-size:0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Seed Venues</h1>
+            <p class="subtitle">Load all CT venue records into the Airtable Venues table</p>
+        </header>
+
+        <main>
+            <div style="margin-bottom:20px;">
+                <a href="admin.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Back to Dashboard</a>
+            </div>
+
+            <div class="notice-box">
+                <strong>Before running:</strong> Make sure your <code>config.js</code> includes
+                <code>VENUES: 'Venues'</code> inside <code>CONFIG.AIRTABLE_TABLES</code>. Example:<br>
+                <code>AIRTABLE_TABLES: { ..., VENUES: 'Venues' }</code>
+            </div>
+
+            <div class="section-card">
+                <h2 style="color:#0f3460; margin-bottom:6px;">50 CT Venues</h2>
+                <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">
+                    Creates venue records (Venue ID, Venue Name, Address, City, State) for all known
+                    CT fields used in the scheduling system. Venues that already exist
+                    (matched by Venue ID) are skipped automatically.
+                </p>
+                <p style="color:#e74c3c; font-size:0.85rem; margin-bottom:20px;">
+                    This will add records to your live Airtable base. Safe to re-run — duplicates are skipped.
+                </p>
+
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="seedBtn" onclick="runSeed()" style="background:#27ae60;">Seed Venues</button>
+                </div>
+
+                <div class="progress-bar" id="progressBar" style="display:none;">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+
+                <div class="summary-box" id="summaryBox"></div>
+                <div class="log" id="log" style="display:none;"></div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Referee Scheduling System by Anvil Arts</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="js/airtable-client.js"></script>
+    <script src="js/admin-auth.js"></script>
+    <script>
+        checkAdminAccess();
+
+        // NOTE: CONFIG.AIRTABLE_TABLES.VENUES must equal 'Venues'
+        // Add to config.js:  VENUES: 'Venues'
+
+        const VENUES = [
+            { id: 123,  name: 'Addison Park',                        address: '450 Addison Road',                    city: 'Glastonbury',    state: 'CT' },
+            { id: 549,  name: 'Bartlem Park',                        address: '500 South Main Street',               city: 'Cheshire',       state: 'CT' },
+            { id: 845,  name: 'Blackwell Field (Canterbury)',        address: '194 Wauregan Road',                   city: 'Canterbury',     state: 'CT' },
+            { id: 391,  name: 'Blackledge Field',                    address: '200 West Road',                       city: 'Manchester',     state: 'CT' },
+            { id: 1071, name: 'Buckingham Park',                     address: '1320 Manchester Road',                city: 'Glastonbury',    state: 'CT' },
+            { id: 677,  name: 'Burnt Hill Park',                     address: '185 East Street',                     city: 'Hebron',         state: 'CT' },
+            { id: 907,  name: 'Cheshire High School',                address: '625 South Main Street',               city: 'Cheshire',       state: 'CT' },
+            { id: 352,  name: 'Coventry Fields',                     address: '78 Ripley Hill Road',                 city: 'Coventry',       state: 'CT' },
+            { id: 383,  name: 'Crandall Park',                       address: 'Cider Mill Road',                     city: 'Tolland',        state: 'CT' },
+            { id: 1143, name: 'CT Sportsplex',                       address: '214 Foran Avenue',                    city: 'North Branford', state: 'CT' },
+            { id: 488,  name: 'Falcon Field (Meriden)',              address: '1229 North Broad Street',             city: 'Meriden',        state: 'CT' },
+            { id: 1082, name: 'Gideon Welles School',                address: '5129 Nausuc Road',                    city: 'Glastonbury',    state: 'CT' },
+            { id: 567,  name: 'Glastonbury High School',             address: '330 Hubbard Street',                  city: 'Glastonbury',    state: 'CT' },
+            { id: 967,  name: 'Griswold High School',                address: '267 Slater Avenue',                   city: 'Griswold',       state: 'CT' },
+            { id: 917,  name: 'Griswold Soccer Complex',             address: '211 Sheldon Road',                    city: 'Griswold',       state: 'CT' },
+            { id: 510,  name: 'Griswold Town Garage',                address: '1170 Voluntown Road',                 city: 'Griswold',       state: 'CT' },
+            { id: 645,  name: 'Abraham Avenue School',               address: '1363 Hebron Avenue',                  city: 'Glastonbury',    state: 'CT' },
+            { id: 569,  name: 'Heron Cove',                          address: '125 South River Road',                city: 'Tolland',        state: 'CT' },
+            { id: 314,  name: 'Irish American Hibernian',            address: '311 River Road',                      city: 'Willington',     state: 'CT' },
+            { id: 1093, name: 'Knox Lane Fields',                    address: 'Knox Lane',                           city: 'Glastonbury',    state: 'CT' },
+            { id: 368,  name: 'Lebanon Elementary School',           address: '478 Exeter Road',                     city: 'Lebanon',        state: 'CT' },
+            { id: 369,  name: 'Lebanon Lions Field',                 address: '122 Mack Road',                       city: 'Lebanon',        state: 'CT' },
+            { id: 244,  name: 'Lebanon Middle School',               address: '862 Exeter Road',                     city: 'Lebanon',        state: 'CT' },
+            { id: 1037, name: 'Ledyard High School',                 address: '1593 Norwich-New London Turnpike',    city: 'Uncasville',     state: 'CT' },
+            { id: 395,  name: 'Lions Club Fields (Mansfield)',       address: '220 Warrenville Road',                city: 'Mansfield',      state: 'CT' },
+            { id: 952,  name: 'Long Hill Field',                     address: '31 Long Hill Road',                   city: 'Andover',        state: 'CT' },
+            { id: 459,  name: 'Loomis Chaffee Fields',               address: '4 Batchelder Road',                   city: 'Windsor',        state: 'CT' },
+            { id: 370,  name: 'Lyman Memorial High School',          address: '917 Exeter Road',                     city: 'Lebanon',        state: 'CT' },
+            { id: 1036, name: 'Maloney High School',                 address: '121 Gravel Street',                   city: 'Meriden',        state: 'CT' },
+            { id: 400,  name: 'Mansfield Middle School',             address: '205 Spring Hill Road',                city: 'Mansfield',      state: 'CT' },
+            { id: 899,  name: 'Manship Park (Canterbury)',           address: '50 Lovell Lane',                      city: 'Canterbury',     state: 'CT' },
+            { id: 459,  name: 'Miller Richardson Park',              address: '200 Bliss Street',                    city: 'Coventry',       state: 'CT' },
+            { id: 1128, name: 'Municipal Field',                     address: '1 Plains Road',                       city: 'Moodus',         state: 'CT' },
+            { id: 504,  name: 'Nathan Hale Middle School',           address: '176 Strawberry Hill Avenue',          city: 'Norwalk',        state: 'CT' },
+            { id: 867,  name: 'Nathan Hale-Ray Middle School',       address: '73 Clark Gates Road',                 city: 'Moodus',         state: 'CT' },
+            { id: 417,  name: 'Nayaug School',                       address: '222 Old Hadds Lane',                  city: 'Glastonbury',    state: 'CT' },
+            { id: 421,  name: 'Oakwood Soccer Park',                 address: '521 Glastonbury Turnpike',            city: 'Portland',       state: 'CT' },
+            { id: 625,  name: 'Portland Recreational Complex',       address: 'Intersection of Rt 17 and Strickland Street', city: 'Portland', state: 'CT' },
+            { id: 97,   name: 'Quinnipiac Recreational Park',        address: 'Quinnipiac Park',                     city: 'Cheshire',       state: 'CT' },
+            { id: 296,  name: 'River Road Athletic Complex',         address: '311 River Road',                      city: 'Willington',     state: 'CT' },
+            { id: 506,  name: 'Riverfront Park (Glastonbury)',       address: 'Welles Street',                       city: 'Glastonbury',    state: 'CT' },
+            { id: 1021, name: 'Smith Middle School',                 address: '214 Addison Road',                    city: 'Glastonbury',    state: 'CT' },
+            { id: 865,  name: 'Star Hill Family Athletic Center',    address: '100 Gerber Road',                     city: 'Tolland',        state: 'CT' },
+            { id: 933,  name: 'Taugwank Field (Stonington)',         address: '17-21 Taugwank Road',                 city: 'Stonington',     state: 'CT' },
+            { id: 1135, name: 'The Forge',                           address: '48 Randolph Road',                    city: 'Middletown',     state: 'CT' },
+            { id: 763,  name: 'Tolland High School',                 address: '1 Eagle Hill',                        city: 'Tolland',        state: 'CT' },
+            { id: 1077, name: 'Vale Sports Club',                    address: '1260 Newfield Street',                city: 'Middletown',     state: 'CT' },
+            { id: 576,  name: "Veteran's Park (Hebron)",             address: '20 Wall Street',                      city: 'Hebron',         state: 'CT' },
+            { id: 1047, name: 'Ward Road Memorial Field',            address: '180 West Road',                       city: 'Marlborough',    state: 'CT' },
+            { id: 810,  name: 'Westover Athletic Complex',           address: 'Bloomingdale Road',                   city: 'Quaker Hill',    state: 'CT' },
+            { id: 984,  name: 'Xavier High School',                  address: '101 Randolph Road',                   city: 'Middletown',     state: 'CT' },
+        ];
+
+        function log(msg, type = '') {
+            const el = document.getElementById('log');
+            el.style.display = 'block';
+            el.innerHTML += `<div class="${type}">${msg}</div>`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function setProgress(pct) {
+            document.getElementById('progressFill').style.width = pct + '%';
+        }
+
+        function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        async function runSeed() {
+            const btn = document.getElementById('seedBtn');
+            btn.disabled = true;
+            btn.textContent = 'Seeding…';
+            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('log').innerHTML = '';
+            document.getElementById('summaryBox').style.display = 'none';
+
+            let created = 0;
+            let skipped = 0;
+            let errors  = 0;
+
+            // Track IDs already processed in this run to catch in-list duplicates
+            const seenIds = new Set();
+
+            try {
+                const total = VENUES.length;
+
+                for (let i = 0; i < total; i++) {
+                    const v = VENUES[i];
+
+                    // Deduplicate within the list itself (e.g. Venue ID 459 appears twice)
+                    if (seenIds.has(v.id)) {
+                        log(`  [WARN] Venue ID ${v.id} ("${v.name}") is a duplicate in the seed list — skipping`, 'warn');
+                        skipped++;
+                        setProgress(((i + 1) / total) * 100);
+                        continue;
+                    }
+                    seenIds.add(v.id);
+
+                    // Check whether this Venue ID already exists in Airtable
+                    try {
+                        const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, {
+                            filterByFormula: `{Venue ID} = ${v.id}`,
+                            maxRecords: 1,
+                        });
+
+                        if (existing && existing.length > 0) {
+                            log(`  — Skipped (already exists): [${v.id}] ${v.name}`, 'info');
+                            skipped++;
+                        } else {
+                            await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.VENUES, {
+                                'Venue ID':   v.id,
+                                'Venue Name': v.name,
+                                'Address':    v.address,
+                                'City':       v.city,
+                                'State':      v.state,
+                            });
+                            log(`  + Created: [${v.id}] ${v.name} — ${v.city}, ${v.state}`, 'ok');
+                            created++;
+                        }
+                    } catch(e) {
+                        log(`  x Error on [${v.id}] ${v.name}: ${e.message}`, 'err');
+                        errors++;
+                    }
+
+                    setProgress(((i + 1) / total) * 100);
+                    await delay(150);
+                }
+
+                log('Done!', 'info');
+
+                const summary = document.getElementById('summaryBox');
+                summary.style.display = 'block';
+                summary.innerHTML = `
+                    <strong style="color:#27ae60;">Seed complete</strong><br>
+                    <span style="font-size:0.88rem;">
+                        ${created} created &nbsp;·&nbsp;
+                        ${skipped} skipped &nbsp;·&nbsp;
+                        ${errors} error${errors !== 1 ? 's' : ''}
+                    </span>`;
+
+            } catch(e) {
+                log('Fatal error: ' + e.message, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Seed Venues';
+            }
+        }
+    </script>
+</body>
+</html>
