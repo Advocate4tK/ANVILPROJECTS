@@ -49,9 +49,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     refUpdates['Club Preference'] = locations; // array for multi-select
                 }
 
-                // Save Certification Level if present
-                const certEl = document.getElementById('certificationLevel');
-                if (certEl?.value) refUpdates['Certification Level'] = certEl.value;
 
                 if (Object.keys(refUpdates).length > 0) {
                     try {
@@ -70,10 +67,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                     { ...refUpdates, 'Club Preference': locations.join(', ') }
                                 );
                             } catch(retryErr) {
-                                showMessage('error', `Could not save location preferences: ${retryErr.message}. Please try again.`);
-                                submitBtn.disabled = false;
-                                submitBtn.innerHTML = originalText;
-                                return;
+                                // Non-blocking — log but don't prevent availability from saving
+                                console.warn('Could not save Club Preference:', retryErr.message);
                             }
                         } else {
                             console.warn('Could not update referee profile:', updateErr.message);
@@ -159,6 +154,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const locations = getCheckboxValues('locations');
         if (locations.length === 0) {
             showMessage('error', 'Please select at least one preferred location.');
+            return false;
+        }
+
+        const ageGroups = getCheckboxValues('ageGroups');
+        if (ageGroups.length === 0) {
+            showMessage('error', 'Please select at least one preferred age group.');
             return false;
         }
 
