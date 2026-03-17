@@ -9,8 +9,6 @@
 
 // ── Default values for Central Assign fields ──────────────────────────────────
 const DEFAULTS = {
-    duration:     '2 x 40',
-    durationTime: 90,
     type:         'League',
     gender:       'F',
     league:       '',
@@ -19,6 +17,15 @@ const DEFAULTS = {
     arRate:       25,
     fourthRate:   0,
     assessorRate: 0
+};
+
+// ── Period lengths by age group ────────────────────────────────────────────────
+const DURATION_BY_AGE = {
+    'U8':  { duration: '2 x 20', durationTime: 40 },
+    'U10': { duration: '2 x 30', durationTime: 60 },
+    'U12': { duration: '2 x 35', durationTime: 70 },
+    'U15': { duration: '2 x 40', durationTime: 80 },
+    'U19': { duration: '2 x 45', durationTime: 90 },
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -339,11 +346,15 @@ exportBtn.addEventListener('click', () => {
         // Map Airtable Gender field to CA format (M/F), fall back to default
         const gameGender = f['Gender'] === 'Male' ? 'M' : f['Gender'] === 'Female' ? 'F' : DEFAULTS.gender;
 
+        // Period length by age group
+        const ageGroup = f['Age Group'] || '';
+        const { duration, durationTime } = DURATION_BY_AGE[ageGroup] || { duration: '2 x 40', durationTime: 80 };
+
         return [
             f['Home Team']  || '',
             f['Away Team']  || '',
-            DEFAULTS.duration,
-            DEFAULTS.durationTime,
+            duration,
+            durationTime,
             formatDateForExport(f['Date'] || ''),
             formatTimeForExport(f['Time'] || ''),
             DEFAULTS.type,
