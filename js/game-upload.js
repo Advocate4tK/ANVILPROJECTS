@@ -12,9 +12,10 @@ const FIELD_MAP = {
     'Home Team':      'Home Team',
     'Away Team':      'Away Team',
     'Age Group':      'Age Group',
+    'Gender':         'Gender',
+    'League':         'League',
     'Division':       'Division',
     'Game Status':    'Game Status',
-    'Payment Status': 'Payment Status',
     'Notes':          'Notes'
 };
 // Note: 'Club' and 'Field' are linked record fields in Airtable and must be linked manually.
