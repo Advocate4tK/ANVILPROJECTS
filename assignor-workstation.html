@@ -105,6 +105,30 @@
         }
         .ref-card.throb { animation: throb 1.4s ease-in-out infinite; }
 
+        /* ── Game edit panel ── */
+        .game-edit-panel {
+            margin-top: 10px; padding: 10px 12px; background: #f7f9fc;
+            border: 1px solid #dde3ed; border-radius: 8px; font-size: 0.82rem;
+        }
+        .game-edit-panel label { font-size: 0.75rem; font-weight: 700; color: #555; display: block; margin-bottom: 3px; }
+        .game-edit-panel input[type="date"],
+        .game-edit-panel input[type="time"] {
+            padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px;
+            font-size: 0.82rem; font-family: inherit;
+        }
+        .edit-save-btn {
+            background: #0f3460; color: white; border: none; border-radius: 6px;
+            padding: 6px 14px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit;
+        }
+        .edit-cancel-game-btn {
+            background: #e74c3c; color: white; border: none; border-radius: 6px;
+            padding: 6px 14px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit;
+        }
+        .edit-close-btn {
+            background: #eee; color: #555; border: 1px solid #ccc; border-radius: 6px;
+            padding: 6px 10px; font-size: 0.82rem; cursor: pointer; font-family: inherit;
+        }
+
         /* ── Field display dropdown ── */
         .field-toggle-wrap { position:relative; margin-bottom:8px; }
         .field-toggle-btn {
@@ -820,9 +844,10 @@
                             <span class="game-title">${home} vs ${away}</span>
                             <span class="game-meta">&nbsp;— ${date} ${time ? '@ ' + formatTime(time) : ''}</span>
                         </div>
-                        <div style="display:flex; gap:6px;">
+                        <div style="display:flex; gap:6px; align-items:center;">
                             ${age  ? `<span class="game-badge">${age}</span>`  : ''}
                             ${club ? `<span class="game-badge" style="background:#f0f0f0;">${club}</span>` : ''}
+                            <button onclick="event.stopPropagation(); toggleGameEdit('${gid}')" title="Edit game" style="background:none; border:1px solid #ccc; border-radius:6px; padding:2px 7px; font-size:0.78rem; cursor:pointer; color:#555; line-height:1.4;">✏️</button>
                         </div>
                     </div>
                     ${(() => {
@@ -871,6 +896,23 @@
                             </select>
                         </div>`;
                     })()}
+                    <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
+                        <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px;">
+                            <div>
+                                <label>Date</label>
+                                <input type="date" id="editDate-${gid}" value="${f['Date'] || ''}">
+                            </div>
+                            <div>
+                                <label>Time</label>
+                                <input type="time" id="editTime-${gid}" value="${f['Time'] || ''}">
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
+                            <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
+                            <button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>
+                        </div>
+                    </div>
                 </div>`;
             });
 
@@ -1331,6 +1373,83 @@
 
             } catch(e) {
                 alert(`Could not unassign referee: ${e.message}`);
+            }
+        }
+
+        // ── Edit game (date / time / cancel) ─────────────────────────────────
+        function toggleGameEdit(gameId) {
+            const panel = document.getElementById(`editPanel-${gameId}`);
+            if (!panel) return;
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function saveGameEdit(gameId) {
+            const newDate = document.getElementById(`editDate-${gameId}`)?.value || '';
+            const newTime = document.getElementById(`editTime-${gameId}`)?.value || '';
+
+            if (!newDate) { alert('Please enter a date.'); return; }
+
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                    'Date': newDate,
+                    'Time': newTime || null
+                });
+
+                // Update local state
+                const game = allGames.find(g => g.id === gameId);
+                if (game) {
+                    const oldDt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
+                    const newDt = `${newDate}|${newTime}`;
+                    // Re-key assignedAt for all refs on this game
+                    ['Center Referee','AR 1','AR 2'].forEach(pos => {
+                        const linked = game.fields[pos] || [];
+                        linked.forEach(rid => {
+                            if (assignedAt[rid]) {
+                                const gameSet = assignedAt[rid].get(oldDt);
+                                if (gameSet) {
+                                    gameSet.delete(gameId);
+                                    if (!assignedAt[rid].has(newDt)) assignedAt[rid].set(newDt, new Set());
+                                    assignedAt[rid].get(newDt).add(gameId);
+                                }
+                            }
+                        });
+                    });
+                    game.fields['Date'] = newDate;
+                    game.fields['Time'] = newTime || '';
+                }
+
+                toggleGameEdit(gameId);
+                renderGames();
+                renderRefs(document.getElementById('refSearch').value.toLowerCase());
+
+            } catch(e) {
+                alert(`Could not save game: ${e.message}`);
+            }
+        }
+
+        async function cancelGame(gameId, label) {
+            if (!confirm(`Cancel "${label}"?\n\nThis will permanently delete the game and cannot be undone.`)) return;
+            try {
+                await airtableClient.deleteRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId);
+
+                // Remove from local state
+                const game = allGames.find(g => g.id === gameId);
+                if (game) {
+                    const dt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
+                    ['Center Referee','AR 1','AR 2'].forEach(pos => {
+                        (game.fields[pos] || []).forEach(rid => {
+                            assignedAt[rid]?.get(dt)?.delete(gameId);
+                        });
+                    });
+                }
+                allGames = allGames.filter(g => g.id !== gameId);
+                if (selectedGame?.id === gameId) selectedGame = null;
+
+                renderGames();
+                renderRefs(document.getElementById('refSearch').value.toLowerCase());
+
+            } catch(e) {
+                alert(`Could not cancel game: ${e.message}`);
             }
         }
     </script>
