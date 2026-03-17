@@ -4,23 +4,8 @@
  * formatted for Central Assign import.
  */
 
-// ── Venue ID Lookup ────────────────────────────────────────────────────────────
-// Maps our venue/field names to Central Assign venue IDs
-// Add more as you collect them from Central Assign screenshots
-const VENUE_LOOKUP = {
-    // Griswold
-    'Blackwell Field':              845,
-    'Blackwell Field(Canterbury)':  845,
-    'Griswold High School':         967,
-    'Griswold Soccer Complex':      917,
-    'Griswold Town Garage':         510,
-    'Manship Park':                 899,
-    'Manship Park(Canterbury)':     899,
-
-    // East Haddam
-    'Nathan Hale Middle School':    504,
-    'Nathan Hale-Ray Middle School': 867
-};
+// VENUE_LOOKUP is no longer hardcoded — CA venue IDs are read directly
+// from the Airtable Venues table (Venue ID field) at load time.
 
 // ── Default values for Central Assign fields ──────────────────────────────────
 const DEFAULTS = {
@@ -51,8 +36,9 @@ const progressBar    = document.getElementById('progressBar');
 const progressText   = document.getElementById('progressText');
 
 let loadedGames = [];
-let refIdLookup = {};     // Airtable record ID → Central Assign numeric ID
-let venueNameLookup = {}; // Airtable venue record ID → venue name
+let refIdLookup  = {}; // Airtable ref record ID  → Central Assign numeric ID
+let venueCAId    = {}; // Airtable venue record ID → Central Assign venue ID (number)
+let venueNameMap = {}; // Airtable venue record ID → Venue Name (for display)
 
 // ── Mode toggle — show only the selected filter panel ─────────────────────────
 document.querySelectorAll('input[name="filterMode"]').forEach(radio => {
@@ -181,11 +167,14 @@ loadBtn.addEventListener('click', async () => {
             if (caId) refIdLookup[r.id] = parseInt(caId) || caId;
         });
 
-        // Build lookup: venue record ID → venue name
-        venueNameLookup = {};
+        // Build lookups from Venues table
+        venueCAId    = {};
+        venueNameMap = {};
         venues.forEach(v => {
-            const name = v.fields['Name'] || v.fields['Venue Name'] || '';
-            if (name) venueNameLookup[v.id] = name;
+            const name = v.fields['Venue Name'] || '';
+            const caId = v.fields['Venue ID'];
+            if (name) venueNameMap[v.id] = name;
+            if (caId) venueCAId[v.id]    = parseInt(caId) || caId;
         });
 
         progressBar.style.width = '100%';
@@ -244,10 +233,9 @@ function renderGamesTable(records) {
 
     records.forEach((rec, i) => {
         const f = rec.fields;
-        const venueName = getVenueName(f['Venue'] || f['Field'] || '');
-        const venueId = resolveVenueId(venueName);
+        const { name: venueName, caId: venueId } = resolveVenue(f['Venue'] || f['Field']);
         const venueDisplay = venueId
-            ? `<span style="color:#27ae60">✓ ID: ${venueId}</span>`
+            ? `<span style="color:#27ae60">✓ ${venueName} (ID: ${venueId})</span>`
             : `<span style="color:#e74c3c">⚠ No ID: ${venueName || 'Unknown'}</span>`;
 
         const cr = f['Center Referee'];
@@ -322,8 +310,7 @@ exportBtn.addEventListener('click', () => {
 
     const rows = selected.map(rec => {
         const f = rec.fields;
-        const venueName = getVenueName(f['Venue'] || f['Field'] || '');
-        const venueId = resolveVenueId(venueName);
+        const { name: venueName, caId: venueId } = resolveVenue(f['Venue'] || f['Field']);
 
         // Resolve Center Referee → Central Assign numeric ID
         const centerRefField = f['Center Referee'];
@@ -369,29 +356,18 @@ exportBtn.addEventListener('click', () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Resolve a Games field value (may be a linked record array or plain string) to a venue name
-function getVenueName(fieldValue) {
-    if (!fieldValue) return '';
-    // Linked record — array of record IDs
+// Resolve a Games Venue field value (linked record array or plain text)
+// Returns { name, caId } — caId is null if not found in Venues table
+function resolveVenue(fieldValue) {
+    if (!fieldValue) return { name: '', caId: null };
+    // Linked record — array of Airtable venue record IDs
     if (Array.isArray(fieldValue) && fieldValue.length > 0) {
-        return venueNameLookup[fieldValue[0]] || '';
+        const rid = fieldValue[0];
+        return { name: venueNameMap[rid] || '', caId: venueCAId[rid] || null };
     }
-    // Plain text
-    return String(fieldValue);
-}
-
-function resolveVenueId(venueName) {
-    if (!venueName) return null;
-    // Try exact match first
-    if (VENUE_LOOKUP[venueName]) return VENUE_LOOKUP[venueName];
-    // Try partial match
-    for (const key of Object.keys(VENUE_LOOKUP)) {
-        if (venueName.toLowerCase().includes(key.toLowerCase()) ||
-            key.toLowerCase().includes(venueName.toLowerCase())) {
-            return VENUE_LOOKUP[key];
-        }
-    }
-    return null;
+    // Plain text — shouldn't normally occur but handle gracefully
+    const name = String(fieldValue);
+    return { name, caId: null };
 }
 
 function formatDate(dateStr) {
