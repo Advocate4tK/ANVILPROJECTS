@@ -65,6 +65,19 @@
                         <div style="font-size:0.875rem; color:#555; margin-top:6px;">Please complete all fields below. Your information will be saved to our database so future submissions are faster.</div>
                     </div>
 
+                    <!-- Option 3b: Name match but both email slots already taken — tell them to use an existing email -->
+                    <div id="twoEmailsPrompt" style="display:none; background:#fdecea; border:2px solid #e74c3c; border-radius:12px; padding:20px 25px; margin-bottom:20px;">
+                        <div style="font-size:1.1rem; font-weight:700; color:#0f3460;">📧 We already have two emails on file for you</div>
+                        <div style="font-size:0.875rem; color:#555; margin-top:8px; line-height:1.6;">
+                            There is a profile for <strong id="twoEmailsName"></strong> in our system with two email addresses already on file.
+                            Please go back and log in using one of the two emails you have used previously.
+                        </div>
+                        <div style="margin-top:14px;">
+                            <button type="button" onclick="document.getElementById('twoEmailsPrompt').style.display='none'; document.getElementById('entryFieldset').style.display='block'; document.getElementById('refereeEmail').value=''; document.getElementById('refereeEmail').focus();"
+                                style="background:#0f3460; color:white; border:none; border-radius:8px; padding:8px 22px; font-size:0.9rem; font-weight:700; cursor:pointer;">← Try a Different Email</button>
+                        </div>
+                    </div>
+
                     <!-- Option 3: Name match found under a different email — offer to merge -->
                     <div id="mergePrompt" style="display:none; background:#fff3e0; border:2px solid #e67e22; border-radius:12px; padding:20px 25px; margin-bottom:20px;">
                         <div style="font-size:1.1rem; font-weight:700; color:#0f3460;">🔍 We found an existing profile</div>
@@ -661,8 +674,19 @@
                         } catch(e) { /* ignore — fall through to new ref */ }
 
                         if (nameMatch) {
+                            const existingEmail  = nameMatch.fields['Email']   || '';
+                            const existingEmail2 = nameMatch.fields['Email 2'] || '';
+
+                            if (existingEmail && existingEmail2) {
+                                // ── BOTH EMAIL SLOTS TAKEN — can't add a third ──
+                                document.getElementById('twoEmailsName').textContent    = typedName;
+                                document.getElementById('twoEmailsPrompt').style.display = 'block';
+                                document.getElementById('entryFieldset').style.display  = 'none';
+                                document.getElementById('loggingName').textContent      = typedName;
+                                document.getElementById('loggingBadge').style.display   = 'block';
+                                status.textContent = '';
+                            } else {
                             // ── NAME MATCH — offer to merge ───────────────
-                            const existingEmail = nameMatch.fields['Email'] || '';
                             const masked = existingEmail.replace(/^(.).*@/, (_, c) => `${c}***@`);
                             document.getElementById('mergeFoundName').textContent  = typedName;
                             document.getElementById('mergeFoundEmail').textContent = masked;
@@ -675,6 +699,7 @@
                             // Store for merge handlers
                             window._mergeRecord    = nameMatch;
                             window._mergeNewEmail  = typedEmail;
+                            } // end else (one email slot available)
                         } else {
                             // ── GENUINELY NEW REFEREE ─────────────────────
                             document.getElementById('newRefWelcome').style.display    = 'block';
