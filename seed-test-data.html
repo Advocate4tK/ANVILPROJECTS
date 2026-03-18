@@ -53,6 +53,9 @@
                         <button class="btn btn-primary" id="seedRefsBtn" onclick="seedRefsOnly()" style="background:#8e44ad;">👤 Seed Refs Only</button>
                         <button class="btn btn-danger" id="clearGamesBtn" onclick="clearGamesOnly()">🗑 Clear Games Only</button>
                     </div>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <button class="btn btn-primary" id="seedRefAvailBtn" onclick="seedRefsAvailOnly()" style="background:#16a085;">📋 Seed Refs for This Weekend's Games</button>
+                    </div>
                 </div>
 
                 <div class="progress-bar" id="progressBar" style="display:none;">
@@ -601,6 +604,68 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = '👤 Seed Refs Only';
+            }
+        }
+
+        async function seedRefsAvailOnly() {
+            const btn = document.getElementById('seedRefAvailBtn');
+            btn.disabled = true;
+            btn.textContent = 'Seeding…';
+            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('log').style.display = 'block';
+            document.getElementById('log').innerHTML = '';
+
+            try {
+                // Fetch existing fake refs from Airtable
+                log('Fetching existing seeded referees…', 'info');
+                const allRefs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 });
+                const fakeRefs = allRefs.filter(r => FAKE_REF_NAMES.has((r.fields['Name'] || '').trim()));
+                log(`Found ${fakeRefs.length} seeded referees.`, 'info');
+
+                if (fakeRefs.length === 0) {
+                    log('No seeded referees found — run "Seed Refs Only" first.', 'err');
+                    return;
+                }
+
+                const dates = [SAT, SUN];
+                log(`Creating availability for ${SAT} and ${SUN}…`, 'info');
+                let avCount = 0;
+                const avTotal = fakeRefs.length * dates.length;
+
+                for (const ref of fakeRefs) {
+                    const name = (ref.fields['Name'] || '').trim();
+                    for (const date of dates) {
+                        try {
+                            await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.AVAILABILITY, {
+                                'Referee Name': name,
+                                'Date':         date,
+                                'Start Time':   '08:00',
+                                'End Time':     '18:00',
+                                'Max Games':    '2',
+                                'Notes':        'Test data',
+                            });
+                            avCount++;
+                        } catch(e) {
+                            log(`  ✗ ${name} ${date}: ${e.message}`, 'err');
+                        }
+                        setProgress((avCount / avTotal) * 100);
+                        await delay(150);
+                    }
+                    log(`  ✓ ${name}`, 'ok');
+                }
+
+                setProgress(100);
+                const summary = document.getElementById('summaryBox');
+                summary.style.display = 'block';
+                summary.innerHTML = `<strong style="color:#27ae60;">✓ Availability seeded</strong><br>
+                    <span style="font-size:0.88rem;">${avCount} availability records created for ${fakeRefs.length} referees on ${SAT} and ${SUN}.</span>`;
+                log('Done!', 'info');
+
+            } catch(e) {
+                log('Fatal error: ' + e.message, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📋 Seed Refs for This Weekend\'s Games';
             }
         }
 
