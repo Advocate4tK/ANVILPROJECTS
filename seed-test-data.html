@@ -616,6 +616,16 @@
             document.getElementById('log').innerHTML = '';
 
             try {
+                // Clear all existing availability first to avoid duplicates
+                log('Clearing existing availability records…', 'info');
+                const existingAvail = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, { maxRecords: 1000 });
+                let cleared = 0;
+                for (const rec of existingAvail) {
+                    try { await airtableClient.deleteRecord(CONFIG.AIRTABLE_TABLES.AVAILABILITY, rec.id); cleared++; } catch(e) {}
+                    await delay(100);
+                }
+                log(`Cleared ${cleared} existing availability records.`, 'info');
+
                 // Fetch existing fake refs from Airtable
                 log('Fetching existing seeded referees…', 'info');
                 const allRefs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 });
