@@ -133,6 +133,12 @@
                     <div id="resultsList"></div>
                 </div>
             </div>
+
+            <!-- Submission History -->
+            <div id="submissionHistory" style="margin-top:28px; display:none;">
+                <h2 style="color:#0f3460; font-size:1.1rem; margin-bottom:14px;">📋 Submitted Games</h2>
+                <div id="historyContent"></div>
+            </div>
         </main>
 
         <footer>
@@ -147,8 +153,110 @@
     <script>
         emailjs.init('p0JPOZ4XKJ86egvTB');
 
+        // ── Submission History (localStorage, 2-week retention) ──────────────
+        const HISTORY_KEY = 'gameUploadHistory';
+        const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+
+        function loadHistory() {
+            try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) { return []; }
+        }
+
+        function saveHistory(history) {
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        }
+
+        function pruneHistory(history) {
+            const cutoff = Date.now() - TWO_WEEKS_MS;
+            return history.filter(g => g.submittedAt >= cutoff);
+        }
+
+        function getWeekKey(dateStr) {
+            // Returns the Monday of the week containing dateStr
+            const d = new Date(dateStr + 'T00:00:00');
+            const day = d.getDay(); // 0=Sun
+            const diff = day === 0 ? -6 : 1 - day;
+            const mon = new Date(d); mon.setDate(d.getDate() + diff);
+            const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+            const fmt = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+            return { key: mon.toISOString().split('T')[0], label: `Week of ${fmt(mon)} – ${fmt(sun)}` };
+        }
+
+        function renderHistory() {
+            const history = pruneHistory(loadHistory());
+            saveHistory(history); // prune stale entries
+            const wrap = document.getElementById('submissionHistory');
+            const content = document.getElementById('historyContent');
+            if (history.length === 0) { wrap.style.display = 'none'; return; }
+
+            // Group by week
+            const weeks = {};
+            history.forEach(g => {
+                const { key, label } = getWeekKey(g.date || g.submittedAt ? new Date(g.submittedAt).toISOString().split('T')[0] : '');
+                if (!weeks[key]) weeks[key] = { label, games: [] };
+                weeks[key].games.push(g);
+            });
+
+            // Sort weeks descending (most recent first)
+            const sortedWeeks = Object.entries(weeks).sort((a, b) => b[0].localeCompare(a[0]));
+
+            content.innerHTML = sortedWeeks.map(([, { label, games }]) => {
+                const rows = games
+                    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''))
+                    .map(g => `
+                        <tr>
+                            <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.date || '—'}</td>
+                            <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.time || '—'}</td>
+                            <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">${g.home || '—'} vs ${g.away || '—'}</td>
+                            <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.age || '—'}</td>
+                            <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">
+                                <span style="background:#d5f5e3; color:#1e8449; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px;">SUBMITTED</span>
+                            </td>
+                        </tr>`).join('');
+                return `
+                    <div style="margin-bottom:18px;">
+                        <div style="font-size:0.8rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; padding-bottom:4px; border-bottom:2px solid #e94560;">${label}</div>
+                        <table style="width:100%; border-collapse:collapse; font-size:0.85rem; background:white; border-radius:8px; overflow:hidden; box-shadow:0 1px 6px rgba(0,0,0,0.06);">
+                            <thead>
+                                <tr style="background:#0f3460; color:white;">
+                                    <th style="padding:7px 12px; text-align:left; font-weight:600;">Date</th>
+                                    <th style="padding:7px 12px; text-align:left; font-weight:600;">Time</th>
+                                    <th style="padding:7px 12px; text-align:left; font-weight:600;">Matchup</th>
+                                    <th style="padding:7px 12px; text-align:left; font-weight:600;">Age</th>
+                                    <th style="padding:7px 12px; text-align:left; font-weight:600;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>`;
+            }).join('');
+
+            wrap.style.display = 'block';
+        }
+
+        function addGamesToHistory(uploadedByClub) {
+            const history = pruneHistory(loadHistory());
+            const now = Date.now();
+            Object.values(uploadedByClub).forEach(games => {
+                games.forEach(gameStr => {
+                    // gameStr format: "2026-03-22 09:00 — Home vs Away (U10)"
+                    const match = gameStr.match(/^(\S+)\s+(\S+)\s+—\s+(.+)\s+vs\s+(.+)\s+\((.+)\)$/);
+                    if (match) {
+                        history.push({ date: match[1], time: match[2], home: match[3].trim(), away: match[4].trim(), age: match[5].trim(), submittedAt: now });
+                    } else {
+                        history.push({ date: '', time: '', home: gameStr, away: '', age: '', submittedAt: now });
+                    }
+                });
+            });
+            saveHistory(history);
+            renderHistory();
+        }
+
+        // Render history on page load
+        renderHistory();
+
         document.addEventListener('uploadComplete', function(e) {
             const { uploadedByClub, clubEmailMap } = e.detail;
+            addGamesToHistory(uploadedByClub);
             Object.entries(uploadedByClub).forEach(([clubName, games]) => {
                 const clubKey = clubName.toLowerCase();
                 const toEmail = clubEmailMap[clubKey]
