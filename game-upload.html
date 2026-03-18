@@ -171,6 +171,8 @@
     <script>
         emailjs.init('p0JPOZ4XKJ86egvTB');
 
+        const UPLOADER_KEY = 'gameUploaderName';
+
         // ── Submission History (localStorage, 2-week retention) ──────────────
         const HISTORY_KEY = 'gameUploadHistory';
         const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
@@ -285,10 +287,12 @@
             document.getElementById('uploaderName').textContent = currentUploader;
             document.getElementById('doorway').style.display    = 'none';
             document.getElementById('uploadArea').style.display = 'block';
+            localStorage.setItem(UPLOADER_KEY, JSON.stringify({ first, last }));
             renderHistory();
         }
 
         function resetUploader() {
+            localStorage.removeItem(UPLOADER_KEY);
             currentUploader = '';
             uploaderName    = '';
             document.getElementById('uploaderFirst').value = '';
@@ -303,8 +307,30 @@
             document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') unlockUpload(); });
         });
 
+        // Auto-fill saved uploader name
+        const savedUploader = JSON.parse(localStorage.getItem(UPLOADER_KEY) || 'null');
+        if (savedUploader && savedUploader.first && savedUploader.last) {
+            document.getElementById('uploaderFirst').value = savedUploader.first;
+            document.getElementById('uploaderLast').value  = savedUploader.last;
+            unlockUpload();
+        }
+
         // Render history on page load
         renderHistory();
+
+        // ── Idle session timeout (30 min) ─────────────────────────────────────────
+        let _idleTimer;
+        function _resetIdle() {
+            clearTimeout(_idleTimer);
+            if (!currentUploader) return;
+            _idleTimer = setTimeout(() => {
+                alert('Your session has expired due to inactivity. Please sign in again.');
+                resetUploader();
+            }, 30 * 60 * 1000);
+        }
+        ['mousemove','keydown','click','touchstart'].forEach(ev =>
+            document.addEventListener(ev, _resetIdle, { passive: true })
+        );
 
         document.addEventListener('uploadComplete', function(e) {
             const { uploadedByClub, clubEmailMap } = e.detail;

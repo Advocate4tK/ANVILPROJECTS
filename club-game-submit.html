@@ -409,6 +409,8 @@
     let currentClubRecord = null; // Airtable club record for this page
     let currentSubmitter  = '';   // name of person who completed doorway
 
+    const SUBMITTER_KEY = 'cgsSubmitter';
+
     // ── Submission History (localStorage, 2-week retention) ──────────────────
     const HISTORY_KEY   = 'clubGameSubmitHistory';
     const TWO_WEEKS_MS  = 14 * 24 * 60 * 60 * 1000;
@@ -416,6 +418,12 @@
     function loadHistory()         { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) { return []; } }
     function saveHistory(h)        { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
     function pruneHistory(h)       { const cut = Date.now() - TWO_WEEKS_MS; return h.filter(g => g.submittedAt >= cut); }
+
+    function formatTime(t) {
+        if (!t) return '—';
+        const [h, m] = t.split(':').map(Number);
+        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+    }
 
     function getWeekLabel(dateStr) {
         const d   = new Date(dateStr + 'T00:00:00');
@@ -471,7 +479,7 @@
                     .sort((a, b) => (a.date||'').localeCompare(b.date||'') || (a.time||'').localeCompare(b.time||''))
                     .map(g => `<tr>
                         <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.date||'—'}</td>
-                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.time||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${formatTime(g.time)}</td>
                         <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">${g.home||'—'} vs ${g.away||'—'}</td>
                         <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.age||'—'}</td>
                         <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.venue||'—'}</td>
@@ -577,10 +585,17 @@
         document.getElementById('doorwayStep1').style.display = 'none';
         document.getElementById('doorwayStep2').style.display = 'none';
         document.getElementById('mainForm').style.display     = 'block';
+        const [f1, ...rest] = currentSubmitter.split(' ');
+        localStorage.setItem(SUBMITTER_KEY, JSON.stringify({ first: f1, last: rest.join(' ') }));
         renderHistory();
     }
 
     function resetDoorway() {
+        const pending = stagedGames.filter(g => g.status === 'pending');
+        if (pending.length > 0) {
+            if (!confirm(`You have ${pending.length} unsaved game${pending.length > 1 ? 's' : ''} — are you sure you want to log out? They will be lost.`)) return;
+        }
+        localStorage.removeItem(SUBMITTER_KEY);
         currentSubmitter = '';
         ['dwFirst','dwLast','dwEmail','dwPhone'].forEach(id => document.getElementById(id).value = '');
         document.getElementById('dwError').style.display    = 'none';
@@ -621,6 +636,20 @@
         } else {
             // No param — show dropdown (admin/testing mode)
             populateClubDropdown();
+        }
+
+        // Auto-fill saved submitter name
+        const saved = JSON.parse(localStorage.getItem(SUBMITTER_KEY) || 'null');
+        if (saved && saved.first && saved.last) {
+            document.getElementById('dwFirst').value = saved.first;
+            document.getElementById('dwLast').value  = saved.last;
+            const fullName = `${saved.first} ${saved.last}`;
+            const existingAdmin = currentClubRecord ? (currentClubRecord.fields['Club Admin'] || '') : '';
+            if (existingAdmin.trim().toLowerCase() === fullName.toLowerCase()) {
+                currentSubmitter = fullName;
+                document.getElementById('submitterName').textContent = currentSubmitter;
+                showMainForm();
+            }
         }
     });
 
@@ -809,6 +838,18 @@
         const pending = stagedGames.filter(g => g.status === 'pending');
         if (pending.length === 0) { alert('No games to submit.'); return; }
 
+        // Quick local duplicate pre-check
+        const historyKeys = new Set(
+            loadHistory().map(g => `${g.date}|${(g.home||'').toLowerCase()}|${(g.away||'').toLowerCase()}`)
+        );
+        const localDups = pending.filter(g =>
+            historyKeys.has(`${g.date}|${g.home.toLowerCase()}|${g.away.toLowerCase()}`)
+        );
+        if (localDups.length > 0) {
+            const names = localDups.map(g => `${g.home} vs ${g.away} (${g.date})`).join('\n');
+            if (!confirm(`${localDups.length} game(s) appear to already be submitted:\n\n${names}\n\nSubmit anyway?`)) return;
+        }
+
         document.getElementById('submitBtn').disabled    = true;
         document.getElementById('createGameBtn').disabled = true;
         document.getElementById('progressWrap').style.display = 'block';
@@ -895,6 +936,20 @@
         document.getElementById('createGameBtn').disabled = false;
         updateCreateBtn();
     });
+
+    // ── Idle session timeout (30 min) ─────────────────────────────────────────
+    let _idleTimer;
+    function _resetIdle() {
+        clearTimeout(_idleTimer);
+        if (!currentSubmitter) return;
+        _idleTimer = setTimeout(() => {
+            alert('Your session has expired due to inactivity. Please sign in again.');
+            resetDoorway();
+        }, 30 * 60 * 1000);
+    }
+    ['mousemove','keydown','click','touchstart'].forEach(ev =>
+        document.addEventListener(ev, _resetIdle, { passive: true })
+    );
     </script>
 </body>
 </html>
