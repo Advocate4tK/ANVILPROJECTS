@@ -610,10 +610,6 @@
     window.addEventListener('load', async () => {
         if (!airtableClient) { alert('Airtable client not initialized.'); return; }
 
-        // Purge old non-club-specific keys so they can't bleed across clubs
-        localStorage.removeItem('cgsSubmitter');
-        localStorage.removeItem('clubGameSubmitHistory');
-
         // Set club-specific localStorage keys so history doesn't bleed across clubs
         const urlParam = new URLSearchParams(window.location.search).get('club');
         if (urlParam) {
@@ -621,6 +617,16 @@
             HISTORY_KEY   = `clubGameSubmitHistory_${slug}`;
             SUBMITTER_KEY = `cgsSubmitter_${slug}`;
         }
+
+        // Migrate old generic keys into club-specific ones (one-time migration)
+        const oldHistory = localStorage.getItem('clubGameSubmitHistory');
+        if (oldHistory) {
+            if (!localStorage.getItem(HISTORY_KEY)) {
+                localStorage.setItem(HISTORY_KEY, oldHistory);
+            }
+            localStorage.removeItem('clubGameSubmitHistory');
+        }
+        localStorage.removeItem('cgsSubmitter');
 
         await loadReferenceData();
         if (urlParam) {
