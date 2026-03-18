@@ -467,6 +467,42 @@
             if (tri) tri.textContent = open ? '▶' : '▼';
         }
 
+        function toggleRefEdit(rid) {
+            const form = document.getElementById('redit-' + rid);
+            if (!form) return;
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function setRefStar(rid, val) {
+            for (let i = 1; i <= 5; i++) {
+                const s = document.getElementById(`rstar-${rid}-${i}`);
+                if (s) s.textContent = i <= val ? '★' : '☆';
+            }
+            const inp = document.getElementById(`rrating-${rid}`);
+            if (inp) inp.value = val;
+        }
+
+        async function saveRefTag(rid) {
+            const rating = parseInt(document.getElementById(`rrating-${rid}`).value) || 0;
+            const notes  = document.getElementById(`rnotes-${rid}`).value.trim();
+            const btn    = document.getElementById(`rsave-${rid}`);
+            btn.disabled = true; btn.textContent = 'Saving…';
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rid, {
+                    'Rating': rating || null,
+                    'Assignor Notes': notes || null
+                });
+                // Update the cached record so it survives re-renders
+                const rec = allRefs.find(r => r.id === rid);
+                if (rec) { rec.fields['Rating'] = rating; rec.fields['Assignor Notes'] = notes; }
+                btn.textContent = '✅ Saved';
+                setTimeout(() => { btn.disabled = false; btn.textContent = 'Save'; }, 1500);
+            } catch(e) {
+                btn.textContent = '❌ Failed';
+                btn.disabled = false;
+            }
+        }
+
         let dragRefId           = null;
         let dragRefName         = null;
         let dragSourceGameId    = null; // set when drag starts from a slot
@@ -1265,6 +1301,27 @@
                         ${clubLine      ? `<div class="ref-meta" style="margin-top:2px; color:#0f3460; font-weight:600;">${clubLine}</div>` : ''}
                         ${assignedBadge ? `<div class="ref-meta" style="margin-top:2px;">${assignedBadge}</div>` : ''}
                         ${status        ? `<div class="ref-meta" style="margin-top:2px;">${status}</div>` : ''}
+
+                        <!-- Assignor rating & notes -->
+                        <div style="margin-top:8px; padding-top:7px; border-top:1px dashed #dde3f0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="font-size:0.95rem; color:#f1c40f; letter-spacing:2px;">${[1,2,3,4,5].map(i => i <= (r.fields['Rating']||0) ? '★' : '☆').join('')}</span>
+                            ${r.fields['Assignor Notes'] ? `<span style="font-size:0.78rem; color:#555; font-style:italic;">"${r.fields['Assignor Notes']}"</span>` : '<span style="font-size:0.75rem; color:#bbb;">No notes yet</span>'}
+                            <button onclick="event.stopPropagation(); toggleRefEdit('${rid}')" style="margin-left:auto; background:none; border:none; cursor:pointer; font-size:0.85rem; color:#888;" title="Edit rating & notes">✏️</button>
+                        </div>
+                        <div id="redit-${rid}" style="display:none; margin-top:8px; background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; padding:10px;">
+                            <div style="margin-bottom:8px;">
+                                <div style="font-size:0.75rem; font-weight:600; color:#555; margin-bottom:4px;">Rating</div>
+                                <input type="hidden" id="rrating-${rid}" value="${r.fields['Rating'] || 0}">
+                                <span style="font-size:1.4rem; cursor:pointer; letter-spacing:3px;">
+                                    ${[1,2,3,4,5].map(i => `<span id="rstar-${rid}-${i}" onclick="setRefStar('${rid}',${i})" style="color:#f1c40f;">${i <= (r.fields['Rating']||0) ? '★' : '☆'}</span>`).join('')}
+                                </span>
+                            </div>
+                            <div style="margin-bottom:8px;">
+                                <div style="font-size:0.75rem; font-weight:600; color:#555; margin-bottom:4px;">Notes</div>
+                                <textarea id="rnotes-${rid}" rows="3" style="width:100%; font-size:0.82rem; padding:6px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit; box-sizing:border-box; resize:vertical;">${r.fields['Assignor Notes'] || ''}</textarea>
+                            </div>
+                            <button id="rsave-${rid}" onclick="event.stopPropagation(); saveRefTag('${rid}')" style="background:#0f3460; color:white; border:none; border-radius:6px; padding:5px 16px; font-size:0.82rem; font-weight:700; cursor:pointer; font-family:inherit;">Save</button>
+                        </div>
                     </div>
                 </div>`;
             });
