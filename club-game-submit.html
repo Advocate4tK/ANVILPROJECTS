@@ -409,10 +409,11 @@
     let currentClubRecord = null; // Airtable club record for this page
     let currentSubmitter  = '';   // name of person who completed doorway
 
-    const SUBMITTER_KEY = 'cgsSubmitter';
+    // Keys are set per-club once the URL param is known
+    let SUBMITTER_KEY = 'cgsSubmitter';
+    let HISTORY_KEY   = 'clubGameSubmitHistory';
 
     // ── Submission History (localStorage, 2-week retention) ──────────────────
-    const HISTORY_KEY   = 'clubGameSubmitHistory';
     const TWO_WEEKS_MS  = 14 * 24 * 60 * 60 * 1000;
 
     function loadHistory()         { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) { return []; } }
@@ -607,15 +608,20 @@
 
     window.addEventListener('load', async () => {
         if (!airtableClient) { alert('Airtable client not initialized.'); return; }
-        renderHistory();
-        await loadReferenceData();
 
-        // Check for ?club= URL parameter
+        // Set club-specific localStorage keys so history doesn't bleed across clubs
         const urlParam = new URLSearchParams(window.location.search).get('club');
         if (urlParam) {
+            const slug = urlParam.toLowerCase().replace(/[^a-z0-9]/g, '-');
+            HISTORY_KEY   = `clubGameSubmitHistory_${slug}`;
+            SUBMITTER_KEY = `cgsSubmitter_${slug}`;
+        }
+
+        await loadReferenceData();
+        if (urlParam) {
             // Match club by slug (lowercase, spaces/dashes normalized)
-            const slug = s => s.toLowerCase().replace(/[\s-]+/g, '');
-            const match = allClubs.find(c => slug(c.name) === slug(urlParam));
+            const normalize = s => s.toLowerCase().replace(/[\s-]+/g, '');
+            const match = allClubs.find(c => normalize(c.name) === normalize(urlParam));
             if (match) {
                 currentClubRecord = match.record || null; // store full Airtable record
                 // Lock the club — hide dropdown, show name
