@@ -1245,8 +1245,10 @@
                     if (ageFilter === '36+'   && age < 36)              return false;
                 }
                 if (genderFilter && r.fields['Gender'] !== genderFilter) return false;
+                const refName = (r.fields['Name'] || '').trim().toLowerCase();
+
                 if (dateFilter) {
-                    const refName = (r.fields['Name'] || '').trim().toLowerCase();
+                    // Specific date filter (games filter panel)
                     if (!availByName[refName]?.has(dateFilter)) return false;
                     if (timeFilter) {
                         const slot = availTimeByName[refName]?.[dateFilter];
@@ -1254,15 +1256,37 @@
                             if (timeFilter < slot.start || timeFilter > slot.end) return false;
                         }
                     }
-                }
-                // When a game is selected, filter to refs available for that game's date & time
-                if (!dateFilter && gameDate) {
-                    const refName = (r.fields['Name'] || '').trim().toLowerCase();
+                } else if (gameDate) {
+                    // Game selected — filter to that game's date & time
                     if (!availByName[refName]?.has(gameDate)) return false;
                     if (gameTime) {
                         const slot = availTimeByName[refName]?.[gameDate];
                         if (slot && slot.start && slot.end) {
                             if (gameTime < slot.start || gameTime > slot.end) return false;
+                        }
+                    }
+                } else {
+                    // No specific date selected — filter by dateFrom/dateTo range
+                    const from = document.getElementById('dateFrom').value;
+                    const to   = document.getElementById('dateTo').value;
+                    if (from || to) {
+                        const refDates = availByName[refName];
+                        if (!refDates || refDates.size === 0) return false;
+                        // Ref must have at least one available date within the range
+                        const datesInRange = [...refDates].filter(d => {
+                            if (from && d < from) return false;
+                            if (to   && d > to)   return false;
+                            return true;
+                        });
+                        if (datesInRange.length === 0) return false;
+                        // If timeFilter is set, at least one in-range date must cover that time
+                        if (timeFilter) {
+                            const hasTime = datesInRange.some(d => {
+                                const slot = availTimeByName[refName]?.[d];
+                                if (!slot || !slot.start || !slot.end) return true;
+                                return timeFilter >= slot.start && timeFilter <= slot.end;
+                            });
+                            if (!hasTime) return false;
                         }
                     }
                 }
