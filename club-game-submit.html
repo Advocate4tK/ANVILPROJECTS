@@ -375,6 +375,12 @@
 
             </div>
             </div> <!-- /mainForm -->
+
+            <!-- Submission History -->
+            <div id="submissionHistory" style="margin-top:28px; display:none;">
+                <h2 style="color:#0f3460; font-size:1.1rem; margin-bottom:14px;">📋 Submitted Games</h2>
+                <div id="historyContent"></div>
+            </div>
         </main>
 
         <footer>
@@ -393,9 +399,93 @@
     let currentClubRecord = null; // Airtable club record for this page
     let currentSubmitter  = '';   // name of person who completed doorway
 
+    // ── Submission History (localStorage, 2-week retention) ──────────────────
+    const HISTORY_KEY   = 'clubGameSubmitHistory';
+    const TWO_WEEKS_MS  = 14 * 24 * 60 * 60 * 1000;
+
+    function loadHistory()         { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) { return []; } }
+    function saveHistory(h)        { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+    function pruneHistory(h)       { const cut = Date.now() - TWO_WEEKS_MS; return h.filter(g => g.submittedAt >= cut); }
+
+    function getWeekLabel(dateStr) {
+        const d   = new Date(dateStr + 'T00:00:00');
+        const day = d.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const mon  = new Date(d); mon.setDate(d.getDate() + diff);
+        const sun  = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const fmt  = x => x.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        return { key: mon.toISOString().split('T')[0], label: `Week of ${fmt(mon)} – ${fmt(sun)}` };
+    }
+
+    function addGamesToHistory(games) {
+        const history = pruneHistory(loadHistory());
+        const now = Date.now();
+        games.forEach(g => {
+            history.push({
+                date: g.date, time: g.time,
+                home: g.home, away: g.away,
+                age:  g.age,
+                submittedBy: currentSubmitter,
+                submittedAt: now
+            });
+        });
+        saveHistory(history);
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const history = pruneHistory(loadHistory());
+        saveHistory(history);
+        const wrap    = document.getElementById('submissionHistory');
+        const content = document.getElementById('historyContent');
+        if (history.length === 0) { wrap.style.display = 'none'; return; }
+
+        const weeks = {};
+        history.forEach(g => {
+            const { key, label } = getWeekLabel(g.date || new Date(g.submittedAt).toISOString().split('T')[0]);
+            if (!weeks[key]) weeks[key] = { label, games: [] };
+            weeks[key].games.push(g);
+        });
+
+        const sortedWeeks = Object.entries(weeks).sort((a, b) => b[0].localeCompare(a[0]));
+        content.innerHTML = sortedWeeks.map(([, { label, games }]) => {
+            const rows = games
+                .sort((a, b) => (a.date||'').localeCompare(b.date||'') || (a.time||'').localeCompare(b.time||''))
+                .map(g => `<tr>
+                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.date||'—'}</td>
+                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.time||'—'}</td>
+                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">${g.home||'—'} vs ${g.away||'—'}</td>
+                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.age||'—'}</td>
+                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap; color:#555; font-size:0.82rem;">${g.submittedBy||'—'}</td>
+                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">
+                        <span style="background:#d5f5e3; color:#1e8449; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px;">SUBMITTED</span>
+                    </td>
+                </tr>`).join('');
+            return `<div style="margin-bottom:18px;">
+                <div style="font-size:0.8rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; padding-bottom:4px; border-bottom:2px solid #e94560;">${label}</div>
+                <table style="width:100%; border-collapse:collapse; font-size:0.85rem; background:white; border-radius:8px; overflow:hidden; box-shadow:0 1px 6px rgba(0,0,0,0.06);">
+                    <thead><tr style="background:#0f3460; color:white;">
+                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Date</th>
+                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Time</th>
+                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Matchup</th>
+                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Age</th>
+                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Submitted By</th>
+                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Status</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+        }).join('');
+
+        wrap.style.display = 'block';
+    }
+
     // ── Doorway ───────────────────────────────────────────────────────────────
-    ['dwFirst','dwLast','dwEmail','dwPhone'].forEach(id => {
-        document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') unlockSubmit(); });
+    document.addEventListener('DOMContentLoaded', () => {
+        ['dwFirst','dwLast','dwEmail','dwPhone'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') unlockSubmit(); });
+        });
     });
 
     async function unlockSubmit() {
@@ -435,6 +525,7 @@
 
         document.getElementById('doorway').style.display  = 'none';
         document.getElementById('mainForm').style.display = 'block';
+        renderHistory();
     }
 
     function resetDoorway() {
@@ -447,6 +538,7 @@
 
     window.addEventListener('load', async () => {
         if (!airtableClient) { alert('Airtable client not initialized.'); return; }
+        renderHistory();
         await loadReferenceData();
 
         // Check for ?club= URL parameter
@@ -707,8 +799,9 @@
                     'Gender':    g.gender,
                     'League':    league
                 };
-                if (g.fieldId) fields['Field'] = [g.fieldId];
-                if (g.notes)   fields['Notes'] = g.notes;
+                if (g.fieldId)         fields['Field']       = [g.fieldId];
+                if (g.notes)           fields['Notes']       = g.notes;
+                if (currentSubmitter)  fields['Uploaded By'] = currentSubmitter;
 
                 await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
                 existingKeys.add(dupKey);
@@ -725,6 +818,10 @@
 
         document.getElementById('progressBar').style.width = '100%';
         document.getElementById('progressText').textContent = 'Done!';
+
+        // Save successfully submitted games to local history
+        const submittedGames = stagedGames.filter(g => g.status === 'submitted');
+        if (submittedGames.length > 0) addGamesToHistory(submittedGames);
 
         const box = document.getElementById('summaryBox');
         const parts = [];
