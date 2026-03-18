@@ -9,6 +9,7 @@ let clubEmailMap   = {}; // club name (lowercase) → president email
 let clubNameMap    = {}; // club name (lowercase) → display name
 let fieldLookup    = {}; // "venuename|fieldname" (lowercase) → Airtable Field record ID
 let uploadedByClub = {}; // club display name → array of game summary strings
+let uploaderName   = ''; // set from the doorway before upload
 
 // ── CSV field name → Airtable field name mapping ──────────────────────────────
 const FIELD_MAP = {
@@ -234,6 +235,7 @@ uploadBtn.addEventListener('click', async () => {
 
         try {
             const fields = buildFields(row);
+            if (uploaderName) fields['Uploaded By'] = uploaderName;
             await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
             existingKeys.add(key); // prevent re-upload within same batch
             successCount++;
