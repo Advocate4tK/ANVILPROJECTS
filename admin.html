@@ -245,44 +245,58 @@
                 return;
             }
 
-            resultsDiv.innerHTML = hits.slice(0, 15).map(p => {
+            const toggleCard = (id) => {
+                const body = document.getElementById(id);
+                const tri  = document.getElementById('tri-' + id);
+                if (!body) return;
+                const open = body.style.display !== 'none';
+                body.style.display = open ? 'none' : 'block';
+                if (tri) tri.style.transform = open ? 'rotate(-90deg)' : 'rotate(0deg)';
+            };
+            window._toggleCard = toggleCard;
+
+            resultsDiv.innerHTML = hits.slice(0, 15).map((p, i) => {
                 if (p.type === 'referee') {
+                    const cardId = 'rc-' + i;
                     const meta = [
                         p.age    ? `Age ${p.age}`           : '',
                         p.dob    ? `DOB: ${p.dob}`          : '',
                         p.years  ? `${p.years} yrs reffing` : '',
-                        p.gender
                     ].filter(Boolean).join(' · ');
                     const isMinor = !!(p.guardianName || p.guardianEmail);
-                    return `<div style="background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:5px;">
+                    return `<div style="background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; overflow:hidden;">
+                        <div onclick="window._toggleCard('${cardId}')" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 14px; cursor:pointer; user-select:none;">
+                            <span id="tri-${cardId}" style="font-size:0.75rem; color:#888; transition:transform 0.15s; display:inline-block;">▼</span>
                             <span style="background:#0f3460; color:white; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:12px; letter-spacing:0.5px;">REFEREE</span>
                             <span style="font-weight:700; font-size:0.95rem; color:#0f3460;">${p.name}</span>
-                            ${p.cert  ? `<span style="background:#e8f4fd; color:#0f3460; font-size:0.75rem; padding:2px 8px; border-radius:10px;">${p.cert}</span>` : ''}
-                            ${isMinor ? `<span style="background:#fff3cd; color:#856404; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:10px;">MINOR</span>` : ''}
+                            ${p.gender ? `<span style="color:#666; font-size:0.85rem;">${p.gender}</span>` : ''}
+                            ${p.cert   ? `<span style="background:#e8f4fd; color:#0f3460; font-size:0.75rem; padding:2px 8px; border-radius:10px;">${p.cert}</span>` : ''}
+                            ${isMinor  ? `<span style="background:#fff3cd; color:#856404; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:10px;">MINOR</span>` : ''}
                         </div>
-                        <div style="font-size:0.85rem; color:#444; display:flex; flex-wrap:wrap; gap:16px; margin-bottom:${isMinor ? '6px' : '0'};">
-                            ${p.phone ? `<span>📞 ${p.phone}</span>` : ''}
-                            ${p.email ? `<span>✉️ <a href="mailto:${p.email}" style="color:#0f3460;">${p.email}</a></span>` : ''}
-                            ${meta    ? `<span style="color:#666;">${meta}</span>` : ''}
-                            ${p.clubs ? `<span>⭐ ${p.clubs}</span>` : ''}
+                        <div id="${cardId}" style="display:none; padding:0 14px 12px; border-top:1px solid #dde3f0;">
+                            <div style="font-size:0.85rem; color:#444; display:flex; flex-wrap:wrap; gap:16px; margin-top:8px; margin-bottom:${isMinor ? '6px' : '0'};">
+                                ${p.phone ? `<span>📞 ${p.phone}</span>` : ''}
+                                ${p.email ? `<span>✉️ <a href="mailto:${p.email}" style="color:#0f3460;">${p.email}</a></span>` : ''}
+                                ${meta    ? `<span style="color:#666;">${meta}</span>` : ''}
+                                ${p.clubs ? `<span>⭐ ${p.clubs}</span>` : ''}
+                            </div>
+                            ${isMinor ? `<div style="font-size:0.82rem; color:#666; background:#fff8e1; border-radius:6px; padding:5px 10px; display:flex; flex-wrap:wrap; gap:14px; margin-top:6px;">
+                                <span style="font-weight:600; color:#856404;">Guardian:</span>
+                                ${p.guardianName  ? `<span>${p.guardianName}</span>` : ''}
+                                ${p.guardianEmail ? `<span>✉️ <a href="mailto:${p.guardianEmail}" style="color:#0f3460;">${p.guardianEmail}</a></span>` : ''}
+                            </div>` : ''}
+                            ${p.assignments.length > 0
+                                ? `<div style="font-size:0.82rem; margin-top:6px; background:#eaf7ef; border-radius:6px; padding:5px 10px;">
+                                    <span style="font-weight:600; color:#1a7a40;">📅 Assigned:</span>
+                                    ${p.assignments.map(a => {
+                                        const d = new Date(a.date + 'T00:00:00');
+                                        const label = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+                                        return `<span style="margin-left:8px;">${label}${a.time ? ' ' + a.time : ''} — ${a.home} vs ${a.away}</span>`;
+                                    }).join('<br style="margin:0;">')}
+                                  </div>`
+                                : `<div style="font-size:0.82rem; margin-top:6px; color:#888;">📋 No upcoming assignments</div>`
+                            }
                         </div>
-                        ${isMinor ? `<div style="font-size:0.82rem; color:#666; background:#fff8e1; border-radius:6px; padding:5px 10px; display:flex; flex-wrap:wrap; gap:14px;">
-                            <span style="font-weight:600; color:#856404;">Guardian:</span>
-                            ${p.guardianName  ? `<span>${p.guardianName}</span>` : ''}
-                            ${p.guardianEmail ? `<span>✉️ <a href="mailto:${p.guardianEmail}" style="color:#0f3460;">${p.guardianEmail}</a></span>` : ''}
-                        </div>` : ''}
-                        ${p.assignments.length > 0
-                            ? `<div style="font-size:0.82rem; margin-top:6px; background:#eaf7ef; border-radius:6px; padding:5px 10px;">
-                                <span style="font-weight:600; color:#1a7a40;">📅 Assigned:</span>
-                                ${p.assignments.map(a => {
-                                    const d = new Date(a.date + 'T00:00:00');
-                                    const label = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
-                                    return `<span style="margin-left:8px;">${label}${a.time ? ' ' + a.time : ''} — ${a.home} vs ${a.away}</span>`;
-                                }).join('<br style="margin:0;">')}
-                              </div>`
-                            : `<div style="font-size:0.82rem; margin-top:6px; color:#888;">📋 No upcoming assignments</div>`
-                        }
                     </div>`;
                 } else {
                     return `<div style="background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
