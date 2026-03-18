@@ -444,50 +444,58 @@
     }
 
     function renderHistory() {
-        const history = pruneHistory(loadHistory());
-        saveHistory(history);
-        const wrap    = document.getElementById('submissionHistory');
-        const content = document.getElementById('historyContent');
-        if (history.length === 0) { wrap.style.display = 'none'; return; }
+        try {
+            const history = pruneHistory(loadHistory());
+            saveHistory(history);
+            const wrap    = document.getElementById('submissionHistory');
+            const content = document.getElementById('historyContent');
+            wrap.style.display = 'block';
 
-        const weeks = {};
-        history.forEach(g => {
-            const { key, label } = getWeekLabel(g.date || new Date(g.submittedAt).toISOString().split('T')[0]);
-            if (!weeks[key]) weeks[key] = { label, games: [] };
-            weeks[key].games.push(g);
-        });
+            if (history.length === 0) {
+                content.innerHTML = '<p style="color:#888; font-size:0.85rem;">No games submitted yet on this device.</p>';
+                return;
+            }
 
-        const sortedWeeks = Object.entries(weeks).sort((a, b) => b[0].localeCompare(a[0]));
-        content.innerHTML = sortedWeeks.map(([, { label, games }]) => {
-            const rows = games
-                .sort((a, b) => (a.date||'').localeCompare(b.date||'') || (a.time||'').localeCompare(b.time||''))
-                .map(g => `<tr>
-                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.date||'—'}</td>
-                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.time||'—'}</td>
-                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">${g.home||'—'} vs ${g.away||'—'}</td>
-                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.age||'—'}</td>
-                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap; color:#555; font-size:0.82rem;">${g.submittedBy||'—'}</td>
-                    <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">
-                        <span style="background:#d5f5e3; color:#1e8449; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px;">SUBMITTED</span>
-                    </td>
-                </tr>`).join('');
-            return `<div style="margin-bottom:18px;">
-                <div style="font-size:0.8rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; padding-bottom:4px; border-bottom:2px solid #e94560;">${label}</div>
-                <table style="width:100%; border-collapse:collapse; font-size:0.85rem; background:white; border-radius:8px; overflow:hidden; box-shadow:0 1px 6px rgba(0,0,0,0.06);">
-                    <thead><tr style="background:#0f3460; color:white;">
-                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Date</th>
-                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Time</th>
-                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Matchup</th>
-                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Age</th>
-                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Submitted By</th>
-                        <th style="padding:7px 12px; text-align:left; font-weight:600;">Status</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>`;
-        }).join('');
+            const weeks = {};
+            history.forEach(g => {
+                const dateStr = g.date || new Date(g.submittedAt).toISOString().split('T')[0];
+                const { key, label } = getWeekLabel(dateStr);
+                if (!weeks[key]) weeks[key] = { label, games: [] };
+                weeks[key].games.push(g);
+            });
 
-        wrap.style.display = 'block';
+            const sortedWeeks = Object.entries(weeks).sort((a, b) => b[0].localeCompare(a[0]));
+            content.innerHTML = sortedWeeks.map(([, { label, games }]) => {
+                const rows = games
+                    .sort((a, b) => (a.date||'').localeCompare(b.date||'') || (a.time||'').localeCompare(b.time||''))
+                    .map(g => `<tr>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.date||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.time||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">${g.home||'—'} vs ${g.away||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.age||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap; color:#555; font-size:0.82rem;">${g.submittedBy||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">
+                            <span style="background:#d5f5e3; color:#1e8449; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px;">SUBMITTED</span>
+                        </td>
+                    </tr>`).join('');
+                return `<div style="margin-bottom:18px;">
+                    <div style="font-size:0.8rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; padding-bottom:4px; border-bottom:2px solid #e94560;">${label}</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:0.85rem; background:white; border-radius:8px; overflow:hidden; box-shadow:0 1px 6px rgba(0,0,0,0.06);">
+                        <thead><tr style="background:#0f3460; color:white;">
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Date</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Time</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Matchup</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Age</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Submitted By</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Status</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`;
+            }).join('');
+        } catch(e) {
+            console.error('renderHistory error:', e);
+        }
     }
 
     // ── Doorway ───────────────────────────────────────────────────────────────
