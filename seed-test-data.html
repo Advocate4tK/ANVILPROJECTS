@@ -43,10 +43,15 @@
                     ⚠ This will add records to your live Airtable base. Only run once.
                 </p>
 
-                <div style="display:flex; gap:12px; flex-wrap:wrap;">
-                    <button class="btn btn-primary" id="seedBtn" onclick="runSeed()" style="background:#27ae60;">🚀 Seed All Test Data</button>
-                    <button class="btn btn-primary" id="seedGamesBtn" onclick="seedGamesOnly()" style="background:#0f3460;">📅 Seed Griswold &amp; East Haddam Games</button>
-                    <button class="btn btn-danger" id="clearBtn" onclick="clearData()">🗑 Clear Seeded Data</button>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <button class="btn btn-primary" id="seedBtn" onclick="runSeed()" style="background:#27ae60;">🚀 Seed All Test Data</button>
+                        <button class="btn btn-danger" id="clearBtn" onclick="clearData()">🗑 Clear All Seeded Data</button>
+                    </div>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <button class="btn btn-primary" id="seedGamesBtn" onclick="seedGamesOnly()" style="background:#0f3460;">📅 Seed Griswold &amp; East Haddam Games</button>
+                        <button class="btn btn-primary" id="seedRefsBtn" onclick="seedRefsOnly()" style="background:#8e44ad;">👤 Seed Refs Only</button>
+                    </div>
                 </div>
 
                 <div class="progress-bar" id="progressBar" style="display:none;">
@@ -515,7 +520,86 @@
                 log('Fatal error: ' + e.message, 'err');
             } finally {
                 btn.disabled = false;
-                btn.textContent = '📅 Seed Games Only';
+                btn.textContent = '📅 Seed Griswold & East Haddam Games';
+            }
+        }
+
+        async function seedRefsOnly() {
+            const btn = document.getElementById('seedRefsBtn');
+            btn.disabled = true;
+            btn.textContent = 'Seeding…';
+            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('log').style.display = 'block';
+            document.getElementById('log').innerHTML = '';
+            seededRefIds = [];
+
+            try {
+                log('Creating fake referees…', 'info');
+                const createdRefNames = [];
+                for (let i = 0; i < FAKE_REFS.length; i++) {
+                    const r = FAKE_REFS[i];
+                    let rec = null;
+                    try {
+                        rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
+                            'Name':          r.name,
+                            'Years Reffing': r.years,
+                            'Phone':         r.phone,
+                        });
+                        for (const [key, val] of [['Age', r.age], ['Club Preference', r.prefs], ['Gender', r.gender]]) {
+                            try {
+                                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rec.id, { [key]: val });
+                            } catch(e) { /* optional field — skip */ }
+                        }
+                    } catch(e) {
+                        log(`  ✗ ${r.name}: ${e.message}`, 'err');
+                    }
+                    if (rec) {
+                        seededRefIds.push(rec.id);
+                        createdRefNames.push(r.name);
+                        log(`  ✓ ${r.name} — ${r.years === '0' ? '1st Season' : r.years === '1' ? '2nd Season' : r.years + ' yrs'}`, 'ok');
+                    }
+                    setProgress((i / FAKE_REFS.length) * 80);
+                    await delay(150);
+                }
+
+                // Create availability for all created refs
+                log('Creating availability records…', 'info');
+                const dates = [SAT, SUN];
+                let avCount = 0;
+                const avTotal = createdRefNames.length * dates.length;
+                for (const name of createdRefNames) {
+                    for (const date of dates) {
+                        try {
+                            const rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.AVAILABILITY, {
+                                'Referee Name': name,
+                                'Date':         date,
+                                'Start Time':   '08:00',
+                                'End Time':     '18:00',
+                                'Max Games':    '2',
+                                'Notes':        'Test data',
+                            });
+                            seededAvailIds.push(rec.id);
+                            avCount++;
+                        } catch(e) {
+                            log(`  ✗ availability ${name} ${date}: ${e.message}`, 'err');
+                        }
+                        setProgress(80 + (avCount / avTotal) * 20);
+                        await delay(150);
+                    }
+                }
+
+                setProgress(100);
+                const summary = document.getElementById('summaryBox');
+                summary.style.display = 'block';
+                summary.innerHTML = `<strong style="color:#27ae60;">✓ Refs seeded</strong><br>
+                    <span style="font-size:0.88rem;">${seededRefIds.length} referees + ${seededAvailIds.length} availability records created. Games unchanged.</span>`;
+                log('Done!', 'info');
+
+            } catch(e) {
+                log('Fatal error: ' + e.message, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '👤 Seed Refs Only';
             }
         }
 
