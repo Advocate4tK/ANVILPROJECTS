@@ -147,18 +147,28 @@
     <script>
         emailjs.init('p0JPOZ4XKJ86egvTB');
 
-        function sendUploadNotification(gameCount) {
-            emailjs.send('nectassignor@gmail.com', 'template_e6a6ab', {
-                game_count: gameCount
-            }).then(function() {
-                console.log('Upload notification sent');
-            }, function(error) {
-                console.error('Failed to send notification:', error);
-            });
-        }
-
         document.addEventListener('uploadComplete', function(e) {
-            sendUploadNotification(e.detail.gameCount);
+            const { uploadedByClub, clubEmailMap } = e.detail;
+            Object.entries(uploadedByClub).forEach(([clubName, games]) => {
+                const clubKey = clubName.toLowerCase();
+                const toEmail = clubEmailMap[clubKey]
+                    || Object.entries(clubEmailMap).find(([k]) => clubKey.includes(k) || k.includes(clubKey))?.[1];
+                if (!toEmail) {
+                    console.warn(`No email on file for ${clubName} — skipping confirmation`);
+                    return;
+                }
+                const gameList = games.map((g, i) => `${i + 1}. ${g}`).join('\n');
+                emailjs.send('nectassignor@gmail.com', 'template_game_confirm', {
+                    to_email:   toEmail,
+                    club_name:  clubName,
+                    game_count: games.length,
+                    game_list:  gameList,
+                }).then(function() {
+                    console.log(`Confirmation sent to ${toEmail} for ${clubName}`);
+                }, function(err) {
+                    console.error(`Failed to send to ${toEmail}:`, err);
+                });
+            });
         });
     </script>
 </body>

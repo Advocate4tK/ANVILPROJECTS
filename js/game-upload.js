@@ -4,8 +4,11 @@
  */
 
 let parsedRows = [];
-let clubLeagueMap = {}; // club name (lowercase) → league number
-let fieldLookup   = {}; // "venuename|fieldname" (lowercase) → Airtable Field record ID
+let clubLeagueMap  = {}; // club name (lowercase) → league number
+let clubEmailMap   = {}; // club name (lowercase) → president email
+let clubNameMap    = {}; // club name (lowercase) → display name
+let fieldLookup    = {}; // "venuename|fieldname" (lowercase) → Airtable Field record ID
+let uploadedByClub = {}; // club display name → array of game summary strings
 
 // ── CSV field name → Airtable field name mapping ──────────────────────────────
 const FIELD_MAP = {
@@ -146,6 +149,7 @@ uploadBtn.addEventListener('click', async () => {
     let errorCount = 0;
     let skipCount = 0;
     const total = parsedRows.length;
+    uploadedByClub = {};
 
     // Load clubs and fields in parallel for auto-fill lookups
     progressText.textContent = 'Loading club and field data...';
@@ -158,11 +162,17 @@ uploadBtn.addEventListener('click', async () => {
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
         ]);
 
-        // Club name → league number
+        // Club name → league number, email, display name
         clubs.forEach(c => {
-            const name   = (c.fields['Club Name'] || c.fields['Name'] || '').toLowerCase();
-            const league = c.fields['League'] || 21;
-            if (name) clubLeagueMap[name] = league;
+            const display = c.fields['Club Name'] || c.fields['Name'] || '';
+            const name    = display.toLowerCase();
+            const league  = c.fields['League'] || 21;
+            const email   = c.fields['President Email'] || c.fields['Email'] || c.fields['Contact Email'] || '';
+            if (name) {
+                clubLeagueMap[name] = league;
+                clubEmailMap[name]  = email;
+                clubNameMap[name]   = display;
+            }
         });
 
         // Venue record ID → venue name
@@ -229,6 +239,12 @@ uploadBtn.addEventListener('click', async () => {
             successCount++;
             if (rowEl) rowEl.classList.add('row-success');
             addResult('success', `Row ${i + 1}: ${label} uploaded successfully.`);
+            // Track for confirmation email
+            const clubKey     = (row['Club'] || row['Home Team'] || '').trim().toLowerCase();
+            const clubDisplay = clubNameMap[clubKey] || Object.entries(clubNameMap).find(([k]) => clubKey.includes(k) || k.includes(clubKey))?.[1] || (row['Club'] || row['Home Team'] || 'Unknown');
+            if (!uploadedByClub[clubDisplay]) uploadedByClub[clubDisplay] = [];
+            uploadedByClub[clubDisplay].push(`${row['Date'] || ''} ${row['Time'] || ''} — ${row['Home Team'] || ''} vs ${row['Away Team'] || ''} (${row['Age Group'] || row['Age'] || ''})`);
+
         } catch (err) {
             errorCount++;
             if (rowEl) rowEl.classList.add('row-error');
@@ -259,10 +275,10 @@ uploadBtn.addEventListener('click', async () => {
     clearBtn.disabled = false;
     summaryBox.scrollIntoView({ behavior: 'smooth' });
 
-    // Fire upload complete notification
+    // Fire upload complete notification — includes per-club game lists and emails
     if (successCount > 0) {
         document.dispatchEvent(new CustomEvent('uploadComplete', {
-            detail: { gameCount: successCount }
+            detail: { gameCount: successCount, uploadedByClub, clubEmailMap, clubNameMap }
         }));
     }
 });
