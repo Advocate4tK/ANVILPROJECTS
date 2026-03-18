@@ -224,7 +224,30 @@
         </header>
 
         <main>
+            <!-- Doorway -->
+            <div id="doorway" class="form-container" style="max-width:500px; margin:0 auto 24px;">
+                <h2 style="color:#0f3460; margin-bottom:4px; font-size:1.1rem;">Who's submitting?</h2>
+                <p style="color:#666; font-size:0.88rem; margin-bottom:16px;">Enter your info to continue. First-time users will be saved as the Club Admin.</p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                    <div><label style="font-size:0.8rem; color:#555; display:block; margin-bottom:3px;">First Name <span style="color:#e74c3c">*</span></label>
+                        <input type="text" id="dwFirst" placeholder="First" style="width:100%; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit; box-sizing:border-box;"></div>
+                    <div><label style="font-size:0.8rem; color:#555; display:block; margin-bottom:3px;">Last Name <span style="color:#e74c3c">*</span></label>
+                        <input type="text" id="dwLast" placeholder="Last" style="width:100%; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit; box-sizing:border-box;"></div>
+                    <div><label style="font-size:0.8rem; color:#555; display:block; margin-bottom:3px;">Email <span style="color:#e74c3c">*</span></label>
+                        <input type="email" id="dwEmail" placeholder="email@example.com" style="width:100%; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit; box-sizing:border-box;"></div>
+                    <div><label style="font-size:0.8rem; color:#555; display:block; margin-bottom:3px;">Cell Phone <span style="color:#e74c3c">*</span></label>
+                        <input type="tel" id="dwPhone" placeholder="860-555-0100" style="width:100%; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit; box-sizing:border-box;"></div>
+                </div>
+                <button onclick="unlockSubmit()" style="width:100%; background:#0f3460; color:white; border:none; border-radius:8px; padding:10px; font-size:1rem; font-weight:700; cursor:pointer; margin-top:4px;">Continue →</button>
+                <p id="dwError" style="color:#e74c3c; font-size:0.85rem; margin-top:8px; display:none;"></p>
+            </div>
+
+            <!-- Main form — hidden until doorway complete -->
+            <div id="mainForm" style="display:none;">
             <div class="form-container">
+                <div id="submitterBadge" style="background:#eaf4fb; border:1px solid #aed6f1; border-radius:8px; padding:8px 14px; margin-bottom:16px; font-size:0.88rem; color:#0f3460;">
+                    Submitting as: <strong id="submitterName"></strong> &nbsp;<a href="#" onclick="resetDoorway(); return false;" style="color:#888; font-size:0.8rem; text-decoration:none;">(not you?)</a>
+                </div>
 
                 <div class="page-intro">
                     Fill in each game and click <strong>Create Game</strong> to add it to your list.
@@ -351,6 +374,7 @@
                 <div class="summary-box" id="summaryBox"></div>
 
             </div>
+            </div> <!-- /mainForm -->
         </main>
 
         <footer>
@@ -365,7 +389,61 @@
     let allVenues = [];
     let allFields = [];
     let clubLeagueMap = {};
-    let stagedGames = []; // array of game objects waiting to submit
+    let stagedGames   = [];
+    let currentClubRecord = null; // Airtable club record for this page
+    let currentSubmitter  = '';   // name of person who completed doorway
+
+    // ── Doorway ───────────────────────────────────────────────────────────────
+    ['dwFirst','dwLast','dwEmail','dwPhone'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') unlockSubmit(); });
+    });
+
+    async function unlockSubmit() {
+        const first = document.getElementById('dwFirst').value.trim();
+        const last  = document.getElementById('dwLast').value.trim();
+        const email = document.getElementById('dwEmail').value.trim();
+        const phone = document.getElementById('dwPhone').value.trim();
+        const errEl = document.getElementById('dwError');
+
+        if (!first || !last || !email || !phone) {
+            errEl.textContent = 'Please fill in all four fields to continue.';
+            errEl.style.display = 'block';
+            return;
+        }
+        errEl.style.display = 'none';
+
+        currentSubmitter = `${first} ${last}`;
+        document.getElementById('submitterName').textContent = currentSubmitter;
+
+        // If no Club Admin set yet for this club — save them
+        if (currentClubRecord) {
+            const f = currentClubRecord.fields;
+            const existingAdmin = f['Club Admin'] || '';
+            if (!existingAdmin) {
+                try {
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.CLUBS, currentClubRecord.id, {
+                        'Club Admin':       `${first} ${last}`,
+                        'Club Admin Email': email,
+                        'Club Admin Phone': phone,
+                    });
+                    console.log('Club Admin saved for', currentClubRecord.fields['Club Name'] || '');
+                } catch(e) {
+                    console.warn('Could not save Club Admin:', e.message);
+                }
+            }
+        }
+
+        document.getElementById('doorway').style.display  = 'none';
+        document.getElementById('mainForm').style.display = 'block';
+    }
+
+    function resetDoorway() {
+        currentSubmitter = '';
+        ['dwFirst','dwLast','dwEmail','dwPhone'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('dwError').style.display   = 'none';
+        document.getElementById('doorway').style.display   = 'block';
+        document.getElementById('mainForm').style.display  = 'none';
+    }
 
     window.addEventListener('load', async () => {
         if (!airtableClient) { alert('Airtable client not initialized.'); return; }
@@ -378,6 +456,7 @@
             const slug = s => s.toLowerCase().replace(/[\s-]+/g, '');
             const match = allClubs.find(c => slug(c.name) === slug(urlParam));
             if (match) {
+                currentClubRecord = match.record || null; // store full Airtable record
                 // Lock the club — hide dropdown, show name
                 document.getElementById('clubSelectWrap').style.display = 'none';
                 document.getElementById('clubLockedWrap').style.display = 'block';
@@ -411,7 +490,8 @@
             allClubs = clubs.map(c => ({
                 id:     c.id,
                 name:   c.fields['Club Name'] || c.fields['Name'] || '',
-                league: c.fields['League'] || 21
+                league: c.fields['League'] || 21,
+                record: c
             })).filter(c => c.name).sort((a, b) => a.name.localeCompare(b.name));
 
             allClubs.forEach(c => { clubLeagueMap[c.id] = c.league; });
