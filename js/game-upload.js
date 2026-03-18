@@ -167,7 +167,7 @@ uploadBtn.addEventListener('click', async () => {
             const display = c.fields['Club Name'] || c.fields['Name'] || '';
             const name    = display.toLowerCase();
             const league  = c.fields['League'] || 21;
-            const email   = c.fields['President Email'] || c.fields['Email'] || c.fields['Contact Email'] || '';
+            const email   = c.fields['Club Admin Email'] || c.fields['President Email'] || c.fields['Email'] || c.fields['Contact Email'] || '';
             if (name) {
                 clubLeagueMap[name] = league;
                 clubEmailMap[name]  = email;
