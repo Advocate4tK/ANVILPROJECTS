@@ -767,8 +767,41 @@
                     if (guardianFirst || guardianLast) refereeRecord['Guardian Name'] = `${guardianFirst} ${guardianLast}`.trim();
                     if (guardianEmail) refereeRecord['Guardian Email'] = guardianEmail;
 
+                    // ── Phone match check — catches returning refs with a new email ──
+                    // Before creating a new record, see if anyone already has this phone number.
+                    let phoneMatch = null;
+                    if (phone) {
+                        try {
+                            const phoneResults = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, {
+                                filterByFormula: `{Phone} = "${phone}"`,
+                                maxRecords: 1
+                            });
+                            if (phoneResults.length > 0) phoneMatch = phoneResults[0];
+                        } catch(e) { /* ignore — fall through to create */ }
+                    }
+
+                    let savedRef;
+                    if (phoneMatch) {
+                        // Existing ref found by phone — update Email 2 and profile, don't create new
+                        savedRef = phoneMatch;
+                        const updates = { 'Email 2': document.getElementById('refereeEmail').value.trim() };
+                        // Update any profile fields that may have changed
+                        if (refereeRecord['Years Reffing']) updates['Years Reffing'] = refereeRecord['Years Reffing'];
+                        if (refereeRecord['Address'])       updates['Address']        = refereeRecord['Address'];
+                        if (refereeRecord['City'])          updates['City']           = refereeRecord['City'];
+                        if (refereeRecord['State'])         updates['State']          = refereeRecord['State'];
+                        if (refereeRecord['Zip Code'])      updates['Zip Code']       = refereeRecord['Zip Code'];
+                        if (refereeRecord['Date of Birth']) updates['Date of Birth']  = refereeRecord['Date of Birth'];
+                        if (refereeRecord['Age'])           updates['Age']            = refereeRecord['Age'];
+                        await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, phoneMatch.id, updates);
+                        msgEl.className = 'form-message success';
+                        msgEl.textContent = '✅ Welcome back! Your new email has been saved to your profile.';
+                    } else {
+                        // Genuinely new referee — create record
+                    }
+
                     // Save core fields — this must succeed
-                    const savedRef = await airtableClient.upsertReferee(refereeRecord);
+                    if (!phoneMatch) savedRef = await airtableClient.upsertReferee(refereeRecord);
 
                     // Store ID so form submit can update Club Preference
                     if (savedRef?.id) window._foundRefId = savedRef.id;
