@@ -51,6 +51,7 @@
                     <div style="display:flex; gap:12px; flex-wrap:wrap;">
                         <button class="btn btn-primary" id="seedGamesBtn" onclick="seedGamesOnly()" style="background:#0f3460;">📅 Seed Griswold &amp; East Haddam Games</button>
                         <button class="btn btn-primary" id="seedRefsBtn" onclick="seedRefsOnly()" style="background:#8e44ad;">👤 Seed Refs Only</button>
+                        <button class="btn btn-danger" id="clearGamesBtn" onclick="clearGamesOnly()">🗑 Clear Games Only</button>
                     </div>
                 </div>
 
@@ -600,6 +601,38 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = '👤 Seed Refs Only';
+            }
+        }
+
+        async function clearGamesOnly() {
+            if (!confirm('Delete ALL games from Airtable? Refs and availability will not be touched.')) return;
+            const btn = document.getElementById('clearGamesBtn');
+            btn.disabled = true;
+            btn.textContent = 'Clearing…';
+            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('log').style.display = 'block';
+            document.getElementById('log').innerHTML = '';
+            try {
+                log('Fetching games…', 'info');
+                const games = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 2000 });
+                log(`Found ${games.length} game(s) to delete.`, 'info');
+                for (let i = 0; i < games.length; i++) {
+                    try {
+                        await deleteRecord(CONFIG.AIRTABLE_TABLES.GAMES, games[i].id);
+                        log(`  deleted ${games[i].id}`, 'warn');
+                    } catch(e) {
+                        log(`  failed ${games[i].id}: ${e.message}`, 'err');
+                    }
+                    setProgress(((i + 1) / games.length) * 100);
+                    await delay(150);
+                }
+                seededGameIds = [];
+                log(`✅ Done — ${games.length} game(s) deleted.`, 'ok');
+            } catch(e) {
+                log('Error: ' + e.message, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🗑 Clear Games Only';
             }
         }
 
