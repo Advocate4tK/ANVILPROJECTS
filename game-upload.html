@@ -94,8 +94,25 @@
         </header>
 
         <main>
+            <!-- Doorway: Name entry -->
+            <div id="doorway" class="form-container" style="max-width:480px; margin:0 auto 24px;">
+                <h2 style="color:#0f3460; margin-bottom:6px; font-size:1.1rem;">Who is uploading?</h2>
+                <p style="color:#666; font-size:0.88rem; margin-bottom:16px;">Enter your name to unlock the upload tool.</p>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <input type="text" id="uploaderFirst" placeholder="First name" style="flex:1; min-width:120px; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit;">
+                    <input type="text" id="uploaderLast"  placeholder="Last name"  style="flex:1; min-width:120px; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit;">
+                    <button onclick="unlockUpload()" style="background:#0f3460; color:white; border:none; border-radius:8px; padding:9px 20px; font-size:0.95rem; font-weight:700; cursor:pointer; white-space:nowrap;">Continue →</button>
+                </div>
+                <p id="doorwayError" style="color:#e74c3c; font-size:0.85rem; margin-top:8px; display:none;">Please enter both your first and last name.</p>
+            </div>
+
+            <!-- Upload area — locked until name entered -->
+            <div id="uploadArea" style="display:none;">
             <!-- Drop Zone -->
             <div class="form-container">
+                <div id="uploaderBadge" style="background:#eaf4fb; border:1px solid #aed6f1; border-radius:8px; padding:8px 14px; margin-bottom:16px; font-size:0.88rem; color:#0f3460;">
+                    Uploading as: <strong id="uploaderName"></strong> &nbsp;<a href="#" onclick="resetUploader(); return false;" style="color:#888; font-size:0.8rem; text-decoration:none;">(not you?)</a>
+                </div>
                 <div class="drop-zone" id="dropZone">
                     <div class="drop-icon">📂</div>
                     <p><strong>Drag & drop your CSV file here</strong></p>
@@ -133,6 +150,7 @@
                     <div id="resultsList"></div>
                 </div>
             </div>
+            </div> <!-- /uploadArea -->
 
             <!-- Submission History -->
             <div id="submissionHistory" style="margin-top:28px; display:none;">
@@ -208,6 +226,7 @@
                             <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.time || '—'}</td>
                             <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">${g.home || '—'} vs ${g.away || '—'}</td>
                             <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.age || '—'}</td>
+                            <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap; color:#555; font-size:0.82rem;">${g.submittedBy || '—'}</td>
                             <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">
                                 <span style="background:#d5f5e3; color:#1e8449; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px;">SUBMITTED</span>
                             </td>
@@ -222,6 +241,7 @@
                                     <th style="padding:7px 12px; text-align:left; font-weight:600;">Time</th>
                                     <th style="padding:7px 12px; text-align:left; font-weight:600;">Matchup</th>
                                     <th style="padding:7px 12px; text-align:left; font-weight:600;">Age</th>
+                                    <th style="padding:7px 12px; text-align:left; font-weight:600;">Submitted By</th>
                                     <th style="padding:7px 12px; text-align:left; font-weight:600;">Status</th>
                                 </tr>
                             </thead>
@@ -238,18 +258,48 @@
             const now = Date.now();
             Object.values(uploadedByClub).forEach(games => {
                 games.forEach(gameStr => {
-                    // gameStr format: "2026-03-22 09:00 — Home vs Away (U10)"
                     const match = gameStr.match(/^(\S+)\s+(\S+)\s+—\s+(.+)\s+vs\s+(.+)\s+\((.+)\)$/);
                     if (match) {
-                        history.push({ date: match[1], time: match[2], home: match[3].trim(), away: match[4].trim(), age: match[5].trim(), submittedAt: now });
+                        history.push({ date: match[1], time: match[2], home: match[3].trim(), away: match[4].trim(), age: match[5].trim(), submittedBy: currentUploader, submittedAt: now });
                     } else {
-                        history.push({ date: '', time: '', home: gameStr, away: '', age: '', submittedAt: now });
+                        history.push({ date: '', time: '', home: gameStr, away: '', age: '', submittedBy: currentUploader, submittedAt: now });
                     }
                 });
             });
             saveHistory(history);
             renderHistory();
         }
+
+        // ── Doorway ───────────────────────────────────────────────────────────
+        let currentUploader = '';
+
+        function unlockUpload() {
+            const first = document.getElementById('uploaderFirst').value.trim();
+            const last  = document.getElementById('uploaderLast').value.trim();
+            if (!first || !last) {
+                document.getElementById('doorwayError').style.display = 'block';
+                return;
+            }
+            currentUploader = `${first} ${last}`;
+            document.getElementById('uploaderName').textContent = currentUploader;
+            document.getElementById('doorway').style.display    = 'none';
+            document.getElementById('uploadArea').style.display = 'block';
+            renderHistory();
+        }
+
+        function resetUploader() {
+            currentUploader = '';
+            document.getElementById('uploaderFirst').value = '';
+            document.getElementById('uploaderLast').value  = '';
+            document.getElementById('doorwayError').style.display   = 'none';
+            document.getElementById('doorway').style.display        = 'block';
+            document.getElementById('uploadArea').style.display     = 'none';
+        }
+
+        // Allow Enter key on name fields
+        ['uploaderFirst','uploaderLast'].forEach(id => {
+            document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') unlockUpload(); });
+        });
 
         // Render history on page load
         renderHistory();
