@@ -297,21 +297,24 @@
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
                 ]);
-                // Build lookups: name (lowercase) → numeric ID used in Games
-                const venueByName = {};
+                // Build lookups: all venue/field names stored for contains matching
+                const venueEntries = [];
                 venueRecs.forEach(r => {
                     const name = r.fields['Venue Name'] || r.fields['Name'] || '';
                     const id   = r.fields['Venue ID'];
-                    if (name && id != null) venueByName[name.toLowerCase()] = id;
+                    if (name && id != null) venueEntries.push({ name: name.toLowerCase(), id });
                 });
-                const fieldByName = {};
+                const fieldEntries = [];
                 fieldRecs.forEach(r => {
                     const name = r.fields['Field Name'] || r.fields['Name'] || '';
                     const id   = r.fields['Field ID'];
-                    if (name && id != null) fieldByName[name.toLowerCase()] = id;
+                    if (name && id != null) fieldEntries.push({ name: name.toLowerCase(), id });
                 });
-                log(`  Found ${Object.keys(venueByName).length} venue(s): ${Object.keys(venueByName).join(', ')}`, 'info');
-                log(`  Found ${Object.keys(fieldByName).length} field(s): ${Object.keys(fieldByName).join(', ')}`, 'info');
+                // Contains match: 'griswold' matches 'Griswold Soccer Complex'
+                const findVenue = key => { const k = key.toLowerCase(); return (venueEntries.find(v => v.name.includes(k) || k.includes(v.name)) || {}).id ?? null; };
+                const findField = key => { const k = key.toLowerCase(); return (fieldEntries.find(f => f.name.includes(k) || k.includes(f.name)) || {}).id ?? null; };
+                log(`  Found ${venueEntries.length} venue(s): ${venueEntries.map(v=>v.name).join(', ')}`, 'info');
+                log(`  Found ${fieldEntries.length} field(s): ${fieldEntries.map(f=>f.name).join(', ')}`, 'info');
 
                 log('Creating games…', 'info');
                 const total = GAMES_TO_SEED.length;
@@ -327,9 +330,9 @@
                     if (!badGameFields.has('Age Group'))   fields['Age Group']   = g.age;
                     if (!badGameFields.has('Game Status')) fields['Game Status'] = 'Scheduled';
                     if (g.gender)                          fields['Gender']      = g.gender;
-                    // Venue and Field stored as numeric IDs in Games table
-                    const venueId = g.venue ? venueByName[g.venue.toLowerCase()] : null;
-                    const fieldId = g.field ? fieldByName[g.field.toLowerCase()] : null;
+                    // Venue and Field stored as numeric IDs in Games table (contains match)
+                    const venueId = g.venue ? findVenue(g.venue) : null;
+                    const fieldId = g.field ? findField(g.field) : null;
                     if (venueId != null) fields['Venue ID'] = venueId;
                     if (fieldId != null) fields['Field ID'] = fieldId;
 
