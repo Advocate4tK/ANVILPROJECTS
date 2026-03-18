@@ -519,39 +519,77 @@
             }
         }
 
+        const FAKE_REF_NAMES = new Set([
+            'Biff Whistledown', 'Muffin Thistleby', 'Clod Noodleman', 'Dingus McFlag',
+            'Wanda Blorpstein', 'Flopsy Grumbull', 'Poot Cranberry', 'Greta Fumblebox',
+            'Snorkel Briggs', 'Lulu Squelchworth', 'Bumble Cranksworth', 'Fizzy Blortwick',
+            'Crud Hammersby', 'Dotty Plunkerton', 'Egbert Noodleby',
+            'Chump Benderby', 'Dolly Sprocketton', 'Rando Quigley', 'Fern Wobblewick',
+            'Grisby Fumbleston', 'Harriet Clobberson', 'Peter Zipser', 'Sam Whitfield', 'Peyton Vance',
+            'Babs Wobbleston', 'Gump Flannigan', 'Inkle Blunderbuss', 'Jangles Muttberry', 'Lottie Crumblehorn',
+            'Ogbert Splatterly', 'Pudding Flannelby', 'Quibble Noodlehorn', 'Rummy Blortsworth',
+            'Dork Cabbagehead', 'Norbert Fleebish', 'Knobby Fizzleton',
+            'Trish Noodlehat', 'Mumbles Dorksworth', 'Nibbles Wobbleston',
+            'Slab Beefpudding', 'Velma Chortlebury', 'Grub Muttonfist', 'Splotch Crumpleby',
+            'Patsy Wobblehorn', 'Tansy Fumbleby', 'Hannah Millbrook', 'Travis Dunmore',
+            'Casey Fullerton', 'Reese Talmadge',
+            'Bobo Crumplehorn', 'Uglbert Wibbleston', 'Marge Blunderpuss', 'Violet Snorkelton',
+            'Wumble Cabbagehorn', 'Xena Blunderpants', 'Thud Biscuitpants', 'Yogi Sprocketsby',
+            'Doris Crankshaw', 'Frank Wobbleby', 'Gloria Nettlewick', 'Harold Splunge'
+        ]);
+
         async function clearData() {
-            if (!confirm(`Delete ${seededGameIds.length} games and ${seededAvailIds.length} availability records that were just created?`)) return;
+            if (!confirm('Fetch all seeded records from Airtable and delete them? This removes ALL test games, all 61 test referees (by name), and all availability records.')) return;
 
             const btn = document.getElementById('clearBtn');
             btn.disabled = true;
-            btn.textContent = 'Clearing…';
+            btn.textContent = 'Loading…';
+            document.getElementById('progressBar').style.display = 'block';
             document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('log').style.display = 'block';
 
-            const allIds = [
-                ...seededGameIds.map(id  => ({ table: CONFIG.AIRTABLE_TABLES.GAMES,        id })),
-                ...seededRefIds.map(id   => ({ table: CONFIG.AIRTABLE_TABLES.REFEREES,     id })),
-                ...seededAvailIds.map(id => ({ table: CONFIG.AIRTABLE_TABLES.AVAILABILITY, id })),
-            ];
+            try {
+                log('Fetching all records to clear…', 'info');
+                const [games, referees, availability] = await Promise.all([
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,        { maxRecords: 2000 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES,     { maxRecords: 2000 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, { maxRecords: 2000 })
+                ]);
 
-            let done = 0;
-            for (const { table, id } of allIds) {
-                try {
-                    await deleteRecord(table, id);
-                    log(`  deleted ${id}`, 'warn');
-                } catch(e) {
-                    log(`  failed to delete ${id}: ${e.message}`, 'err');
+                const toDelete = [
+                    ...games.map(r       => ({ table: CONFIG.AIRTABLE_TABLES.GAMES,        id: r.id })),
+                    ...referees.filter(r => FAKE_REF_NAMES.has((r.fields['Name'] || '').trim()))
+                               .map(r   => ({ table: CONFIG.AIRTABLE_TABLES.REFEREES,     id: r.id })),
+                    ...availability.map(r => ({ table: CONFIG.AIRTABLE_TABLES.AVAILABILITY, id: r.id })),
+                ];
+
+                log(`Found: ${games.length} game(s), ${referees.filter(r => FAKE_REF_NAMES.has((r.fields['Name']||'').trim())).length} test ref(s), ${availability.length} availability record(s)`, 'info');
+
+                btn.textContent = 'Clearing…';
+                let done = 0;
+                for (const { table, id } of toDelete) {
+                    try {
+                        await deleteRecord(table, id);
+                        log(`  deleted ${id}`, 'warn');
+                    } catch(e) {
+                        log(`  failed ${id}: ${e.message}`, 'err');
+                    }
+                    done++;
+                    setProgress((done / toDelete.length) * 100);
+                    await delay(150);
                 }
-                done++;
-                setProgress((done / allIds.length) * 100);
-                await delay(150);
+
+                seededGameIds = [];
+                seededRefIds  = [];
+                seededAvailIds = [];
+                document.getElementById('summaryBox').style.display = 'none';
+                log(`✅ Done — ${toDelete.length} records deleted.`, 'ok');
+            } catch(e) {
+                log(`Error: ${e.message}`, 'err');
             }
 
-            seededGameIds = [];
-            seededAvailIds = [];
-            document.getElementById('summaryBox').style.display = 'none';
             btn.disabled = false;
             btn.textContent = '🗑 Clear Seeded Data';
-            log('All seeded records deleted.', 'info');
         }
 
         async function deleteRecord(tableName, recordId) {
