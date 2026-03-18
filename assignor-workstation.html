@@ -318,7 +318,7 @@
                     <!-- Full-width title bar -->
                     <div style="background:#0f3460; color:white; border-radius:8px 8px 0 0; padding:8px 14px; margin:-1px -1px 0 -1px;">
                         <div style="display:flex; align-items:center; justify-content:space-between;">
-                            <span style="font-size:1rem; font-weight:700; letter-spacing:0.5px;">👤 Referees</span>
+                            <span id="refsPanelTitle" style="font-size:1rem; font-weight:700; letter-spacing:0.5px;">👤 Referees</span>
                             <button onclick="renderRefs(document.getElementById('refSearch').value.toLowerCase())" title="Refresh referee list" style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:6px; padding:3px 8px; font-size:0.8rem; cursor:pointer; color:white; font-family:inherit;">↻ Refresh</button>
                         </div>
                         <div style="display:flex; align-items:center; gap:6px; margin-top:6px; padding-bottom:4px;">
@@ -327,15 +327,28 @@
                                 <span style="position:absolute; top:3px; left:3px; width:14px; height:14px; background:white; border-radius:50%; transition:left 0.2s;"></span>
                             </span>
                         </div>
+                        <div style="display:flex; align-items:center; gap:6px; margin-top:4px; padding-bottom:4px;">
+                            <span style="font-size:0.75rem; color:rgba(255,255,255,0.85);">Sort:</span>
+                            <select id="refSortMode" onchange="renderRefs(document.getElementById('refSearch').value.toLowerCase())" style="font-size:0.75rem; padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.15); color:white; font-family:inherit; cursor:pointer;">
+                                <option value="availability">Available first</option>
+                                <option value="rating">Rating ↓</option>
+                                <option value="exp-desc">Experience ↓</option>
+                                <option value="exp-asc">Experience ↑</option>
+                                <option value="name">Name A–Z</option>
+                            </select>
+                        </div>
                     </div>
                     <div style="margin-bottom:10px;"></div>
-                    <div class="conflict-legend">
-                        <span><span class="legend-dot" style="background:#e74c3c;"></span>1st Season</span>
-                        <span><span class="legend-dot" style="background:#27ae60;"></span>2nd Season</span>
-                        <span><span class="legend-dot" style="background:#f1c40f;"></span>2–3 yrs</span>
-                        <span><span class="legend-dot" style="background:#2980b9;"></span>4–10 yrs</span>
-                        <span><span class="legend-dot" style="background:#8e44ad;"></span>10+ yrs</span>
-                        <span><span class="legend-dot" style="background:#bbb;"></span>No availability</span>
+                    <div style="margin-bottom:8px;">
+                        <button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'flex':'none'" style="background:none; border:none; cursor:pointer; font-size:0.75rem; color:#888; padding:0; font-family:inherit;">❓ Show legend</button>
+                        <div class="conflict-legend" style="display:none; margin-top:6px;">
+                            <span><span class="legend-dot" style="background:#e74c3c;"></span>1st Season</span>
+                            <span><span class="legend-dot" style="background:#27ae60;"></span>2nd Season</span>
+                            <span><span class="legend-dot" style="background:#f1c40f;"></span>2–3 yrs</span>
+                            <span><span class="legend-dot" style="background:#2980b9;"></span>4–10 yrs</span>
+                            <span><span class="legend-dot" style="background:#8e44ad;"></span>10+ yrs</span>
+                            <span><span class="legend-dot" style="background:#bbb;"></span>No availability</span>
+                        </div>
                     </div>
                     <!-- Filter section -->
                     <div style="margin-bottom:10px; position:relative;">
@@ -1257,7 +1270,18 @@
                 return 1;
             };
 
-            filtered.sort((a, b) => classify(a) - classify(b));
+            const sortMode = document.getElementById('refSortMode')?.value || 'availability';
+            if (sortMode === 'availability') {
+                filtered.sort((a, b) => classify(a) - classify(b));
+            } else if (sortMode === 'rating') {
+                filtered.sort((a, b) => (b.fields['Rating'] || 0) - (a.fields['Rating'] || 0));
+            } else if (sortMode === 'exp-desc') {
+                filtered.sort((a, b) => (parseInt(b.fields['Years Reffing']) || 0) - (parseInt(a.fields['Years Reffing']) || 0));
+            } else if (sortMode === 'exp-asc') {
+                filtered.sort((a, b) => (parseInt(a.fields['Years Reffing']) || 0) - (parseInt(b.fields['Years Reffing']) || 0));
+            } else if (sortMode === 'name') {
+                filtered.sort((a, b) => (a.fields['Name'] || '').localeCompare(b.fields['Name'] || ''));
+            }
 
             if (!filtered.length) { wrap.innerHTML = '<p class="hint">No refs found.</p>'; return; }
 
@@ -1331,8 +1355,11 @@
                     ${expColor ? `style="border-left-color:${expColor};"` : ''}
                     ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
-                        <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}${genderDot}${years ? `<span style="font-size:0.72rem; font-weight:700; color:${expColor || '#888'}; white-space:nowrap;">${years}</span>` : ''}</div>
-                        <span id="rtri-${rid}" onclick="event.stopPropagation(); toggleRefCardWS('${rid}')" style="cursor:pointer; font-size:0.7rem; color:#aaa; padding:2px 4px; flex-shrink:0;">▶</span>
+                        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; min-width:0;">
+                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}${genderDot}${years ? `<span style="font-size:0.72rem; font-weight:700; color:${expColor || '#888'}; white-space:nowrap;">${years}</span>` : ''}</div>
+                            ${assignedTodayCount > 0 ? `<span style="font-size:0.7rem; background:#e8f4fd; color:#0f3460; border-radius:10px; padding:1px 6px; font-weight:700; white-space:nowrap;">📋 ${assignedTodayCount}</span>` : ''}
+                        </div>
+                        <span id="rtri-${rid}" onclick="event.stopPropagation(); toggleRefCardWS('${rid}')" style="cursor:pointer; font-size:0.7rem; color:${cls === 2 ? '#e74c3c' : '#aaa'}; padding:2px 4px; flex-shrink:0; font-weight:${cls === 2 ? '900' : 'normal'};">▶</span>
                     </div>
                     <div id="rcd-${rid}" style="display:none;">
                         ${metaParts.length ? `<div class="ref-meta">${metaParts.join(' · ')}</div>` : ''}
@@ -1366,6 +1393,8 @@
             });
 
             wrap.innerHTML = html;
+            const titleEl = document.getElementById('refsPanelTitle');
+            if (titleEl) titleEl.textContent = `👤 Referees (${filtered.length})`;
         }
 
         // ── Drag ─────────────────────────────────────────────────────────────
