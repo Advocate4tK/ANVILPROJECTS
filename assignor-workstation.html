@@ -317,7 +317,8 @@
                 <div class="refs-panel">
                     <div class="panel-title">👤 Referees</div>
                     <div class="conflict-legend">
-                        <span><span class="legend-dot" style="background:#27ae60;"></span>1 yr</span>
+                        <span><span class="legend-dot" style="background:#e67e22;"></span>1st Season</span>
+                        <span><span class="legend-dot" style="background:#27ae60;"></span>2nd Season</span>
                         <span><span class="legend-dot" style="background:#f1c40f;"></span>2–3 yrs</span>
                         <span><span class="legend-dot" style="background:#2980b9;"></span>4–10 yrs</span>
                         <span><span class="legend-dot" style="background:#8e44ad;"></span>10+ yrs</span>
@@ -334,12 +335,13 @@
                                 <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">Years Reffing:</label>
                                 <select id="yearsFilter" style="flex:1; font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
                                     <option value="any">Any</option>
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="3">3</option>
-                                    <option value="4">4</option>
-                                    <option value="5-10">5–10</option>
-                                    <option value="10+">10+</option>
+                                    <option value="0">1st Season</option>
+                                    <option value="1">2nd Season</option>
+                                    <option value="2">2 yrs</option>
+                                    <option value="3">3 yrs</option>
+                                    <option value="4">4 yrs</option>
+                                    <option value="5-10">5–10 yrs</option>
+                                    <option value="10+">10+ yrs</option>
                                 </select>
                             </div>
                             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
@@ -1000,9 +1002,7 @@
                 // Use the same experience color scale as the ref panel cards
                 const ref = refLookup[refId];
                 const yrsNum = ref ? (parseInt(ref.fields['Years Reffing']) || 0) : 0;
-                const expColor = yrsNum > 0
-                    ? (yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad')
-                    : null;
+                const expColor = yrsNum === 0 ? '#e67e22' : yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad';
                 const borderStyle = expColor ? `border-color:${expColor};` : '';
                 const labelColor  = expColor ? `color:${expColor};` : '';
                 return `<div class="slot occupied" draggable="true" data-game-id="${gameId}" data-position="${position}"
@@ -1134,7 +1134,8 @@
                     if (!prefs.some(p => focusClubs.includes(p.toLowerCase()))) return false;
                 }
                 if (yearsFilter !== 'any') {
-                    const yrs = parseInt(r.fields['Years Reffing']) || 0;
+                    const yrs = parseInt(r.fields['Years Reffing'] ?? -1);
+                    if (yearsFilter === '0'    && yrs !== 0)             return false;
                     if (yearsFilter === '1'    && yrs !== 1)             return false;
                     if (yearsFilter === '2'    && yrs !== 2)             return false;
                     if (yearsFilter === '3'    && yrs !== 3)             return false;
@@ -1217,9 +1218,9 @@
                                : '';
                 const yrsNum  = parseInt(r.fields['Years Reffing']) || 0;
                 const expColor = cls <= 1
-                    ? (yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad')
+                    ? (yrsNum === 0 ? '#e67e22' : yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad')
                     : null; // conflicts/no-avail keep their grey class color
-                const years = r.fields['Years Reffing'] ? `${r.fields['Years Reffing']} yr${r.fields['Years Reffing'] == 1 ? '' : 's'}` : '';
+                const years = yrsNum === 0 ? '1st Season' : yrsNum === 1 ? '2nd Season' : r.fields['Years Reffing'] ? `${r.fields['Years Reffing']} yrs` : '';
                 const age   = r.fields['Age'] ? `age ${r.fields['Age']}` : '';
                 const refNameKey = (r.fields['Name'] || '').trim().toLowerCase();
                 const lookupDate = gameDate || document.getElementById('dateFilter').value;
