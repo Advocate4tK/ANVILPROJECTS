@@ -214,6 +214,27 @@
         }
         .summary-box.all-good    { background: #d5f5e3; color: #1e8449; }
         .summary-box.some-errors { background: #fdebd0; color: #935116; }
+
+        /* ── Scheduled Games section ── */
+        .sched-table { width:100%; border-collapse:collapse; font-size:0.84rem; background:white; border-radius:8px; overflow:hidden; box-shadow:0 1px 6px rgba(0,0,0,0.06); }
+        .sched-table th { background:#0f3460; color:white; padding:8px 12px; text-align:left; font-weight:600; white-space:nowrap; }
+        .sched-table td { padding:7px 12px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+        .sched-table tr:last-child td { border-bottom:none; }
+        .ref-badge { background:#eaf4fb; color:#1a5276; font-size:0.75rem; font-weight:700; padding:2px 7px; border-radius:10px; white-space:nowrap; display:inline-block; margin:1px 2px; }
+        .status-badge { font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+        .status-submitted   { background:#d5f5e3; color:#1e8449; }
+        .status-assigned    { background:#d6eaf8; color:#1a5276; }
+        .status-change-req  { background:#fdebd0; color:#935116; }
+        .btn-change { background:none; border:1px solid #e94560; color:#e94560; border-radius:6px; padding:3px 10px; font-size:0.78rem; font-weight:600; cursor:pointer; white-space:nowrap; }
+        .btn-change:hover { background:#e94560; color:white; }
+
+        /* ── Change Request inline form ── */
+        .change-form { background:#fff8f0; border:1px solid #f0a500; border-radius:8px; padding:14px 16px; margin-top:8px; display:none; }
+        .change-form label { font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:3px; margin-top:10px; }
+        .change-form label:first-child { margin-top:0; }
+        .change-form input, .change-form textarea { width:100%; padding:7px 10px; border:1px solid #ccc; border-radius:6px; font-size:0.88rem; font-family:inherit; box-sizing:border-box; }
+        .change-form textarea { height:60px; resize:vertical; }
+        .change-form-btns { display:flex; gap:8px; margin-top:10px; }
     </style>
 </head>
 <body>
@@ -385,6 +406,13 @@
 
             </div>
             </div> <!-- /mainForm -->
+
+            <!-- Scheduled Games (live from Airtable) -->
+            <div id="scheduledGamesSection" style="margin-top:28px; display:none;">
+                <h2 style="color:#0f3460; font-size:1.1rem; margin-bottom:6px;">📅 Your Scheduled Games</h2>
+                <p style="color:#666; font-size:0.83rem; margin-bottom:12px;">Games on file with the assignor. Assigned referees appear once the assignor fills them in.</p>
+                <div id="scheduledGamesContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>
+            </div>
 
             <!-- Submission History -->
             <div id="submissionHistory" style="margin-top:28px; display:none;">
@@ -589,6 +617,7 @@
         const [f1, ...rest] = currentSubmitter.split(' ');
         localStorage.setItem(SUBMITTER_KEY, JSON.stringify({ first: f1, last: rest.join(' ') }));
         renderHistory();
+        loadScheduledGames();
     }
 
     function resetDoorway() {
@@ -964,6 +993,119 @@
         document.getElementById('createGameBtn').disabled = false;
         updateCreateBtn();
     });
+
+    // ── Scheduled Games (live from Airtable) ─────────────────────────────────
+    async function loadScheduledGames() {
+        const section = document.getElementById('scheduledGamesSection');
+        const content = document.getElementById('scheduledGamesContent');
+        if (!currentClubRecord) return;
+        section.style.display = 'block';
+
+        const clubName = (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '').toLowerCase();
+        try {
+            const games = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 500 });
+            const clubGames = games
+                .filter(r => (r.fields['Home Team'] || '').toLowerCase().includes(clubName) || (r.fields['Club'] || '').toLowerCase().includes(clubName))
+                .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || ''));
+
+            if (clubGames.length === 0) {
+                content.innerHTML = '<p style="color:#888; font-size:0.85rem;">No games on file yet.</p>';
+                return;
+            }
+
+            const rows = clubGames.map(r => {
+                const f          = r.fields;
+                const dateStr    = f['Date'] || '—';
+                const timeRaw    = f['Time'] || '';
+                const timeDisp   = timeRaw ? formatTime(timeRaw.substring(0,5)) : '—';
+                const center     = f['Center Referee'] || '';
+                const ar1        = f['AR 1'] || '';
+                const ar2        = f['AR 2'] || '';
+                const refs       = [center && `<span class="ref-badge">⚽ ${center}</span>`,
+                                    ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
+                                    ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('') || '<span style="color:#aaa; font-size:0.8rem;">Pending</span>';
+                const rawStatus  = f['Game Status'] || f['Status'] || 'Submitted';
+                const statusCls  = rawStatus === 'Change Requested' ? 'status-change-req' : (center ? 'status-assigned' : 'status-submitted');
+                const statusDisp = rawStatus === 'Change Requested' ? '⚠ Change Requested' : (center ? 'Assigned' : 'Submitted');
+
+                return `<tr>
+                    <td style="white-space:nowrap;">${dateStr}</td>
+                    <td style="white-space:nowrap;">${timeDisp}</td>
+                    <td>${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</td>
+                    <td style="white-space:nowrap;">${f['Age Group'] || '—'}</td>
+                    <td>${refs}</td>
+                    <td><span class="status-badge ${statusCls}">${statusDisp}</span></td>
+                    <td>
+                        <button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>
+                        <div class="change-form" id="chgForm_${r.id}">
+                            <p style="font-size:0.82rem; font-weight:700; color:#935116; margin:0 0 8px;">Request a change for: <em>${f['Home Team'] || ''} vs ${f['Away Team'] || ''} (${dateStr})</em></p>
+                            <label>New Date (optional)</label>
+                            <input type="date" id="chgDate_${r.id}">
+                            <label>New Time (optional)</label>
+                            <input type="time" id="chgTime_${r.id}">
+                            <label>Reason <span style="color:#e74c3c">*</span></label>
+                            <textarea id="chgReason_${r.id}" placeholder="Explain the requested change…"></textarea>
+                            <div class="change-form-btns">
+                                <button class="btn btn-primary" style="font-size:0.85rem; padding:7px 16px;" onclick="submitChangeRequest('${r.id}')">Submit Request</button>
+                                <button class="btn btn-outline" style="font-size:0.85rem; padding:7px 16px;" onclick="toggleChangeForm('${r.id}')">Cancel</button>
+                            </div>
+                            <p id="chgMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            content.innerHTML = `<table class="sched-table">
+                <thead><tr>
+                    <th>Date</th><th>Time</th><th>Matchup</th><th>Age</th>
+                    <th>Referees</th><th>Status</th><th></th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        } catch(err) {
+            content.innerHTML = `<p style="color:#e74c3c; font-size:0.85rem;">Could not load games: ${err.message}</p>`;
+        }
+    }
+
+    function toggleChangeForm(gameId) {
+        const form = document.getElementById('chgForm_' + gameId);
+        form.style.display = form.style.display === 'block' ? 'none' : 'block';
+    }
+
+    async function submitChangeRequest(gameId) {
+        const reason  = (document.getElementById('chgReason_' + gameId).value || '').trim();
+        const newDate = document.getElementById('chgDate_' + gameId).value || '';
+        const newTime = document.getElementById('chgTime_' + gameId).value || '';
+        const msgEl   = document.getElementById('chgMsg_' + gameId);
+
+        if (!reason) { msgEl.textContent = 'Please enter a reason.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
+
+        msgEl.textContent = 'Submitting…'; msgEl.style.color = '#555'; msgEl.style.display = 'block';
+
+        const now     = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+        let noteText  = `\n\n[CHANGE REQUEST – ${now}]`;
+        if (newDate)  noteText += `\nRequested Date: ${newDate}`;
+        if (newTime)  noteText += `\nRequested Time: ${newTime}`;
+        noteText += `\nReason: ${reason}`;
+        if (currentSubmitter) noteText += `\nRequested by: ${currentSubmitter}`;
+
+        try {
+            // Get existing notes to append
+            const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { filterByFormula: `RECORD_ID()='${gameId}'`, maxRecords: 1 });
+            const prevNotes = existing[0]?.fields['Notes'] || '';
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                'Game Status': 'Change Requested',
+                'Notes': prevNotes + noteText
+            });
+            msgEl.textContent = '✅ Change request submitted. The assignor will be in touch.';
+            msgEl.style.color = '#1e8449';
+            // Refresh the table after a moment
+            setTimeout(loadScheduledGames, 1500);
+        } catch(err) {
+            msgEl.textContent = '❌ Failed: ' + err.message;
+            msgEl.style.color = '#e74c3c';
+        }
+    }
 
     // ── Idle session timeout (30 min) ─────────────────────────────────────────
     let _idleTimer;
