@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Change Requests</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .change-card {
+            background: white;
+            border-radius: 12px;
+            border-left: 5px solid #e94560;
+            padding: 20px 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+        }
+        .change-card.resolved {
+            border-left-color: #27ae60;
+            opacity: 0.65;
+        }
+        .change-card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .game-title { font-size: 1.05rem; font-weight: 800; color: #0f3460; }
+        .game-meta  { font-size: 0.83rem; color: #666; margin-top: 3px; }
+        .status-pill {
+            font-size: 0.75rem; font-weight: 700; padding: 4px 12px;
+            border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+        }
+        .pill-open     { background: #fdebd0; color: #935116; }
+        .pill-resolved { background: #d5f5e3; color: #1e8449; }
+        .request-box {
+            background: #fff8f0;
+            border: 1px solid #f0a500;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            color: #333;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin-bottom: 14px;
+            font-family: inherit;
+        }
+        .current-refs {
+            font-size: 0.82rem;
+            color: #555;
+            margin-bottom: 14px;
+        }
+        .ref-badge { background:#eaf4fb; color:#1a5276; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px; display:inline-block; margin:0 3px; }
+        .action-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .btn-resolve  { background: #27ae60; color: white; border: none; border-radius: 8px; padding: 8px 18px; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+        .btn-resolve:hover  { background: #1e8449; }
+        .btn-dismiss  { background: #e74c3c; color: white; border: none; border-radius: 8px; padding: 8px 18px; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+        .btn-dismiss:hover  { background: #c0392b; }
+        .btn-contact  { background: none; border: 1px solid #0f3460; color: #0f3460; border-radius: 8px; padding: 7px 16px; font-size: 0.85rem; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-contact:hover  { background: #0f3460; color: white; }
+        .club-section-label {
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 2px; color: #e94560; margin: 24px 0 8px;
+            padding-bottom: 4px; border-bottom: 2px solid #e94560;
+        }
+        .empty-state { text-align: center; padding: 60px 20px; color: #888; font-size: 0.95rem; }
+        .empty-state .big { font-size: 3rem; margin-bottom: 12px; }
+        #filterRow { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+        #filterRow label { font-size: 0.82rem; color: #555; font-weight: 600; }
+        .action-msg { font-size: 0.82rem; margin-left: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚠️ Schedule Change Requests</h1>
+            <p class="subtitle">Games flagged for rescheduling by club admins</p>
+        </header>
+
+        <main>
+            <div style="margin-bottom:16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <a href="admin.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Admin Portal</a>
+                <a href="assignor-workstation.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">📋 Assignor Workstation</a>
+                <button onclick="loadChanges()" class="btn btn-secondary" style="font-size:0.85rem; padding:8px 16px;">🔄 Refresh</button>
+                <label style="margin-left:auto; font-size:0.82rem; color:#555; font-weight:600;">
+                    <input type="checkbox" id="showResolved" onchange="loadChanges()"> Show Resolved
+                </label>
+            </div>
+
+            <div id="summary" style="margin-bottom:16px;"></div>
+            <div id="changesList"><p style="color:#888; font-size:0.9rem;">Loading…</p></div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Referee Scheduling System by Anvil Arts</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="js/airtable-client.js"></script>
+    <script>
+    let refById = {};
+
+    function formatTime(t) {
+        if (!t) return '—';
+        const [h, m] = t.substring(0,5).split(':').map(Number);
+        return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
+    }
+
+    function resolveRef(val) {
+        if (!val) return '';
+        if (Array.isArray(val)) return val.map(id => refById[id] || id).filter(Boolean).join(', ');
+        return val;
+    }
+
+    // Extract the change request block(s) from the Notes field
+    function extractRequests(notes) {
+        if (!notes) return [];
+        const blocks = notes.split(/\[CHANGE REQUEST/i).slice(1);
+        return blocks.map(b => '[CHANGE Request' + b.trim());
+    }
+
+    async function loadChanges() {
+        const container   = document.getElementById('changesList');
+        const summaryEl   = document.getElementById('summary');
+        const showResolved = document.getElementById('showResolved').checked;
+        container.innerHTML = '<p style="color:#888; font-size:0.9rem;">Loading…</p>';
+
+        try {
+            const [games, refs] = await Promise.all([
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 1000 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 })
+            ]);
+
+            refs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
+
+            const changeGames = games.filter(r => {
+                const s = (r.fields['Game Status'] || '').toLowerCase();
+                if (showResolved) return s === 'change requested' || s === 'change resolved';
+                return s === 'change requested';
+            });
+
+            if (changeGames.length === 0) {
+                summaryEl.innerHTML = '';
+                container.innerHTML = `<div class="empty-state"><div class="big">✅</div>No open change requests — you're all clear.</div>`;
+                return;
+            }
+
+            // Group by club/home team
+            const byClub = {};
+            changeGames.forEach(r => {
+                const club = (r.fields['Club'] || r.fields['Home Team'] || 'Unknown').split(' vs ')[0].trim();
+                if (!byClub[club]) byClub[club] = [];
+                byClub[club].push(r);
+            });
+
+            const openCount = changeGames.filter(r => (r.fields['Game Status'] || '').toLowerCase() === 'change requested').length;
+            summaryEl.innerHTML = `<div style="background:#fdebd0; border:1px solid #f0a500; border-radius:8px; padding:12px 18px; font-size:0.88rem; color:#935116; font-weight:600;">
+                ⚠️ ${openCount} open change request${openCount !== 1 ? 's' : ''} across ${Object.keys(byClub).length} club${Object.keys(byClub).length !== 1 ? 's' : ''}
+            </div>`;
+
+            container.innerHTML = Object.entries(byClub).sort().map(([club, records]) => {
+                const cards = records
+                    .sort((a,b) => (a.fields['Date']||'').localeCompare(b.fields['Date']||''))
+                    .map(r => {
+                        const f          = r.fields;
+                        const isResolved = (f['Game Status']||'').toLowerCase() === 'change resolved';
+                        const center     = resolveRef(f['Center Referee']);
+                        const ar1        = resolveRef(f['AR 1']);
+                        const ar2        = resolveRef(f['AR 2']);
+                        const refsHtml   = [center && `<span class="ref-badge">⚽ ${center}</span>`,
+                                            ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
+                                            ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('') || '<em>None assigned</em>';
+
+                        const requests   = extractRequests(f['Notes'] || '');
+                        const requestHtml = requests.length
+                            ? requests.map(req => `<div class="request-box">${req}</div>`).join('')
+                            : `<div class="request-box" style="color:#aaa;">No change details found in notes.</div>`;
+
+                        const adminEmail = f['Club Admin Email'] || '';
+                        const contactBtn = adminEmail
+                            ? `<a href="mailto:${adminEmail}?subject=Re: Schedule Change Request — ${f['Home Team']||''} vs ${f['Away Team']||''}" class="btn-contact">✉ Contact Club</a>`
+                            : '';
+
+                        return `<div class="change-card ${isResolved ? 'resolved' : ''}" id="card_${r.id}">
+                            <div class="change-card-header">
+                                <div>
+                                    <div class="game-title">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</div>
+                                    <div class="game-meta">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
+                                </div>
+                                <span class="status-pill ${isResolved ? 'pill-resolved' : 'pill-open'}">${isResolved ? '✅ Resolved' : '⚠ Open'}</span>
+                            </div>
+                            <div class="current-refs"><strong>Current Refs:</strong> ${refsHtml}</div>
+                            ${requestHtml}
+                            <div class="action-row">
+                                ${!isResolved ? `<button class="btn-resolve" onclick="markResolved('${r.id}')">✅ Mark Resolved</button>` : ''}
+                                ${!isResolved ? `<button class="btn-dismiss" onclick="dismissRequest('${r.id}')">✕ Dismiss</button>` : ''}
+                                ${contactBtn}
+                                <span class="action-msg" id="msg_${r.id}"></span>
+                            </div>
+                        </div>`;
+                    }).join('');
+
+                return `<div class="club-section-label">🏟 ${club}</div>${cards}`;
+            }).join('');
+
+        } catch(err) {
+            container.innerHTML = `<p style="color:#e74c3c;">Error loading data: ${err.message}</p>`;
+        }
+    }
+
+    async function markResolved(gameId) {
+        const msgEl = document.getElementById('msg_' + gameId);
+        msgEl.textContent = 'Saving…'; msgEl.style.color = '#555';
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Change Resolved' });
+            msgEl.textContent = '✅ Marked resolved';
+            msgEl.style.color = '#1e8449';
+            setTimeout(loadChanges, 1000);
+        } catch(err) {
+            msgEl.textContent = '❌ ' + err.message;
+            msgEl.style.color = '#e74c3c';
+        }
+    }
+
+    async function dismissRequest(gameId) {
+        if (!confirm('Dismiss this change request without resolving? The game status will revert to Submitted.')) return;
+        const msgEl = document.getElementById('msg_' + gameId);
+        msgEl.textContent = 'Saving…'; msgEl.style.color = '#555';
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Submitted' });
+            msgEl.textContent = 'Dismissed';
+            msgEl.style.color = '#888';
+            setTimeout(loadChanges, 1000);
+        } catch(err) {
+            msgEl.textContent = '❌ ' + err.message;
+            msgEl.style.color = '#e74c3c';
+        }
+    }
+
+    window.addEventListener('load', () => {
+        if (!airtableClient) { alert('Airtable client not initialized.'); return; }
+        loadChanges();
+    });
+    </script>
+</body>
+</html>
