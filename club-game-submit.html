@@ -1039,6 +1039,31 @@
         return val; // already a plain name
     }
 
+    // ── Game number helpers ───────────────────────────────────────────────────
+    function clubAbbr(teamName) {
+        const skip = new Set(['sc','fc','soccer','club','boys','girls','united','youth','the','of']);
+        return (teamName || '').split(/\s+/)
+            .filter(w => w.length > 1 && !skip.has(w.toLowerCase()))
+            .map(w => w[0].toUpperCase())
+            .slice(0, 2).join('');
+    }
+    function seasonCode(dateStr) {
+        const m = parseInt((dateStr || '').split('-')[1]);
+        if (m >= 3 && m <= 6)  return 'SP';
+        if (m >= 7 && m <= 8)  return 'SU';
+        if (m >= 9 && m <= 11) return 'FA';
+        return 'WI';
+    }
+    function buildGameNumber(fields) {
+        const autoNum = fields['Auto Number'] || fields['Game Number'];
+        if (!autoNum) return null;
+        const club   = clubAbbr(fields['Home Team'] || '');
+        const season = seasonCode(fields['Date'] || '');
+        const year   = (fields['Date'] || '').slice(2, 4);
+        const seq    = String(autoNum).padStart(3, '0');
+        return `${club}${season}${seq}${year}`;
+    }
+
     // Extract the most recent change request block from Notes
     function extractLastChangeRequest(notesText) {
         if (!notesText) return null;
@@ -1058,6 +1083,8 @@
         const dateStr    = f['Date'] || '—';
         const timeRaw    = (f['Time'] || '').substring(0, 5);
         const timeDisp   = timeRaw ? formatTime(timeRaw) : '—';
+        const gameNum    = buildGameNumber(f);
+        const gameNumHtml = gameNum ? `<span style="font-size:0.68rem; font-weight:700; color:#aaa; letter-spacing:0.5px; margin-right:8px;">${gameNum}</span>` : '';
         const center     = resolveRef(f['Center Referee']);
         const ar1        = resolveRef(f['AR 1']);
         const ar2        = resolveRef(f['AR 2']);
@@ -1076,7 +1103,7 @@
             // Green "resolved" card — notification that the change was handled
             return `<div class="game-card change-done">
                 <div class="game-card-main">
-                    <div class="game-matchup">✅ ${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                    <div class="game-matchup">${gameNumHtml}✅ ${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
                     <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
                     <div class="game-refs">${refsHtml}</div>
                     <div class="chg-req-detail" style="background:#d5f5e3; color:#1e5e33;">
@@ -1100,7 +1127,7 @@
             </div>` : '';
             return `<div class="game-card change-req">
                 <div class="game-card-main">
-                    <div class="game-matchup">${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                    <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
                     <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
                     <div class="game-refs">${refsHtml}</div>
                     ${chgDetail}
@@ -1117,7 +1144,7 @@
         const statusLbl = center ? 'Assigned' : 'Submitted';
         return `<div class="game-card">
             <div class="game-card-main">
-                <div class="game-matchup">${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
                 <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
                 <div class="game-refs">${refsHtml}</div>
                 <div class="change-form" id="chgForm_${r.id}" style="margin-top:10px;">
@@ -1176,6 +1203,7 @@
                     pendingChanges.push(r);
                 } else if (rawStatus === 'Change Resolved') {
                     resolvedChanges.push(r);
+                    regularGames.push(r); // also show in Submitted Games with current refs/date
                 } else {
                     regularGames.push(r);
                 }

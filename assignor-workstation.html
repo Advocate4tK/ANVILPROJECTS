@@ -1282,6 +1282,7 @@
                     ${isChangeReq ? '<div style="font-size:0.72rem; font-weight:700; color:#935116; background:#fdebd0; border-radius:4px; padding:2px 8px; margin-bottom:6px; display:inline-block;">⚠ Change Requested</div>' : ''}
                     <div class="game-header">
                         <div>
+                            ${(() => { const gn = buildGameNumber(f); return gn ? `<span style="font-size:0.65rem; font-weight:700; color:#aaa; letter-spacing:0.5px; margin-right:6px;">${gn}</span>` : ''; })()}
                             <span class="game-title">${home} vs ${away}</span>
                             <span class="game-meta">&nbsp;— ${date} ${time ? '@ ' + formatTime(time) : ''}</span>
                         </div>
@@ -1435,6 +1436,31 @@
             dragSourceGameId   = gameId;
             dragSourcePosition = position;
             e.dataTransfer.effectAllowed = 'move';
+        }
+
+        // ── Game number helpers ───────────────────────────────────────────────
+        function clubAbbr(teamName) {
+            const skip = new Set(['sc','fc','soccer','club','boys','girls','united','youth','the','of']);
+            return (teamName || '').split(/\s+/)
+                .filter(w => w.length > 1 && !skip.has(w.toLowerCase()))
+                .map(w => w[0].toUpperCase())
+                .slice(0, 2).join('');
+        }
+        function seasonCode(dateStr) {
+            const m = parseInt((dateStr || '').split('-')[1]);
+            if (m >= 3 && m <= 6)  return 'SP';
+            if (m >= 7 && m <= 8)  return 'SU';
+            if (m >= 9 && m <= 11) return 'FA';
+            return 'WI';
+        }
+        function buildGameNumber(f) {
+            const autoNum = f['Auto Number'] || f['Game Number'];
+            if (!autoNum) return null;
+            const abbr   = clubAbbr(f['Home Team'] || '');
+            const season = seasonCode(f['Date'] || '');
+            const year   = (f['Date'] || '').slice(2, 4);
+            const seq    = String(autoNum).padStart(3, '0');
+            return `${abbr}${season}${seq}${year}`;
         }
 
         function resolveRefName(linkedIds) {
