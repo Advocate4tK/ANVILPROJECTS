@@ -216,10 +216,6 @@
         .summary-box.some-errors { background: #fdebd0; color: #935116; }
 
         /* ── Scheduled Games section ── */
-        .sched-table { width:100%; border-collapse:collapse; font-size:0.84rem; background:white; border-radius:8px; overflow:hidden; box-shadow:0 1px 6px rgba(0,0,0,0.06); }
-        .sched-table th { background:#0f3460; color:white; padding:8px 12px; text-align:left; font-weight:600; white-space:nowrap; }
-        .sched-table td { padding:7px 12px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
-        .sched-table tr:last-child td { border-bottom:none; }
         .ref-badge { background:#eaf4fb; color:#1a5276; font-size:0.75rem; font-weight:700; padding:2px 7px; border-radius:10px; white-space:nowrap; display:inline-block; margin:1px 2px; }
         .status-badge { font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px; white-space:nowrap; }
         .status-submitted   { background:#d5f5e3; color:#1e8449; }
@@ -227,6 +223,35 @@
         .status-change-req  { background:#fdebd0; color:#935116; }
         .btn-change { background:none; border:1px solid #e94560; color:#e94560; border-radius:6px; padding:3px 10px; font-size:0.78rem; font-weight:600; cursor:pointer; white-space:nowrap; }
         .btn-change:hover { background:#e94560; color:white; }
+
+        /* ── Game card layout ── */
+        .game-card {
+            background: white;
+            border-radius: 10px;
+            border-left: 4px solid #0f3460;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+        .game-card.change-req { border-left-color: #f0a500; background: #fff3cd; }
+        .game-card-main { flex: 1 1 280px; min-width: 0; }
+        .game-matchup { font-size: 0.95rem; font-weight: 800; color: #0f3460; margin-bottom: 4px; }
+        .game-card.change-req .game-matchup { color: #935116; }
+        .game-meta { font-size: 0.78rem; color: #666; margin-bottom: 6px; }
+        .game-refs { font-size: 0.78rem; color: #555; }
+        .game-refs-label { font-weight: 600; margin-right: 4px; }
+        .game-card-side {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .submitted-by-lbl { font-size: 0.72rem; color: #999; }
 
         /* ── Change Request inline form ── */
         .change-form { background:#fff8f0; border:1px solid #f0a500; border-radius:8px; padding:14px 16px; margin-top:8px; display:none; }
@@ -1065,18 +1090,16 @@
 
                     const rowStyle = isChangeReq ? 'background:#fff3cd; border-left:4px solid #f0a500;' : '';
 
-                    return `<tr style="${rowStyle}">
-                        <td style="white-space:nowrap;">${dateStr}</td>
-                        <td style="white-space:nowrap;">${timeDisp}</td>
-                        <td>${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</td>
-                        <td style="white-space:nowrap;">${f['Age Group'] || '—'}</td>
-                        <td style="white-space:nowrap;">${venueName}</td>
-                        <td style="white-space:nowrap;">${refs}</td>
-                        <td style="white-space:nowrap; color:#555; font-size:0.82rem;">${submittedBy}</td>
-                        <td><span class="status-badge ${statusCls}">${statusLbl}</span>${reqDetails}</td>
-                        <td>
-                            <button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>
-                            <div class="change-form" id="chgForm_${r.id}">
+                    const refsDisplay = refs !== '<span style="color:#aaa; font-size:0.8rem;">Pending</span>'
+                        ? `<span class="game-refs-label">Refs:</span>${refs}`
+                        : `<span style="color:#aaa; font-size:0.8rem; font-style:italic;">No refs assigned yet</span>`;
+
+                    return `<div class="game-card ${isChangeReq ? 'change-req' : ''}">
+                        <div class="game-card-main">
+                            <div class="game-matchup">${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                            <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
+                            <div class="game-refs">${refsDisplay}</div>
+                            <div class="change-form" id="chgForm_${r.id}" style="margin-top:10px;">
                                 <p style="font-size:0.82rem; font-weight:700; color:#935116; margin:0 0 8px;">Request a change for: <em>${f['Home Team'] || ''} vs ${f['Away Team'] || ''} (${dateStr})</em></p>
                                 <label>New Date (optional)</label>
                                 <input type="date" id="chgDate_${r.id}">
@@ -1090,19 +1113,19 @@
                                 </div>
                                 <p id="chgMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
                             </div>
-                        </td>
-                    </tr>`;
+                        </div>
+                        <div class="game-card-side">
+                            <span class="status-badge ${statusCls}">${statusLbl}</span>
+                            ${reqDetails}
+                            <button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>
+                            <span class="submitted-by-lbl">by ${submittedBy}</span>
+                        </div>
+                    </div>`;
                 }).join('');
 
-                return `<div style="margin-bottom:18px;">
-                    <div style="font-size:0.8rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; padding-bottom:4px; border-bottom:2px solid #e94560;">${label}</div>
-                    <table class="sched-table">
-                        <thead><tr>
-                            <th>Date</th><th>Time</th><th>Matchup</th><th>Age</th>
-                            <th>Venue</th><th>Referees</th><th>Submitted By</th><th>Status</th><th></th>
-                        </tr></thead>
-                        <tbody>${rows}</tbody>
-                    </table>
+                return `<div style="margin-bottom:24px;">
+                    <div style="font-size:0.8rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; padding-bottom:4px; border-bottom:2px solid #e94560;">${label}</div>
+                    ${rows}
                 </div>`;
             }).join('');
 
