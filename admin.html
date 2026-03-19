@@ -510,14 +510,14 @@
                     }
 
                     // Count by club record ID (reliable for detail card)
+                    const uploadTime = rec.createdTime || '';
                     clubIds.forEach(id => {
                         gameCountById[id] = (gameCountById[id] || 0) + 1;
                         if (gameDate >= startOfWeek && gameDate <= endOfWeek) {
                             thisWeekById[id] = (thisWeekById[id] || 0) + 1;
                             if (isUnassigned) unassignedById[id] = (unassignedById[id] || 0) + 1;
                         }
-                        // Track most recent upload per club
-                        const uploadTime = rec.createdTime || '';
+                        // Track most recent upload per club (ID-keyed)
                         if (uploadTime) {
                             const prev = lastUploadByClubId[id];
                             if (!prev || uploadTime > prev.time) {
@@ -525,6 +525,20 @@
                             }
                         }
                     });
+                    // Fallback: games uploaded via CSV have no Club linked record —
+                    // match by Home Team containing the club name
+                    if (clubIds.length === 0 && uploadTime) {
+                        const homeTeam = (f['Home Team'] || '').toLowerCase();
+                        for (const [cname] of Object.entries(clubRecordByName)) {
+                            if (homeTeam.includes(cname.toLowerCase())) {
+                                const prev = lastUploadByClubId['name:' + cname];
+                                if (!prev || uploadTime > prev.time) {
+                                    lastUploadByClubId['name:' + cname] = { time: uploadTime, uploader: f['Uploaded By'] || '' };
+                                }
+                                break;
+                            }
+                        }
+                    }
 
                     // Urgent: next 48 hours unassigned
                     if (gameDate >= now && gameDate <= in48Hours && isUnassigned) {
@@ -685,7 +699,9 @@
                         const unassigned = (cid ? unassignedById[cid] : 0) || unassignedByClub[clubName] || 0;
                         const venueCount     = cid ? (venueCountByClubId[cid] || 0) : 0;
                         const fieldCount     = cid ? (fieldCountByClubId[cid] || 0) : 0;
-                        const lastUpload     = cid ? (lastUploadByClubId[cid] || null) : null;
+                        const lastUpload     = (cid ? lastUploadByClubId[cid] : null)
+                                               || lastUploadByClubId['name:' + clubName]
+                                               || null;
                         const lastUploadStr  = lastUpload ? (() => {
                             const d = new Date(lastUpload.time);
                             return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
@@ -724,25 +740,23 @@
                                 <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Total Games on File</div>
                                 <div style="font-size:1.6rem; font-weight:800; color:#0f3460; line-height:1;">${totalGames}</div>
                             </div>
-                            <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Last Games Pushed</div>
-                                ${lastUploadStr
-                                    ? `<div style="font-weight:700; color:#0f3460; font-size:0.88rem;">${lastUploadStr}</div>
-                                       ${lastUpload.uploader ? `<div style="font-size:0.8rem; color:#666; margin-top:3px;">by ${lastUpload.uploader}</div>` : ''}`
-                                    : `<div style="color:#aaa; font-size:0.85rem;">No upload on record</div>`}
-                            </div>
                         </div>
-                        ${submitUrl ? `<div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                            <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:8px;">Game Submission Link</div>
-                            ${lastUploadStr ? `<div style="font-size:0.8rem; color:#555; margin-bottom:8px;">Last pushed <strong>${lastUploadStr}</strong>${lastUpload.uploader ? ` by <strong>${lastUpload.uploader}</strong>` : ''}</div>` : ''}
-                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
+                            <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:8px;">Game Submission Information</div>
+                            <div style="margin-bottom:${submitUrl ? '12px' : '0'};">
+                                <span style="font-size:0.8rem; color:#555; font-weight:600;">Last games pushed: </span>
+                                ${lastUploadStr
+                                    ? `<span style="font-size:0.8rem; color:#0f3460; font-weight:700;">${lastUploadStr}</span>${lastUpload.uploader ? `<span style="font-size:0.8rem; color:#555;"> by <strong>${lastUpload.uploader}</strong></span>` : ''}`
+                                    : `<span style="font-size:0.8rem; color:#aaa;">No upload on record</span>`}
+                            </div>
+                            ${submitUrl ? `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                                 <button onclick="navigator.clipboard.writeText('${submitUrl}').then(()=>{ this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy Link',1500); })"
                                     style="background:#e8f4fd; border:1px solid #3498db; color:#3498db; border-radius:6px; padding:4px 10px; font-size:0.8rem; cursor:pointer; white-space:nowrap; flex-shrink:0;">📋 Copy Link</button>
                                 <a href="${submitUrl}" target="_blank"
                                     style="background:#eafaf1; border:1px solid #27ae60; color:#27ae60; border-radius:6px; padding:4px 10px; font-size:0.8rem; text-decoration:none; white-space:nowrap; flex-shrink:0;">↗ Open Page</a>
                                 <a href="${submitUrl}" target="_blank" style="font-size:0.78rem; color:#3498db; text-decoration:underline; word-break:break-all;">${submitUrl}</a>
-                            </div>
-                        </div>` : ''}
+                            </div>` : ''}
+                        </div>
                         `;
                     });
                 }, 0);
