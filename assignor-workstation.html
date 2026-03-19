@@ -340,6 +340,10 @@
                                 <option value="name"         style="color:#1a1a1a; background:white;">Name A–Z</option>
                             </select>
                         </div>
+                        <div style="display:flex; align-items:center; gap:6px; margin-top:4px; padding-bottom:4px; border-top:1px solid rgba(255,255,255,0.15); padding-top:6px;">
+                            <input type="checkbox" id="showAllRefs" onchange="renderRefs(document.getElementById('refSearch').value.toLowerCase())" style="cursor:pointer; accent-color:#e94560;">
+                            <label for="showAllRefs" style="font-size:0.75rem; color:rgba(255,255,255,0.9); cursor:pointer; font-weight:600;">Override — show all refs</label>
+                        </div>
                     </div>
                     <div style="margin-bottom:10px;"></div>
                     <div style="margin-bottom:8px;">
@@ -416,10 +420,6 @@
                                     <option value="Male">Male</option>
                                     <option value="Female">Female</option>
                                 </select>
-                            </div>
-                            <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px;">
-                                <input type="checkbox" id="showAllRefs" onchange="renderRefs(document.getElementById('refSearch').value.toLowerCase())">
-                                <label for="showAllRefs" style="font-size:0.78rem; color:#555; cursor:pointer;">Show all refs (ignore club preference)</label>
                             </div>
                             <div style="text-align:right; margin-top:4px; padding-bottom:8px;">
                                 <button onclick="clearFilters()" style="background:#eee; color:#555; border:1px solid #ccc; border-radius:6px; padding:6px 14px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; margin-right:6px;">Clear</button>
@@ -1220,7 +1220,8 @@
             const prefClub     = document.getElementById('prefFilter').value;
             const yearsFilter  = document.getElementById('yearsFilter').value;
             const ageFilter    = document.getElementById('ageFilter').value;
-            const dateFilter   = document.getElementById('dateFilter').value;
+            // When a game is selected, always filter by game date — ignore the manual date input
+            const dateFilter   = selectedGame ? '' : document.getElementById('dateFilter').value;
             const timeFilter   = document.getElementById('timeFilter').value;
             const genderFilter = document.getElementById('genderFilter').value;
 
@@ -1328,10 +1329,18 @@
                 filtered.sort((a, b) => (a.fields['Name'] || '').localeCompare(b.fields['Name'] || ''));
             }
 
-            if (!filtered.length) { wrap.innerHTML = '<p class="hint">No refs found.</p>'; return; }
+            // Hide no-availability refs entirely unless override is on
+            const displayRefs = showAllRefs ? filtered : filtered.filter(r => classify(r) !== 3);
+
+            if (!displayRefs.length) {
+                wrap.innerHTML = showAllRefs
+                    ? '<p class="hint">No refs found.</p>'
+                    : '<p class="hint" style="text-align:center; padding:20px; color:#888;">No refs have submitted availability for this game.<br><small>Toggle <strong>Override</strong> to see all refs.</small></p>';
+                return;
+            }
 
             let html = '';
-            filtered.forEach(r => {
+            displayRefs.forEach(r => {
                 const rid    = r.id;
                 const name   = r.fields['Name'] || '—';
                 const cert   = r.fields['Certification Level'] || '';
@@ -1438,7 +1447,7 @@
 
             wrap.innerHTML = html;
             const titleEl = document.getElementById('refsPanelTitle');
-            if (titleEl) titleEl.textContent = `👤 Referees (${filtered.length})`;
+            if (titleEl) titleEl.textContent = `👤 Referees (${displayRefs.length})`;
         }
 
         // ── Drag ─────────────────────────────────────────────────────────────
