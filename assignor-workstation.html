@@ -265,7 +265,7 @@
                             </div>
                             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                                 <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">Time:</label>
-                                <select id="gameTimeFilter" style="flex:1; font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
+                                <select id="gameTimeFilter" onchange="applyGameFilters(); renderRefs(document.getElementById('refSearch').value.toLowerCase())" style="flex:1; font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
                                     <option value="">Any</option>
                                     <option value="06:00">6:00 AM</option><option value="06:15">6:15 AM</option><option value="06:30">6:30 AM</option><option value="06:45">6:45 AM</option>
                                     <option value="07:00">7:00 AM</option><option value="07:15">7:15 AM</option><option value="07:30">7:30 AM</option><option value="07:45">7:45 AM</option>
@@ -1201,10 +1201,6 @@
         function renderRefs(query) {
             const wrap = document.getElementById('refsListWrap');
             if (!allRefs.length) { wrap.innerHTML = '<p class="hint">Load games first.</p>'; return; }
-            if (!selectedGame) {
-                wrap.innerHTML = '<p class="hint" style="text-align:center; padding:20px; color:#888;">👆 Click a game to see available referees.</p>';
-                return;
-            }
 
             const gameDate  = selectedGame ? selectedGame.fields['Date'] : null;
             const gameTime  = selectedGame ? (selectedGame.fields['Time'] || '') : null;
@@ -1220,9 +1216,10 @@
             const prefClub     = document.getElementById('prefFilter').value;
             const yearsFilter  = document.getElementById('yearsFilter').value;
             const ageFilter    = document.getElementById('ageFilter').value;
-            // When a game is selected, always filter by game date — ignore the manual date input
-            const dateFilter   = selectedGame ? '' : document.getElementById('dateFilter').value;
-            const timeFilter   = document.getElementById('timeFilter').value;
+            const dateFilter   = document.getElementById('dateFilter').value;
+            // Pull the active time filter from the games panel (so ref list syncs with game time filter)
+            const gameTimeFilter = document.getElementById('gameTimeFilter')?.value || '';
+            const timeFilter   = document.getElementById('timeFilter').value || gameTimeFilter;
             const genderFilter = document.getElementById('genderFilter').value;
 
             const filtered = allRefs.filter(r => {
@@ -1256,7 +1253,7 @@
                 const refName = (r.fields['Name'] || '').trim().toLowerCase();
 
                 if (dateFilter) {
-                    // Specific date filter (games filter panel)
+                    // Specific date filter active — ref must be available on that date
                     if (!availByName[refName]?.has(dateFilter)) return false;
                     if (timeFilter) {
                         const slot = availTimeByName[refName]?.[dateFilter];
@@ -1264,30 +1261,20 @@
                             if (timeFilter < slot.start || timeFilter > slot.end) return false;
                         }
                     }
-                } else if (gameDate) {
-                    // Game selected — filter to that game's date & time
-                    if (!availByName[refName]?.has(gameDate)) return false;
-                    if (gameTime) {
-                        const slot = availTimeByName[refName]?.[gameDate];
-                        if (slot && slot.start && slot.end) {
-                            if (gameTime < slot.start || gameTime > slot.end) return false;
-                        }
-                    }
                 } else {
-                    // No specific date selected — filter by dateFrom/dateTo range
+                    // No specific date — filter by dateFrom/dateTo range
                     const from = document.getElementById('dateFrom').value;
                     const to   = document.getElementById('dateTo').value;
                     if (from || to) {
                         const refDates = availByName[refName];
                         if (!refDates || refDates.size === 0) return false;
-                        // Ref must have at least one available date within the range
                         const datesInRange = [...refDates].filter(d => {
                             if (from && d < from) return false;
                             if (to   && d > to)   return false;
                             return true;
                         });
                         if (datesInRange.length === 0) return false;
-                        // If timeFilter is set, at least one in-range date must cover that time
+                        // If a game time filter is active, ref must cover that time on at least one day
                         if (timeFilter) {
                             const hasTime = datesInRange.some(d => {
                                 const slot = availTimeByName[refName]?.[d];
@@ -1466,32 +1453,25 @@
                 const gameDate = targetGame.fields['Date'];
                 const dt = `${gameDate}|${targetGame.fields['Time'] || ''}`;
 
-                // Block: scheduling conflict
+                // Warn: scheduling conflict (hard block — double-booking is a real problem)
                 const conflicts = assignedAt[refId] ? [...(assignedAt[refId].get(dt) || [])].filter(gid => gid !== gameId) : [];
                 if (conflicts.length > 0) {
-                    alert(`${refName} already has a game assigned at this time and cannot be assigned.`);
-                    return;
+                    if (!confirm(`⚠️ ${refName} is already assigned to another game at this same time.\n\nAssign anyway and override?`)) return;
                 }
 
-                // Block: ref has not submitted availability for this date
+                // Warn: ref has not submitted availability for this date
                 const refNameKey = (refLookup[refId]?.fields['Name'] || refName).trim().toLowerCase();
                 if (gameDate && !availByName[refNameKey]?.has(gameDate)) {
-                    alert(`${refName} has not submitted availability for ${gameDate} and cannot be assigned.`);
-                    return;
+                    if (!confirm(`${refName} has not submitted availability for this date.\n\nAssign anyway and override?`)) return;
                 }
 
-                // Block: ref has not listed this game's location in their preferences
+                // Warn: ref has not listed this game's location in their preferences
                 const ref = refLookup[refId];
                 const gameClub = resolveGameClub(targetGame.fields);
                 if (ref && gameClub) {
                     const prefs = parsePreferences(ref.fields['Club Preference']);
-                    if (prefs.length === 0) {
-                        alert(`${refName} has no preferred locations listed and cannot be assigned. They must submit their availability form first.`);
-                        return;
-                    }
                     if (!prefs.some(p => p.toLowerCase() === gameClub.toLowerCase())) {
-                        alert(`${refName} has not listed "${gameClub}" as a preferred location and cannot be assigned.`);
-                        return;
+                        if (!confirm(`${refName} has not listed "${gameClub}" as a preferred location.\n\nAssign anyway and override?`)) return;
                     }
                 }
             }
