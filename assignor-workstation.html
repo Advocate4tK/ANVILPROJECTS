@@ -483,6 +483,7 @@
         let availTimeByName = {}; // ref name → { date → { start, end } }
         let selectedClubs = new Set(CLUBS_LIST); // default: all
         let selectedGame        = null; // currently focused game record
+        let visibleGameDates    = new Set(); // dates of games currently on screen
         let hideU8Games         = true;
         let allDogTagsExpanded = false;
 
@@ -945,6 +946,10 @@
 
             document.getElementById('gameCountPill').textContent = `${filtered.length} game${filtered.length !== 1 ? 's' : ''}`;
 
+            // Update visible game dates so the refs panel shows only refs available on those dates
+            visibleGameDates = new Set(filtered.map(g => g.fields['Date']).filter(Boolean));
+            renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
+
             if (!filtered.length) {
                 wrap.innerHTML = '<p class="hint">No games for selected clubs/dates.</p>';
                 return;
@@ -1263,28 +1268,20 @@
                             if (timeFilter < slot.start || timeFilter > slot.end) return false;
                         }
                     }
-                } else {
-                    // No specific date — filter by dateFrom/dateTo range
-                    const from = document.getElementById('dateFrom').value;
-                    const to   = document.getElementById('dateTo').value;
-                    if (from || to) {
-                        const refDates = availByName[refName];
-                        if (!refDates || refDates.size === 0) return false;
-                        const datesInRange = [...refDates].filter(d => {
-                            if (from && d < from) return false;
-                            if (to   && d > to)   return false;
-                            return true;
+                } else if (visibleGameDates.size > 0) {
+                    // Filter by the actual dates of games on screen — not the raw date range
+                    const refDates = availByName[refName];
+                    if (!refDates || refDates.size === 0) return false;
+                    const matchingDates = [...visibleGameDates].filter(d => refDates.has(d));
+                    if (matchingDates.length === 0) return false;
+                    // If a time filter is active, ref must cover that time on at least one matching date
+                    if (timeFilter) {
+                        const hasTime = matchingDates.some(d => {
+                            const slot = availTimeByName[refName]?.[d];
+                            if (!slot || !slot.start || !slot.end) return true;
+                            return timeFilter >= slot.start && timeFilter <= slot.end;
                         });
-                        if (datesInRange.length === 0) return false;
-                        // If a game time filter is active, ref must cover that time on at least one day
-                        if (timeFilter) {
-                            const hasTime = datesInRange.some(d => {
-                                const slot = availTimeByName[refName]?.[d];
-                                if (!slot || !slot.start || !slot.end) return true;
-                                return timeFilter >= slot.start && timeFilter <= slot.end;
-                            });
-                            if (!hasTime) return false;
-                        }
+                        if (!hasTime) return false;
                     }
                 }
                 return true;
