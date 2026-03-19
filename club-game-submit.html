@@ -1036,7 +1036,13 @@
 
         const clubName = (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '').toLowerCase();
         try {
-            const games = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 500 });
+            const [games, refRecs] = await Promise.all([
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 })
+            ]);
+            // Ensure refById is always current regardless of load order
+            refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
+
             const clubGames = games
                 .filter(r => (r.fields['Home Team'] || '').toLowerCase().includes(clubName) || (r.fields['Club'] || '').toLowerCase().includes(clubName))
                 .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || '') || (a.fields['Time'] || '').localeCompare(b.fields['Time'] || ''));
