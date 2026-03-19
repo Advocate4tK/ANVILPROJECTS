@@ -1436,16 +1436,20 @@
                 const status = cls <= 1 ? '' : cls === 2
                     ? '<span style="color:#999; font-size:0.72rem;">⚠ Already assigned this time</span>'
                     : '<span style="color:#bbb; font-size:0.72rem;">No availability submitted</span>';
-                // Count how many games this ref is assigned to (filter by date if known, otherwise all)
-                const workDate = gameDate || document.getElementById('dateFilter').value;
-                let assignedTodayCount = 0;
+                // Count assigned games — scoped to the active date context
+                const loadedFrom  = document.getElementById('dateFrom').value;
+                const loadedTo    = document.getElementById('dateTo').value;
+                const singleDay   = loadedFrom && loadedTo && loadedFrom === loadedTo;
+                const workDate    = gameDate || document.getElementById('dateFilter').value || (singleDay ? loadedFrom : '');
+                let assignedCount = 0;
                 if (assignedAt[rid]) {
                     for (const [dt, gameSet] of assignedAt[rid]) {
-                        if (!workDate || dt.startsWith(workDate + '|')) assignedTodayCount += gameSet.size;
+                        if (!workDate || dt.startsWith(workDate + '|')) assignedCount += gameSet.size;
                     }
                 }
-                const assignedBadge = assignedTodayCount > 0
-                    ? `<span style="font-size:0.72rem; color:#0f3460; font-weight:700;">📋 ${assignedTodayCount} game${assignedTodayCount > 1 ? 's' : ''} assigned today</span>`
+                const badgeLabel = singleDay || workDate ? 'this day' : 'this period';
+                const assignedBadge = assignedCount > 0
+                    ? `<span style="font-size:0.72rem; color:#0f3460; font-weight:700;">📋 ${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}</span>`
                     : '';
                 const certCls = cert === 'National' ? 'cert-N' : cert === 'Regional' ? 'cert-R' : 'cert-G';
                 const gender  = r.fields['Gender'] || '';
