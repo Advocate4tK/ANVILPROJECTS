@@ -52,6 +52,7 @@
         .game-card:hover { border-color: #0f3460; }
         .game-card.selected { border-color: #e94560; background: #fff8f9; }
         .game-card.fully-assigned { border-color: #27ae60; background: #f0faf4; }
+        .game-card.change-focus { border-color: #f0a500; background: #fff8e8; box-shadow: 0 0 0 3px rgba(240,165,0,0.25); }
         .game-header {
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 8px; flex-wrap: wrap; gap: 6px;
@@ -254,6 +255,16 @@
                     <div style="font-size:0.95rem; font-weight:700; color:#333; margin-bottom:8px;">Filter by Club:</div>
                     <div class="club-pills" id="clubPills"></div>
                 </div>
+            </div>
+
+            <!-- Change Request Focus Banner -->
+            <div id="changeRequestBanner" style="display:none; background:#fff3cd; border:1px solid #f0a500; border-radius:10px; padding:14px 18px; margin-bottom:16px; display:none; align-items:center; gap:12px; flex-wrap:wrap;">
+                <span style="font-size:1.3rem;">⚠️</span>
+                <div style="flex:1; min-width:0;">
+                    <div style="font-weight:700; color:#935116; font-size:0.95rem;">Opened from Schedule Change Requests</div>
+                    <div id="changeRequestBannerText" style="font-size:0.83rem; color:#7d4e00; margin-top:2px;">Scroll down — the flagged game is selected and highlighted below.</div>
+                </div>
+                <a href="schedule-changes.html" style="font-size:0.82rem; font-weight:600; color:#935116; text-decoration:none; border:1px solid #f0a500; border-radius:6px; padding:5px 12px; white-space:nowrap;">← Back to Changes</a>
             </div>
 
             <!-- Loading msg -->
@@ -775,8 +786,25 @@
 
         // ── Init ─────────────────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
-            // Default to this weekend on load
-            setDateRange('this-weekend', null);
+            const focusGameId = new URLSearchParams(window.location.search).get('game');
+
+            if (focusGameId) {
+                // Show the banner immediately
+                const banner = document.getElementById('changeRequestBanner');
+                if (banner) banner.style.display = 'flex';
+                // Set a wide date range so the game is guaranteed to be in scope
+                const today = new Date();
+                const from  = new Date(today); from.setDate(today.getDate() - 30);
+                const to    = new Date(today); to.setDate(today.getDate() + 120);
+                document.getElementById('dateFrom').value = from.toISOString().split('T')[0];
+                document.getElementById('dateTo').value   = to.toISOString().split('T')[0];
+                // Auto-load so the assignor goes straight to work
+                loadAll();
+            } else {
+                // Default to this weekend on load
+                setDateRange('this-weekend', null);
+            }
+
             // Highlight the "This Weekend" button manually since no click event
             const weekendBtn = [...document.querySelectorAll('.date-quick-btn')]
                 .find(b => b.textContent.trim() === 'This Weekend');
@@ -1091,6 +1119,25 @@
 
                 renderGames();
                 renderRefs('');
+
+                // If opened with ?game=, select and scroll to that game
+                const focusGameId = new URLSearchParams(window.location.search).get('game');
+                if (focusGameId) {
+                    selectGame(focusGameId);
+                    // Add the amber highlight ring
+                    const card = document.getElementById('card-' + focusGameId);
+                    if (card) card.classList.add('change-focus');
+                    // Update banner with game details
+                    const focusedGame = allGames.find(g => g.id === focusGameId);
+                    if (focusedGame) {
+                        const f = focusedGame.fields;
+                        document.getElementById('changeRequestBannerText').textContent =
+                            `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'} · ${f['Date'] || '—'} — selected and highlighted below.`;
+                    } else {
+                        document.getElementById('changeRequestBannerText').textContent =
+                            'Game not found in the current date range — try widening the date filter.';
+                    }
+                }
 
             } catch(e) {
                 alert('Failed to load: ' + e.message);
@@ -1778,6 +1825,18 @@
                     if (!assignedAt[refId]) assignedAt[refId] = new Map();
                     if (!assignedAt[refId].has(dt)) assignedAt[refId].set(dt, new Set());
                     assignedAt[refId].get(dt).add(gameId);
+
+                    // Auto-clear "Change Requested" flag now that the assignor has acted on this game
+                    if ((game.fields['Game Status'] || '') === 'Change Requested') {
+                        try {
+                            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Assigned' });
+                            game.fields['Game Status'] = 'Assigned';
+                            // Remove amber highlight ring if present
+                            document.getElementById('card-' + gameId)?.classList.remove('change-focus');
+                        } catch(e) {
+                            console.warn('Could not auto-clear Change Requested status:', e.message);
+                        }
+                    }
                 }
 
                 renderGames();
@@ -1905,6 +1964,17 @@
                     });
                     game.fields['Date'] = newDate;
                     game.fields['Time'] = newTime || '';
+
+                    // Auto-clear "Change Requested" flag when assignor reschedules the game
+                    if ((game.fields['Game Status'] || '') === 'Change Requested') {
+                        try {
+                            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Change Resolved' });
+                            game.fields['Game Status'] = 'Change Resolved';
+                            document.getElementById('card-' + gameId)?.classList.remove('change-focus');
+                        } catch(e) {
+                            console.warn('Could not auto-clear Change Requested status:', e.message);
+                        }
+                    }
                 }
 
                 toggleGameEdit(gameId);
