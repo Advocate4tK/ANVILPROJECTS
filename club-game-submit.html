@@ -1044,9 +1044,18 @@
                     const refs      = [center && `<span class="ref-badge">⚽ ${center}</span>`,
                                        ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
                                        ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('&nbsp;') || '<span style="color:#aaa; font-size:0.8rem;">Pending</span>';
-                    const rawStatus  = f['Game Status'] || f['Status'] || 'Submitted';
-                    const statusCls  = rawStatus === 'Change Requested' ? 'status-change-req' : (center ? 'status-assigned' : 'status-submitted');
-                    const statusLbl  = rawStatus === 'Change Requested' ? '⚠ Change Requested' : (center ? 'Assigned' : 'Submitted');
+                    const rawStatus   = f['Game Status'] || f['Status'] || 'Submitted';
+                    const notesText   = f['Notes'] || '';
+                    const isChangeReq = rawStatus === 'Change Requested' || notesText.includes('[CHANGE REQUEST');
+                    const statusCls   = isChangeReq ? 'status-change-req' : (center ? 'status-assigned' : 'status-submitted');
+                    const statusLbl   = isChangeReq ? '⚠ Change Requested' : (center ? 'Assigned' : 'Submitted');
+
+                    // Extract requested date/time from notes if present
+                    const reqDateMatch = notesText.match(/Requested Date: (\S+)/);
+                    const reqTimeMatch = notesText.match(/Requested Time: (\S+)/);
+                    const reqDetails   = isChangeReq && (reqDateMatch || reqTimeMatch)
+                        ? `<div style="font-size:0.75rem; color:#935116; margin-top:3px;">📅 ${reqDateMatch?.[1]||''} ${reqTimeMatch?.[1]||''}</div>`
+                        : '';
                     const submittedBy = f['Uploaded By'] || '—';
                     // Resolve venue name from Venue ID number
                     const venueNumId = parseFloat(f['Venue ID']);
@@ -1054,7 +1063,9 @@
                         ? (allVenues.find(v => parseFloat(v.numId) === venueNumId)?.name || '—')
                         : '—';
 
-                    return `<tr>
+                    const rowStyle = isChangeReq ? 'background:#fff3cd; border-left:4px solid #f0a500;' : '';
+
+                    return `<tr style="${rowStyle}">
                         <td style="white-space:nowrap;">${dateStr}</td>
                         <td style="white-space:nowrap;">${timeDisp}</td>
                         <td>${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</td>
@@ -1062,7 +1073,7 @@
                         <td style="white-space:nowrap;">${venueName}</td>
                         <td style="white-space:nowrap;">${refs}</td>
                         <td style="white-space:nowrap; color:#555; font-size:0.82rem;">${submittedBy}</td>
-                        <td><span class="status-badge ${statusCls}">${statusLbl}</span></td>
+                        <td><span class="status-badge ${statusCls}">${statusLbl}</span>${reqDetails}</td>
                         <td>
                             <button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>
                             <div class="change-form" id="chgForm_${r.id}">
@@ -1126,10 +1137,21 @@
             // Get existing notes to append
             const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { filterByFormula: `RECORD_ID()='${gameId}'`, maxRecords: 1 });
             const prevNotes = existing[0]?.fields['Notes'] || '';
+
+            // Update Notes first — always works
             await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
-                'Game Status': 'Change Requested',
                 'Notes': prevNotes + noteText
             });
+
+            // Try Game Status separately — may fail if select option doesn't exist in Airtable yet
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                    'Game Status': 'Change Requested'
+                });
+            } catch(statusErr) {
+                console.warn('Could not update Game Status (add "Change Requested" option to Airtable select field):', statusErr.message);
+            }
+
             msgEl.textContent = '✅ Change request submitted. The assignor will be in touch.';
             msgEl.style.color = '#1e8449';
             // Refresh the table after a moment
