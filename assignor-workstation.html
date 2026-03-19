@@ -508,7 +508,8 @@
         let allFields     = []; // { fieldId, name, venueId }
         let clubLookup    = {}; // airtable record ID → club name
         let refLookup     = {}; // airtable record ID → ref object
-        let venueZipMap   = {}; // Airtable field record ID → venue zip string
+        let venueZipMap     = {}; // Airtable field record ID → venue zip string
+        let clubVenueZipMap = {}; // club name (lowercase) → representative venue zip
 
         // ── CT Zip Code Centroids (lat, lng) ─────────────────────────────────
         const ZIP_LATLNG = {
@@ -1059,6 +1060,18 @@
                     if (zip) venueZipMap[f.id] = zip;
                 });
 
+                // Build clubVenueZipMap: club name (lowercase) → first venue zip for that club
+                clubVenueZipMap = {};
+                venues.forEach(v => {
+                    const zip = (v.fields['Zip'] || '').toString().trim();
+                    if (!zip) return;
+                    const linkedClubs = Array.isArray(v.fields['Clubs']) ? v.fields['Clubs'] : [];
+                    linkedClubs.forEach(clubId => {
+                        const clubName = (clubLookup[clubId] || '').toLowerCase();
+                        if (clubName && !clubVenueZipMap[clubName]) clubVenueZipMap[clubName] = zip;
+                    });
+                });
+
                 document.getElementById('workstation').style.display = 'grid';
 
                 // If launched with ?filter=unassigned, pre-check the filter
@@ -1535,7 +1548,11 @@
             };
 
             // Build distance map for all refs (refId → miles | null)
-            const venueZip  = getSelectedGameVenueZip();
+            // Priority: selected game's venue zip → single active club's venue zip → nothing
+            const activeClubZip = selectedClubs.size === 1
+                ? (clubVenueZipMap[[...selectedClubs][0].toLowerCase()] || null)
+                : null;
+            const venueZip  = getSelectedGameVenueZip() || activeClubZip;
             const venueLoc  = venueZip ? ZIP_LATLNG[venueZip] : null;
             const distMap   = {};
             filtered.forEach(r => {
