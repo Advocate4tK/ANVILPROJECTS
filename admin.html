@@ -156,6 +156,7 @@
         let personSearchRefs  = [];
         let personSearchClubs = [];
         let personSearchGames = [];
+        let proximityVenues   = []; // { name, zip } for venue-name lookup
 
         function runPersonSearch(val) {
             const resultsDiv = document.getElementById('personResults');
@@ -419,6 +420,9 @@
                 personSearchRefs  = allReferees;
                 personSearchClubs = allClubs;
                 personSearchGames = allGames;
+                proximityVenues   = allVenues
+                    .map(v => ({ name: v.fields['Venue Name'] || '', zip: (v.fields['Zip'] || '').toString().trim() }))
+                    .filter(v => v.name && v.zip);
 
                 // Build club ID → name lookup
                 const clubLookup = {};
@@ -603,7 +607,7 @@
 
                 <div style="margin-bottom:24px; padding-bottom:20px; border-bottom:1px solid #e0e0e0;">
                     <p style="font-weight:700; font-size:0.95rem; margin-bottom:10px; color:#0f3460;">🔍 Proximity Search</p>
-                    <input type="text" id="proximityZip" oninput="runProximitySearch(this.value)" placeholder="Enter a zip code to find nearest referees…" maxlength="5"
+                    <input type="text" id="proximityZip" oninput="runProximitySearch(this.value)" placeholder="Enter a zip code or venue name…"
                         style="width:100%; padding:10px 14px; border:1px solid #ccc; border-radius:8px; font-size:0.9rem; box-sizing:border-box; font-family:inherit;">
                     <div id="proximityResults" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;"></div>
                 </div>
@@ -899,12 +903,33 @@
         function runProximitySearch(val) {
             const resultsDiv = document.getElementById('proximityResults');
             if (!resultsDiv) return;
-            const zip = val.trim();
-            if (zip.length < 5) { resultsDiv.innerHTML = ''; return; }
-            const fromLoc = ZIP_LATLNG[zip];
-            if (!fromLoc) {
-                resultsDiv.innerHTML = `<p style="color:#888; font-size:0.85rem;">Zip code ${zip} not found in CT zip table.</p>`;
-                return;
+            const q = val.trim();
+            if (q.length < 3) { resultsDiv.innerHTML = ''; return; }
+
+            let fromLoc = null;
+            let fromLabel = '';
+
+            // 5-digit zip code
+            if (/^\d{5}$/.test(q)) {
+                fromLoc = ZIP_LATLNG[q];
+                fromLabel = q;
+                if (!fromLoc) {
+                    resultsDiv.innerHTML = `<p style="color:#888; font-size:0.85rem;">Zip code ${q} not found in CT zip table.</p>`;
+                    return;
+                }
+            } else {
+                // Venue name match
+                const match = proximityVenues.find(v => v.name.toLowerCase().includes(q.toLowerCase()));
+                if (!match) {
+                    if (q.length >= 3) resultsDiv.innerHTML = `<p style="color:#888; font-size:0.85rem;">No venue matching "${q}" found.</p>`;
+                    return;
+                }
+                fromLoc = ZIP_LATLNG[match.zip];
+                fromLabel = match.name;
+                if (!fromLoc) {
+                    resultsDiv.innerHTML = `<p style="color:#888; font-size:0.85rem;">${match.name} has zip ${match.zip} which isn't in the CT zip table.</p>`;
+                    return;
+                }
             }
 
             const results = [];
@@ -928,7 +953,8 @@
 
             results.sort((a, b) => a.miles - b.miles);
 
-            resultsDiv.innerHTML = results.slice(0, 15).map(p => {
+            const header = `<p style="font-size:0.8rem; color:#888; margin-bottom:6px;">Nearest to <strong style="color:#0f3460;">${fromLabel}</strong></p>`;
+            resultsDiv.innerHTML = header + results.slice(0, 15).map(p => {
                 const yrsNum = parseInt(p.years) || 0;
                 const yrsLabel = yrsNum === 0 ? '1st Season' : yrsNum === 1 ? '2nd Season' : `${p.years} yrs`;
                 return `<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; padding:9px 14px; font-size:0.88rem;">
