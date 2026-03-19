@@ -33,6 +33,20 @@
             </div>
 
             <div class="section-card">
+                <h2 style="color:#0f3460; margin-bottom:6px;">Patch Ref Zip Codes</h2>
+                <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">
+                    Looks up each seeded referee by name and sets their <strong>Zip Code</strong> field if it's blank.
+                    Safe to run at any time — does not delete refs, games, availability, or assignments.
+                </p>
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="patchZipsBtn" onclick="patchRefZips()" style="background:#8e44ad;">📍 Patch Ref Zip Codes</button>
+                </div>
+                <div class="progress-bar" id="patchZipsBar" style="display:none;"><div class="progress-fill" id="patchZipsFill"></div></div>
+                <div class="summary-box" id="patchZipsSummary"></div>
+                <div class="log" id="patchZipsLog" style="display:none;"></div>
+            </div>
+
+            <div class="section-card">
                 <h2 style="color:#0f3460; margin-bottom:6px;" id="weekendLabel">Weekend: loading…</h2>
                 <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">
                     Creates realistic schedules for <strong>Griswold</strong> and <strong>East Haddam</strong> — 7 games each per day (28 total).
@@ -673,6 +687,65 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = '📋 Seed Refs for This Weekend\'s Games';
+            }
+        }
+
+        async function patchRefZips() {
+            const btn    = document.getElementById('patchZipsBtn');
+            const bar    = document.getElementById('patchZipsBar');
+            const fill   = document.getElementById('patchZipsFill');
+            const logEl  = document.getElementById('patchZipsLog');
+            const summary = document.getElementById('patchZipsSummary');
+            btn.disabled = true;
+            btn.textContent = 'Patching…';
+            bar.style.display = 'block';
+            logEl.style.display = 'block';
+            logEl.innerHTML = '';
+            summary.style.display = 'none';
+
+            const zipByName = {};
+            FAKE_REFS.forEach(r => { zipByName[r.name] = r.zip; });
+
+            let patched = 0, skipped = 0, missing = 0;
+            try {
+                logEl.innerHTML += '<div class="info">Fetching referees from Airtable…</div>';
+                const allRefs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 });
+                const total = Object.keys(zipByName).length;
+                let done = 0;
+
+                for (const rec of allRefs) {
+                    const name = (rec.fields['Name'] || '').trim();
+                    const zip  = zipByName[name];
+                    if (!zip) continue; // not a seeded ref we know about
+
+                    done++;
+                    fill.style.width = Math.round((done / total) * 100) + '%';
+
+                    if (rec.fields['Zip Code'] && rec.fields['Zip Code'].trim() !== '') {
+                        logEl.innerHTML += `<div class="info">— ${name}: already has zip (${rec.fields['Zip Code']}), skipped</div>`;
+                        skipped++;
+                        continue;
+                    }
+                    try {
+                        await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rec.id, { 'Zip Code': zip });
+                        logEl.innerHTML += `<div class="ok">✓ ${name} → ${zip}</div>`;
+                        patched++;
+                    } catch(e) {
+                        logEl.innerHTML += `<div class="err">✗ ${name}: ${e.message}</div>`;
+                        missing++;
+                    }
+                    logEl.scrollTop = logEl.scrollHeight;
+                    await delay(150);
+                }
+
+                fill.style.width = '100%';
+                summary.style.display = 'block';
+                summary.innerHTML = `<strong style="color:#27ae60;">Done.</strong> ${patched} patched, ${skipped} already had a zip, ${missing} failed.`;
+            } catch(e) {
+                logEl.innerHTML += `<div class="err">Fatal: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📍 Patch Ref Zip Codes';
             }
         }
 
