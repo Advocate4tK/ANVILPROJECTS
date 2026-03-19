@@ -357,13 +357,15 @@
                             <span><span class="legend-dot" style="background:#bbb;"></span>No availability</span>
                         </div>
                     </div>
+                    <!-- Always-visible search -->
+                    <input type="text" id="refSearch" placeholder="🔍 Search referee..." oninput="renderRefs(this.value.toLowerCase())" style="width:100%; padding:5px 8px; border:1px solid #dde3f0; border-radius:6px; font-size:0.78rem; font-family:inherit; margin-bottom:6px; box-sizing:border-box;">
                     <!-- Filter section -->
                     <div style="margin-bottom:10px; position:relative;">
                         <button id="filterToggleBtn" onclick="toggleRefFilter()" style="width:100%; display:flex; justify-content:space-between; align-items:center; background:#f4f6fa; border:1px solid #dde3f0; border-radius:8px; padding:7px 12px; font-size:0.85rem; font-weight:700; color:#0f3460; cursor:pointer; font-family:inherit;">
                             <span>🔍 Filter</span><span id="filterToggleArrow">▾</span>
                         </button>
                         <div id="refFilterBody" style="display:none; position:absolute; z-index:100; left:0; right:0; top:100%; border:1px solid #dde3f0; border-radius:0 0 8px 8px; padding:10px 10px 4px; background:#fafbfd; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-                            <input type="text" class="ref-search" id="refSearch" placeholder="Search refs..." style="margin-bottom:8px;">
+
                             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                                 <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">Years Reffing:</label>
                                 <select id="yearsFilter" style="flex:1; font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
@@ -1259,29 +1261,31 @@
                 if (genderFilter && r.fields['Gender'] !== genderFilter) return false;
                 const refName = (r.fields['Name'] || '').trim().toLowerCase();
 
-                if (dateFilter) {
-                    // Specific date filter active — ref must be available on that date
-                    if (!availByName[refName]?.has(dateFilter)) return false;
-                    if (timeFilter) {
-                        const slot = availTimeByName[refName]?.[dateFilter];
-                        if (slot && slot.start && slot.end) {
-                            if (timeFilter < slot.start || timeFilter > slot.end) return false;
+                // When searching by name, skip availability filters so any ref can be found
+                if (!query) {
+                    if (dateFilter) {
+                        // Specific date filter active — ref must be available on that date
+                        if (!availByName[refName]?.has(dateFilter)) return false;
+                        if (timeFilter) {
+                            const slot = availTimeByName[refName]?.[dateFilter];
+                            if (slot && slot.start && slot.end) {
+                                if (timeFilter < slot.start || timeFilter > slot.end) return false;
+                            }
                         }
-                    }
-                } else if (visibleGameDates.size > 0) {
-                    // Filter by the actual dates of games on screen — not the raw date range
-                    const refDates = availByName[refName];
-                    if (!refDates || refDates.size === 0) return false;
-                    const matchingDates = [...visibleGameDates].filter(d => refDates.has(d));
-                    if (matchingDates.length === 0) return false;
-                    // If a time filter is active, ref must cover that time on at least one matching date
-                    if (timeFilter) {
-                        const hasTime = matchingDates.some(d => {
-                            const slot = availTimeByName[refName]?.[d];
-                            if (!slot || !slot.start || !slot.end) return true;
-                            return timeFilter >= slot.start && timeFilter <= slot.end;
-                        });
-                        if (!hasTime) return false;
+                    } else if (visibleGameDates.size > 0) {
+                        // Filter by the actual dates of games on screen
+                        const refDates = availByName[refName];
+                        if (!refDates || refDates.size === 0) return false;
+                        const matchingDates = [...visibleGameDates].filter(d => refDates.has(d));
+                        if (matchingDates.length === 0) return false;
+                        if (timeFilter) {
+                            const hasTime = matchingDates.some(d => {
+                                const slot = availTimeByName[refName]?.[d];
+                                if (!slot || !slot.start || !slot.end) return true;
+                                return timeFilter >= slot.start && timeFilter <= slot.end;
+                            });
+                            if (!hasTime) return false;
+                        }
                     }
                 }
                 return true;
