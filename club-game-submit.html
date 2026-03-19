@@ -237,10 +237,12 @@
             align-items: flex-start;
             flex-wrap: wrap;
         }
-        .game-card.change-req { border-left-color: #f0a500; background: #fff3cd; }
+        .game-card.change-req  { border-left-color: #f0a500; background: #fff8ec; }
+        .game-card.change-done { border-left-color: #27ae60; background: #f0faf4; }
         .game-card-main { flex: 1 1 280px; min-width: 0; }
         .game-matchup { font-size: 0.95rem; font-weight: 800; color: #0f3460; margin-bottom: 4px; }
-        .game-card.change-req .game-matchup { color: #935116; }
+        .game-card.change-req  .game-matchup { color: #935116; }
+        .game-card.change-done .game-matchup { color: #1e8449; }
         .game-meta { font-size: 0.78rem; color: #666; margin-bottom: 6px; }
         .game-refs { font-size: 0.78rem; color: #555; }
         .game-refs-label { font-weight: 600; margin-right: 4px; }
@@ -252,6 +254,15 @@
             flex-shrink: 0;
         }
         .submitted-by-lbl { font-size: 0.72rem; color: #999; }
+        .chg-section-hdr {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 0.82rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1.5px; margin-bottom: 10px; padding-bottom: 5px;
+        }
+        .chg-section-hdr.pending { color: #935116; border-bottom: 2px solid #f0a500; }
+        .chg-section-hdr.resolved { color: #1e8449; border-bottom: 2px solid #27ae60; }
+        .chg-req-detail { font-size: 0.8rem; background: rgba(0,0,0,0.04); border-radius: 6px; padding: 7px 10px; margin-top: 6px; color: #555; }
+        .chg-req-detail strong { color: #333; }
 
         /* ── Change Request inline form ── */
         .change-form { background:#fff8f0; border:1px solid #f0a500; border-radius:8px; padding:14px 16px; margin-top:8px; display:none; }
@@ -1028,6 +1039,110 @@
         return val; // already a plain name
     }
 
+    // Extract the most recent change request block from Notes
+    function extractLastChangeRequest(notesText) {
+        if (!notesText) return null;
+        const blocks = notesText.split(/\[CHANGE REQUEST/i);
+        if (blocks.length < 2) return null;
+        const last = '[CHANGE REQUEST' + blocks[blocks.length - 1];
+        return {
+            reqDate: (last.match(/Requested Date: (\S+)/))?.[1] || '',
+            reqTime: (last.match(/Requested Time: (\S+)/))?.[1] || '',
+            reason:  (last.match(/Reason: (.+)/))?.[1]           || '',
+            reqBy:   (last.match(/Requested by: (.+)/))?.[1]     || ''
+        };
+    }
+
+    function buildGameCard(r, opts = {}) {
+        const f          = r.fields;
+        const dateStr    = f['Date'] || '—';
+        const timeRaw    = (f['Time'] || '').substring(0, 5);
+        const timeDisp   = timeRaw ? formatTime(timeRaw) : '—';
+        const center     = resolveRef(f['Center Referee']);
+        const ar1        = resolveRef(f['AR 1']);
+        const ar2        = resolveRef(f['AR 2']);
+        const refBadges  = [center && `<span class="ref-badge">⚽ ${center}</span>`,
+                            ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
+                            ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('&nbsp;');
+        const refsHtml   = refBadges
+            ? `<span class="game-refs-label">Refs:</span>${refBadges}`
+            : `<span style="color:#aaa; font-size:0.8rem; font-style:italic;">No refs assigned yet</span>`;
+        const venueNumId = parseFloat(f['Venue ID']);
+        const venueName  = !isNaN(venueNumId)
+            ? (allVenues.find(v => parseFloat(v.numId) === venueNumId)?.name || '—') : '—';
+        const submittedBy = f['Uploaded By'] || '—';
+
+        if (opts.changeResolved) {
+            // Green "resolved" card — notification that the change was handled
+            return `<div class="game-card change-done">
+                <div class="game-card-main">
+                    <div class="game-matchup">✅ ${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                    <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
+                    <div class="game-refs">${refsHtml}</div>
+                    <div class="chg-req-detail" style="background:#d5f5e3; color:#1e5e33;">
+                        Your change request has been handled by the assignor. The game above reflects the updated schedule.
+                    </div>
+                </div>
+                <div class="game-card-side">
+                    <span class="status-badge status-submitted" style="background:#d5f5e3; color:#1e8449;">✅ Resolved</span>
+                    <span class="submitted-by-lbl">by ${submittedBy}</span>
+                </div>
+            </div>`;
+        }
+
+        if (opts.changePending) {
+            // Amber "pending" card with request details and no "Request Change" button
+            const chg = extractLastChangeRequest(f['Notes'] || '');
+            const chgDetail = chg ? `<div class="chg-req-detail">
+                ${chg.reqDate || chg.reqTime ? `<div><strong>Requested reschedule:</strong> ${chg.reqDate || ''} ${chg.reqTime ? formatTime(chg.reqTime) : ''}</div>` : ''}
+                ${chg.reason  ? `<div><strong>Reason:</strong> ${chg.reason}</div>` : ''}
+                ${chg.reqBy   ? `<div><strong>Requested by:</strong> ${chg.reqBy}</div>` : ''}
+            </div>` : '';
+            return `<div class="game-card change-req">
+                <div class="game-card-main">
+                    <div class="game-matchup">${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                    <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
+                    <div class="game-refs">${refsHtml}</div>
+                    ${chgDetail}
+                </div>
+                <div class="game-card-side">
+                    <span class="status-badge status-change-req">⚠ Pending</span>
+                    <span class="submitted-by-lbl" style="color:#935116; font-size:0.75rem;">Awaiting assignor</span>
+                </div>
+            </div>`;
+        }
+
+        // Regular submitted/assigned game card
+        const statusCls = center ? 'status-assigned' : 'status-submitted';
+        const statusLbl = center ? 'Assigned' : 'Submitted';
+        return `<div class="game-card">
+            <div class="game-card-main">
+                <div class="game-matchup">${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
+                <div class="game-refs">${refsHtml}</div>
+                <div class="change-form" id="chgForm_${r.id}" style="margin-top:10px;">
+                    <p style="font-size:0.82rem; font-weight:700; color:#935116; margin:0 0 8px;">Request a change for: <em>${f['Home Team'] || ''} vs ${f['Away Team'] || ''} (${dateStr})</em></p>
+                    <label>New Date (optional)</label>
+                    <input type="date" id="chgDate_${r.id}">
+                    <label>New Time (optional)</label>
+                    <input type="time" id="chgTime_${r.id}">
+                    <label>Reason <span style="color:#e74c3c">*</span></label>
+                    <textarea id="chgReason_${r.id}" placeholder="Explain the requested change…"></textarea>
+                    <div class="change-form-btns">
+                        <button class="btn btn-primary" style="font-size:0.85rem; padding:7px 16px;" onclick="submitChangeRequest('${r.id}')">Submit Request</button>
+                        <button class="btn btn-outline" style="font-size:0.85rem; padding:7px 16px;" onclick="toggleChangeForm('${r.id}')">Cancel</button>
+                    </div>
+                    <p id="chgMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
+                </div>
+            </div>
+            <div class="game-card-side">
+                <span class="status-badge ${statusCls}">${statusLbl}</span>
+                <button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>
+                <span class="submitted-by-lbl">by ${submittedBy}</span>
+            </div>
+        </div>`;
+    }
+
     async function loadScheduledGames() {
         const section = document.getElementById('scheduledGamesSection');
         const content = document.getElementById('scheduledGamesContent');
@@ -1040,7 +1155,6 @@
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 500 }),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 })
             ]);
-            // Ensure refById is always current regardless of load order
             refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
 
             const clubGames = games
@@ -1052,88 +1166,59 @@
                 return;
             }
 
-            // Group by week
-            const weeks = {};
+            // Classify into buckets
+            const pendingChanges  = [];
+            const resolvedChanges = [];
+            const regularGames    = [];
             clubGames.forEach(r => {
-                const dateStr = r.fields['Date'] || new Date().toISOString().split('T')[0];
-                const { key, label } = getWeekLabel(dateStr);
-                if (!weeks[key]) weeks[key] = { label, games: [] };
-                weeks[key].games.push(r);
+                const rawStatus = (r.fields['Game Status'] || r.fields['Status'] || '').trim();
+                const notesText = r.fields['Notes'] || '';
+                const hasReqNote = notesText.includes('[CHANGE REQUEST');
+                if (rawStatus === 'Change Requested' || (hasReqNote && rawStatus !== 'Change Resolved' && rawStatus !== 'Assigned')) {
+                    pendingChanges.push(r);
+                } else if (rawStatus === 'Change Resolved' || (hasReqNote && rawStatus === 'Assigned')) {
+                    resolvedChanges.push(r);
+                } else {
+                    regularGames.push(r);
+                }
             });
 
-            const sortedWeeks = Object.entries(weeks).sort((a, b) => a[0].localeCompare(b[0]));
+            let html = '';
 
-            content.innerHTML = sortedWeeks.map(([, { label, games }]) => {
-                const rows = games.map(r => {
-                    const f         = r.fields;
-                    const dateStr   = f['Date'] || '—';
-                    const timeRaw   = (f['Time'] || '').substring(0,5);
-                    const timeDisp  = timeRaw ? formatTime(timeRaw) : '—';
-                    const center    = resolveRef(f['Center Referee']);
-                    const ar1       = resolveRef(f['AR 1']);
-                    const ar2       = resolveRef(f['AR 2']);
-                    const refs      = [center && `<span class="ref-badge">⚽ ${center}</span>`,
-                                       ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
-                                       ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('&nbsp;') || '<span style="color:#aaa; font-size:0.8rem;">Pending</span>';
-                    const rawStatus   = f['Game Status'] || f['Status'] || 'Submitted';
-                    const notesText   = f['Notes'] || '';
-                    const isChangeReq = rawStatus === 'Change Requested' || notesText.includes('[CHANGE REQUEST');
-                    const statusCls   = isChangeReq ? 'status-change-req' : (center ? 'status-assigned' : 'status-submitted');
-                    const statusLbl   = isChangeReq ? '⚠ Change Requested' : (center ? 'Assigned' : 'Submitted');
-
-                    // Extract requested date/time from notes if present
-                    const reqDateMatch = notesText.match(/Requested Date: (\S+)/);
-                    const reqTimeMatch = notesText.match(/Requested Time: (\S+)/);
-                    const reqDetails   = isChangeReq && (reqDateMatch || reqTimeMatch)
-                        ? `<div style="font-size:0.75rem; color:#935116; margin-top:3px;">📅 ${reqDateMatch?.[1]||''} ${reqTimeMatch?.[1]||''}</div>`
-                        : '';
-                    const submittedBy = f['Uploaded By'] || '—';
-                    // Resolve venue name from Venue ID number
-                    const venueNumId = parseFloat(f['Venue ID']);
-                    const venueName  = !isNaN(venueNumId)
-                        ? (allVenues.find(v => parseFloat(v.numId) === venueNumId)?.name || '—')
-                        : '—';
-
-                    const rowStyle = isChangeReq ? 'background:#fff3cd; border-left:4px solid #f0a500;' : '';
-
-                    const refsDisplay = refs !== '<span style="color:#aaa; font-size:0.8rem;">Pending</span>'
-                        ? `<span class="game-refs-label">Refs:</span>${refs}`
-                        : `<span style="color:#aaa; font-size:0.8rem; font-style:italic;">No refs assigned yet</span>`;
-
-                    return `<div class="game-card ${isChangeReq ? 'change-req' : ''}">
-                        <div class="game-card-main">
-                            <div class="game-matchup">${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
-                            <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
-                            <div class="game-refs">${refsDisplay}</div>
-                            <div class="change-form" id="chgForm_${r.id}" style="margin-top:10px;">
-                                <p style="font-size:0.82rem; font-weight:700; color:#935116; margin:0 0 8px;">Request a change for: <em>${f['Home Team'] || ''} vs ${f['Away Team'] || ''} (${dateStr})</em></p>
-                                <label>New Date (optional)</label>
-                                <input type="date" id="chgDate_${r.id}">
-                                <label>New Time (optional)</label>
-                                <input type="time" id="chgTime_${r.id}">
-                                <label>Reason <span style="color:#e74c3c">*</span></label>
-                                <textarea id="chgReason_${r.id}" placeholder="Explain the requested change…"></textarea>
-                                <div class="change-form-btns">
-                                    <button class="btn btn-primary" style="font-size:0.85rem; padding:7px 16px;" onclick="submitChangeRequest('${r.id}')">Submit Request</button>
-                                    <button class="btn btn-outline" style="font-size:0.85rem; padding:7px 16px;" onclick="toggleChangeForm('${r.id}')">Cancel</button>
-                                </div>
-                                <p id="chgMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
-                            </div>
-                        </div>
-                        <div class="game-card-side">
-                            <span class="status-badge ${statusCls}">${statusLbl}</span>
-                            ${reqDetails}
-                            <button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>
-                            <span class="submitted-by-lbl">by ${submittedBy}</span>
-                        </div>
-                    </div>`;
-                }).join('');
-
-                return `<div style="margin-bottom:24px;">
-                    <div style="font-size:0.8rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; padding-bottom:4px; border-bottom:2px solid #e94560;">${label}</div>
-                    ${rows}
+            // ── Change Requests section (shown if any pending or recently resolved) ──
+            if (pendingChanges.length > 0 || resolvedChanges.length > 0) {
+                const pendingHtml = pendingChanges.map(r => buildGameCard(r, { changePending: true })).join('');
+                const resolvedHtml = resolvedChanges.map(r => buildGameCard(r, { changeResolved: true })).join('');
+                html += `<div style="margin-bottom:32px;">
+                    <div class="chg-section-hdr pending">⚠️ Change Requests
+                        ${pendingChanges.length > 0 ? `<span style="background:#fdebd0; color:#935116; font-size:0.72rem; padding:2px 8px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0;">${pendingChanges.length} pending</span>` : ''}
+                    </div>
+                    ${pendingHtml}
+                    ${resolvedChanges.length > 0 ? `<div class="chg-section-hdr resolved" style="margin-top:16px;">✅ Recently Resolved</div>${resolvedHtml}` : ''}
                 </div>`;
-            }).join('');
+            }
+
+            // ── Submitted Games section ──
+            if (regularGames.length > 0) {
+                const weeks = {};
+                regularGames.forEach(r => {
+                    const dateStr = r.fields['Date'] || new Date().toISOString().split('T')[0];
+                    const { key, label } = getWeekLabel(dateStr);
+                    if (!weeks[key]) weeks[key] = { label, games: [] };
+                    weeks[key].games.push(r);
+                });
+                const weekBlocks = Object.entries(weeks).sort((a, b) => a[0].localeCompare(b[0]))
+                    .map(([, { label, games: wGames }]) => `<div style="margin-bottom:24px;">
+                        <div style="font-size:0.8rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; padding-bottom:4px; border-bottom:2px solid #e94560;">${label}</div>
+                        ${wGames.map(r => buildGameCard(r)).join('')}
+                    </div>`).join('');
+                html += `<div>
+                    <div style="font-size:1rem; font-weight:800; color:#0f3460; margin-bottom:14px;">📋 Submitted Games</div>
+                    ${weekBlocks}
+                </div>`;
+            }
+
+            content.innerHTML = html;
 
         } catch(err) {
             content.innerHTML = `<p style="color:#e74c3c; font-size:0.85rem;">Could not load games: ${err.message}</p>`;
