@@ -538,10 +538,11 @@
             seededRefIds = [];
 
             try {
-                log('Creating fake referees…', 'info');
+                log('Creating fake referees for Griswold & East Haddam…', 'info');
+                const GE_REFS = FAKE_REFS.filter(r => r.prefs && (r.prefs.includes('Griswold') || r.prefs.includes('East Haddam')));
                 const createdRefNames = [];
-                for (let i = 0; i < FAKE_REFS.length; i++) {
-                    const r = FAKE_REFS[i];
+                for (let i = 0; i < GE_REFS.length; i++) {
+                    const r = GE_REFS[i];
                     let rec = null;
                     try {
                         rec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, {
@@ -562,7 +563,7 @@
                         createdRefNames.push(r.name);
                         log(`  ✓ ${r.name} — ${r.years === '0' ? '1st Season' : r.years === '1' ? '2nd Season' : r.years + ' yrs'}`, 'ok');
                     }
-                    setProgress((i / FAKE_REFS.length) * 80);
+                    setProgress((i / GE_REFS.length) * 80);
                     await delay(150);
                 }
 
@@ -626,11 +627,16 @@
                 }
                 log(`Cleared ${cleared} existing availability records.`, 'info');
 
-                // Fetch existing fake refs from Airtable
-                log('Fetching existing seeded referees…', 'info');
+                // Fetch existing fake refs — only those preferring Griswold or East Haddam
+                log('Fetching existing seeded referees for Griswold & East Haddam…', 'info');
+                const GE_REF_NAMES = new Set(
+                    FAKE_REFS
+                        .filter(r => r.prefs && (r.prefs.includes('Griswold') || r.prefs.includes('East Haddam')))
+                        .map(r => r.name)
+                );
                 const allRefs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 });
-                const fakeRefs = allRefs.filter(r => FAKE_REF_NAMES.has((r.fields['Name'] || '').trim()));
-                log(`Found ${fakeRefs.length} seeded referees.`, 'info');
+                const fakeRefs = allRefs.filter(r => GE_REF_NAMES.has((r.fields['Name'] || '').trim()));
+                log(`Found ${fakeRefs.length} Griswold/East Haddam referees.`, 'info');
 
                 if (fakeRefs.length === 0) {
                     log('No seeded referees found — run "Seed Refs Only" first.', 'err');
