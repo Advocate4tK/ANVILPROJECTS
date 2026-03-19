@@ -29,8 +29,8 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.07);
             border-top: 4px solid #0f3460;
             position: sticky;
-            top: 20px;
-            max-height: calc(100vh - 60px);
+            top: 120px;
+            max-height: calc(100vh - 140px);
             overflow-y: auto;
         }
 
@@ -173,15 +173,81 @@
         .cert-R { background: #cce5ff; color: #004085; }
         .cert-N { background: #fff3cd; color: #856404; }
 
-        /* ── Filters bar ── */
-        .filters-bar {
-            background: white; border-radius: 12px; padding: 16px 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.07); margin-bottom: 16px;
+        /* ── Sticky toolbar ── */
+        .sticky-toolbar {
+            position: sticky; top: 0; z-index: 200;
+            background: #0f3460;
+            box-shadow: 0 3px 14px rgba(0,0,0,0.28);
+            margin: -35px -30px 20px -30px; /* bleed out of main's 35px top / 30px side padding */
+            border-radius: 16px 16px 0 0;   /* match container corners */
+            padding: 0;
         }
-        .filters-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
-        .filters-row .form-group { margin-bottom: 0; }
-        .filters-row label { font-size: 0.82rem; margin-bottom: 4px; }
-        .filters-row input[type="date"] { padding: 7px 10px; font-size: 0.85rem; }
+        .toolbar-row1 {
+            display: flex; align-items: center; gap: 14px;
+            padding: 9px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            flex-wrap: wrap;
+        }
+        .toolbar-back {
+            color: rgba(255,255,255,0.75); text-decoration: none; font-size: 0.78rem;
+            font-weight: 600; white-space: nowrap;
+            padding: 4px 10px; border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;
+            transition: all 0.15s;
+        }
+        .toolbar-back:hover { color: white; border-color: white; }
+        .toolbar-title {
+            font-size: 1rem; font-weight: 800; color: white; white-space: nowrap;
+            letter-spacing: 0.3px;
+        }
+        .toolbar-spacer { flex: 1; }
+        .toolbar-load-btn {
+            background: #e94560; color: white; border: none; border-radius: 7px;
+            padding: 7px 18px; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+            font-family: inherit; white-space: nowrap; transition: background 0.15s;
+        }
+        .toolbar-load-btn:hover { background: #c73652; }
+
+        /* Date quick-pick buttons (dark-bg variant) */
+        .toolbar-row2 {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 20px; flex-wrap: wrap;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .date-quick-btn {
+            background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.9);
+            border: 1px solid rgba(255,255,255,0.25);
+            padding: 4px 11px; font-size: 0.75rem; border-radius: 6px; cursor: pointer;
+            font-weight: 600; font-family: inherit; transition: all 0.15s; white-space: nowrap;
+        }
+        .date-quick-btn:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.5); }
+        .date-quick-btn.active { background: #e94560; color: white; border-color: #e94560; }
+        .toolbar-custom-date {
+            padding: 4px 9px; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px;
+            font-size: 0.75rem; background: rgba(255,255,255,0.1); color: white;
+            font-family: inherit; cursor: pointer;
+        }
+        .toolbar-custom-date::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.7); }
+        .toolbar-date-label {
+            font-size: 0.72rem; color: rgba(255,255,255,0.6); white-space: nowrap;
+        }
+
+        /* Club pills row */
+        .toolbar-row3 {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 20px; flex-wrap: wrap;
+            background: rgba(0,0,0,0.15);
+        }
+        .toolbar-row3-label {
+            font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.5);
+            text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
+        }
+        /* Override club-pill colors for dark toolbar */
+        .toolbar-row3 .club-pill {
+            background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.75);
+            border-color: rgba(255,255,255,0.2); font-size: 0.75rem; padding: 3px 11px;
+        }
+        .toolbar-row3 .club-pill:hover { border-color: #f1c40f; color: white; }
+        .toolbar-row3 .club-pill.active { background: #f1c40f; color: #1a1a1a; border-color: #d4ac0d; }
 
         /* ── Misc ── */
         .panel-title { font-size: 1rem; font-weight: 700; color: #0f3460; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
@@ -202,32 +268,37 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>📋 Assignor Workstation</h1>
-            <p class="subtitle">Assign referees to games by club</p>
-        </header>
-
         <main>
-            <div style="margin-bottom:16px;">
-                <a href="admin.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Back to Dashboard</a>
-            </div>
+            <!-- ── Sticky Toolbar ── -->
+            <div class="sticky-toolbar">
+                <!-- Hidden date inputs used by loadAll() -->
+                <input type="hidden" id="dateFrom">
+                <input type="hidden" id="dateTo">
 
-            <!-- Filters -->
-            <div class="filters-bar">
-                <div class="filters-row">
-                    <div class="form-group">
-                        <label>Date From</label>
-                        <input type="date" id="dateFrom">
-                    </div>
-                    <div class="form-group">
-                        <label>Date To</label>
-                        <input type="date" id="dateTo">
-                    </div>
-                    <button class="btn btn-primary" id="loadBtn">View/Refresh Games</button>
+                <!-- Row 1: Title + Load button -->
+                <div class="toolbar-row1">
+                    <a href="admin.html" class="toolbar-back">← Dashboard</a>
+                    <span class="toolbar-title">📋 Assignor Workstation</span>
+                    <div class="toolbar-spacer"></div>
+                    <span id="dateRangeLabel" class="toolbar-date-label"></span>
+                    <button class="toolbar-load-btn" id="loadBtn">▶ Load Games</button>
                 </div>
-                <div>
-                    <div style="font-size:0.8rem; font-weight:600; color:#555; margin-bottom:8px;">Filter by Club:</div>
-                    <div class="club-pills" id="clubPills"></div>
+
+                <!-- Row 2: Date quick-picks + custom -->
+                <div class="toolbar-row2">
+                    <button class="date-quick-btn" onclick="setDateRange('this-sat', event)">This Sat</button>
+                    <button class="date-quick-btn" onclick="setDateRange('this-sun', event)">This Sun</button>
+                    <button class="date-quick-btn" onclick="setDateRange('this-weekend', event)">This Weekend</button>
+                    <button class="date-quick-btn" onclick="setDateRange('next-sat', event)">Next Sat</button>
+                    <button class="date-quick-btn" onclick="setDateRange('next-sun', event)">Next Sun</button>
+                    <button class="date-quick-btn" onclick="setDateRange('next-weekend', event)">Next Weekend</button>
+                    <input type="date" id="customDay" class="toolbar-custom-date" onchange="setDateRange('custom', null)" title="Custom single day">
+                </div>
+
+                <!-- Row 3: Club pills -->
+                <div class="toolbar-row3">
+                    <span class="toolbar-row3-label">Club:</span>
+                    <div class="club-pills" id="clubPills" style="margin-bottom:0;"></div>
                 </div>
             </div>
 
@@ -571,16 +642,75 @@
         let dragSourceGameId    = null; // set when drag starts from a slot
         let dragSourcePosition  = null;
 
+        // ── Date quick-pick helpers ───────────────────────────────────────────
+        function getWeekendDates(weeksAhead) {
+            const today = new Date();
+            const day   = today.getDay(); // 0=Sun … 6=Sat
+            // Days until this/coming Saturday (0 if today is Sat)
+            let daysToSat = (6 - day + 7) % 7;
+            // "This weekend" = the nearest upcoming Saturday
+            // "Next weekend"  = the one after that
+            daysToSat += weeksAhead * 7;
+            const sat = new Date(today); sat.setDate(today.getDate() + daysToSat);
+            const sun = new Date(sat);   sun.setDate(sat.getDate() + 1);
+            return { sat, sun };
+        }
+
+        function setDateRange(preset, evt) {
+            let from, to;
+
+            if (preset === 'this-sat') {
+                const { sat } = getWeekendDates(0);
+                from = to = sat;
+            } else if (preset === 'this-sun') {
+                const { sun } = getWeekendDates(0);
+                from = to = sun;
+            } else if (preset === 'this-weekend') {
+                const { sat, sun } = getWeekendDates(0);
+                from = sat; to = sun;
+            } else if (preset === 'next-sat') {
+                const { sat } = getWeekendDates(1);
+                from = to = sat;
+            } else if (preset === 'next-sun') {
+                const { sun } = getWeekendDates(1);
+                from = to = sun;
+            } else if (preset === 'next-weekend') {
+                const { sat, sun } = getWeekendDates(1);
+                from = sat; to = sun;
+            } else if (preset === 'custom') {
+                const val = document.getElementById('customDay').value;
+                if (!val) return;
+                from = to = new Date(val + 'T12:00:00'); // noon avoids TZ shift
+            }
+
+            if (!from) return;
+            document.getElementById('dateFrom').value = fmt(from);
+            document.getElementById('dateTo').value   = fmt(to);
+
+            // Highlight active quick-pick button
+            document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
+            if (preset !== 'custom') {
+                if (evt && evt.target) evt.target.classList.add('active');
+                document.getElementById('customDay').value = '';
+            }
+
+            // Show label
+            const label = document.getElementById('dateRangeLabel');
+            if (fmt(from) === fmt(to)) {
+                label.textContent = fmt(from);
+            } else {
+                label.textContent = `${fmt(from)} → ${fmt(to)}`;
+            }
+        }
+
         // ── Init ─────────────────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
-            // Default date range: Monday–Sunday of the current week
-            const today = new Date();
-            const day   = today.getDay(); // 0=Sun, 1=Mon … 6=Sat
-            const diffToMon = day === 0 ? -6 : 1 - day;
-            const monday = new Date(today); monday.setDate(today.getDate() + diffToMon);
-            const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-            document.getElementById('dateFrom').value = fmt(monday);
-            document.getElementById('dateTo').value   = fmt(sunday);
+            // Default to this weekend on load
+            setDateRange('this-weekend', null);
+            // Highlight the "This Weekend" button manually since no click event
+            const weekendBtn = [...document.querySelectorAll('.date-quick-btn')]
+                .find(b => b.textContent.trim() === 'This Weekend');
+            if (weekendBtn) weekendBtn.classList.add('active');
 
             buildClubPills();
 
@@ -758,11 +888,11 @@
             try {
                 let filter = '';
                 if (dateFrom && dateTo) {
-                    filter = `AND({Date} >= '${dateFrom}', {Date} <= '${dateTo}')`;
+                    filter = `AND(NOT(IS_BEFORE({Date}, '${dateFrom}')), NOT(IS_AFTER({Date}, '${dateTo}')))`;
                 } else if (dateFrom) {
-                    filter = `{Date} >= '${dateFrom}'`;
+                    filter = `NOT(IS_BEFORE({Date}, '${dateFrom}'))`;
                 } else if (dateTo) {
-                    filter = `{Date} <= '${dateTo}'`;
+                    filter = `NOT(IS_AFTER({Date}, '${dateTo}'))`;
                 }
 
                 const gameOpts = { maxRecords: 500 };
