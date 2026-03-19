@@ -1273,11 +1273,13 @@
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
                 const fullyAssigned = cRef && ar1 && ar2;
-                const selected    = selectedGame && selectedGame.id === gid;
-                const isCancelled = cancelledGameIds.has(gid) || f['Status'] === 'Cancelled';
+                const selected      = selectedGame && selectedGame.id === gid;
+                const isCancelled   = cancelledGameIds.has(gid) || f['Status'] === 'Cancelled';
+                const isChangeReq   = (f['Game Status'] || '') === 'Change Requested';
 
-                html += `<div class="game-card ${fullyAssigned ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''}" onclick="selectGame('${gid}')" id="card-${gid}">
+                html += `<div class="game-card ${fullyAssigned ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}" onclick="selectGame('${gid}')" id="card-${gid}">
                     ${isCancelled ? '<div class="cancelled-stamp">CANCELLED</div>' : ''}
+                    ${isChangeReq ? '<div style="font-size:0.72rem; font-weight:700; color:#935116; background:#fdebd0; border-radius:4px; padding:2px 8px; margin-bottom:6px; display:inline-block;">⚠ Change Requested</div>' : ''}
                     <div class="game-header">
                         <div>
                             <span class="game-title">${home} vs ${away}</span>
@@ -1286,6 +1288,7 @@
                         <div style="display:flex; gap:6px; align-items:center;">
                             ${age  ? `<span class="game-badge">${age}</span>`  : ''}
                             ${club ? `<span class="game-badge" style="background:#f0f0f0;">${club}</span>` : ''}
+                            ${isChangeReq ? `<button onclick="event.stopPropagation(); markChangeResolved('${gid}')" title="Mark change request resolved" style="background:#27ae60; color:white; border:none; border-radius:6px; padding:2px 9px; font-size:0.78rem; cursor:pointer; font-weight:700; line-height:1.4;">✅ Mark Resolved</button>` : ''}
                             <button onclick="event.stopPropagation(); toggleGameEdit('${gid}')" title="Edit game" style="background:none; border:1px solid #ccc; border-radius:6px; padding:2px 7px; font-size:0.78rem; cursor:pointer; color:#555; line-height:1.4;">✏️</button>
                         </div>
                     </div>
@@ -1831,17 +1834,7 @@
                     if (!assignedAt[refId].has(dt)) assignedAt[refId].set(dt, new Set());
                     assignedAt[refId].get(dt).add(gameId);
 
-                    // Auto-clear "Change Requested" flag now that the assignor has acted on this game
-                    if ((game.fields['Game Status'] || '') === 'Change Requested') {
-                        try {
-                            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Assigned' });
-                            game.fields['Game Status'] = 'Assigned';
-                            // Remove amber highlight ring if present
-                            document.getElementById('card-' + gameId)?.classList.remove('change-focus');
-                        } catch(e) {
-                            console.warn('Could not auto-clear Change Requested status:', e.message);
-                        }
-                    }
+                    // Do NOT auto-clear Change Requested here — assignor must explicitly mark resolved
                 }
 
                 renderGames();
@@ -2015,6 +2008,21 @@
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Status': '' });
             } catch(e) {
                 console.warn('Could not persist restore to Airtable:', e.message);
+            }
+        }
+
+        // ── Mark a change request as resolved (explicit assignor action) ──────
+        async function markChangeResolved(gameId) {
+            if (!confirm('Mark this change request as resolved?\n\nThis will clear the flag and notify the club that their request has been handled.')) return;
+            const game = allGames.find(g => g.id === gameId);
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Change Resolved' });
+                if (game) game.fields['Game Status'] = 'Change Resolved';
+                document.getElementById('card-' + gameId)?.classList.remove('change-focus');
+                renderGames();
+                renderRefs(document.getElementById('refSearch').value.toLowerCase());
+            } catch(e) {
+                alert('Could not mark resolved: ' + e.message);
             }
         }
     </script>
