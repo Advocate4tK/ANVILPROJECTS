@@ -652,6 +652,8 @@
         let availTimeByName = {}; // ref name → { date → { start, end } }
         let selectedClubs = new Set(CLUBS_LIST); // default: all
         let selectedGame        = null; // currently focused game record
+        let requestedChangeDate = null; // parsed from Notes when change request game is open
+        let requestedChangeTime = null; // parsed from Notes when change request game is open
         let visibleGameDates    = new Set(); // dates of games currently on screen
         let showAllRefsMode     = false; // Show All Refs button state
         let hideU8Games         = true;
@@ -1131,12 +1133,26 @@
                     const focusedGame = allGames.find(g => g.id === focusGameId);
                     if (focusedGame) {
                         const f = focusedGame.fields;
-                        const refsVisible = document.getElementById('refsListWrap')?.querySelectorAll('.ref-card').length || 0;
-                        const noAvailMsg  = refsVisible === 0
-                            ? ' ⚠️ No refs have submitted availability for this date — you may need to contact refs directly or use Show All Refs.'
+                        // Parse requested new date/time from Notes
+                        const notes  = f['Notes'] || '';
+                        const blocks = notes.split(/\[CHANGE REQUEST/i);
+                        if (blocks.length > 1) {
+                            const last = '[CHANGE REQUEST' + blocks[blocks.length - 1];
+                            requestedChangeDate = (last.match(/Requested Date:\s*(\S+)/i))?.[1] || null;
+                            requestedChangeTime = (last.match(/Requested Time:\s*(\S+)/i))?.[1] || null;
+                        }
+                        // Re-render refs using the requested date as the effective game date
+                        if (requestedChangeDate) renderRefs('');
+
+                        const reqLabel = requestedChangeDate
+                            ? ` &nbsp;→&nbsp; <span style="color:#c0392b; font-weight:700;">Requested: ${requestedChangeDate}${requestedChangeTime ? ' @ ' + formatTime(requestedChangeTime) : ''}</span>`
                             : '';
-                        document.getElementById('changeRequestBannerText').textContent =
-                            `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'} · ${f['Date'] || '—'} — selected and highlighted below.${noAvailMsg}`;
+                        const refsVisible = document.getElementById('refsListWrap')?.querySelectorAll('.ref-card').length || 0;
+                        const noAvailMsg  = (requestedChangeDate && refsVisible === 0)
+                            ? ' &nbsp;⚠️ No refs available for the requested date.'
+                            : '';
+                        document.getElementById('changeRequestBannerText').innerHTML =
+                            `<strong>${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</strong> &nbsp;·&nbsp; Current: ${f['Date'] || '—'} @ ${formatTime(f['Time'] || '')}${reqLabel}${noAvailMsg}`;
                     } else {
                         document.getElementById('changeRequestBannerText').textContent =
                             'Game not found in the current date range — try widening the date filter.';
@@ -1416,11 +1432,18 @@
                 const expColor = yrsNum === 0 ? '#e74c3c' : yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad';
                 const borderStyle = expColor ? `border-color:${expColor};` : '';
                 const labelColor  = expColor ? `color:${expColor};` : '';
+                // Warn if this ref is not available on the requested change date
+                const availWarn = requestedChangeDate
+                    ? (availByName[refName.trim().toLowerCase()]?.has(requestedChangeDate)
+                        ? `<span style="font-size:0.65rem; color:#27ae60; font-weight:700; display:block; line-height:1.2;">✓ Avail ${requestedChangeDate}</span>`
+                        : `<span style="font-size:0.65rem; color:#e74c3c; font-weight:700; display:block; line-height:1.2;">⚠ Not avail ${requestedChangeDate}</span>`)
+                    : '';
                 return `<div class="slot occupied" draggable="true" data-game-id="${gameId}" data-position="${position}"
                     style="${borderStyle}"
                     ondragstart="onSlotDragStart(event, '${gameId}', '${position}', '${refId}', '${safeName}')">
                     <span class="slot-label" style="${labelColor}">${label}</span>
                     <span style="font-size:0.8rem;">${refName}</span>
+                    ${availWarn}
                     <button class="unassign-btn" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
                 </div>`;
             }
@@ -1511,6 +1534,11 @@
         // ── Select a game → update ref colors ─────────────────────────────────
         function selectGame(gameId) {
             selectedGame = allGames.find(g => g.id === gameId) || null;
+            // Clear change request context if switching to a non-change game
+            if (!selectedGame || (selectedGame.fields['Game Status'] || '') !== 'Change Requested') {
+                requestedChangeDate = null;
+                requestedChangeTime = null;
+            }
             document.querySelectorAll('.game-card').forEach(c => c.classList.remove('selected'));
             if (selectedGame) {
                 const card = document.getElementById('card-' + gameId);
@@ -1542,8 +1570,11 @@
             const wrap = document.getElementById('refsListWrap');
             if (!allRefs.length) { wrap.innerHTML = '<p class="hint">Load games first.</p>'; return; }
 
-            const gameDate  = selectedGame ? selectedGame.fields['Date'] : null;
-            const gameTime  = selectedGame ? (selectedGame.fields['Time'] || '') : null;
+            const isSelectedChangeReq = selectedGame && (selectedGame.fields['Game Status'] || '') === 'Change Requested';
+            const gameDate  = (isSelectedChangeReq && requestedChangeDate) ? requestedChangeDate
+                            : (selectedGame ? selectedGame.fields['Date'] : null);
+            const gameTime  = (isSelectedChangeReq && requestedChangeTime) ? requestedChangeTime
+                            : (selectedGame ? (selectedGame.fields['Time'] || '') : null);
             const gameDT    = gameDate ? `${gameDate}|${gameTime}` : null;
             const gameClub    = selectedGame ? (resolveGameClub(selectedGame.fields) || '').toLowerCase() : '';
             const showAllRefs = showAllRefsMode;
