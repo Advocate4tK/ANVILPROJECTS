@@ -116,11 +116,30 @@
         return val;
     }
 
-    // Extract the change request block(s) from the Notes field
+    // Parse all change request blocks from the Notes field into structured objects
     function extractRequests(notes) {
         if (!notes) return [];
         const blocks = notes.split(/\[CHANGE REQUEST/i).slice(1);
-        return blocks.map(b => '[CHANGE Request' + b.trim());
+        return blocks.map(b => {
+            const full = '[CHANGE REQUEST' + b;
+            const ts      = (full.match(/\[CHANGE REQUEST[^\]]*–\s*([^\]]+)\]/i))?.[1]?.trim() || '';
+            const reqDate = (full.match(/Requested Date:\s*(\S+)/i))?.[1] || '';
+            const reqTime = (full.match(/Requested Time:\s*(\S+)/i))?.[1] || '';
+            const reason  = (full.match(/Reason:\s*(.+)/i))?.[1]?.trim()  || '';
+            const reqBy   = (full.match(/Requested by:\s*(.+)/i))?.[1]?.trim() || '';
+            return { ts, reqDate, reqTime, reason, reqBy };
+        });
+    }
+
+    function formatRequestHtml(requests) {
+        if (!requests.length) return `<div class="request-box" style="color:#aaa;">No change details found in notes.</div>`;
+        return requests.map(req => `
+            <div class="request-box">
+                ${req.ts     ? `<div style="font-size:0.78rem; color:#888; margin-bottom:6px;">Submitted: ${req.ts}</div>` : ''}
+                ${req.reqDate || req.reqTime ? `<div><strong>Requested reschedule:</strong> ${req.reqDate || ''} ${req.reqTime ? formatTime(req.reqTime) : ''}</div>` : ''}
+                ${req.reason  ? `<div><strong>Reason:</strong> ${req.reason}</div>` : ''}
+                ${req.reqBy   ? `<div><strong>Requested by:</strong> ${req.reqBy}</div>` : ''}
+            </div>`).join('');
     }
 
     async function loadChanges() {
@@ -178,10 +197,8 @@
                                             ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
                                             ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('') || '<em>None assigned</em>';
 
-                        const requests   = extractRequests(f['Notes'] || '');
-                        const requestHtml = requests.length
-                            ? requests.map(req => `<div class="request-box">${req}</div>`).join('')
-                            : `<div class="request-box" style="color:#aaa;">No change details found in notes.</div>`;
+                        const requests    = extractRequests(f['Notes'] || '');
+                        const requestHtml = formatRequestHtml(requests);
 
                         const adminEmail = f['Club Admin Email'] || '';
                         const contactBtn = adminEmail
