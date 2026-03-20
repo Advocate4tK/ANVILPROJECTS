@@ -2043,9 +2043,11 @@
             if (!confirm('Mark this change request as resolved?\n\nThis will clear the flag and return you to the Schedule Change Requests page.')) return;
             const game = allGames.find(g => g.id === gameId);
             try {
-                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Change Resolved' });
-                if (game) game.fields['Game Status'] = 'Change Resolved';
-                // Return to the change requests page — the flag will be gone on reload
+                const now = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+                const prevNotes = game?.fields['Notes'] || '';
+                const updatedNotes = prevNotes + `\n[RESOLVED – ${now}]`;
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Change Resolved', 'Notes': updatedNotes });
+                if (game) { game.fields['Game Status'] = 'Change Resolved'; game.fields['Notes'] = updatedNotes; }
                 window.location.href = 'schedule-changes.html';
             } catch(e) {
                 alert('Could not mark resolved: ' + e.message);

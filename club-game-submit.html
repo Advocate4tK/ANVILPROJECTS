@@ -1084,6 +1084,12 @@
     }
 
     // Extract the most recent change request block from Notes
+    function extractResolvedTimestamp(notesText) {
+        if (!notesText) return null;
+        const matches = [...notesText.matchAll(/\[RESOLVED\s*[–-]\s*([^\]]+)\]/gi)];
+        return matches.length ? matches[matches.length - 1][1].trim() : null;
+    }
+
     function extractLastChangeRequest(notesText) {
         if (!notesText) return null;
         const blocks = notesText.split(/\[CHANGE REQUEST/i);
@@ -1120,7 +1126,8 @@
 
         if (opts.changeResolved) {
             // Green "resolved" card — notification that the change was handled
-            const chgRes = extractLastChangeRequest(f['Notes'] || '');
+            const chgRes    = extractLastChangeRequest(f['Notes'] || '');
+            const resolvedAt = extractResolvedTimestamp(f['Notes'] || '');
             const reasonHtml = chgRes?.reason
                 ? `<div style="margin-top:4px; font-size:0.78rem; color:#1e5e33;"><strong>Reason:</strong> ${chgRes.reason}</div>`
                 : '';
@@ -1136,7 +1143,8 @@
                 </div>
                 <div class="game-card-side">
                     <span class="status-badge status-submitted" style="background:#d5f5e3; color:#1e8449;">✅ Resolved</span>
-                    <span class="submitted-by-lbl">by ${submittedBy}</span>
+                    ${resolvedAt ? `<span class="submitted-by-lbl" style="color:#1e8449; font-size:0.7rem;">${resolvedAt}</span>` : ''}
+                    ${submittedBy ? `<span class="submitted-by-lbl">by ${submittedBy}</span>` : ''}
                 </div>
             </div>`;
         }
