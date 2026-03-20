@@ -1459,14 +1459,40 @@
                 const expColor = yrsNum === 0 ? '#e74c3c' : yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad';
                 const borderStyle = expColor ? `border-color:${expColor};` : '';
                 const labelColor  = expColor ? `color:${expColor};` : '';
-                // Warn if this ref is not available on the requested change date
+                // Three-point availability check for change request games
                 let availWarn = '', availOverride = '';
                 if (requestedChangeDate) {
-                    const isAvail = availByName[refName.trim().toLowerCase()]?.has(requestedChangeDate);
-                    availWarn = isAvail
-                        ? `<span style="font-size:0.7rem; color:#1e8449; font-weight:700; display:block; margin-top:2px;">✓ Avail new date</span>`
-                        : `<span style="font-size:0.7rem; color:#e74c3c; font-weight:700; display:block; margin-top:2px;">⚠ Not avail new date</span>`;
-                    if (!isAvail) availOverride = 'background:#fff0f0; border:2px dashed #e74c3c;';
+                    const thisGame = allGames.find(g => g.id === gameId);
+                    const isChangeReqGame = thisGame && (thisGame.fields['Game Status'] || '') === 'Change Requested';
+                    if (isChangeReqGame) {
+                        const refKey   = refName.trim().toLowerCase();
+                        const gameClub = (resolveGameClub(thisGame.fields) || '').toLowerCase();
+
+                        // 1. Date — did they submit availability for the requested date?
+                        const dateOk = !!availByName[refKey]?.has(requestedChangeDate);
+
+                        // 2. Club — do they list this club as a preference?
+                        const prefs  = parsePreferences(ref?.fields['Club Preference'] || '');
+                        const clubOk = !gameClub || prefs.some(p => p.toLowerCase() === gameClub);
+
+                        // 3. Time — does their availability window cover the requested time?
+                        const timeSlot = availTimeByName[refKey]?.[requestedChangeDate];
+                        let timeOk;
+                        if (!requestedChangeTime)                             timeOk = true;
+                        else if (!dateOk)                                     timeOk = false;
+                        else if (!timeSlot || !timeSlot.start || !timeSlot.end) timeOk = true;
+                        else timeOk = requestedChangeTime >= timeSlot.start && requestedChangeTime <= timeSlot.end;
+
+                        const chk = ok => ok
+                            ? `<span style="color:#1e8449; font-weight:800;">✓</span>`
+                            : `<span style="color:#e74c3c; font-weight:800;">⚠</span>`;
+                        availWarn = `<div style="font-size:0.68rem; margin-top:4px; line-height:1.7; display:grid; grid-template-columns:14px 1fr; gap:0 3px;">
+                            ${chk(dateOk)}<span style="color:${dateOk?'#1e8449':'#e74c3c'};">Date</span>
+                            ${chk(clubOk)}<span style="color:${clubOk?'#1e8449':'#e74c3c'};">Club</span>
+                            ${chk(timeOk)}<span style="color:${timeOk?'#1e8449':'#e74c3c'};">Time</span>
+                        </div>`;
+                        if (!dateOk || !clubOk || !timeOk) availOverride = 'background:#fff0f0; border:2px dashed #e74c3c;';
+                    }
                 }
                 return `<div class="slot occupied" draggable="true" data-game-id="${gameId}" data-position="${position}"
                     style="${borderStyle} ${availOverride}"
