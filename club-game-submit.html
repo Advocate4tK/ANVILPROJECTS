@@ -227,33 +227,33 @@
         /* ── Game card layout ── */
         .game-card {
             background: white;
-            border-radius: 10px;
+            border-radius: 8px;
             border-left: 4px solid #0f3460;
-            padding: 12px 16px;
-            margin-bottom: 10px;
-            box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
             display: flex;
-            gap: 12px;
-            align-items: flex-start;
+            gap: 10px;
+            align-items: center;
             flex-wrap: wrap;
         }
         .game-card.change-req  { border-left-color: #f0a500; background: #fff8ec; }
         .game-card.change-done { border-left-color: #27ae60; background: #f0faf4; }
         .game-card-main { flex: 1 1 280px; min-width: 0; }
-        .game-matchup { font-size: 0.95rem; font-weight: 800; color: #0f3460; margin-bottom: 4px; }
+        .game-matchup { font-size: 0.9rem; font-weight: 800; color: #0f3460; margin-bottom: 2px; }
         .game-card.change-req  .game-matchup { color: #935116; }
         .game-card.change-done .game-matchup { color: #1e8449; }
-        .game-meta { font-size: 0.78rem; color: #666; margin-bottom: 6px; }
-        .game-refs { font-size: 0.78rem; color: #555; }
+        .game-meta { font-size: 0.75rem; color: #666; margin-bottom: 3px; }
+        .game-refs { font-size: 0.75rem; color: #555; }
         .game-refs-label { font-weight: 600; margin-right: 4px; }
         .game-card-side {
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            gap: 6px;
+            gap: 4px;
             flex-shrink: 0;
         }
-        .submitted-by-lbl { font-size: 0.72rem; color: #999; }
+        .submitted-by-lbl { font-size: 0.7rem; color: #999; }
         .chg-section-hdr {
             display: flex; align-items: center; gap: 10px;
             font-size: 0.82rem; font-weight: 700; text-transform: uppercase;
@@ -1098,7 +1098,7 @@
         const venueNumId = parseFloat(f['Venue ID']);
         const venueName  = !isNaN(venueNumId)
             ? (allVenues.find(v => parseFloat(v.numId) === venueNumId)?.name || '—') : '—';
-        const submittedBy = f['Uploaded By'] || '—';
+        const submittedBy = f['Uploaded By'] || f['Submitted By'] || f['Club Admin'] || '';
 
         if (opts.changeResolved) {
             // Green "resolved" card — notification that the change was handled
@@ -1166,7 +1166,7 @@
             <div class="game-card-side">
                 <span class="status-badge ${statusCls}">${statusLbl}</span>
                 <button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>
-                <span class="submitted-by-lbl">by ${submittedBy}</span>
+                ${submittedBy ? `<span class="submitted-by-lbl">by ${submittedBy}</span>` : ''}
             </div>
         </div>`;
     }
@@ -1179,11 +1179,18 @@
 
         const clubName = (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '').toLowerCase();
         try {
-            const [games, refRecs] = await Promise.all([
+            const [games, refRecs, venueRecs] = await Promise.all([
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 500 }),
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 })
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 200 })
             ]);
             refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
+            // Rebuild allVenues so venue names resolve correctly
+            allVenues = venueRecs.map(v => ({
+                id:    v.id,
+                numId: v.fields['Venue ID'] || null,
+                name:  v.fields['Venue Name'] || v.fields['Name'] || ''
+            }));
 
             const clubGames = games
                 .filter(r => (r.fields['Home Team'] || '').toLowerCase().includes(clubName) || (r.fields['Club'] || '').toLowerCase().includes(clubName))
@@ -1236,7 +1243,7 @@
                 });
                 const weekBlocks = Object.entries(weeks).sort((a, b) => a[0].localeCompare(b[0]))
                     .map(([, { label, games: wGames }]) => `<div style="margin-bottom:24px;">
-                        <div style="font-size:0.8rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; padding-bottom:4px; border-bottom:2px solid #e94560;">${label}</div>
+                        <div style="font-size:0.75rem; font-weight:700; color:#0f3460; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; padding-bottom:3px; border-bottom:2px solid #e94560;">${label}</div>
                         ${wGames.map(r => buildGameCard(r)).join('')}
                     </div>`).join('');
                 html += `<div>
