@@ -1120,13 +1120,18 @@
 
         if (opts.changeResolved) {
             // Green "resolved" card — notification that the change was handled
+            const chgRes = extractLastChangeRequest(f['Notes'] || '');
+            const reasonHtml = chgRes?.reason
+                ? `<div style="margin-top:4px; font-size:0.78rem; color:#1e5e33;"><strong>Reason:</strong> ${chgRes.reason}</div>`
+                : '';
             return `<div class="game-card change-done">
                 <div class="game-card-main">
                     <div class="game-matchup">${gameNumHtml}✅ ${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
                     <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
                     <div class="game-refs">${refsHtml}</div>
                     <div class="chg-req-detail" style="background:#d5f5e3; color:#1e5e33;">
-                        Your change request has been handled by the assignor. The game above reflects the updated schedule.
+                        Change request resolved by assignor. The game above reflects the updated schedule.
+                        ${reasonHtml}
                     </div>
                 </div>
                 <div class="game-card-side">
@@ -1274,7 +1279,9 @@
             // ── Change Requests section (shown if any pending or recently resolved) ──
             if (pendingChanges.length > 0 || resolvedChanges.length > 0) {
                 const pendingHtml = pendingChanges.map(r => buildGameCard(r, { changePending: true })).join('');
-                const resolvedHtml = resolvedChanges.map(r => buildGameCard(r, { changeResolved: true })).join('');
+                const resolvedHtml = [...resolvedChanges]
+                    .sort((a, b) => (b.fields['Date']||'').localeCompare(a.fields['Date']||''))
+                    .map(r => buildGameCard(r, { changeResolved: true })).join('');
                 html += `<div style="margin-bottom:32px;">
                     <div class="chg-section-hdr pending">⚠️ Change Requests
                         ${pendingChanges.length > 0 ? `<span style="background:#fdebd0; color:#935116; font-size:0.72rem; padding:2px 8px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0;">${pendingChanges.length} pending</span>` : ''}
