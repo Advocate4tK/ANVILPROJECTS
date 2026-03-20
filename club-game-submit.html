@@ -1181,12 +1181,25 @@
                         return tsB - tsA; // newest resolved first
                     })
                     .map(r => buildGameCard(r, { changeResolved: true })).join('');
+                const currentWeekKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
+                const resolvedThisWeek = resolvedChanges.filter(r => {
+                    const ts = extractResolvedTimestamp(r.fields['Notes'] || '');
+                    if (!ts) return false;
+                    const d = new Date(ts);
+                    if (isNaN(d)) return false;
+                    const isoDate = d.toISOString().split('T')[0];
+                    return getWeekLabel(isoDate).key === currentWeekKey;
+                }).length;
                 html += `<div style="margin-bottom:32px;">
-                    <div class="chg-section-hdr pending">⚠️ Open Change Requests
-                        ${pendingChanges.length > 0 ? `<span style="background:#fdebd0; color:#935116; font-size:0.72rem; padding:2px 8px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0;">${pendingChanges.length} pending</span>` : ''}
+                    <div class="chg-section-hdr pending" style="justify-content:space-between;">
+                        <span>⚠️ Open Change Requests</span>
+                        <span style="background:#fef3c7; color:#78350f; font-size:0.78rem; padding:2px 10px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif;">${pendingChanges.length}</span>
                     </div>
                     ${pendingHtml}
-                    ${resolvedChanges.length > 0 ? `<div class="chg-section-hdr resolved" style="margin-top:16px;">✅ Recently Resolved Change Requests</div>${resolvedHtml}` : ''}
+                    ${resolvedChanges.length > 0 ? `<div class="chg-section-hdr resolved" style="margin-top:16px; justify-content:space-between;">
+                        <span>✅ Recently Resolved Change Requests</span>
+                        <span style="background:#dcfce7; color:#14532d; font-size:0.78rem; padding:2px 10px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif;">${resolvedThisWeek} this week</span>
+                    </div>${resolvedHtml}` : ''}
                 </div>`;
             }
 
