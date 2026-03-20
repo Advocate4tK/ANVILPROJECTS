@@ -271,6 +271,17 @@
         .change-form input, .change-form textarea { width:100%; padding:7px 10px; border:1px solid #ccc; border-radius:6px; font-size:0.88rem; font-family:inherit; box-sizing:border-box; }
         .change-form textarea { height:60px; resize:vertical; }
         .change-form-btns { display:flex; gap:8px; margin-top:10px; }
+
+        /* ── Modify Game inline form ── */
+        .modify-form { background:#eaf4fb; border:1px solid #3498db; border-radius:8px; padding:14px 16px; margin-top:8px; display:none; }
+        .modify-form label { font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:3px; margin-top:10px; }
+        .modify-form label:first-of-type { margin-top:0; }
+        .modify-form input, .modify-form select { width:100%; padding:7px 10px; border:1px solid #ccc; border-radius:6px; font-size:0.88rem; font-family:inherit; box-sizing:border-box; }
+        .modify-form-btns { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+        .btn-cancel-game { background:#e74c3c; color:white; border:none; border-radius:6px; padding:3px 10px; font-size:0.78rem; font-weight:700; cursor:pointer; white-space:nowrap; }
+        .btn-cancel-game:hover { background:#c0392b; }
+        .btn-modify-game { background:none; border:1px solid #3498db; color:#3498db; border-radius:6px; padding:3px 10px; font-size:0.78rem; font-weight:600; cursor:pointer; white-space:nowrap; }
+        .btn-modify-game:hover { background:#3498db; color:white; }
     </style>
 </head>
 <body>
@@ -499,6 +510,13 @@
         const sun  = new Date(mon); sun.setDate(mon.getDate() + 6);
         const fmt  = x => x.toLocaleDateString('en-US', { month:'short', day:'numeric' });
         return { key: mon.toISOString().split('T')[0], label: `Week of ${fmt(mon)} – ${fmt(sun)}` };
+    }
+
+    function isFutureWeek(dateStr) {
+        if (!dateStr || dateStr === '—') return false;
+        const todayKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
+        const gameKey  = getWeekLabel(dateStr).key;
+        return gameKey > todayKey;
     }
 
     function addGamesToHistory(games) {
@@ -1141,8 +1159,38 @@
         }
 
         // Regular submitted/assigned game card
-        const statusCls = center ? 'status-assigned' : 'status-submitted';
-        const statusLbl = center ? 'Assigned' : 'Submitted';
+        const isAssigned = !!(center || ar1 || ar2);
+        const canModify  = !isAssigned && isFutureWeek(dateStr);
+        const statusCls  = center ? 'status-assigned' : 'status-submitted';
+        const statusLbl  = center ? 'Assigned' : 'Submitted';
+
+        const modifyFormHtml = canModify ? `
+            <div class="modify-form" id="modForm_${r.id}">
+                <p style="font-size:0.82rem; font-weight:700; color:#1a5276; margin:0 0 8px;">Modify: <em>${f['Home Team'] || ''} vs ${f['Away Team'] || ''}</em></p>
+                <label>Date</label>
+                <input type="date" id="modDate_${r.id}" value="${dateStr !== '—' ? dateStr : ''}">
+                <label>Time</label>
+                <input type="time" id="modTime_${r.id}" value="${timeRaw}">
+                <label>Venue</label>
+                <select id="modVenue_${r.id}">
+                    <option value="">— Select Venue —</option>
+                    ${allVenues.map(v => `<option value="${v.numId}" ${parseFloat(f['Venue ID']) === parseFloat(v.numId) ? 'selected' : ''}>${v.name}</option>`).join('')}
+                </select>
+                <label>Age Group</label>
+                <select id="modAge_${r.id}">
+                    ${['U8','U10','U12','U13','U15','U16','U19'].map(a => `<option value="${a}" ${f['Age Group']===a?'selected':''}>${a}</option>`).join('')}
+                </select>
+                <label>Gender</label>
+                <select id="modGender_${r.id}">
+                    ${['Female','Male'].map(g => `<option value="${g}" ${f['Gender']===g?'selected':''}>${g}</option>`).join('')}
+                </select>
+                <div class="modify-form-btns">
+                    <button class="btn btn-primary" style="font-size:0.85rem; padding:7px 16px;" onclick="saveModifiedGame('${r.id}')">Save Changes</button>
+                    <button class="btn btn-outline" style="font-size:0.85rem; padding:7px 16px;" onclick="toggleModifyForm('${r.id}')">Cancel</button>
+                </div>
+                <p id="modMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
+            </div>` : '';
+
         return `<div class="game-card">
             <div class="game-card-main">
                 <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
@@ -1162,10 +1210,14 @@
                     </div>
                     <p id="chgMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
                 </div>
+                ${modifyFormHtml}
             </div>
             <div class="game-card-side">
                 <span class="status-badge ${statusCls}">${statusLbl}</span>
-                <button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>
+                ${canModify ? `
+                    <button class="btn-cancel-game" onclick="cancelGame('${r.id}')">✕ Cancel Game</button>
+                    <button class="btn-modify-game" onclick="toggleModifyForm('${r.id}')">✏ Modify</button>
+                ` : `<button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>`}
                 ${submittedBy ? `<span class="submitted-by-lbl">by ${submittedBy}</span>` : ''}
             </div>
         </div>`;
@@ -1262,6 +1314,49 @@
     function toggleChangeForm(gameId) {
         const form = document.getElementById('chgForm_' + gameId);
         form.style.display = form.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function toggleModifyForm(gameId) {
+        const form = document.getElementById('modForm_' + gameId);
+        form.style.display = form.style.display === 'block' ? 'none' : 'block';
+    }
+
+    async function cancelGame(gameId) {
+        if (!confirm('Cancel this game?\n\nThis will permanently mark it as Cancelled and remove it from your schedule.')) return;
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Cancelled' });
+            await loadScheduledGames();
+        } catch(err) {
+            alert('Could not cancel game: ' + err.message);
+        }
+    }
+
+    async function saveModifiedGame(gameId) {
+        const msgEl   = document.getElementById('modMsg_' + gameId);
+        const newDate = document.getElementById('modDate_' + gameId).value;
+        const newTime = document.getElementById('modTime_' + gameId).value;
+        const venueId = document.getElementById('modVenue_' + gameId).value;
+        const age     = document.getElementById('modAge_' + gameId).value;
+        const gender  = document.getElementById('modGender_' + gameId).value;
+
+        if (!newDate) { msgEl.textContent = 'Date is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
+        msgEl.textContent = 'Saving…'; msgEl.style.color = '#555'; msgEl.style.display = 'block';
+
+        const updates = { 'Date': newDate };
+        if (newTime)  updates['Time']      = newTime;
+        if (venueId)  updates['Venue ID']  = parseFloat(venueId);
+        if (age)      updates['Age Group'] = age;
+        if (gender)   updates['Gender']    = gender;
+
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, updates);
+            msgEl.textContent = '✅ Game updated!';
+            msgEl.style.color = '#1e8449';
+            setTimeout(loadScheduledGames, 1000);
+        } catch(err) {
+            msgEl.textContent = '❌ ' + err.message;
+            msgEl.style.color = '#e74c3c';
+        }
     }
 
     async function submitChangeRequest(gameId) {
