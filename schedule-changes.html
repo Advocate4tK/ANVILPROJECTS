@@ -98,7 +98,7 @@
                 <label style="margin-left:auto; font-size:0.82rem; color:#555; font-weight:600;">
                     <input type="checkbox" id="showResolved" onchange="onShowResolvedChange()"> Show Resolved
                 </label>
-                <button id="sortBtn" onclick="toggleSort()" style="display:none; background:none; border:1px solid #aaa; color:#555; border-radius:8px; padding:6px 14px; font-size:0.82rem; font-weight:600; cursor:pointer;">Date ↓ Newest</button>
+                <button id="sortBtn" onclick="toggleSort()" style="display:none; background:none; border:1px solid #aaa; color:#555; border-radius:8px; padding:6px 14px; font-size:0.82rem; font-weight:600; cursor:pointer;">Resolved ↓ Newest</button>
             </div>
 
             <div id="summary" style="margin-bottom:16px;"></div>
@@ -115,6 +115,11 @@
     <script>
     let refById = {};
     let sortDir  = 'desc'; // newest first when viewing resolved
+
+    function getResolvedTs(r) {
+        const m = (r.fields['Notes'] || '').match(/\[RESOLVED\s*[–-]\s*([^\]]+)\]/i);
+        return m ? new Date(m[1].trim()) : new Date(0);
+    }
 
     function buildGameNum(f) {
         const skip = new Set(['sc','fc','soccer','club','boys','girls','united','youth','the','of']);
@@ -214,8 +219,18 @@
             container.innerHTML = Object.entries(byClub).sort().map(([club, records]) => {
                 const cards = records
                     .sort((a,b) => {
-                        const cmp = (a.fields['Date']||'').localeCompare(b.fields['Date']||'');
-                        return sortDir === 'asc' ? cmp : -cmp;
+                        const isResA = (a.fields['Game Status']||'').toLowerCase() === 'change resolved';
+                        const isResB = (b.fields['Game Status']||'').toLowerCase() === 'change resolved';
+                        // Open requests always sort by game date; resolved sort by resolved timestamp
+                        if (isResA && isResB) {
+                            const tsA = getResolvedTs(a), tsB = getResolvedTs(b);
+                            const cmp = tsA - tsB;
+                            return sortDir === 'asc' ? cmp : -cmp;
+                        }
+                        // Open before resolved regardless of sort direction
+                        if (!isResA && isResB) return -1;
+                        if (isResA && !isResB) return 1;
+                        return (a.fields['Date']||'').localeCompare(b.fields['Date']||'');
                     })
                     .map(r => {
                         const f          = r.fields;
@@ -330,7 +345,7 @@
     function toggleSort() {
         sortDir = sortDir === 'asc' ? 'desc' : 'asc';
         const sortBtn = document.getElementById('sortBtn');
-        sortBtn.textContent = sortDir === 'asc' ? 'Date ↑ Oldest' : 'Date ↓ Newest';
+        sortBtn.textContent = sortDir === 'asc' ? 'Resolved ↑ Oldest' : 'Resolved ↓ Newest';
         loadChanges();
     }
 
