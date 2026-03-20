@@ -102,16 +102,16 @@
         .ref-card.prefers    { border-left-color: #f39c12; }
         .pref-tag { font-size:0.71rem; color:#d68910; font-weight:600; }
         @keyframes throb {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(15,52,96,0); }
-            50%       { box-shadow: 0 0 0 4px rgba(15,52,96,0.22); }
+            0%, 100% { box-shadow: -2px 0 4px 0 rgba(15,52,96,0); }
+            50%       { box-shadow: -5px 0 8px 2px rgba(15,52,96,0.2); }
         }
         @keyframes throb-med {
-            0%, 100% { box-shadow: 0 0 4px 0 rgba(39,174,96,0); }
-            50%       { box-shadow: 0 0 10px 4px rgba(39,174,96,0.5); }
+            0%, 100% { box-shadow: -3px 0 4px 0 rgba(39,174,96,0); }
+            50%       { box-shadow: -12px 0 12px 2px rgba(39,174,96,0.5); }
         }
         @keyframes throb-hot {
-            0%, 100% { box-shadow: 0 0 4px 0 rgba(39,174,96,0); transform: scale(1); }
-            50%       { box-shadow: 0 0 20px 7px rgba(39,174,96,0.75); transform: scale(1.025); }
+            0%, 100% { box-shadow: -4px 0 4px 0 rgba(39,174,96,0); transform: translateX(0); }
+            50%       { box-shadow: -22px 0 18px 4px rgba(39,174,96,0.75); transform: translateX(-3px); }
         }
         .ref-card.throb     { animation: throb     2.2s ease-in-out infinite; }
         .ref-card.throb-med { animation: throb-med 1.6s ease-in-out infinite; }
@@ -1799,15 +1799,17 @@
                 }
                 // Score ref for throb intensity (computed after assignedCount is known)
                 let throbClass = '';
-                if (cls <= 1 && selectedGame && selectedGame.fields['Time'] && !alreadyOnGame) {
+                if (cls <= 1 && selectedGame && selectedGame.fields['Time'] && !alreadyOnGame && assignedCount < 4) {
                     let score = 0;
                     if (cls === 0) score += 2;                          // prefers this club
                     const dist = distMap[r.id];
                     if (dist !== null && dist <= 15) score += 1;        // within 15 miles
-                    if (assignedCount <= 1) score += 1;                 // light workload
+                    if (assignedCount === 0) score += 2;                // fresh — no games yet
+                    else if (assignedCount <= 2) score += 1;            // light workload
+                    // assignedCount 3 = no bonus; 4+ = no throb at all (blocked above)
                     const stars = parseInt(r.fields['Rating'] || 0);
                     if (stars >= 4) score += 1;                         // high assignor rating
-                    throbClass = score >= 3 ? ' throb-hot' : score >= 1 ? ' throb-med' : ' throb';
+                    throbClass = score >= 4 ? ' throb-hot' : score >= 2 ? ' throb-med' : ' throb';
                 }
                 const cardClass = (cls <= 1 ? (cls === 0 ? 'available prefers' : 'available') : cls === 2 ? 'conflict' : 'no-avail') + throbClass;
                 const badgeLabel = singleDay || workDate ? 'this day' : 'this period';
