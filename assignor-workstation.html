@@ -105,7 +105,17 @@
             0%, 100% { box-shadow: 0 0 0 0 rgba(15,52,96,0); }
             50%       { box-shadow: 0 0 0 4px rgba(15,52,96,0.22); }
         }
-        .ref-card.throb { animation: throb 1.4s ease-in-out infinite; }
+        @keyframes throb-med {
+            0%, 100% { box-shadow: 0 0 4px 0 rgba(39,174,96,0); }
+            50%       { box-shadow: 0 0 10px 4px rgba(39,174,96,0.5); }
+        }
+        @keyframes throb-hot {
+            0%, 100% { box-shadow: 0 0 4px 0 rgba(39,174,96,0); transform: scale(1); }
+            50%       { box-shadow: 0 0 20px 7px rgba(39,174,96,0.75); transform: scale(1.025); }
+        }
+        .ref-card.throb     { animation: throb     1.4s ease-in-out infinite; }
+        .ref-card.throb-med { animation: throb-med 1.0s ease-in-out infinite; }
+        .ref-card.throb-hot { animation: throb-hot 0.65s ease-in-out infinite; }
 
         /* ── Cancelled game stamp ── */
         .game-card.cancelled { position: relative; }
@@ -1730,8 +1740,18 @@
                     const linked = selectedGame.fields[pos];
                     return Array.isArray(linked) && linked.includes(rid);
                 });
-                const doThrob  = cls <= 1 && selectedGame && selectedGame.fields['Time'] && !alreadyOnGame;
-                const cardClass = (cls <= 1 ? (cls === 0 ? 'available prefers' : 'available') : cls === 2 ? 'conflict' : 'no-avail') + (doThrob ? ' throb' : '');
+                let throbClass = '';
+                if (cls <= 1 && selectedGame && selectedGame.fields['Time'] && !alreadyOnGame) {
+                    let score = 0;
+                    if (cls === 0) score += 2;                          // prefers this club
+                    const dist = distMap[r.id];
+                    if (dist !== null && dist <= 15) score += 1;        // within 15 miles
+                    if (assignedCount <= 1) score += 1;                 // light workload
+                    const stars = parseInt(r.fields['Rating'] || 0);
+                    if (stars >= 4) score += 1;                         // high assignor rating
+                    throbClass = score >= 3 ? ' throb-hot' : score >= 1 ? ' throb-med' : ' throb';
+                }
+                const cardClass = (cls <= 1 ? (cls === 0 ? 'available prefers' : 'available') : cls === 2 ? 'conflict' : 'no-avail') + throbClass;
                 const status = cls <= 1 ? '' : cls === 2
                     ? '<span style="color:#999; font-size:0.72rem;">⚠ Already assigned this time</span>'
                     : '<span style="color:#bbb; font-size:0.72rem;">No availability submitted</span>';
