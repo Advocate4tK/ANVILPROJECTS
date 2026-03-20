@@ -84,8 +84,9 @@
                 <a href="assignor-workstation.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">📋 Assignor Workstation</a>
                 <button onclick="loadChanges()" class="btn btn-secondary" style="font-size:0.85rem; padding:8px 16px;">🔄 Refresh</button>
                 <label style="margin-left:auto; font-size:0.82rem; color:#555; font-weight:600;">
-                    <input type="checkbox" id="showResolved" onchange="loadChanges()"> Show Resolved
+                    <input type="checkbox" id="showResolved" onchange="onShowResolvedChange()"> Show Resolved
                 </label>
+                <button id="sortBtn" onclick="toggleSort()" style="display:none; background:none; border:1px solid #aaa; color:#555; border-radius:8px; padding:6px 14px; font-size:0.82rem; font-weight:600; cursor:pointer;">Date ↓ Newest</button>
             </div>
 
             <div id="summary" style="margin-bottom:16px;"></div>
@@ -101,6 +102,7 @@
     <script src="js/airtable-client.js"></script>
     <script>
     let refById = {};
+    let sortDir  = 'desc'; // newest first when viewing resolved
 
     function formatTime(t) {
         if (!t) return '—';
@@ -162,7 +164,10 @@
 
             container.innerHTML = Object.entries(byClub).sort().map(([club, records]) => {
                 const cards = records
-                    .sort((a,b) => (a.fields['Date']||'').localeCompare(b.fields['Date']||''))
+                    .sort((a,b) => {
+                        const cmp = (a.fields['Date']||'').localeCompare(b.fields['Date']||'');
+                        return sortDir === 'asc' ? cmp : -cmp;
+                    })
                     .map(r => {
                         const f          = r.fields;
                         const isResolved = (f['Game Status']||'').toLowerCase() === 'change resolved';
@@ -238,6 +243,21 @@
             msgEl.textContent = '❌ ' + err.message;
             msgEl.style.color = '#e74c3c';
         }
+    }
+
+    function onShowResolvedChange() {
+        const showResolved = document.getElementById('showResolved').checked;
+        const sortBtn = document.getElementById('sortBtn');
+        sortBtn.style.display = showResolved ? 'inline-block' : 'none';
+        if (!showResolved) sortDir = 'desc'; // reset when hiding
+        loadChanges();
+    }
+
+    function toggleSort() {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        const sortBtn = document.getElementById('sortBtn');
+        sortBtn.textContent = sortDir === 'asc' ? 'Date ↑ Oldest' : 'Date ↓ Newest';
+        loadChanges();
     }
 
     window.addEventListener('load', () => {
