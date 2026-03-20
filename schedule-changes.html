@@ -69,6 +69,18 @@
         #filterRow { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
         #filterRow label { font-size: 0.82rem; color: #555; font-weight: 600; }
         .action-msg { font-size: 0.82rem; margin-left: 8px; }
+        .resolved-header {
+            display: flex; align-items: center; gap: 10px;
+            cursor: pointer; user-select: none;
+        }
+        .resolved-header:hover { opacity: 0.85; }
+        .toggle-arrow { font-size: 0.72rem; color: #27ae60; flex-shrink: 0; transition: transform 0.2s; }
+        .change-card.resolved.expanded .toggle-arrow { transform: rotate(90deg); }
+        .resolved-game-num { font-size: 0.68rem; font-weight: 700; color: #aaa; letter-spacing: 0.5px; flex-shrink: 0; }
+        .resolved-matchup { font-size: 0.92rem; font-weight: 800; color: #1e8449; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .resolved-meta { font-size: 0.78rem; color: #888; flex-shrink: 0; white-space: nowrap; }
+        .card-body { display: none; margin-top: 14px; }
+        .change-card.resolved.expanded .card-body { display: block; }
     </style>
 </head>
 <body>
@@ -103,6 +115,22 @@
     <script>
     let refById = {};
     let sortDir  = 'desc'; // newest first when viewing resolved
+
+    function buildGameNum(f) {
+        const skip = new Set(['sc','fc','soccer','club','boys','girls','united','youth','the','of']);
+        const words = (f['Home Team'] || '').split(/\s+/).filter(w => w.length > 1 && !skip.has(w.toLowerCase()));
+        const abbr = words.length === 0 ? '' : words.length === 1 ? words[0].substring(0,2).toUpperCase() : words.map(w => w[0].toUpperCase()).slice(0,2).join('');
+        const dateStr = f['Date'] || '';
+        const m = parseInt((dateStr).split('-')[1]);
+        const season = m >= 3 && m <= 6 ? 'SP' : m >= 7 && m <= 8 ? 'SU' : m >= 9 && m <= 11 ? 'FA' : 'WI';
+        const yr = (dateStr.split('-')[0] || '').slice(-2);
+        const seq = String(f['Game Number'] || f['Auto Number'] || '').padStart(3, '0');
+        return seq && seq !== '000' ? `${abbr}${season}${seq}${yr}` : '';
+    }
+
+    function toggleCollapse(id) {
+        document.getElementById('card_' + id)?.classList.toggle('expanded');
+    }
 
     function formatTime(t) {
         if (!t) return '—';
@@ -207,20 +235,43 @@
                             ? `<a href="mailto:${adminEmail}?subject=Re: Schedule Change Request — ${f['Home Team']||''} vs ${f['Away Team']||''}" class="btn-contact">✉ Contact Club</a>`
                             : '';
 
-                        return `<div class="change-card ${isResolved ? 'resolved' : ''}" id="card_${r.id}">
+                        if (isResolved) {
+                            const gameNum = buildGameNum(f);
+                            return `<div class="change-card resolved" id="card_${r.id}">
+                                <div class="resolved-header" onclick="toggleCollapse('${r.id}')">
+                                    <span class="toggle-arrow">▶</span>
+                                    ${gameNum ? `<span class="resolved-game-num">${gameNum}</span>` : ''}
+                                    <span class="resolved-matchup">✅ ${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</span>
+                                    <span class="resolved-meta">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')}</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="change-card-header" style="margin-top:0;">
+                                        <div>
+                                            <div class="game-meta">${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
+                                        </div>
+                                        <span class="status-pill pill-resolved">✅ Resolved</span>
+                                    </div>
+                                    <div class="current-refs"><strong>Current Refs:</strong> ${refsHtml}</div>
+                                    ${requestHtml}
+                                    ${contactBtn ? `<div class="action-row">${contactBtn}</div>` : ''}
+                                </div>
+                            </div>`;
+                        }
+
+                        return `<div class="change-card" id="card_${r.id}">
                             <div class="change-card-header">
                                 <div>
                                     <div class="game-title">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</div>
                                     <div class="game-meta">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
                                 </div>
-                                <span class="status-pill ${isResolved ? 'pill-resolved' : 'pill-open'}">${isResolved ? '✅ Resolved' : '⚠ Open'}</span>
+                                <span class="status-pill pill-open">⚠ Open</span>
                             </div>
                             <div class="current-refs"><strong>Current Refs:</strong> ${refsHtml}</div>
                             ${requestHtml}
                             <div class="action-row">
-                                ${!isResolved ? `<button class="btn-resolve" onclick="markResolved('${r.id}')">✅ Mark Resolved</button>` : ''}
-                                ${!isResolved ? `<button class="btn-dismiss" onclick="dismissRequest('${r.id}')">✕ Dismiss</button>` : ''}
-                                ${!isResolved ? `<a href="assignor-workstation.html?game=${r.id}" class="btn-resolve" style="background:#0f3460; text-decoration:none; display:inline-block;">📋 Open in Workstation</a>` : ''}
+                                <button class="btn-resolve" onclick="markResolved('${r.id}')">✅ Mark Resolved</button>
+                                <button class="btn-dismiss" onclick="dismissRequest('${r.id}')">✕ Dismiss</button>
+                                <a href="assignor-workstation.html?game=${r.id}" class="btn-resolve" style="background:#0f3460; text-decoration:none; display:inline-block;">📋 Open in Workstation</a>
                                 ${contactBtn}
                                 <span class="action-msg" id="msg_${r.id}"></span>
                             </div>
