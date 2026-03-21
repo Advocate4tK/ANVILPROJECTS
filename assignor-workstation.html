@@ -1475,16 +1475,30 @@
 
                         if (targetRefId) {
                             // Swap: assign each ref to the other's slot
-                            assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
-                            assignRef(dragSourceGameId, dragSourcePosition, targetRefId, targetRefName);
+                            // Block if it would put the same ref in two slots on the same game
+                            if (dragSourceGameId === targetGameId && dragRefId === targetRefId) {
+                                alert(`${dragRefName} is already assigned to this game in another position.`);
+                            } else {
+                                assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
+                                assignRef(dragSourceGameId, dragSourcePosition, targetRefId, targetRefName);
+                            }
                         } else {
                             // Move: assign to target, clear source
                             assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
                             unassignRef(dragSourceGameId, dragSourcePosition);
                         }
                     } else if (!dragSourceGameId) {
-                        // Drag from ref panel
-                        assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
+                        // Drag from ref panel — block if ref already assigned to another slot on this game
+                        const targetGame = allGames.find(g => g.id === targetGameId);
+                        const alreadyOnGame = targetGame && ['Center Referee','AR 1','AR 2'].some(pos => {
+                            const linked = targetGame.fields[pos];
+                            return Array.isArray(linked) && linked.includes(dragRefId);
+                        });
+                        if (alreadyOnGame) {
+                            alert(`${dragRefName} is already assigned to this game in another position.`);
+                        } else {
+                            assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
+                        }
                     }
 
                     dragSourceGameId   = null;
