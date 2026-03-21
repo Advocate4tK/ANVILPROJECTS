@@ -669,6 +669,7 @@
         const KNOWN_CLUBS = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
         let clubsList     = KNOWN_CLUBS.slice(); // pre-seeded so pills render on page load
         let selectedClubs = new Set(clubsList); // default: all selected
+        let userHasFilteredClubs = false; // true once user manually picks specific clubs
         let selectedGame        = null; // currently focused game record
         let requestedChangeDate = null; // parsed from Notes when change request game is open
         let requestedChangeTime = null; // parsed from Notes when change request game is open
@@ -839,7 +840,7 @@
                     const clubRecs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
                     const airtableClubs = clubRecs.map(c => c.fields['Club Name'] || c.fields['Name'] || '').filter(Boolean);
                     clubsList = [...new Set([...KNOWN_CLUBS, ...airtableClubs])].sort();
-                    selectedClubs = new Set(clubsList);
+                    if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);
                     const pillsWrap = document.getElementById('clubPills');
                     if (pillsWrap) { pillsWrap.innerHTML = ''; buildClubPills(); }
                 } catch(e) { /* keep KNOWN_CLUBS pills on error */ }
@@ -990,6 +991,7 @@
                 pill.textContent = club;
                 pill.dataset.club = club;
                 pill.addEventListener('click', () => {
+                    userHasFilteredClubs = true;
                     if (selectedClubs.has(club)) {
                         selectedClubs.delete(club);
                         pill.classList.remove('active');
@@ -1091,14 +1093,13 @@
                 // Merge Airtable club names + Source Club game values into the known list
                 const sourceClubs  = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
                 const airtableClubs = clubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
-                const prevSelected = selectedClubs.size > 0 ? new Set(selectedClubs) : null;
                 clubsList = [...new Set([...KNOWN_CLUBS, ...airtableClubs, ...sourceClubs])].sort();
-                // Preserve existing selection; only default to all-selected on first load
-                if (prevSelected && prevSelected.size < clubsList.length) {
-                    selectedClubs = new Set([...prevSelected].filter(c => clubsList.includes(c)));
-                    if (selectedClubs.size === 0) selectedClubs = new Set(clubsList);
-                } else {
+                if (!userHasFilteredClubs) {
                     selectedClubs = new Set(clubsList);
+                } else {
+                    // Keep existing selection but drop any clubs no longer in list
+                    selectedClubs = new Set([...selectedClubs].filter(c => clubsList.includes(c)));
+                    if (selectedClubs.size === 0) selectedClubs = new Set(clubsList);
                 }
 
                 // Rebuild club pills with the merged list
