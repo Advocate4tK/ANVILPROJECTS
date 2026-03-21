@@ -102,16 +102,25 @@
 
                 <!-- Featured: Assignor Workstation -->
                 <a href="assignor-workstation.html" style="text-decoration:none; display:block; margin-bottom:20px;">
-                    <div style="background:linear-gradient(135deg,#0f3460 0%,#1a4a80 100%); border-radius:14px; padding:28px 36px; display:flex; align-items:center; gap:28px; box-shadow:0 6px 24px rgba(15,52,96,0.25); transition:transform 0.15s, box-shadow 0.15s; cursor:pointer;"
+                    <div style="background:linear-gradient(135deg,#0f3460 0%,#1a4a80 100%); border-radius:14px; padding:28px 36px; box-shadow:0 6px 24px rgba(15,52,96,0.25); transition:transform 0.15s, box-shadow 0.15s; cursor:pointer;"
                         onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 10px 32px rgba(15,52,96,0.35)';"
                         onmouseout="this.style.transform=''; this.style.boxShadow='0 6px 24px rgba(15,52,96,0.25)';">
-                        <div style="font-size:3rem; flex-shrink:0;">📋</div>
-                        <div style="flex:1;">
-                            <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:#e94560; margin-bottom:4px;">Primary Tool</div>
-                            <div style="font-size:1.5rem; font-weight:800; color:white; margin-bottom:6px;">Assignor Workstation</div>
-                            <div style="font-size:0.9rem; color:rgba(255,255,255,0.7);">Drag-and-drop referees onto games by club, filter by date, sort by proximity</div>
+
+                        <!-- Top row: icon + title + button -->
+                        <div style="display:flex; align-items:center; gap:28px;">
+                            <div style="font-size:3rem; flex-shrink:0;">📋</div>
+                            <div style="flex:1;">
+                                <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:#e94560; margin-bottom:4px;">Primary Tool</div>
+                                <div style="font-size:1.5rem; font-weight:800; color:white; margin-bottom:6px;">Assignor Workstation</div>
+                                <div style="font-size:0.9rem; color:rgba(255,255,255,0.7);">Drag-and-drop referees onto games by club, filter by date, sort by proximity</div>
+                            </div>
+                            <div style="background:#e94560; color:white; font-weight:700; font-size:0.9rem; padding:10px 24px; border-radius:8px; white-space:nowrap; flex-shrink:0;">Open Workstation →</div>
                         </div>
-                        <div style="background:#e94560; color:white; font-weight:700; font-size:0.9rem; padding:10px 24px; border-radius:8px; white-space:nowrap; flex-shrink:0;">Open Workstation →</div>
+
+                        <!-- Stats strip -->
+                        <div id="workstationStats" style="margin-top:20px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.12);">
+                            <div style="color:rgba(255,255,255,0.45); font-size:0.75rem; font-family:'JetBrains Mono',monospace; letter-spacing:1px; margin-bottom:10px;">LOADING WEEKEND STATUS…</div>
+                        </div>
                     </div>
                 </a>
 
@@ -657,6 +666,46 @@
             setTimeout(() => { msg.style.display = 'none'; msg.textContent = '✓ Saved'; }, 2000);
         }
 
+        // ── Workstation Card Stats ────────────────────────────────────────────
+        function updateWorkstationCard(total, assigned, unassigned, urgent) {
+            const el = document.getElementById('workstationStats');
+            if (!el) return;
+
+            const pct      = total > 0 ? Math.round((assigned / total) * 100) : 100;
+            const hasUrgent = urgent.length > 0;
+            const barColor  = pct >= 80 ? '#00c853' : pct >= 50 ? '#f59e0b' : '#e74c3c';
+            const badgeBg   = unassigned === 0 ? '#00c853' : hasUrgent ? '#e74c3c' : '#f59e0b';
+            const badgeColor = unassigned === 0 ? '#09142a' : '#fff';
+            const refs      = weekendRefsAvailable !== null ? weekendRefsAvailable : '—';
+
+            // Urgent games list (max 3 shown)
+            const urgentHtml = hasUrgent ? `
+                <div style="margin-top:12px; background:rgba(231,76,60,0.18); border:1px solid rgba(231,76,60,0.4); border-radius:8px; padding:10px 14px;">
+                    <div style="font-size:0.75rem; font-weight:800; color:#ff6b6b; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">⚠ ${urgent.length} Unassigned Within 48 Hours</div>
+                    ${urgent.slice(0,3).map(g => `<div style="font-size:0.8rem; color:rgba(255,255,255,0.8); padding:2px 0;">${g.date} ${g.time} — ${g.home} vs ${g.away}</div>`).join('')}
+                    ${urgent.length > 3 ? `<div style="font-size:0.78rem; color:rgba(255,255,255,0.5); margin-top:3px;">…and ${urgent.length - 3} more</div>` : ''}
+                </div>` : '';
+
+            el.innerHTML = `
+                <!-- Coverage meter header -->
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap;">
+                    <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.5);">Weekend Coverage</span>
+                    <span style="background:${badgeBg}; color:${badgeColor}; font-family:'JetBrains Mono',monospace; font-size:0.78rem; font-weight:800; padding:3px 10px; border-radius:20px; flex-shrink:0;">
+                        ${unassigned === 0 ? '✓ All Covered' : `${unassigned} Unassigned`}
+                    </span>
+                    <span style="margin-left:auto; font-size:0.8rem; color:rgba(255,255,255,0.6);">👤 ${refs} ref${refs === 1 ? '' : 's'} available</span>
+                </div>
+                <!-- Progress bar -->
+                <div style="background:rgba(255,255,255,0.12); border-radius:6px; height:8px; overflow:hidden; margin-bottom:8px;">
+                    <div style="background:${barColor}; width:${pct}%; height:100%; border-radius:6px; transition:width 0.6s ease;"></div>
+                </div>
+                <!-- Coverage label -->
+                <div style="font-size:0.82rem; color:rgba(255,255,255,0.55);">
+                    ${total === 0 ? 'No games scheduled this weekend' : `${assigned} of ${total} game${total !== 1 ? 's' : ''} assigned &nbsp;·&nbsp; ${pct}% covered`}
+                </div>
+                ${urgentHtml}`;
+        }
+
         // ── Card toggle — global so inline onclick handlers can reach it ──────
         function toggleRefCard(id) {
             const body = document.getElementById(id);
@@ -913,8 +962,11 @@
                     refsEl.textContent = `${unique.size} referee${unique.size !== 1 ? 's' : ''}`;
                     refsEl.style.color = unique.size === 0 ? '#e74c3c' : '#27ae60';
                 }
+                weekendRefsAvailable = unique.size;
             } catch(e) { if (refsEl) refsEl.textContent = '—'; }
         });
+
+        let weekendRefsAvailable = null;
 
         async function loadStats() {
             if (!airtableClient) return;
@@ -1083,7 +1135,11 @@
                     }
                 });
 
-                const totalUnassigned = Object.values(unassignedByClub).reduce((a, b) => a + b, 0);
+                const totalUnassigned  = Object.values(unassignedByClub).reduce((a, b) => a + b, 0);
+                const totalWeekendGames = Object.values(thisWeekByClub).reduce((a, b) => a + b, 0);
+                const totalAssigned    = totalWeekendGames - totalUnassigned;
+                updateWorkstationCard(totalWeekendGames, totalAssigned, totalUnassigned, urgent);
+
 
                 // Heat meter
                 const in7Hours  = new Date(now.getTime() + 7  * 60 * 60 * 1000);
