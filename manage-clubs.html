@@ -341,7 +341,14 @@
 
                     <div class="fg">
                         <label>Club Name <span style="color:#e74c3c">*</span></label>
-                        <input type="text" id="clubName" placeholder="e.g. Glastonbury Soccer Club">
+                        <input type="text" id="clubName" placeholder="e.g. Glastonbury">
+                        <div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Short operational name — used in URLs and system filters.</div>
+                    </div>
+
+                    <div class="fg">
+                        <label>Display Name</label>
+                        <input type="text" id="displayName" placeholder="e.g. Glastonbury Soccer Club">
+                        <div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Full public name shown on the club's scheduling page. Leave blank to use Club Name.</div>
                     </div>
 
                     <!-- Club President (primary) -->
@@ -452,6 +459,21 @@
                     <select id="editClubSelect" onchange="onEditClubChange()">
                         <option value="">— Loading clubs… —</option>
                     </select>
+                </div>
+
+                <!-- Display Name editor -->
+                <div id="editDisplayNameWrap" style="display:none; margin-bottom:20px;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#aaa; margin-bottom:8px;">Display Name</div>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <input type="text" id="editDisplayName" placeholder="e.g. Glastonbury Soccer Club"
+                            style="flex:1; min-width:200px; padding:9px 12px; border:1px solid #e2d9ce; border-radius:8px; font-size:0.9rem; font-family:'DM Sans',sans-serif;">
+                        <button onclick="saveDisplayName()"
+                            style="background:#09142a; color:#fff; border:none; padding:9px 20px; border-radius:8px; font-weight:700; font-size:0.85rem; cursor:pointer; font-family:'DM Sans',sans-serif; white-space:nowrap;">
+                            Save Name
+                        </button>
+                    </div>
+                    <div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Full public name shown on the club's scheduling page. Leave blank to use Club Name.</div>
+                    <div id="editDisplayNameMsg" style="display:none; font-size:0.82rem; margin-top:6px;"></div>
                 </div>
 
                 <!-- Existing venue/field summary -->
@@ -780,11 +802,13 @@
             const presLast  = document.getElementById('presLast').value.trim();
             const presEmail = document.getElementById('presEmail').value.trim();
             const presPhone = document.getElementById('presPhone').value.trim();
+            const displayName = document.getElementById('displayName').value.trim();
             const clubFields = {
                 'Club Name':  clubName,
                 'PRESIDENT':  `${presFirst} ${presLast}`,
                 'Club Admin': `${adminFirst} ${adminLast}`
             };
+            if (displayName) clubFields['Display Name'] = displayName;
             if (presEmail)  clubFields['President Email'] = presEmail;
             if (presPhone)  clubFields['President Phone'] = presPhone;
             if (document.getElementById('adminEmail').value.trim())
@@ -867,7 +891,7 @@
         try {
             const recs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
             allClubRecords = recs
-                .map(r => ({ id: r.id, name: r.fields['Club Name'] || '(unnamed)' }))
+                .map(r => ({ id: r.id, name: r.fields['Club Name'] || '(unnamed)', displayName: r.fields['Display Name'] || '' }))
                 .sort((a, b) => a.name.localeCompare(b.name));
             const opts = '<option value="">— Select a club —</option>'
                 + allClubRecords.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
@@ -1031,10 +1055,21 @@
         logEl.style.display = 'none';
         logEl.innerHTML = '';
 
+        document.getElementById('editDisplayNameWrap').style.display = 'none';
+        document.getElementById('editDisplayName').value = '';
+        document.getElementById('editDisplayNameMsg').style.display = 'none';
+
         if (!clubId) {
             currentEl.style.display = 'none';
             builderEl.style.display = 'none';
             return;
+        }
+
+        // Load and show current Display Name
+        const clubRec = allClubRecords.find(c => c.id === clubId);
+        if (clubRec) {
+            document.getElementById('editDisplayName').value = clubRec.displayName || '';
+            document.getElementById('editDisplayNameWrap').style.display = 'block';
         }
 
         // Show current venues/fields
@@ -1071,6 +1106,29 @@
         editFieldCounts = {};
         addEditVenue();
         builderEl.style.display = 'block';
+    }
+
+    async function saveDisplayName() {
+        const clubId = document.getElementById('editClubSelect').value;
+        if (!clubId) return;
+        const val    = document.getElementById('editDisplayName').value.trim();
+        const msgEl  = document.getElementById('editDisplayNameMsg');
+        msgEl.style.display = 'none';
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.CLUBS, clubId, {
+                'Display Name': val
+            });
+            // Update local cache
+            const rec = allClubRecords.find(c => c.id === clubId);
+            if (rec) rec.displayName = val;
+            msgEl.textContent = val ? `✓ Display Name saved — "${val}"` : '✓ Display Name cleared.';
+            msgEl.style.color   = '#00c853';
+            msgEl.style.display = 'block';
+        } catch(e) {
+            msgEl.textContent = `✗ Error: ${e.message}`;
+            msgEl.style.color   = '#e74c3c';
+            msgEl.style.display = 'block';
+        }
     }
 
     function addEditVenue() {
