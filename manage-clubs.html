@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add New Club</title>
+    <title>Manage Clubs</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -289,8 +289,8 @@
 <body>
 <div class="container">
     <header>
-        <h1>➕ Add New Club</h1>
-        <p class="subtitle">Create a club, venues, and fields in one step</p>
+        <h1>🏟 Manage Clubs</h1>
+        <p class="subtitle">Add or remove clubs, venues, and fields</p>
     </header>
 
     <main>
@@ -411,6 +411,51 @@
             </div>
 
         </div><!-- /wizardContent -->
+
+        <!-- Remove Club Section -->
+        <div id="removeSection" style="display:none; margin-top:32px;">
+            <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #e74c3c;">
+                <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#e74c3c; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">⚠ Remove Club</h2>
+                <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Permanently deletes the club, its venues, and its fields from Airtable. Games are <strong>not</strong> deleted but will lose their club link.</p>
+
+                <div class="fg" style="max-width:380px;">
+                    <label>Select Club to Remove</label>
+                    <select id="removeClubSelect" onchange="clearInspection()">
+                        <option value="">— Loading clubs… —</option>
+                    </select>
+                </div>
+
+                <button onclick="inspectClub()" id="inspectBtn"
+                    style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:8px 20px; border-radius:8px; font-weight:700; font-size:0.85rem; cursor:pointer; font-family:'DM Sans',sans-serif; margin-bottom:16px;">
+                    Inspect Club →
+                </button>
+
+                <!-- Inspection results -->
+                <div id="inspectionResults" style="display:none;">
+                    <div id="inspectionSummary" style="margin-bottom:16px;"></div>
+
+                    <!-- Active games warning -->
+                    <div id="activeGamesWarning" style="display:none; background:#fff5f5; border:1px solid #fca5a5; border-left:4px solid #e74c3c; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:0.85rem; color:#7f1d1d;">
+                        <strong>🔴 Active games found.</strong> This club has games in the system. Removing the club will orphan those game records. Proceed only if you are certain.
+                    </div>
+
+                    <!-- Confirm checkbox -->
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:0.88rem; color:#09142a; font-weight:600; margin-bottom:16px;">
+                        <input type="checkbox" id="confirmRemove" onchange="toggleRemoveBtn()" style="width:16px; height:16px; cursor:pointer;">
+                        I understand this is irreversible. Remove this club and all its venues and fields.
+                    </label>
+
+                    <button onclick="removeClub()" id="removeClubBtn" disabled
+                        style="background:#e74c3c; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:800; font-size:0.95rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase; opacity:0.4; transition:opacity 0.15s;">
+                        Remove Club
+                    </button>
+                </div>
+
+                <!-- Deletion log -->
+                <div class="create-log" id="removeLog"></div>
+            </div>
+        </div>
+
     </main>
 
     <footer>
@@ -440,9 +485,11 @@
     }
 
     function unlock() {
-        document.getElementById('pinGate').style.display      = 'none';
+        document.getElementById('pinGate').style.display       = 'none';
         document.getElementById('wizardContent').style.display = 'block';
+        document.getElementById('removeSection').style.display = 'block';
         if (venueCount === 0) addVenue(); // seed first venue
+        loadClubsForRemove();
     }
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -712,6 +759,162 @@
             createBtn.disabled = false;
             backBtn.disabled   = false;
             createBtn.textContent = 'Create Club';
+        }
+    }
+
+    // ── Remove Club ───────────────────────────────────────────────────────────
+    let allClubRecords = []; // { id, name }
+
+    async function loadClubsForRemove() {
+        try {
+            const recs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+            allClubRecords = recs
+                .map(r => ({ id: r.id, name: r.fields['Club Name'] || '(unnamed)' }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            const sel = document.getElementById('removeClubSelect');
+            sel.innerHTML = '<option value="">— Select a club —</option>'
+                + allClubRecords.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        } catch(e) {
+            document.getElementById('removeClubSelect').innerHTML =
+                '<option value="">⚠ Could not load clubs</option>';
+        }
+    }
+
+    function clearInspection() {
+        document.getElementById('inspectionResults').style.display = 'none';
+        document.getElementById('confirmRemove').checked = false;
+        document.getElementById('removeLog').style.display = 'none';
+        document.getElementById('removeLog').innerHTML = '';
+        toggleRemoveBtn();
+    }
+
+    function toggleRemoveBtn() {
+        const btn = document.getElementById('removeClubBtn');
+        const checked = document.getElementById('confirmRemove').checked;
+        btn.disabled = !checked;
+        btn.style.opacity = checked ? '1' : '0.4';
+        btn.style.cursor  = checked ? 'pointer' : 'not-allowed';
+    }
+
+    async function inspectClub() {
+        const clubId = document.getElementById('removeClubSelect').value;
+        if (!clubId) { alert('Select a club first.'); return; }
+        const btn = document.getElementById('inspectBtn');
+        btn.disabled = true; btn.textContent = 'Inspecting…';
+        clearInspection();
+
+        try {
+            const clubName = allClubRecords.find(c => c.id === clubId)?.name || 'Unknown';
+
+            // Load venues linked to this club
+            const venues = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, {
+                filterByFormula: `FIND("${clubId}", ARRAYJOIN({Clubs}))`,
+                maxRecords: 200
+            });
+
+            // Load fields linked to each venue
+            let totalFields = 0;
+            const venueDetails = [];
+            for (const v of venues) {
+                const fields = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, {
+                    filterByFormula: `FIND("${v.id}", ARRAYJOIN({Venue}))`,
+                    maxRecords: 200
+                });
+                totalFields += fields.length;
+                venueDetails.push({
+                    id: v.id,
+                    name: v.fields['Venue Name'] || '(unnamed)',
+                    fieldIds: fields.map(f => f.id),
+                    fieldNames: fields.map(f => f.fields['Field Name'] || '(unnamed)')
+                });
+            }
+
+            // Check for games tied to this club (Source Club field)
+            const games = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, {
+                filterByFormula: `{Source Club} = "${clubName}"`,
+                maxRecords: 500
+            });
+
+            // Store for use during deletion
+            window._removeTarget = { clubId, clubName, venueDetails };
+
+            // Summary HTML
+            const summaryHtml = `
+                <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-radius:10px; padding:16px 20px; font-size:0.88rem;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; color:#09142a; text-transform:uppercase; margin-bottom:10px;">${clubName}</div>
+                    <div style="display:flex; gap:24px; flex-wrap:wrap;">
+                        <span>🏟 <strong>${venues.length}</strong> venue${venues.length !== 1 ? 's' : ''}</span>
+                        <span>📋 <strong>${totalFields}</strong> field${totalFields !== 1 ? 's' : ''}</span>
+                        <span style="color:${games.length > 0 ? '#e74c3c' : '#00c853'};">
+                            ⚽ <strong>${games.length}</strong> game${games.length !== 1 ? 's' : ''} in system
+                        </span>
+                    </div>
+                    ${venueDetails.length > 0 ? `
+                    <div style="margin-top:12px; font-size:0.8rem; color:#666;">
+                        ${venueDetails.map(v => `<div style="margin-bottom:4px;">📍 ${v.name} — ${v.fieldNames.join(', ') || 'no fields'}</div>`).join('')}
+                    </div>` : ''}
+                </div>`;
+
+            document.getElementById('inspectionSummary').innerHTML = summaryHtml;
+            document.getElementById('activeGamesWarning').style.display = games.length > 0 ? 'block' : 'none';
+            document.getElementById('inspectionResults').style.display = 'block';
+
+        } catch(e) {
+            alert('Inspection failed: ' + e.message);
+        } finally {
+            btn.disabled = false; btn.textContent = 'Inspect Club →';
+        }
+    }
+
+    async function removeClub() {
+        if (!window._removeTarget) return;
+        const { clubId, clubName, venueDetails } = window._removeTarget;
+        const btn    = document.getElementById('removeClubBtn');
+        const logEl  = document.getElementById('removeLog');
+        btn.disabled = true;
+        document.getElementById('backBtn2') && (document.getElementById('backBtn2').disabled = true);
+        logEl.style.display = 'block';
+        logEl.innerHTML = '';
+
+        const log = (msg, type = '') => {
+            logEl.innerHTML += `<div class="${type ? 'log-' + type : ''}">${msg}</div>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        };
+
+        try {
+            // 1. Delete fields first
+            for (const venue of venueDetails) {
+                for (const fieldId of venue.fieldIds) {
+                    log(`  Deleting field from ${venue.name}…`, 'info');
+                    await airtableClient.deleteRecord(CONFIG.AIRTABLE_TABLES.FIELDS, fieldId);
+                    log(`  ✓ Field deleted`, 'ok');
+                }
+            }
+
+            // 2. Delete venues
+            for (const venue of venueDetails) {
+                log(`Deleting venue: ${venue.name}…`, 'info');
+                await airtableClient.deleteRecord(CONFIG.AIRTABLE_TABLES.VENUES, venue.id);
+                log(`✓ Venue deleted — ${venue.name}`, 'ok');
+            }
+
+            // 3. Delete club record
+            log(`Deleting club record: ${clubName}…`, 'info');
+            await airtableClient.deleteRecord(CONFIG.AIRTABLE_TABLES.CLUBS, clubId);
+            log(`✓ Club deleted — ${clubName}`, 'ok');
+
+            log('', '');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            log(`✅ "${clubName}" has been removed.`, 'ok');
+            log('Note: existing games were not deleted but Source Club field is now stale.', 'info');
+
+            // Refresh the dropdown
+            await loadClubsForRemove();
+            clearInspection();
+
+        } catch(e) {
+            log(`✗ Error: ${e.message}`, 'err');
+            btn.disabled = false;
         }
     }
 </script>
