@@ -832,6 +832,19 @@
 
             buildClubPills();
 
+            // Fetch clubs from Airtable immediately so new clubs appear in pills
+            // without waiting for Load Games — runs in background, silent on error
+            (async () => {
+                try {
+                    const clubRecs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+                    const airtableClubs = clubRecs.map(c => c.fields['Club Name'] || c.fields['Name'] || '').filter(Boolean);
+                    clubsList = [...new Set([...KNOWN_CLUBS, ...airtableClubs])].sort();
+                    selectedClubs = new Set(clubsList);
+                    const pillsWrap = document.getElementById('clubPills');
+                    if (pillsWrap) { pillsWrap.innerHTML = ''; buildClubPills(); }
+                } catch(e) { /* keep KNOWN_CLUBS pills on error */ }
+            })();
+
             document.getElementById('loadBtn').addEventListener('click', loadAll);
             document.getElementById('refSearch').addEventListener('input', function() {
                 renderRefs(this.value.toLowerCase());
