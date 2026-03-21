@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schedule Change Requests</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <style>
         .change-card {
@@ -16,10 +19,7 @@
             transition: box-shadow 0.15s;
         }
         .change-card:hover { box-shadow: var(--shadow-md); }
-        .change-card.resolved {
-            border-left-color: var(--accent);
-            opacity: 0.75;
-        }
+        .change-card.resolved { opacity: 0.78; }
         .change-card.resolved:hover { opacity: 1; }
         .change-card-header {
             display: flex;
@@ -62,10 +62,11 @@
         .btn-dismiss:hover  { border-color: var(--danger); color: var(--danger); }
         .btn-contact  { background: none; border: 1px solid var(--deep); color: var(--deep); border-radius: 8px; padding: 7px 14px; font-size: 0.82rem; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; transition: all 0.15s; }
         .btn-contact:hover  { background: var(--deep); color: white; }
+        .btn-reopen { background: none; border: 1px solid #f59e0b; color: #78350f; border-radius: 8px; padding: 6px 13px; font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+        .btn-reopen:hover { background: #fef3c7; }
         .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 0.92rem; }
         .empty-state .big { font-size: 3rem; margin-bottom: 12px; }
-        #filterRow { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
-        #filterRow label { font-size: 0.82rem; color: var(--muted); font-weight: 600; }
+        #filterRow { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
         .action-msg { font-size: 0.8rem; margin-left: 8px; }
         .resolved-header {
             display: flex; align-items: center; gap: 10px;
@@ -79,6 +80,52 @@
         .resolved-meta { font-size: 0.75rem; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
         .card-body { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
         .change-card.resolved.expanded .card-body { display: block; }
+
+        /* Resolved controls bar */
+        #resolvedControls {
+            display: none;
+            background: #f8f6f2;
+            border: 1px solid #e2d9ce;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 14px;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filter-pill {
+            background: #fff;
+            border: 1px solid #e2d9ce;
+            color: #09142a;
+            border-radius: 20px;
+            padding: 5px 14px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            transition: all 0.15s;
+        }
+        .filter-pill.active { background: #09142a; color: #fff; border-color: #09142a; }
+        .filter-pill:hover:not(.active) { border-color: #09142a; }
+        .controls-sep { width: 1px; height: 22px; background: #e2d9ce; flex-shrink: 0; }
+
+        /* Resolved summary strip */
+        #resolvedSummary {
+            display: none;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            padding: 10px 16px;
+            margin-bottom: 14px;
+            font-size: 0.85rem;
+            color: #14532d;
+            gap: 18px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .res-stat { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+        .res-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 800; color: #09142a; }
+        .res-stat-lbl { font-size: 0.72rem; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
     </style>
 </head>
 <body>
@@ -89,14 +136,57 @@
         </header>
 
         <main>
-            <div style="margin-bottom:16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <div id="filterRow">
                 <a href="admin.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Admin Portal</a>
                 <a href="assignor-workstation.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">📋 Assignor Workstation</a>
                 <button onclick="loadChanges()" class="btn btn-secondary" style="font-size:0.85rem; padding:8px 16px;">🔄 Refresh</button>
-                <label style="margin-left:auto; font-size:0.82rem; color:#555; font-weight:600;">
+                <label style="margin-left:auto; font-size:0.82rem; color:#555; font-weight:600; display:flex; align-items:center; gap:6px; cursor:pointer;">
                     <input type="checkbox" id="showResolved" onchange="onShowResolvedChange()"> Show Resolved
                 </label>
-                <button id="sortBtn" onclick="toggleSort()" style="display:none; background:none; border:1px solid #aaa; color:#555; border-radius:8px; padding:6px 14px; font-size:0.82rem; font-weight:600; cursor:pointer;">Resolved ↓ Newest</button>
+            </div>
+
+            <!-- Resolved controls (visible only when Show Resolved is checked) -->
+            <div id="resolvedControls">
+                <!-- Sort -->
+                <span style="font-size:0.75rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.8px; white-space:nowrap;">Sort:</span>
+                <button class="filter-pill active" id="sortNewest" onclick="setSort('desc')">Most Recent</button>
+                <button class="filter-pill" id="sortOldest" onclick="setSort('asc')">Oldest</button>
+
+                <div class="controls-sep"></div>
+
+                <!-- Date range -->
+                <span style="font-size:0.75rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.8px; white-space:nowrap;">Range:</span>
+                <button class="filter-pill active" id="rangeAll"   onclick="setRange('all')">All Time</button>
+                <button class="filter-pill"        id="range7"     onclick="setRange('7')">Last 7 Days</button>
+                <button class="filter-pill"        id="range30"    onclick="setRange('30')">Last 30 Days</button>
+
+                <div class="controls-sep"></div>
+
+                <!-- Club filter -->
+                <span style="font-size:0.75rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.8px; white-space:nowrap;">Club:</span>
+                <select id="clubFilterSelect" onchange="setClubFilter()" style="font-family:'DM Sans',sans-serif; font-size:0.82rem; font-weight:600; padding:5px 10px; border:1px solid #e2d9ce; border-radius:20px; background:#fff; color:#09142a; cursor:pointer; outline:none;">
+                    <option value="">All Clubs</option>
+                </select>
+
+                <div class="controls-sep"></div>
+
+                <!-- Collapse / Expand all -->
+                <button class="filter-pill" onclick="collapseAll()">Collapse All</button>
+                <button class="filter-pill" onclick="expandAll()">Expand All</button>
+
+                <div class="controls-sep"></div>
+
+                <!-- Export -->
+                <button class="filter-pill" onclick="exportCSV()" style="background:#09142a; color:#fff; border-color:#09142a;">⬇ Export CSV</button>
+            </div>
+
+            <!-- Resolved stats summary (visible only when Show Resolved is checked) -->
+            <div id="resolvedSummary">
+                <span style="font-size:0.82rem; font-weight:700; color:#14532d;">✅ Resolved Overview</span>
+                <div class="res-stat"><span class="res-stat-val" id="statThisWeek">—</span><span class="res-stat-lbl">This Week</span></div>
+                <div class="res-stat"><span class="res-stat-val" id="statThisMonth">—</span><span class="res-stat-lbl">This Month</span></div>
+                <div class="res-stat"><span class="res-stat-val" id="statTotal">—</span><span class="res-stat-lbl">All Time</span></div>
+                <div class="res-stat"><span class="res-stat-val" id="statAvgTime">—</span><span class="res-stat-lbl">Avg Resolution</span></div>
             </div>
 
             <div id="summary" style="margin-bottom:16px;"></div>
@@ -111,14 +201,77 @@
     <script src="config.js"></script>
     <script src="js/airtable-client.js"></script>
     <script>
-    let refById = {};
-    let sortDir  = 'desc'; // newest first when viewing resolved
+    let refById   = {};
+    let sortDir   = 'desc';
+    let dateRange = 'all';
+    let clubFilter = '';
+    let allLoadedRecords = []; // cache for export
 
+    // ── Club color palette ────────────────────────────────────────────────────
+    const CLUB_COLORS = ['#3b82f6','#8b5cf6','#f59e0b','#ef4444','#06b6d4','#84cc16','#f97316','#ec4899','#14b8a6','#a855f7'];
+    function getClubColor(name) {
+        let h = 0;
+        for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+        return CLUB_COLORS[Math.abs(h) % CLUB_COLORS.length];
+    }
+
+    // ── Timestamp helpers ─────────────────────────────────────────────────────
     function getResolvedTs(r) {
         const matches = [...(r.fields['Notes'] || '').matchAll(/\[RESOLVED\s*[–-]\s*([^\]]+)\]/gi)];
         return matches.length ? new Date(matches[matches.length - 1][1].trim()) : new Date(0);
     }
 
+    function getRequestTs(r) {
+        const match = (r.fields['Notes'] || '').match(/\[CHANGE REQUEST[^\]]*–\s*([^\]]+)\]/i);
+        return match ? new Date(match[1].trim()) : null;
+    }
+
+    function avgResolutionTime(resolvedRecords) {
+        let total = 0, count = 0;
+        resolvedRecords.forEach(r => {
+            const reqTs = getRequestTs(r);
+            const resTs = getResolvedTs(r);
+            if (reqTs && resTs && resTs > reqTs) {
+                total += resTs - reqTs;
+                count++;
+            }
+        });
+        if (!count) return '—';
+        const avgMs = total / count;
+        const hrs = Math.round(avgMs / (1000 * 60 * 60));
+        if (hrs < 24) return `${hrs}h`;
+        return `${Math.round(hrs / 24)}d`;
+    }
+
+    // ── Sort / filter controls ────────────────────────────────────────────────
+    function setSort(dir) {
+        sortDir = dir;
+        document.getElementById('sortNewest').classList.toggle('active', dir === 'desc');
+        document.getElementById('sortOldest').classList.toggle('active', dir === 'asc');
+        renderCards();
+    }
+
+    function setRange(range) {
+        dateRange = range;
+        ['rangeAll','range7','range30'].forEach(id => document.getElementById(id).classList.remove('active'));
+        document.getElementById(range === 'all' ? 'rangeAll' : range === '7' ? 'range7' : 'range30').classList.add('active');
+        renderCards();
+    }
+
+    function setClubFilter() {
+        clubFilter = document.getElementById('clubFilterSelect').value;
+        renderCards();
+    }
+
+    function collapseAll() {
+        document.querySelectorAll('.change-card.resolved.expanded').forEach(el => el.classList.remove('expanded'));
+    }
+
+    function expandAll() {
+        document.querySelectorAll('.change-card.resolved').forEach(el => el.classList.add('expanded'));
+    }
+
+    // ── Misc helpers ──────────────────────────────────────────────────────────
     function buildGameNum(f) {
         const skip = new Set(['sc','fc','soccer','club','boys','girls','united','youth','the','of']);
         const words = (f['Home Team'] || '').split(/\s+/).filter(w => w.length > 1 && !skip.has(w.toLowerCase()));
@@ -147,7 +300,6 @@
         return val;
     }
 
-    // Parse all change request blocks from the Notes field into structured objects
     function extractRequests(notes) {
         if (!notes) return [];
         const blocks = notes.split(/\[CHANGE REQUEST/i).slice(1);
@@ -175,10 +327,43 @@
         }).join('');
     }
 
+    // ── Export CSV ────────────────────────────────────────────────────────────
+    function exportCSV() {
+        const resolved = allLoadedRecords.filter(r => (r.fields['Game Status']||'').toLowerCase() === 'change resolved');
+        if (!resolved.length) { alert('No resolved records to export.'); return; }
+        const rows = [['Game ID','Home Team','Away Team','Date','Time','Age Group','Resolved At','Avg Resolution Time']];
+        resolved.forEach(r => {
+            const f = r.fields;
+            const resTs = getResolvedTs(r);
+            const reqTs = getRequestTs(r);
+            let dur = '';
+            if (reqTs && resTs && resTs > reqTs) {
+                const hrs = Math.round((resTs - reqTs) / (1000 * 60 * 60));
+                dur = hrs < 24 ? `${hrs}h` : `${Math.round(hrs/24)}d`;
+            }
+            rows.push([
+                r.id,
+                `"${(f['Home Team']||'').replace(/"/g,'""')}"`,
+                `"${(f['Away Team']||'').replace(/"/g,'""')}"`,
+                f['Date']||'',
+                f['Time']||'',
+                f['Age Group']||'',
+                resTs.getTime() > 0 ? resTs.toLocaleString() : '',
+                dur
+            ]);
+        });
+        const csv = rows.map(r => r.join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `resolved-changes-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+    }
+
+    // ── Main load ─────────────────────────────────────────────────────────────
     async function loadChanges() {
-        const container   = document.getElementById('changesList');
-        const summaryEl   = document.getElementById('summary');
-        const showResolved = document.getElementById('showResolved').checked;
+        const container    = document.getElementById('changesList');
+        const summaryEl    = document.getElementById('summary');
         container.innerHTML = '<p style="color:#888; font-size:0.9rem;">Loading…</p>';
 
         try {
@@ -191,112 +376,168 @@
 
             const changeGames = games.filter(r => {
                 const s = (r.fields['Game Status'] || '').toLowerCase();
+                const showResolved = document.getElementById('showResolved').checked;
                 if (showResolved) return s === 'change requested' || s === 'change resolved';
                 return s === 'change requested';
             });
 
-            if (changeGames.length === 0) {
-                summaryEl.innerHTML = '';
-                container.innerHTML = `<div class="empty-state"><div class="big">✅</div>No open change requests — you're all clear.</div>`;
-                return;
-            }
+            allLoadedRecords = changeGames;
 
-            // Group by club/home team
-            const byClub = {};
-            changeGames.forEach(r => {
-                const club = (r.fields['Club'] || r.fields['Home Team'] || 'Unknown').split(' vs ')[0].trim();
-                if (!byClub[club]) byClub[club] = [];
-                byClub[club].push(r);
-            });
+            // Populate club filter dropdown
+            const allClubs = [...new Set(changeGames.map(r => getClubName(r)))].sort();
+            const clubSel = document.getElementById('clubFilterSelect');
+            const prevVal = clubSel.value;
+            clubSel.innerHTML = '<option value="">All Clubs</option>' +
+                allClubs.map(c => `<option value="${c}" ${c === prevVal ? 'selected' : ''}>${c}</option>`).join('');
+
+            // Resolved stats
+            const allResolved = changeGames.filter(r => (r.fields['Game Status']||'').toLowerCase() === 'change resolved');
+            const now = new Date();
+            const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0,0,0,0);
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            document.getElementById('statThisWeek').textContent  = allResolved.filter(r => getResolvedTs(r) >= startOfWeek).length;
+            document.getElementById('statThisMonth').textContent = allResolved.filter(r => getResolvedTs(r) >= startOfMonth).length;
+            document.getElementById('statTotal').textContent     = allResolved.length;
+            document.getElementById('statAvgTime').textContent   = avgResolutionTime(allResolved);
 
             const openCount = changeGames.filter(r => (r.fields['Game Status'] || '').toLowerCase() === 'change requested').length;
-            summaryEl.innerHTML = `<div style="background:#fdebd0; border:1px solid #f0a500; border-radius:8px; padding:12px 18px; font-size:0.88rem; color:#935116; font-weight:600;">
-                ⚠️ ${openCount} open change request${openCount !== 1 ? 's' : ''} across ${Object.keys(byClub).length} club${Object.keys(byClub).length !== 1 ? 's' : ''}
-            </div>`;
+            const clubCount = new Set(changeGames.map(r => getClubName(r))).size;
 
-            container.innerHTML = Object.entries(byClub).sort().map(([club, records]) => {
-                const cards = records
-                    .sort((a,b) => {
-                        const isResA = (a.fields['Game Status']||'').toLowerCase() === 'change resolved';
-                        const isResB = (b.fields['Game Status']||'').toLowerCase() === 'change resolved';
-                        // Open requests always sort by game date; resolved sort by resolved timestamp
-                        if (isResA && isResB) {
-                            const tsA = getResolvedTs(a), tsB = getResolvedTs(b);
-                            const cmp = tsA - tsB;
-                            return sortDir === 'asc' ? cmp : -cmp;
-                        }
-                        // Open before resolved regardless of sort direction
-                        if (!isResA && isResB) return -1;
-                        if (isResA && !isResB) return 1;
-                        return (a.fields['Date']||'').localeCompare(b.fields['Date']||'');
-                    })
-                    .map(r => {
-                        const f          = r.fields;
-                        const isResolved = (f['Game Status']||'').toLowerCase() === 'change resolved';
-                        const center     = resolveRef(f['Center Referee']);
-                        const ar1        = resolveRef(f['AR 1']);
-                        const ar2        = resolveRef(f['AR 2']);
-                        const refsHtml   = [center && `<span class="ref-badge">⚽ ${center}</span>`,
-                                            ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
-                                            ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('') || '<em>None assigned</em>';
+            if (openCount > 0) {
+                summaryEl.innerHTML = `<div style="background:#fdebd0; border:1px solid #f0a500; border-radius:8px; padding:12px 18px; font-size:0.88rem; color:#935116; font-weight:600;">
+                    ⚠️ ${openCount} open change request${openCount !== 1 ? 's' : ''} across ${clubCount} club${clubCount !== 1 ? 's' : ''}
+                </div>`;
+            } else {
+                summaryEl.innerHTML = '';
+            }
 
-                        const requests    = extractRequests(f['Notes'] || '');
-                        const requestHtml = formatRequestHtml(requests);
-
-                        const adminEmail = f['Club Admin Email'] || '';
-                        const contactBtn = adminEmail
-                            ? `<a href="mailto:${adminEmail}?subject=Re: Schedule Change Request — ${f['Home Team']||''} vs ${f['Away Team']||''}" class="btn-contact">✉ Contact Club</a>`
-                            : '';
-
-                        if (isResolved) {
-                            const gameNum = buildGameNum(f);
-                            const resolvedMatches = [...(f['Notes']||'').matchAll(/\[RESOLVED\s*[–-]\s*([^\]]+)\]/gi)];
-                            const resolvedTs = resolvedMatches.length ? resolvedMatches[resolvedMatches.length - 1][1].trim() : '';
-                            return `<div class="change-card resolved" id="card_${r.id}">
-                                <div class="resolved-header" onclick="toggleCollapse('${r.id}')">
-                                    <span class="toggle-arrow">▶</span>
-                                    ${gameNum ? `<span class="resolved-game-num">${gameNum}</span>` : ''}
-                                    <span class="resolved-matchup">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</span>
-                                    ${resolvedTs ? `<span class="resolved-meta">${resolvedTs}</span>` : ''}
-                                    <span class="status-pill pill-resolved" style="font-size:0.7rem; padding:2px 10px;">✅ Resolved</span>
-                                </div>
-                                <div class="card-body">
-                                    <div class="game-meta" style="margin-bottom:10px;">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
-                                    <div class="current-refs"><strong>Current Refs:</strong> ${refsHtml}</div>
-                                    ${requestHtml}
-                                    ${contactBtn ? `<div class="action-row">${contactBtn}</div>` : ''}
-                                </div>
-                            </div>`;
-                        }
-
-                        return `<div class="change-card" id="card_${r.id}">
-                            <div class="change-card-header">
-                                <div>
-                                    <div class="game-title">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</div>
-                                    <div class="game-meta">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
-                                </div>
-                                <span class="status-pill pill-open">⚠ Open</span>
-                            </div>
-                            <div class="current-refs"><strong>Current Refs:</strong> ${refsHtml}</div>
-                            ${requestHtml}
-                            <div class="action-row">
-                                <button class="btn-resolve" onclick="markResolved('${r.id}')">✅ Mark Resolved</button>
-                                <button class="btn-dismiss" onclick="dismissRequest('${r.id}')">✕ Dismiss</button>
-                                <a href="assignor-workstation.html?game=${r.id}" class="btn-resolve" style="background:#0f3460; text-decoration:none; display:inline-block;">📋 Open in Workstation</a>
-                                ${contactBtn}
-                                <span class="action-msg" id="msg_${r.id}"></span>
-                            </div>
-                        </div>`;
-                    }).join('');
-
-                return cards;
-            }).join('');
+            renderCards();
 
         } catch(err) {
-            container.innerHTML = `<p style="color:#e74c3c;">Error loading data: ${err.message}</p>`;
+            document.getElementById('changesList').innerHTML = `<p style="color:#e74c3c;">Error loading data: ${err.message}</p>`;
         }
     }
 
+    function getClubName(r) {
+        return (r.fields['Home Team'] || r.fields['Club'] || 'Unknown').split(' vs ')[0].trim();
+    }
+
+    // ── Render (uses cached records + current filter/sort state) ──────────────
+    function renderCards() {
+        const container    = document.getElementById('changesList');
+        const showResolved = document.getElementById('showResolved').checked;
+
+        if (!allLoadedRecords.length) {
+            container.innerHTML = `<div class="empty-state"><div class="big">✅</div>No open change requests — you're all clear.</div>`;
+            return;
+        }
+
+        // Apply date range filter to resolved records
+        const cutoff = dateRange === 'all' ? null : new Date(Date.now() - parseInt(dateRange) * 24 * 60 * 60 * 1000);
+
+        // Apply club filter
+        const filtered = allLoadedRecords.filter(r => {
+            const isResolved = (r.fields['Game Status']||'').toLowerCase() === 'change resolved';
+            if (isResolved && cutoff && getResolvedTs(r) < cutoff) return false;
+            if (clubFilter && getClubName(r) !== clubFilter) return false;
+            return true;
+        });
+
+        if (!filtered.length) {
+            container.innerHTML = `<div class="empty-state"><div class="big">🔍</div>No records match the current filters.</div>`;
+            return;
+        }
+
+        // Group by club
+        const byClub = {};
+        filtered.forEach(r => {
+            const club = getClubName(r);
+            if (!byClub[club]) byClub[club] = [];
+            byClub[club].push(r);
+        });
+
+        container.innerHTML = Object.entries(byClub).sort().map(([club, records]) => {
+            const clubColor = getClubColor(club);
+            const cards = records
+                .sort((a, b) => {
+                    const isResA = (a.fields['Game Status']||'').toLowerCase() === 'change resolved';
+                    const isResB = (b.fields['Game Status']||'').toLowerCase() === 'change resolved';
+                    if (isResA && isResB) {
+                        const cmp = getResolvedTs(a) - getResolvedTs(b);
+                        return sortDir === 'asc' ? cmp : -cmp;
+                    }
+                    if (!isResA && isResB) return -1;
+                    if (isResA && !isResB) return 1;
+                    return (a.fields['Date']||'').localeCompare(b.fields['Date']||'');
+                })
+                .map(r => {
+                    const f          = r.fields;
+                    const isResolved = (f['Game Status']||'').toLowerCase() === 'change resolved';
+                    const center     = resolveRef(f['Center Referee']);
+                    const ar1        = resolveRef(f['AR 1']);
+                    const ar2        = resolveRef(f['AR 2']);
+                    const refsHtml   = [center && `<span class="ref-badge">⚽ ${center}</span>`,
+                                        ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
+                                        ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('') || '<em>None assigned</em>';
+
+                    const requests    = extractRequests(f['Notes'] || '');
+                    const requestHtml = formatRequestHtml(requests);
+
+                    const adminEmail = f['Club Admin Email'] || '';
+                    const contactBtn = adminEmail
+                        ? `<a href="mailto:${adminEmail}?subject=Re: Schedule Change Request — ${f['Home Team']||''} vs ${f['Away Team']||''}" class="btn-contact">✉ Contact Club</a>`
+                        : '';
+
+                    if (isResolved) {
+                        const gameNum = buildGameNum(f);
+                        const resolvedMatches = [...(f['Notes']||'').matchAll(/\[RESOLVED\s*[–-]\s*([^\]]+)\]/gi)];
+                        const resolvedTs = resolvedMatches.length ? resolvedMatches[resolvedMatches.length - 1][1].trim() : '';
+                        return `<div class="change-card resolved" id="card_${r.id}" style="border-left-color:${clubColor};">
+                            <div class="resolved-header" onclick="toggleCollapse('${r.id}')">
+                                <span class="toggle-arrow">▶</span>
+                                ${gameNum ? `<span class="resolved-game-num">${gameNum}</span>` : ''}
+                                <span class="resolved-matchup">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</span>
+                                ${resolvedTs ? `<span class="resolved-meta">${resolvedTs}</span>` : ''}
+                                <span class="status-pill pill-resolved" style="font-size:0.7rem; padding:2px 10px;">✅ Resolved</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="game-meta" style="margin-bottom:10px;">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
+                                <div class="current-refs"><strong>Current Refs:</strong> ${refsHtml}</div>
+                                ${requestHtml}
+                                <div class="action-row">
+                                    <button class="btn-reopen" onclick="reopenRequest('${r.id}')">↩ Re-open</button>
+                                    ${contactBtn}
+                                    <span class="action-msg" id="msg_${r.id}"></span>
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+
+                    return `<div class="change-card" id="card_${r.id}" style="border-left-color:${clubColor};">
+                        <div class="change-card-header">
+                            <div>
+                                <div class="game-title">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</div>
+                                <div class="game-meta">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
+                            </div>
+                            <span class="status-pill pill-open">⚠ Open</span>
+                        </div>
+                        <div class="current-refs"><strong>Current Refs:</strong> ${refsHtml}</div>
+                        ${requestHtml}
+                        <div class="action-row">
+                            <button class="btn-resolve" onclick="markResolved('${r.id}')">✅ Mark Resolved</button>
+                            <button class="btn-dismiss" onclick="dismissRequest('${r.id}')">✕ Dismiss</button>
+                            <a href="assignor-workstation.html?game=${r.id}" class="btn-resolve" style="background:#0f3460; text-decoration:none; display:inline-block;">📋 Open in Workstation</a>
+                            ${contactBtn}
+                            <span class="action-msg" id="msg_${r.id}"></span>
+                        </div>
+                    </div>`;
+                }).join('');
+
+            return cards;
+        }).join('');
+    }
+
+    // ── Actions ───────────────────────────────────────────────────────────────
     async function markResolved(gameId) {
         const msgEl = document.getElementById('msg_' + gameId);
         msgEl.textContent = 'Saving…'; msgEl.style.color = '#555';
@@ -308,6 +549,21 @@
             await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Change Resolved', 'Notes': updatedNotes });
             msgEl.textContent = '✅ Marked resolved';
             msgEl.style.color = '#1e8449';
+            setTimeout(loadChanges, 1000);
+        } catch(err) {
+            msgEl.textContent = '❌ ' + err.message;
+            msgEl.style.color = '#e74c3c';
+        }
+    }
+
+    async function reopenRequest(gameId) {
+        if (!confirm('Re-open this change request? It will return to Open status.')) return;
+        const msgEl = document.getElementById('msg_' + gameId);
+        msgEl.textContent = 'Saving…'; msgEl.style.color = '#555';
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Change Requested' });
+            msgEl.textContent = '↩ Re-opened';
+            msgEl.style.color = '#f59e0b';
             setTimeout(loadChanges, 1000);
         } catch(err) {
             msgEl.textContent = '❌ ' + err.message;
@@ -330,18 +586,16 @@
         }
     }
 
+    // ── Show/hide resolved controls ───────────────────────────────────────────
     function onShowResolvedChange() {
         const showResolved = document.getElementById('showResolved').checked;
-        const sortBtn = document.getElementById('sortBtn');
-        sortBtn.style.display = showResolved ? 'inline-block' : 'none';
-        if (!showResolved) sortDir = 'desc'; // reset when hiding
-        loadChanges();
-    }
-
-    function toggleSort() {
-        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-        const sortBtn = document.getElementById('sortBtn');
-        sortBtn.textContent = sortDir === 'asc' ? 'Resolved ↑ Oldest' : 'Resolved ↓ Newest';
+        document.getElementById('resolvedControls').style.display = showResolved ? 'flex' : 'none';
+        document.getElementById('resolvedSummary').style.display  = showResolved ? 'flex' : 'none';
+        if (!showResolved) {
+            sortDir = 'desc';
+            dateRange = 'all';
+            clubFilter = '';
+        }
         loadChanges();
     }
 
