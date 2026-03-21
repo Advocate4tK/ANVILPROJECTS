@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add New Club</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        /* ── Wizard steps ── */
+        .wizard-steps {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            margin-bottom: 28px;
+        }
+        .wizard-step {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #aaa;
+        }
+        .wizard-step .step-num {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: #e2d9ce;
+            color: #aaa;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+            transition: background 0.2s, color 0.2s;
+        }
+        .wizard-step.active .step-num  { background: #09142a; color: #fff; }
+        .wizard-step.active            { color: #09142a; }
+        .wizard-step.done .step-num    { background: #00c853; color: #09142a; }
+        .wizard-step.done              { color: #00c853; }
+        .wizard-connector {
+            flex: 1;
+            height: 2px;
+            background: #e2d9ce;
+            margin: 0 10px;
+            transition: background 0.2s;
+        }
+        .wizard-connector.done { background: #00c853; }
+
+        /* ── Step panels ── */
+        .step-panel { display: none; }
+        .step-panel.active { display: block; }
+
+        /* ── Form fields ── */
+        .fg { margin-bottom: 16px; }
+        .fg label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #09142a;
+            margin-bottom: 5px;
+            font-family: 'DM Sans', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .fg input, .fg select {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1.5px solid #e2d9ce;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-family: 'DM Sans', sans-serif;
+            background: #fff;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            box-sizing: border-box;
+        }
+        .fg input:focus, .fg select:focus {
+            outline: none;
+            border-color: #09142a;
+            box-shadow: 0 0 0 3px rgba(9,20,42,0.07);
+        }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .form-row-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px; }
+
+        /* ── Venue blocks ── */
+        .venue-block {
+            background: #f8f6f2;
+            border: 1px solid #e2d9ce;
+            border-left: 4px solid #09142a;
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+        }
+        .venue-block-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .venue-block-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1rem;
+            font-weight: 800;
+            color: #09142a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .fields-list { margin-top: 12px; }
+        .field-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .field-row input {
+            flex: 1;
+            padding: 7px 10px;
+            border: 1.5px solid #e2d9ce;
+            border-radius: 7px;
+            font-size: 0.88rem;
+            font-family: 'DM Sans', sans-serif;
+            background: #fff;
+            transition: border-color 0.15s;
+        }
+        .field-row input:focus { outline: none; border-color: #09142a; }
+        .btn-remove-field {
+            background: none;
+            border: 1px solid #fca5a5;
+            color: #e74c3c;
+            border-radius: 6px;
+            width: 28px; height: 28px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+        .btn-remove-field:hover { background: #fff5f5; }
+        .btn-add-field {
+            background: none;
+            border: 1px dashed #e2d9ce;
+            color: #09142a;
+            border-radius: 7px;
+            padding: 6px 14px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer;
+            margin-top: 4px;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .btn-add-field:hover { border-color: #09142a; background: #fff; }
+        .btn-remove-venue {
+            background: none;
+            border: 1px solid #fca5a5;
+            color: #e74c3c;
+            border-radius: 7px;
+            padding: 4px 12px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .btn-remove-venue:hover { background: #fff5f5; }
+        .btn-add-venue {
+            width: 100%;
+            padding: 12px;
+            background: none;
+            border: 2px dashed #e2d9ce;
+            border-radius: 10px;
+            color: #09142a;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            margin-top: 4px;
+        }
+        .btn-add-venue:hover { border-color: #09142a; background: #f8f6f2; }
+
+        /* ── Review ── */
+        .review-club-header {
+            background: linear-gradient(135deg, #09142a, #1a2f52);
+            border-radius: 10px;
+            padding: 20px 24px;
+            color: white;
+            margin-bottom: 16px;
+        }
+        .review-venue {
+            background: #f8f6f2;
+            border: 1px solid #e2d9ce;
+            border-left: 4px solid #00c853;
+            border-radius: 10px;
+            padding: 14px 18px;
+            margin-bottom: 10px;
+        }
+        .review-venue-name {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-weight: 800;
+            color: #09142a;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-bottom: 6px;
+        }
+        .review-field-tag {
+            display: inline-block;
+            background: #09142a;
+            color: #fff;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 2px 10px;
+            border-radius: 8px;
+            font-family: 'DM Sans', sans-serif;
+            margin: 2px 3px 2px 0;
+        }
+        .url-box {
+            background: #09142a;
+            color: #00c853;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            padding: 12px 16px;
+            border-radius: 8px;
+            word-break: break-all;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .url-copy-btn {
+            background: #00c853;
+            color: #09142a;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            font-family: 'DM Sans', sans-serif;
+            flex-shrink: 0;
+        }
+
+        /* ── Log ── */
+        .create-log {
+            background: #09142a;
+            color: #e0e0e0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            border-radius: 10px;
+            padding: 16px;
+            max-height: 280px;
+            overflow-y: auto;
+            margin-top: 16px;
+            display: none;
+        }
+        .log-ok   { color: #00c853; }
+        .log-err  { color: #e74c3c; }
+        .log-info { color: #74b9ff; }
+
+        /* ── Nav buttons ── */
+        .wizard-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 1px solid #e2d9ce;
+        }
+
+        /* ── PIN gate ── */
+        #pinGate {
+            max-width: 400px;
+            margin: 60px auto;
+            background: white;
+            border-radius: 14px;
+            padding: 40px;
+            box-shadow: 0 6px 32px rgba(9,20,42,0.12);
+            border-top: 4px solid #09142a;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>➕ Add New Club</h1>
+        <p class="subtitle">Create a club, venues, and fields in one step</p>
+    </header>
+
+    <main>
+        <div style="margin-bottom:20px;">
+            <a href="system-tools.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Back to System Tools</a>
+        </div>
+
+        <!-- PIN Gate -->
+        <div id="pinGate">
+            <div style="font-size:2.5rem; margin-bottom:12px;">🔒</div>
+            <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px;">Super Admin Required</h2>
+            <p style="font-size:0.88rem; color:#888; margin-bottom:24px;">Enter your Super Admin PIN to continue.</p>
+            <div style="display:flex; align-items:center; justify-content:center; gap:10px;">
+                <input type="password" id="pinInput" maxlength="8" placeholder="PIN"
+                    style="font-family:'JetBrains Mono',monospace; font-size:1.1rem; padding:10px 16px; border:2px solid #e2d9ce; border-radius:8px; width:130px; letter-spacing:4px; text-align:center; outline:none; transition:border-color 0.2s;"
+                    onfocus="this.style.borderColor='#09142a'" onblur="this.style.borderColor='#e2d9ce'"
+                    onkeydown="if(event.key==='Enter') checkPin()">
+                <button onclick="checkPin()" style="background:#09142a; color:#fff; border:none; border-radius:8px; padding:10px 22px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Unlock</button>
+            </div>
+            <div id="pinError" style="display:none; color:#e74c3c; font-size:0.82rem; margin-top:10px; font-weight:600;">Incorrect PIN</div>
+        </div>
+
+        <!-- Wizard -->
+        <div id="wizardContent" style="display:none;">
+
+            <!-- Step indicators -->
+            <div class="wizard-steps">
+                <div class="wizard-step active" id="step-ind-1">
+                    <div class="step-num">1</div>
+                    <span>Club Info</span>
+                </div>
+                <div class="wizard-connector" id="conn-1"></div>
+                <div class="wizard-step" id="step-ind-2">
+                    <div class="step-num">2</div>
+                    <span>Venues &amp; Fields</span>
+                </div>
+                <div class="wizard-connector" id="conn-2"></div>
+                <div class="wizard-step" id="step-ind-3">
+                    <div class="step-num">3</div>
+                    <span>Review &amp; Create</span>
+                </div>
+            </div>
+
+            <!-- Step 1: Club Info -->
+            <div class="step-panel active" id="step-1">
+                <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #09142a;">
+                    <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:20px;">Club Information</h2>
+
+                    <div class="fg">
+                        <label>Club Name <span style="color:#e74c3c">*</span></label>
+                        <input type="text" id="clubName" placeholder="e.g. Glastonbury Soccer Club">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="fg">
+                            <label>Club Admin First Name <span style="color:#e74c3c">*</span></label>
+                            <input type="text" id="adminFirst" placeholder="Jane">
+                        </div>
+                        <div class="fg">
+                            <label>Club Admin Last Name <span style="color:#e74c3c">*</span></label>
+                            <input type="text" id="adminLast" placeholder="Smith">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="fg">
+                            <label>Admin Email</label>
+                            <input type="email" id="adminEmail" placeholder="jane@glastonburysc.org">
+                        </div>
+                        <div class="fg">
+                            <label>Admin Phone</label>
+                            <input type="tel" id="adminPhone" placeholder="(860) 555-1234">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="wizard-nav">
+                    <span></span>
+                    <button onclick="goToStep2()" class="btn btn-primary" style="background:#09142a; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Next: Venues &amp; Fields →</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Venues & Fields -->
+            <div class="step-panel" id="step-2">
+                <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #09142a;">
+                    <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">Venues &amp; Fields</h2>
+                    <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Each venue needs at least one field. Central Assign IDs are added later via CA Import.</p>
+
+                    <div id="venueList"></div>
+
+                    <button class="btn-add-venue" onclick="addVenue()">+ Add Another Venue</button>
+                </div>
+
+                <div class="wizard-nav">
+                    <button onclick="goToStep(1)" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:10px 22px; border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">← Back</button>
+                    <button onclick="goToStep3()" class="btn btn-primary" style="background:#09142a; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Next: Review →</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Review & Create -->
+            <div class="step-panel" id="step-3">
+                <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #00c853;">
+                    <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:20px;">Review &amp; Create</h2>
+
+                    <div id="reviewContent"></div>
+
+                    <div style="background:#fef3c7; border:1px solid #fcd34d; border-radius:8px; padding:12px 16px; margin-top:16px; font-size:0.83rem; color:#78350f;">
+                        <strong>⚠ Before you create:</strong> Double-check club name spelling — it determines the scheduling page URL and must match exactly what you give the club admin.
+                    </div>
+                </div>
+
+                <div class="wizard-nav">
+                    <button onclick="goToStep(2)" id="backBtn2" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:10px 22px; border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">← Back</button>
+                    <button onclick="createClub()" id="createBtn" style="background:#00c853; color:#09142a; border:none; padding:10px 32px; border-radius:8px; font-weight:800; font-size:1rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">Create Club</button>
+                </div>
+
+                <div class="create-log" id="createLog"></div>
+            </div>
+
+        </div><!-- /wizardContent -->
+    </main>
+
+    <footer>
+        <p>&copy; 2026 Reff Tool by Anvil Arts</p>
+    </footer>
+</div>
+
+<script src="config.js"></script>
+<script src="js/airtable-client.js"></script>
+<script>
+    const SUPER_ADMIN_PIN = '8625';
+    let venueCount = 0;
+    let fieldCounts = {}; // venueIndex → field count
+
+    // ── PIN Gate ──────────────────────────────────────────────────────────────
+    function checkPin() {
+        const input     = document.getElementById('pinInput').value.trim();
+        const activePin = localStorage.getItem('superAdminPinOverride') || SUPER_ADMIN_PIN;
+        if (input === activePin) {
+            sessionStorage.setItem('superAdminSession', activePin);
+            unlock();
+        } else {
+            document.getElementById('pinError').style.display = 'block';
+            document.getElementById('pinInput').value = '';
+            document.getElementById('pinInput').focus();
+        }
+    }
+
+    function unlock() {
+        document.getElementById('pinGate').style.display      = 'none';
+        document.getElementById('wizardContent').style.display = 'block';
+        if (venueCount === 0) addVenue(); // seed first venue
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const session   = sessionStorage.getItem('superAdminSession');
+        const activePin = localStorage.getItem('superAdminPinOverride') || SUPER_ADMIN_PIN;
+        if (session === activePin) unlock();
+        else setTimeout(() => document.getElementById('pinInput').focus(), 100);
+    });
+
+    // ── Step Navigation ───────────────────────────────────────────────────────
+    function goToStep(n) {
+        document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+        document.getElementById('step-' + n).classList.add('active');
+        [1,2,3].forEach(i => {
+            const ind = document.getElementById('step-ind-' + i);
+            ind.classList.remove('active','done');
+            if (i < n) ind.classList.add('done');
+            else if (i === n) ind.classList.add('active');
+        });
+        [1,2].forEach(i => {
+            const conn = document.getElementById('conn-' + i);
+            conn.classList.toggle('done', i < n);
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function goToStep2() {
+        const clubName  = document.getElementById('clubName').value.trim();
+        const adminFirst = document.getElementById('adminFirst').value.trim();
+        const adminLast  = document.getElementById('adminLast').value.trim();
+        if (!clubName || !adminFirst || !adminLast) {
+            alert('Club name and admin first/last name are required.');
+            return;
+        }
+        goToStep(2);
+    }
+
+    function goToStep3() {
+        // Validate at least one venue with a name and one field
+        const vBlocks = document.querySelectorAll('.venue-block');
+        if (vBlocks.length === 0) { alert('Add at least one venue.'); return; }
+        let valid = true;
+        vBlocks.forEach((vb, i) => {
+            const vName = vb.querySelector('.venue-name-input').value.trim();
+            if (!vName) { alert(`Venue ${i+1} needs a name.`); valid = false; }
+            const fields = vb.querySelectorAll('.field-name-input');
+            const hasField = [...fields].some(f => f.value.trim());
+            if (!hasField) { alert(`Venue ${i+1} needs at least one field.`); valid = false; }
+        });
+        if (!valid) return;
+        buildReview();
+        goToStep(3);
+    }
+
+    // ── Venue Builder ─────────────────────────────────────────────────────────
+    function addVenue() {
+        const idx = venueCount++;
+        fieldCounts[idx] = 0;
+        const div = document.createElement('div');
+        div.className = 'venue-block';
+        div.id = 'venue-' + idx;
+        div.innerHTML = `
+            <div class="venue-block-header">
+                <div class="venue-block-title">Venue ${idx + 1}</div>
+                <button class="btn-remove-venue" onclick="removeVenue(${idx})">Remove Venue</button>
+            </div>
+            <div class="fg">
+                <label>Venue Name <span style="color:#e74c3c">*</span></label>
+                <input type="text" class="venue-name-input" placeholder="e.g. Glastonbury High School">
+            </div>
+            <div class="form-row">
+                <div class="fg" style="margin-bottom:0;">
+                    <label>Address</label>
+                    <input type="text" class="venue-addr-input" placeholder="330 Hubbard Street">
+                </div>
+                <div class="fg" style="margin-bottom:0;">
+                    <label>City</label>
+                    <input type="text" class="venue-city-input" placeholder="Glastonbury">
+                </div>
+            </div>
+            <div class="form-row" style="margin-top:12px;">
+                <div class="fg" style="margin-bottom:0;">
+                    <label>State</label>
+                    <input type="text" class="venue-state-input" value="CT" maxlength="2" style="text-transform:uppercase;">
+                </div>
+                <div class="fg" style="margin-bottom:0;">
+                    <label>Zip</label>
+                    <input type="text" class="venue-zip-input" placeholder="06033" maxlength="5">
+                </div>
+            </div>
+            <div style="margin-top:14px; padding-top:14px; border-top:1px solid #e2d9ce;">
+                <div style="font-size:0.78rem; font-weight:700; color:#09142a; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px; font-family:'DM Sans',sans-serif;">Fields <span style="color:#e74c3c">*</span></div>
+                <div class="fields-list" id="fields-${idx}"></div>
+                <button class="btn-add-field" onclick="addField(${idx})">+ Add Field</button>
+            </div>`;
+        document.getElementById('venueList').appendChild(div);
+        addField(idx); // seed first field
+        renumberVenues();
+    }
+
+    function removeVenue(idx) {
+        const el = document.getElementById('venue-' + idx);
+        if (el) el.remove();
+        renumberVenues();
+    }
+
+    function renumberVenues() {
+        document.querySelectorAll('.venue-block').forEach((vb, i) => {
+            vb.querySelector('.venue-block-title').textContent = `Venue ${i + 1}`;
+        });
+    }
+
+    function addField(venueIdx) {
+        const fIdx = fieldCounts[venueIdx]++;
+        const container = document.getElementById('fields-' + venueIdx);
+        const row = document.createElement('div');
+        row.className = 'field-row';
+        row.id = `field-${venueIdx}-${fIdx}`;
+        row.innerHTML = `
+            <input type="text" class="field-name-input" placeholder="e.g. Field 1, Varsity Field, JV Field">
+            <button class="btn-remove-field" onclick="removeField('${venueIdx}-${fIdx}')" title="Remove field">×</button>`;
+        container.appendChild(row);
+    }
+
+    function removeField(id) {
+        const el = document.getElementById('field-' + id);
+        if (el) el.remove();
+    }
+
+    // ── Review Builder ────────────────────────────────────────────────────────
+    function buildReview() {
+        const clubName   = document.getElementById('clubName').value.trim();
+        const adminFirst = document.getElementById('adminFirst').value.trim();
+        const adminLast  = document.getElementById('adminLast').value.trim();
+        const adminEmail = document.getElementById('adminEmail').value.trim();
+        const adminPhone = document.getElementById('adminPhone').value.trim();
+        const slug       = clubName.toLowerCase().replace(/[\s-]+/g, '-').replace(/[^a-z0-9-]/g, '');
+        const url        = `https://referee-tool.com/club-game-submit.html?club=${slug}`;
+
+        let venueHtml = '';
+        document.querySelectorAll('.venue-block').forEach((vb, i) => {
+            const vName  = vb.querySelector('.venue-name-input').value.trim();
+            const vAddr  = vb.querySelector('.venue-addr-input').value.trim();
+            const vCity  = vb.querySelector('.venue-city-input').value.trim();
+            const vState = vb.querySelector('.venue-state-input').value.trim();
+            const vZip   = vb.querySelector('.venue-zip-input').value.trim();
+            const fields = [...vb.querySelectorAll('.field-name-input')]
+                .map(f => f.value.trim()).filter(Boolean);
+            const addrLine = [vAddr, vCity, vState, vZip].filter(Boolean).join(', ');
+            venueHtml += `
+                <div class="review-venue">
+                    <div class="review-venue-name">📍 ${vName}</div>
+                    ${addrLine ? `<div style="font-size:0.8rem; color:#888; margin-bottom:8px;">${addrLine}</div>` : ''}
+                    <div>${fields.map(f => `<span class="review-field-tag">${f}</span>`).join('')}</div>
+                    <div style="font-size:0.72rem; color:#aaa; margin-top:6px; font-family:'JetBrains Mono',monospace;">CS Venue ID: assigned via CA Import</div>
+                </div>`;
+        });
+
+        document.getElementById('reviewContent').innerHTML = `
+            <div class="review-club-header">
+                <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:rgba(255,255,255,0.5); margin-bottom:4px;">New Club</div>
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.6rem; font-weight:800; letter-spacing:0.5px; margin-bottom:4px;">${clubName}</div>
+                <div style="font-size:0.88rem; color:rgba(255,255,255,0.75);">
+                    Admin: <strong>${adminFirst} ${adminLast}</strong>
+                    ${adminEmail ? ` · ${adminEmail}` : ''}
+                    ${adminPhone ? ` · ${adminPhone}` : ''}
+                </div>
+            </div>
+            <div style="margin-bottom:16px;">
+                <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:6px; font-family:'DM Sans',sans-serif;">Scheduling Page URL</div>
+                <div class="url-box">
+                    <span id="schedulingUrl">${url}</span>
+                    <button class="url-copy-btn" onclick="copyUrl('${url}')">Copy</button>
+                </div>
+            </div>
+            <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:8px; font-family:'DM Sans',sans-serif;">Venues &amp; Fields</div>
+            ${venueHtml}`;
+    }
+
+    function copyUrl(url) {
+        navigator.clipboard.writeText(url).then(() => {
+            const btn = event.target;
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 1800);
+        });
+    }
+
+    // ── Create Club ───────────────────────────────────────────────────────────
+    async function createClub() {
+        const createBtn = document.getElementById('createBtn');
+        const backBtn   = document.getElementById('backBtn2');
+        const logEl     = document.getElementById('createLog');
+        createBtn.disabled = true;
+        backBtn.disabled   = true;
+        createBtn.textContent = 'Creating…';
+        logEl.style.display = 'block';
+        logEl.innerHTML = '';
+
+        const log = (msg, type = '') => {
+            logEl.innerHTML += `<div class="${type ? 'log-' + type : ''}">${msg}</div>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        };
+
+        try {
+            const clubName   = document.getElementById('clubName').value.trim();
+            const adminFirst = document.getElementById('adminFirst').value.trim();
+            const adminLast  = document.getElementById('adminLast').value.trim();
+
+            // ── Step 1: Create Club record ──────────────────────────────────
+            log('Creating club record…', 'info');
+            const clubFields = { 'Club Name': clubName, 'Club Admin': `${adminFirst} ${adminLast}` };
+            const clubRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.CLUBS, clubFields);
+            const clubRecordId = clubRec.id;
+            log(`✓ Club created — ID: ${clubRecordId}`, 'ok');
+
+            // ── Step 2: Create Venue records ────────────────────────────────
+            const venueBlocks = document.querySelectorAll('.venue-block');
+            for (const vb of venueBlocks) {
+                const vName  = vb.querySelector('.venue-name-input').value.trim();
+                const vAddr  = vb.querySelector('.venue-addr-input').value.trim();
+                const vCity  = vb.querySelector('.venue-city-input').value.trim();
+                const vState = vb.querySelector('.venue-state-input').value.trim();
+                const vZip   = vb.querySelector('.venue-zip-input').value.trim();
+                const fieldNames = [...vb.querySelectorAll('.field-name-input')]
+                    .map(f => f.value.trim()).filter(Boolean);
+
+                log(`Creating venue: ${vName}…`, 'info');
+                const venueFields = {
+                    'Venue Name': vName,
+                    'Clubs': [clubRecordId]
+                };
+                if (vAddr)  venueFields['Address'] = vAddr;
+                if (vCity)  venueFields['City']    = vCity;
+                if (vState) venueFields['State']   = vState;
+                if (vZip)   venueFields['Zip']     = vZip;
+
+                const venueRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.VENUES, venueFields);
+                const venueRecordId = venueRec.id;
+                log(`  ✓ Venue created — ${vName}`, 'ok');
+
+                // ── Step 3: Create Field records ────────────────────────────
+                for (const fName of fieldNames) {
+                    log(`  Creating field: ${fName}…`, 'info');
+                    await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.FIELDS, {
+                        'Field Name': fName,
+                        'Venue': [venueRecordId]
+                    });
+                    log(`    ✓ Field created — ${fName}`, 'ok');
+                }
+            }
+
+            // ── Done ─────────────────────────────────────────────────────────
+            const slug = clubName.toLowerCase().replace(/[\s-]+/g, '-').replace(/[^a-z0-9-]/g, '');
+            const url  = `https://referee-tool.com/club-game-submit.html?club=${slug}`;
+            log('', '');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            log(`✅ Done! Club "${clubName}" is live.`, 'ok');
+            log(`Scheduling URL: ${url}`, 'ok');
+            log('Next step: CA Import → map Venue CS IDs.', 'info');
+
+            createBtn.textContent = '✓ Created';
+            createBtn.style.background = '#00c853';
+            document.getElementById('backBtn2').style.display = 'none';
+
+        } catch (err) {
+            log(`✗ Error: ${err.message}`, 'err');
+            createBtn.disabled = false;
+            backBtn.disabled   = false;
+            createBtn.textContent = 'Create Club';
+        }
+    }
+</script>
+</body>
+</html>
