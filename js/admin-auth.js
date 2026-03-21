@@ -45,7 +45,9 @@ if (loginSection) {
     // Login button
     loginBtn && loginBtn.addEventListener('click', function() {
         const input = document.getElementById('adminPassword').value;
-        if (hashPassword(input) === CORRECT_HASH) {
+        const override = localStorage.getItem('adminPasswordOverride');
+        const valid = override ? (input === override) : (hashPassword(input) === CORRECT_HASH);
+        if (valid) {
             sessionStorage.setItem('adminAuth', CORRECT_HASH);
             loginSection.style.display = 'none';
             adminDashboard.style.display = 'block';
