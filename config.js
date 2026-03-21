@@ -44,7 +44,8 @@ const CONFIG = {
         FIELDS: 'Fields',
         GAMES: 'Games',
         AVAILABILITY: 'Availability',
-        VENUES: 'Venues'
+        VENUES: 'Venues',
+        SETTINGS: 'Settings'
     },
 
     // API endpoint (don't change this)

@@ -174,6 +174,45 @@
                     </div>
                 </div>
 
+                <!-- Communications Card -->
+                <div style="background:white; border-radius:12px; padding:28px 30px; margin-top:25px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #00c853;">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+                        <span style="font-size:1.5rem;">📢</span>
+                        <div>
+                            <h2 style="color:#09142a; margin:0; font-size:1.1rem;">Club Scheduling Banner</h2>
+                            <div style="font-size:0.82rem; color:#888; margin-top:2px;">Scrolls as a ticker tape across the top of every club's scheduling page.</div>
+                        </div>
+                        <div style="margin-left:auto; display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                            <span style="font-size:0.75rem; font-weight:700; color:#888;" id="bannerStatusLabel">Loading…</span>
+                            <button id="bannerToggleBtn" onclick="toggleBannerActive()"
+                                style="border:none; border-radius:20px; padding:6px 18px; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s;">
+                                —
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="bannerTextarea" rows="2" placeholder="Type your message here…"
+                        style="width:100%; box-sizing:border-box; padding:10px 12px; border:1.5px solid #e2d9ce; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.88rem; resize:vertical; outline:none; transition:border-color 0.15s;"
+                        onfocus="this.style.borderColor='#09142a'" onblur="this.style.borderColor='#e2d9ce'"></textarea>
+                    <!-- Style presets -->
+                    <div style="display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap;">
+                        <span style="font-size:0.72rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.8px; white-space:nowrap;">Style:</span>
+                        <button class="banner-preset" data-style="default" onclick="selectBannerPreset('default')"
+                            style="background:#09142a; color:#00c853; border:2px solid transparent; border-radius:8px; padding:5px 13px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s;">Default</button>
+                        <button class="banner-preset" data-style="alert" onclick="selectBannerPreset('alert')"
+                            style="background:#dc2626; color:#fff; border:2px solid transparent; border-radius:8px; padding:5px 13px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s;">Alert</button>
+                        <button class="banner-preset" data-style="warning" onclick="selectBannerPreset('warning')"
+                            style="background:#d97706; color:#09142a; border:2px solid transparent; border-radius:8px; padding:5px 13px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s;">Warning</button>
+                        <button class="banner-preset" data-style="info" onclick="selectBannerPreset('info')"
+                            style="background:#2563eb; color:#fff; border:2px solid transparent; border-radius:8px; padding:5px 13px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s;">Info</button>
+                        <button class="banner-preset" data-style="green" onclick="selectBannerPreset('green')"
+                            style="background:#14532d; color:#86efac; border:2px solid transparent; border-radius:8px; padding:5px 13px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s;">Green</button>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
+                        <button onclick="saveBanner()" style="background:#09142a; color:#fff; border:none; border-radius:8px; padding:8px 22px; font-size:0.85rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">Save Banner</button>
+                        <span id="bannerSaveMsg" style="font-size:0.8rem; color:#888;"></span>
+                    </div>
+                </div>
+
                 <!-- Super Admin Section -->
                 <div style="background:white; border-radius:12px; margin-top:25px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #09142a; overflow:hidden;">
 
@@ -616,6 +655,95 @@
             document.getElementById('newAdminPass').value = '';
             document.getElementById('newAdminPassConfirm').value = '';
             showSecMsg(msg, '✓ Password updated. Takes effect on next login.', '#00c853');
+        }
+
+        // ── Club Scheduling Banner ────────────────────────────────────────────
+        const BANNER_PRESETS = {
+            default: { bar: '#09142a', text: '#ffffff', badge: '#00c853', badgeText: '#09142a' },
+            alert:   { bar: '#dc2626', text: '#ffffff', badge: '#991b1b', badgeText: '#fecaca' },
+            warning: { bar: '#d97706', text: '#09142a', badge: '#92400e', badgeText: '#fef3c7' },
+            info:    { bar: '#2563eb', text: '#ffffff', badge: '#1e40af', badgeText: '#bfdbfe' },
+            green:   { bar: '#14532d', text: '#ffffff', badge: '#86efac', badgeText: '#14532d' },
+        };
+
+        let _bannerRecordId = null;
+        let _bannerActive   = false;
+        let _bannerStyle    = 'default';
+
+        function selectBannerPreset(style) {
+            _bannerStyle = style;
+            document.querySelectorAll('.banner-preset').forEach(btn => {
+                btn.style.outline = btn.dataset.style === style ? '2px solid #09142a' : 'none';
+                btn.style.outlineOffset = '2px';
+            });
+        }
+
+        async function loadBannerState() {
+            try {
+                const recs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.SETTINGS, {
+                    filterByFormula: `{Key}='banner'`, maxRecords: 1
+                });
+                if (recs.length > 0) {
+                    _bannerRecordId = recs[0].id;
+                    _bannerActive   = !!recs[0].fields['Active'];
+                    _bannerStyle    = recs[0].fields['Style'] || 'default';
+                    document.getElementById('bannerTextarea').value = recs[0].fields['Value'] || '';
+                    selectBannerPreset(_bannerStyle);
+                }
+                updateBannerToggleUI();
+            } catch(e) {
+                document.getElementById('bannerStatusLabel').textContent = 'Error loading';
+            }
+        }
+
+        function updateBannerToggleUI() {
+            const btn   = document.getElementById('bannerToggleBtn');
+            const label = document.getElementById('bannerStatusLabel');
+            if (_bannerActive) {
+                btn.textContent = '🟢 Active';
+                btn.style.background = '#dcfce7';
+                btn.style.color = '#14532d';
+                btn.style.border = '1px solid #86efac';
+                label.textContent = 'Banner is live';
+                label.style.color = '#14532d';
+            } else {
+                btn.textContent = '⭘ Inactive';
+                btn.style.background = '#f3f4f6';
+                btn.style.color = '#6b7280';
+                btn.style.border = '1px solid #e2d9ce';
+                label.textContent = 'Banner is off';
+                label.style.color = '#888';
+            }
+        }
+
+        async function toggleBannerActive() {
+            if (!_bannerRecordId) { alert('Banner record not found in Airtable.'); return; }
+            _bannerActive = !_bannerActive;
+            updateBannerToggleUI();
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, _bannerRecordId, { 'Active': _bannerActive });
+            } catch(e) {
+                _bannerActive = !_bannerActive; // revert on failure
+                updateBannerToggleUI();
+                alert('Failed to update banner status: ' + e.message);
+            }
+        }
+
+        async function saveBanner() {
+            if (!_bannerRecordId) { alert('Banner record not found in Airtable.'); return; }
+            const msg    = document.getElementById('bannerTextarea').value.trim();
+            const saveEl = document.getElementById('bannerSaveMsg');
+            saveEl.textContent = 'Saving…'; saveEl.style.color = '#888';
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, _bannerRecordId, {
+                    'Value': msg,
+                    'Style': _bannerStyle
+                });
+                saveEl.textContent = '✓ Saved'; saveEl.style.color = '#00c853';
+                setTimeout(() => saveEl.textContent = '', 3000);
+            } catch(e) {
+                saveEl.textContent = '✗ ' + e.message; saveEl.style.color = '#e74c3c';
+            }
         }
 
         // ── Change Super Admin PIN ────────────────────────────────────────────
@@ -1382,6 +1510,7 @@
             if (document.getElementById('adminDashboard') && document.getElementById('adminDashboard').style.display !== 'none') {
                 loadStats();
             }
+            loadBannerState();
         });
 
         // ── CT Zip Code Centroids ─────────────────────────────────────────────

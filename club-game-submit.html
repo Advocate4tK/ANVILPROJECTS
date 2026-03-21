@@ -9,6 +9,55 @@
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <style>
+        /* ── Ticker tape ── */
+        #tickerBar {
+            background: #09142a;
+            overflow: hidden;
+            display: none;
+            align-items: center;
+            height: 40px;
+            position: sticky;
+            top: 0;
+            z-index: 200;
+            border-bottom: 2px solid #00c853;
+        }
+        .ticker-badge {
+            background: #00c853;
+            color: #09142a;
+            padding: 0 16px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .ticker-track {
+            flex: 1;
+            overflow: hidden;
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+        .ticker-content {
+            display: inline-block;
+            white-space: nowrap;
+            color: #fff;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.84rem;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            animation: ticker-scroll 35s linear infinite;
+        }
+        @keyframes ticker-scroll {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-50%); }
+        }
+
         .page-intro {
             background: rgba(9,20,42,0.05);
             border-left: 4px solid var(--accent);
@@ -174,6 +223,14 @@
     </style>
 </head>
 <body>
+    <!-- Assignor ticker tape banner (hidden until active in Airtable Settings) -->
+    <div id="tickerBar">
+        <span class="ticker-badge">📢 Notice</span>
+        <div class="ticker-track">
+            <span class="ticker-content" id="tickerContent"></span>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <h1>⚽ Submit Games</h1>
@@ -612,6 +669,44 @@
         localStorage.removeItem('cgsSubmitter');
 
         await loadReferenceData();
+
+        // Load assignor banner from Settings table
+        try {
+            const BANNER_PRESETS = {
+                default: { bar: '#09142a', text: '#ffffff', badge: '#00c853', badgeText: '#09142a' },
+                alert:   { bar: '#dc2626', text: '#ffffff', badge: '#991b1b', badgeText: '#fecaca' },
+                warning: { bar: '#d97706', text: '#09142a', badge: '#92400e', badgeText: '#fef3c7' },
+                info:    { bar: '#2563eb', text: '#ffffff', badge: '#1e40af', badgeText: '#bfdbfe' },
+                green:   { bar: '#14532d', text: '#ffffff', badge: '#86efac', badgeText: '#14532d' },
+            };
+            const settings = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.SETTINGS, {
+                filterByFormula: `AND({Key}='banner', {Active}=TRUE())`,
+                maxRecords: 1
+            });
+            if (settings.length > 0) {
+                const msg   = settings[0].fields['Value'] || '';
+                const style = settings[0].fields['Style'] || 'default';
+                if (msg.trim()) {
+                    const preset = BANNER_PRESETS[style] || BANNER_PRESETS.default;
+                    const spacer = '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0';
+                    const doubled = msg + spacer + msg + spacer;
+                    const bar     = document.getElementById('tickerBar');
+                    const badge   = bar.querySelector('.ticker-badge');
+                    const content = bar.querySelector('.ticker-content');
+                    content.textContent = doubled;
+                    bar.style.background       = preset.bar;
+                    bar.style.borderBottomColor = preset.badge;
+                    badge.style.background     = preset.badge;
+                    badge.style.color          = preset.badgeText;
+                    content.style.color        = preset.text;
+                    bar.style.display = 'flex';
+                    // Scale scroll speed with message length
+                    const duration = Math.max(20, Math.round(msg.length * 0.38));
+                    content.style.animationDuration = duration + 's';
+                }
+            }
+        } catch(e) { /* banner is non-critical — fail silently */ }
+
         if (urlParam) {
             // Match club by slug (lowercase, spaces/dashes normalized)
             const normalize = s => s.toLowerCase().replace(/[\s-]+/g, '');

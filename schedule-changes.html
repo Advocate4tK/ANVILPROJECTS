@@ -126,6 +126,27 @@
         .res-stat { display: flex; flex-direction: column; align-items: center; gap: 1px; }
         .res-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 800; color: #09142a; }
         .res-stat-lbl { font-size: 0.72rem; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* Urgency badge */
+        .urgency-badge {
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+            color: #dc2626;
+            font-size: 0.7rem;
+            font-weight: 800;
+            padding: 2px 9px;
+            border-radius: 20px;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            flex-shrink: 0;
+            animation: urgency-pulse 2s ease-in-out infinite;
+        }
+        @keyframes urgency-pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.55; }
+        }
+        .time-since { font-size: 0.75rem; color: #999; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -140,9 +161,7 @@
                 <a href="admin.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Admin Portal</a>
                 <a href="assignor-workstation.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">📋 Assignor Workstation</a>
                 <button onclick="loadChanges()" class="btn btn-secondary" style="font-size:0.85rem; padding:8px 16px;">🔄 Refresh</button>
-                <label style="margin-left:auto; font-size:0.82rem; color:#555; font-weight:600; display:flex; align-items:center; gap:6px; cursor:pointer;">
-                    <input type="checkbox" id="showResolved" onchange="onShowResolvedChange()"> Show Resolved
-                </label>
+                <button id="showResolvedBtn" onclick="onShowResolvedChange()" class="filter-pill" style="margin-left:auto;">Show Resolved</button>
             </div>
 
             <!-- Resolved controls (visible only when Show Resolved is checked) -->
@@ -214,6 +233,24 @@
         let h = 0;
         for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
         return CLUB_COLORS[Math.abs(h) % CLUB_COLORS.length];
+    }
+
+    // ── Show resolved state helper ────────────────────────────────────────────
+    function isShowingResolved() {
+        return document.getElementById('showResolvedBtn').classList.contains('active');
+    }
+
+    // ── Time helpers ──────────────────────────────────────────────────────────
+    function getTimeSince(date) {
+        if (!date || isNaN(date)) return null;
+        const diffMs = Date.now() - date.getTime();
+        if (diffMs < 0) return null;
+        const mins = Math.floor(diffMs / 60000);
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(diffMs / 3600000);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(diffMs / 86400000);
+        return `${days}d ago`;
     }
 
     // ── Timestamp helpers ─────────────────────────────────────────────────────
@@ -379,18 +416,16 @@
 
             const changeGames = games.filter(r => {
                 const s = (r.fields['Game Status'] || '').toLowerCase();
-                const showResolved = document.getElementById('showResolved').checked;
-                if (showResolved) return s === 'change requested' || s === 'change resolved';
+                if (isShowingResolved()) return s === 'change requested' || s === 'change resolved';
                 return s === 'change requested';
             });
 
             allLoadedRecords = changeGames;
 
-            // Populate club filter dropdown — static base so all clubs always appear
-            const KNOWN_CLUBS = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
+            // Populate club filter dropdown — use Airtable clubs + any Source Club values
+            const airtableClubNames = clubs.map(c => c.fields['Club Name'] || c.fields['Name'] || '').filter(Boolean);
             const clubsWithRecords = new Set(changeGames.map(r => getClubName(r)).filter(Boolean));
-            // Merge: known clubs + any Source Club values not yet in the list (future clubs)
-            const allClubOptions = [...new Set([...KNOWN_CLUBS, ...clubsWithRecords])].sort();
+            const allClubOptions = [...new Set([...airtableClubNames, ...clubsWithRecords])].sort();
             const clubSel = document.getElementById('clubFilterSelect');
             const prevVal = clubSel.value;
             clubSel.innerHTML = '<option value="">All Clubs</option>' +
@@ -406,12 +441,14 @@
             document.getElementById('statTotal').textContent     = allResolved.length;
             document.getElementById('statAvgTime').textContent   = avgResolutionTime(allResolved);
 
-            const openCount = changeGames.filter(r => (r.fields['Game Status'] || '').toLowerCase() === 'change requested').length;
-            const clubCount = new Set(changeGames.map(r => getClubName(r))).size;
-
+            const openRecords = changeGames.filter(r => (r.fields['Game Status'] || '').toLowerCase() === 'change requested');
+            const openCount = openRecords.length;
             if (openCount > 0) {
+                const clubCounts = {};
+                openRecords.forEach(r => { const c = getClubName(r); clubCounts[c] = (clubCounts[c] || 0) + 1; });
+                const clubBreakdown = Object.entries(clubCounts).sort((a,b) => a[0].localeCompare(b[0])).map(([c, n]) => `${c} (${n})`).join(' &nbsp;·&nbsp; ');
                 summaryEl.innerHTML = `<div style="background:#fdebd0; border:1px solid #f0a500; border-radius:8px; padding:12px 18px; font-size:0.88rem; color:#935116; font-weight:600;">
-                    ⚠️ ${openCount} open change request${openCount !== 1 ? 's' : ''} across ${clubCount} club${clubCount !== 1 ? 's' : ''}
+                    ⚠️ ${openCount} open change request${openCount !== 1 ? 's' : ''} &nbsp;&nbsp;<span style="font-weight:400; font-size:0.83rem;">${clubBreakdown}</span>
                 </div>`;
             } else {
                 summaryEl.innerHTML = '';
@@ -439,7 +476,7 @@
     // ── Render (uses cached records + current filter/sort state) ──────────────
     function renderCards() {
         const container    = document.getElementById('changesList');
-        const showResolved = document.getElementById('showResolved').checked;
+        const showResolved = isShowingResolved();
 
         if (!allLoadedRecords.length) {
             container.innerHTML = `<div class="empty-state"><div class="big">✅</div>No open change requests — you're all clear.</div>`;
@@ -505,6 +542,17 @@
                         ? `<a href="mailto:${adminEmail}?subject=Re: Schedule Change Request — ${f['Home Team']||''} vs ${f['Away Team']||''}" class="btn-contact">✉ Contact Club</a>`
                         : '';
 
+                    // Urgency: game within 72 hours
+                    const gameDate = f['Date'] ? new Date(f['Date'] + 'T00:00:00') : null;
+                    const hoursUntilGame = gameDate ? (gameDate - Date.now()) / 3600000 : Infinity;
+                    const isUrgent = !isResolved && hoursUntilGame >= 0 && hoursUntilGame <= 72;
+                    const urgentBadge = isUrgent ? `<span class="urgency-badge">🔴 Urgent</span>` : '';
+
+                    // Time since submitted
+                    const firstReqTs = requests[0]?.ts ? new Date(requests[0].ts) : null;
+                    const timeSinceStr = firstReqTs ? getTimeSince(firstReqTs) : null;
+                    const timeSinceHtml = timeSinceStr ? `<div class="time-since">submitted ${timeSinceStr}</div>` : '';
+
                     if (isResolved) {
                         const gameNum = buildGameNum(f);
                         const resolvedMatches = [...(f['Notes']||'').matchAll(/\[RESOLVED\s*[–-]\s*([^\]]+)\]/gi)];
@@ -530,13 +578,17 @@
                         </div>`;
                     }
 
-                    return `<div class="change-card" id="card_${r.id}" style="border-left-color:${clubColor};">
+                    return `<div class="change-card" id="card_${r.id}" style="border-left-color:${clubColor}; ${isUrgent ? 'border-left-width:5px;' : ''}">
                         <div class="change-card-header">
                             <div>
                                 <div class="game-title">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</div>
                                 <div class="game-meta">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
+                                ${timeSinceHtml}
                             </div>
-                            <span class="status-pill pill-open">⚠ Open</span>
+                            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+                                ${urgentBadge}
+                                <span class="status-pill pill-open">⚠ Open</span>
+                            </div>
                         </div>
                         <div class="current-refs"><strong>Current Refs:</strong> ${refsHtml}</div>
                         ${requestHtml}
@@ -605,7 +657,9 @@
 
     // ── Show/hide resolved controls ───────────────────────────────────────────
     function onShowResolvedChange() {
-        const showResolved = document.getElementById('showResolved').checked;
+        const btn = document.getElementById('showResolvedBtn');
+        const showResolved = !btn.classList.contains('active');
+        btn.classList.toggle('active', showResolved);
         document.getElementById('resolvedControls').style.display = showResolved ? 'flex' : 'none';
         document.getElementById('resolvedSummary').style.display  = showResolved ? 'flex' : 'none';
         if (!showResolved) {
@@ -619,6 +673,7 @@
     window.addEventListener('load', () => {
         if (!airtableClient) { alert('Airtable client not initialized.'); return; }
         loadChanges();
+        setInterval(loadChanges, 2 * 60 * 1000); // auto-refresh every 2 minutes
     });
     </script>
 </body>
