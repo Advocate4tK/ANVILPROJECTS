@@ -1091,8 +1091,15 @@
                 // Merge Airtable club names + Source Club game values into the known list
                 const sourceClubs  = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
                 const airtableClubs = clubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
+                const prevSelected = selectedClubs.size > 0 ? new Set(selectedClubs) : null;
                 clubsList = [...new Set([...KNOWN_CLUBS, ...airtableClubs, ...sourceClubs])].sort();
-                selectedClubs = new Set(clubsList);
+                // Preserve existing selection; only default to all-selected on first load
+                if (prevSelected && prevSelected.size < clubsList.length) {
+                    selectedClubs = new Set([...prevSelected].filter(c => clubsList.includes(c)));
+                    if (selectedClubs.size === 0) selectedClubs = new Set(clubsList);
+                } else {
+                    selectedClubs = new Set(clubsList);
+                }
 
                 // Rebuild club pills with the merged list
                 const pillsWrap = document.getElementById('clubPills');
