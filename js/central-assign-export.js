@@ -210,14 +210,9 @@ loadBtn.addEventListener('click', async () => {
         progressBar.style.width = '100%';
         progressText.textContent = 'Done!';
 
-        // Club filter — client-side substring match (case-insensitive)
+        // Club filter — exact match on Source Club field
         const byClub = selectedClubs.length === 0 ? records : records.filter(r => {
-            const home = (r.fields['Home Team'] || '').toLowerCase();
-            const away = (r.fields['Away Team'] || '').toLowerCase();
-            return selectedClubs.some(c => {
-                const cl = c.toLowerCase();
-                return home.includes(cl) || away.includes(cl);
-            });
+            return selectedClubs.some(c => r.fields['Source Club'] === c);
         });
 
         // Filter to assigned-only if checkbox is checked

@@ -527,28 +527,6 @@
     <script>
         checkAdminAccess();
 
-        const CLUBS_LIST = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
-
-        // Maps town/sub-region names to their parent club pill name
-        const CLUB_ALIASES = {
-            // Plain town names → NECONN
-            'Woodstock':            'NECONN',
-            'Putnam':               'NECONN',
-            'Thompson':             'NECONN',
-            'Eastford':             'NECONN',
-            'Pomfret':              'NECONN',
-            'Killingly':            'NECONN',
-            'Brooklyn':             'NECONN',
-            // "NECONN [Town]" team name format → NECONN
-            'NECONN Woodstock':     'NECONN',
-            'NECONN Putnam':        'NECONN',
-            'NECONN Thompson':      'NECONN',
-            'NECONN Eastford':      'NECONN',
-            'NECONN Pomfret':       'NECONN',
-            'NECONN Killingly':     'NECONN',
-            'NECONN Brooklyn':      'NECONN',
-            'NECONN (Woodstock)':   'NECONN',
-        };
 
         // ── State ────────────────────────────────────────────────────────────
         let allGames      = [];
@@ -688,7 +666,8 @@
         const cancelledGameIds = new Set(); // belt-and-suspenders for cancelled state
         let availByName   = {}; // ref name → Set<date>
         let availTimeByName = {}; // ref name → { date → { start, end } }
-        let selectedClubs = new Set(CLUBS_LIST); // default: all
+        let clubsList     = []; // dynamic list built from loaded game records' Source Club values
+        let selectedClubs = new Set(); // default: all (empty = all clubs shown)
         let selectedGame        = null; // currently focused game record
         let requestedChangeDate = null; // parsed from Notes when change request game is open
         let requestedChangeTime = null; // parsed from Notes when change request game is open
@@ -979,19 +958,19 @@
             all.textContent = 'All Clubs';
             all.dataset.club = '__all__';
             all.addEventListener('click', () => {
-                if (selectedClubs.size === CLUBS_LIST.length) {
+                if (selectedClubs.size === clubsList.length) {
                     selectedClubs.clear();
                     document.querySelectorAll('.club-pill:not([data-club="__all__"])').forEach(p => p.classList.remove('active'));
                     all.classList.remove('active');
                 } else {
-                    selectedClubs = new Set(CLUBS_LIST);
+                    selectedClubs = new Set(clubsList);
                     document.querySelectorAll('.club-pill').forEach(p => p.classList.add('active'));
                 }
                 renderGames();
             });
             wrap.appendChild(all);
 
-            CLUBS_LIST.forEach(club => {
+            clubsList.forEach(club => {
                 const pill = document.createElement('span');
                 pill.className = 'club-pill active';
                 pill.textContent = club;
@@ -1005,7 +984,7 @@
                         pill.classList.add('active');
                     }
                     // Sync "All" pill
-                    document.querySelector('.club-pill[data-club="__all__"]').classList.toggle('active', selectedClubs.size === CLUBS_LIST.length);
+                    document.querySelector('.club-pill[data-club="__all__"]').classList.toggle('active', selectedClubs.size === clubsList.length);
                     renderGames();
                 });
                 wrap.appendChild(pill);
@@ -1095,6 +1074,10 @@
                     const db = `${b.fields['Date']}|${b.fields['Time'] || ''}`;
                     return da.localeCompare(db);
                 });
+                // Build dynamic club list from Source Club values on loaded games
+                clubsList = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))].sort();
+                selectedClubs = new Set(clubsList); // default: all clubs selected
+
                 // Seed cancelledGameIds from Airtable Status field (persists across reloads)
                 cancelledGameIds.clear();
                 allGames.forEach(g => { if (g.fields['Status'] === 'Cancelled') cancelledGameIds.add(g.id); });
@@ -1208,37 +1191,7 @@
 
         // ── Resolve club name from a game record ──────────────────────────────
         function resolveGameClub(f) {
-            const raw = f['Club'] || f['Home Team Club'] || '';
-            let name = '';
-            if (Array.isArray(raw) && raw.length > 0) name = raw.map(id => clubLookup[id] || id).join(', ');
-            else if (typeof raw === 'string') name = raw;
-
-            // Resolve aliases (e.g. town names → parent club)
-            if (CLUB_ALIASES[name]) return CLUB_ALIASES[name];
-            for (const [alias, club] of Object.entries(CLUB_ALIASES)) {
-                if (name.toLowerCase().includes(alias.toLowerCase())) return club;
-            }
-
-            // If name exactly matches a known club, return it
-            const nameLower = name.toLowerCase();
-            const exactMatch = CLUBS_LIST.find(c => c.toLowerCase() === nameLower);
-            if (exactMatch) return exactMatch;
-
-            // Fallback: check home team then away team against CLUBS_LIST and aliases
-            for (const teamField of ['Home Team', 'Away Team']) {
-                const team = (f[teamField] || '').toLowerCase();
-                if (!team) continue;
-                // Check aliases first (e.g. "NECONN Thompson" → "NECONN")
-                for (const [alias, club] of Object.entries(CLUB_ALIASES)) {
-                    if (team.includes(alias.toLowerCase())) return club;
-                }
-                // Then check against known club names
-                for (const c of CLUBS_LIST) {
-                    if (team.includes(c.toLowerCase())) return c;
-                }
-            }
-
-            return name;
+            return f['Source Club'] || '';
         }
 
         // ── Render games ──────────────────────────────────────────────────────
@@ -1269,15 +1222,10 @@
                     // Hide only when fully assigned (U8 needs only CR; all others need CR+AR1+AR2)
                     if (hasCR && (isU8 || (hasAR1 && hasAR2))) return false;
                 }
-                if (selectedClubs.size > 0 && selectedClubs.size < CLUBS_LIST.length) {
+                if (selectedClubs.size > 0 && selectedClubs.size < clubsList.length) {
                     const club = resolveGameClub(g.fields);
                     if (!club) return false;
-                    const clubLower = club.toLowerCase();
-                    if (![...selectedClubs].some(sc =>
-                        sc.toLowerCase() === clubLower ||
-                        clubLower.includes(sc.toLowerCase()) ||
-                        sc.toLowerCase().includes(clubLower)
-                    )) return false;
+                    if (!selectedClubs.has(club)) return false;
                 }
                 return true;
             });
@@ -1662,7 +1610,7 @@
             // Build the set of clubs currently in focus (selected game OR club pill filter)
             const focusClubs  = gameClub
                 ? [gameClub]
-                : (selectedClubs.size > 0 && selectedClubs.size < CLUBS_LIST.length)
+                : (selectedClubs.size > 0 && selectedClubs.size < clubsList.length)
                     ? [...selectedClubs].map(c => c.toLowerCase())
                     : [];
             const prefClub     = document.getElementById('prefFilter').value;

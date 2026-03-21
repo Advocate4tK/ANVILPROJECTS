@@ -1114,16 +1114,13 @@
                         }
                     });
                     // Fallback: games uploaded via CSV have no Club linked record —
-                    // match by Home Team containing the club name
+                    // match by Source Club field set at submission time
                     if (clubIds.length === 0 && uploadTime) {
-                        const homeTeam = (f['Home Team'] || '').toLowerCase();
-                        for (const [cname] of Object.entries(clubRecordByName)) {
-                            if (homeTeam.includes(cname.toLowerCase())) {
-                                const prev = lastUploadByClubId['name:' + cname];
-                                if (!prev || uploadTime > prev.time) {
-                                    lastUploadByClubId['name:' + cname] = { time: uploadTime, uploader: f['Uploaded By'] || '' };
-                                }
-                                break;
+                        const sourceClub = f['Source Club'];
+                        if (sourceClub) {
+                            const prev = lastUploadByClubId['name:' + sourceClub];
+                            if (!prev || uploadTime > prev.time) {
+                                lastUploadByClubId['name:' + sourceClub] = { time: uploadTime, uploader: f['Uploaded By'] || '' };
                             }
                         }
                     }
@@ -1262,13 +1259,13 @@
                     html += `<p style="color:#27ae60; font-weight:600;">✅ No unassigned games in the next 48 hours.</p>`;
                 }
 
-                // Clubs being served — dropdown
-                const CLUBS_LIST = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
+                // Clubs being served — dropdown (dynamic from Source Club values)
+                const clubNames = [...new Set(allGames.map(r => r.fields['Source Club']).filter(Boolean))].sort();
                 html += `<div style="margin-top:20px; border-top:1px solid #e0e0e0; padding-top:18px;">
                     <p style="font-weight:600; margin-bottom:10px; font-size:0.95rem;">⚽ Clubs Being Served</p>
                     <select id="clubDropdown" style="padding:8px 14px; border-radius:8px; border:1px solid #ccc; font-size:0.9rem; color:#0f3460; min-width:220px;">
                         <option value="">— Select a Club —</option>
-                        ${CLUBS_LIST.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        ${clubNames.map(c => `<option value="${c}">${c}</option>`).join('')}
                     </select>
                     <div id="clubStatDisplay" style="margin-top:12px;"></div>
                 </div>`;
