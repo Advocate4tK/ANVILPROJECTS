@@ -35,7 +35,7 @@
         }
 
         /* ── Club Pills ── */
-        .club-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+        .club-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; align-items: center; }
         .club-pill {
             padding: 4px 13px; border-radius: 20px; font-size: 0.82rem; font-weight: 700;
             cursor: pointer; border: 2px solid #ccc; background: #e8e8e8; color: #666;
@@ -43,6 +43,17 @@
         }
         .club-pill:hover { border-color: #d4ac0d; color: #222; background: #f5e97a; }
         .club-pill.active { background: #f1c40f; color: #222; border-color: #c9a200; }
+        /* "All Clubs" master control — visually distinct from individual club pills */
+        .club-pill-all {
+            padding: 4px 16px; border-radius: 20px; font-size: 0.82rem; font-weight: 800;
+            cursor: pointer; border: 2px solid #09142a; background: #09142a; color: #fff;
+            transition: all 0.2s; user-select: none; letter-spacing: 0.3px;
+        }
+        .club-pill-all:hover { background: #1a2d4a; border-color: #1a2d4a; }
+        .club-pill-all.inactive { background: #fff; color: #09142a; }
+        .club-pill-all.inactive:hover { background: #f0ece6; }
+        /* Separator between All and club pills */
+        .pill-sep { width: 1px; height: 22px; background: #ddd; flex-shrink: 0; margin: 0 2px; }
 
         /* ── Game Cards ── */
         .game-card {
@@ -970,37 +981,36 @@
             const wrap = document.getElementById('clubPills');
             const allSelected = selectedClubs.size === clubsList.length;
 
-            // "All Clubs" pill — Fix 2: reset userHasFilteredClubs when clicked
+            // "All Clubs" master toggle — visually distinct, restores original toggle behavior
             const all = document.createElement('span');
-            all.className = allSelected ? 'club-pill active' : 'club-pill'; // Fix 1: reflect actual state
+            all.className = allSelected ? 'club-pill-all' : 'club-pill-all inactive';
             all.textContent = 'All Clubs';
             all.dataset.club = '__all__';
             all.addEventListener('click', () => {
-                selectedClubs = new Set(clubsList);
-                userHasFilteredClubs = false; // Fix 2: back to default, allow resets again
-                document.querySelectorAll('.club-pill').forEach(p => p.classList.add('active'));
+                if (selectedClubs.size === clubsList.length) {
+                    // Deselect all — user is about to pick specific clubs
+                    selectedClubs.clear();
+                    userHasFilteredClubs = true;
+                    all.className = 'club-pill-all inactive';
+                    document.querySelectorAll('.club-pill').forEach(p => p.classList.remove('active'));
+                } else {
+                    // Select all — back to default
+                    selectedClubs = new Set(clubsList);
+                    userHasFilteredClubs = false;
+                    all.className = 'club-pill-all';
+                    document.querySelectorAll('.club-pill').forEach(p => p.classList.add('active'));
+                }
                 renderGames();
             });
             wrap.appendChild(all);
 
-            // Fix 3: Reset Filter button
-            const resetBtn = document.createElement('span');
-            resetBtn.className = 'club-pill';
-            resetBtn.textContent = '↺ Reset';
-            resetBtn.title = 'Reset to all clubs';
-            resetBtn.style.cssText = 'opacity:0.6; font-size:0.75rem;';
-            resetBtn.addEventListener('click', () => {
-                selectedClubs = new Set(clubsList);
-                userHasFilteredClubs = false;
-                document.querySelectorAll('.club-pill').forEach(p => p.classList.add('active'));
-                resetBtn.style.opacity = '0.6';
-                renderGames();
-            });
-            wrap.appendChild(resetBtn);
+            // Separator
+            const sep = document.createElement('span');
+            sep.className = 'pill-sep';
+            wrap.appendChild(sep);
 
             clubsList.forEach(club => {
                 const pill = document.createElement('span');
-                // Fix 1: active state driven by selectedClubs, not hardcoded
                 pill.className = selectedClubs.has(club) ? 'club-pill active' : 'club-pill';
                 pill.textContent = club;
                 pill.dataset.club = club;
@@ -1013,10 +1023,11 @@
                         selectedClubs.add(club);
                         pill.classList.add('active');
                     }
-                    // Sync "All" pill
+                    // Sync "All Clubs" pill
                     const isAll = selectedClubs.size === clubsList.length;
-                    document.querySelector('.club-pill[data-club="__all__"]').classList.toggle('active', isAll);
-                    if (isAll) userHasFilteredClubs = false; // Fix 2: back to all = reset flag
+                    const allPill = document.querySelector('[data-club="__all__"]');
+                    if (allPill) allPill.className = isAll ? 'club-pill-all' : 'club-pill-all inactive';
+                    if (isAll) userHasFilteredClubs = false;
                     renderGames();
                 });
                 wrap.appendChild(pill);
