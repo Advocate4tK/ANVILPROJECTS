@@ -967,27 +967,40 @@
         // ── Club pills ────────────────────────────────────────────────────────
         function buildClubPills() {
             const wrap = document.getElementById('clubPills');
-            // "All" toggle
+            const allSelected = selectedClubs.size === clubsList.length;
+
+            // "All Clubs" pill — Fix 2: reset userHasFilteredClubs when clicked
             const all = document.createElement('span');
-            all.className = 'club-pill active';
+            all.className = allSelected ? 'club-pill active' : 'club-pill'; // Fix 1: reflect actual state
             all.textContent = 'All Clubs';
             all.dataset.club = '__all__';
             all.addEventListener('click', () => {
-                if (selectedClubs.size === clubsList.length) {
-                    selectedClubs.clear();
-                    document.querySelectorAll('.club-pill:not([data-club="__all__"])').forEach(p => p.classList.remove('active'));
-                    all.classList.remove('active');
-                } else {
-                    selectedClubs = new Set(clubsList);
-                    document.querySelectorAll('.club-pill').forEach(p => p.classList.add('active'));
-                }
+                selectedClubs = new Set(clubsList);
+                userHasFilteredClubs = false; // Fix 2: back to default, allow resets again
+                document.querySelectorAll('.club-pill').forEach(p => p.classList.add('active'));
                 renderGames();
             });
             wrap.appendChild(all);
 
+            // Fix 3: Reset Filter button
+            const resetBtn = document.createElement('span');
+            resetBtn.className = 'club-pill';
+            resetBtn.textContent = '↺ Reset';
+            resetBtn.title = 'Reset to all clubs';
+            resetBtn.style.cssText = 'opacity:0.6; font-size:0.75rem;';
+            resetBtn.addEventListener('click', () => {
+                selectedClubs = new Set(clubsList);
+                userHasFilteredClubs = false;
+                document.querySelectorAll('.club-pill').forEach(p => p.classList.add('active'));
+                resetBtn.style.opacity = '0.6';
+                renderGames();
+            });
+            wrap.appendChild(resetBtn);
+
             clubsList.forEach(club => {
                 const pill = document.createElement('span');
-                pill.className = 'club-pill active';
+                // Fix 1: active state driven by selectedClubs, not hardcoded
+                pill.className = selectedClubs.has(club) ? 'club-pill active' : 'club-pill';
                 pill.textContent = club;
                 pill.dataset.club = club;
                 pill.addEventListener('click', () => {
@@ -1000,7 +1013,9 @@
                         pill.classList.add('active');
                     }
                     // Sync "All" pill
-                    document.querySelector('.club-pill[data-club="__all__"]').classList.toggle('active', selectedClubs.size === clubsList.length);
+                    const isAll = selectedClubs.size === clubsList.length;
+                    document.querySelector('.club-pill[data-club="__all__"]').classList.toggle('active', isAll);
+                    if (isAll) userHasFilteredClubs = false; // Fix 2: back to all = reset flag
                     renderGames();
                 });
                 wrap.appendChild(pill);
