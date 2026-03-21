@@ -441,6 +441,41 @@
 
         </div><!-- /wizardContent -->
 
+        <!-- Edit Club Venues Section -->
+        <div id="editSection" style="display:none; margin-top:32px;">
+            <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #f59e0b;">
+                <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">📍 Edit Club Venues &amp; Fields</h2>
+                <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Add new venues and fields to an existing club. Existing venues and fields are not modified.</p>
+
+                <div class="fg" style="max-width:380px; margin-bottom:20px;">
+                    <label>Select Club</label>
+                    <select id="editClubSelect" onchange="onEditClubChange()">
+                        <option value="">— Loading clubs… —</option>
+                    </select>
+                </div>
+
+                <!-- Existing venue/field summary -->
+                <div id="editCurrentVenues" style="display:none; margin-bottom:24px;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#aaa; margin-bottom:8px;">Current Venues &amp; Fields</div>
+                    <div id="editCurrentVenuesList" style="font-size:0.85rem; color:#555; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px; padding:12px 16px;"></div>
+                </div>
+
+                <!-- New venue builder -->
+                <div id="editVenueBuilder" style="display:none;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#aaa; margin-bottom:12px;">Add New Venues</div>
+                    <div id="editVenueList"></div>
+                    <button class="btn-add-venue" onclick="addEditVenue()" style="margin-bottom:20px;">+ Add Venue</button>
+                    <br>
+                    <button onclick="saveEditVenues()" id="saveEditBtn"
+                        style="background:#00c853; color:#09142a; border:none; padding:11px 32px; border-radius:8px; font-weight:800; font-size:1rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">
+                        Save Venues &amp; Fields ↗
+                    </button>
+                </div>
+
+                <div class="create-log" id="editLog"></div>
+            </div>
+        </div>
+
         <!-- Remove Club Section -->
         <div id="removeSection" style="display:none; margin-top:32px;">
             <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #e74c3c;">
@@ -516,9 +551,10 @@
     function unlock() {
         document.getElementById('pinGate').style.display       = 'none';
         document.getElementById('wizardContent').style.display = 'block';
+        document.getElementById('editSection').style.display   = 'block';
         document.getElementById('removeSection').style.display = 'block';
         if (venueCount === 0) addVenue(); // seed first venue
-        loadClubsForRemove();
+        loadClubsForRemove(); // also populates editClubSelect
     }
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -825,11 +861,14 @@
             allClubRecords = recs
                 .map(r => ({ id: r.id, name: r.fields['Club Name'] || '(unnamed)' }))
                 .sort((a, b) => a.name.localeCompare(b.name));
-            const sel = document.getElementById('removeClubSelect');
-            sel.innerHTML = '<option value="">— Select a club —</option>'
+            const opts = '<option value="">— Select a club —</option>'
                 + allClubRecords.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            document.getElementById('removeClubSelect').innerHTML = opts;
+            document.getElementById('editClubSelect').innerHTML   = opts;
         } catch(e) {
             document.getElementById('removeClubSelect').innerHTML =
+                '<option value="">⚠ Could not load clubs</option>';
+            document.getElementById('editClubSelect').innerHTML =
                 '<option value="">⚠ Could not load clubs</option>';
         }
     }
@@ -968,6 +1007,219 @@
 
         } catch(e) {
             log(`✗ Error: ${e.message}`, 'err');
+            btn.disabled = false;
+        }
+    }
+
+    // ── Edit Club Venues ──────────────────────────────────────────────────────
+    let editVenueCount  = 0;
+    let editFieldCounts = {};
+
+    async function onEditClubChange() {
+        const clubId = document.getElementById('editClubSelect').value;
+        const currentEl = document.getElementById('editCurrentVenues');
+        const builderEl = document.getElementById('editVenueBuilder');
+        const logEl     = document.getElementById('editLog');
+        logEl.style.display = 'none';
+        logEl.innerHTML = '';
+
+        if (!clubId) {
+            currentEl.style.display = 'none';
+            builderEl.style.display = 'none';
+            return;
+        }
+
+        // Show current venues/fields
+        currentEl.style.display = 'block';
+        document.getElementById('editCurrentVenuesList').innerHTML = 'Loading…';
+        try {
+            const venues = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, {
+                filterByFormula: `FIND("${clubId}", ARRAYJOIN({Clubs}))`,
+                maxRecords: 200
+            });
+            if (venues.length === 0) {
+                document.getElementById('editCurrentVenuesList').innerHTML =
+                    '<span style="color:#aaa; font-style:italic;">No venues linked yet.</span>';
+            } else {
+                const rows = [];
+                for (const v of venues) {
+                    const fields = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, {
+                        filterByFormula: `FIND("${v.id}", ARRAYJOIN({Venue}))`,
+                        maxRecords: 200
+                    });
+                    const fNames = fields.map(f => f.fields['Field Name'] || '(unnamed)').join(', ') || 'no fields';
+                    rows.push(`<div style="margin-bottom:4px;">📍 <strong>${v.fields['Venue Name'] || '(unnamed)'}</strong> — ${fNames}</div>`);
+                }
+                document.getElementById('editCurrentVenuesList').innerHTML = rows.join('');
+            }
+        } catch(e) {
+            document.getElementById('editCurrentVenuesList').innerHTML =
+                `<span style="color:#e74c3c;">Could not load: ${e.message}</span>`;
+        }
+
+        // Reset and show venue builder
+        document.getElementById('editVenueList').innerHTML = '';
+        editVenueCount  = 0;
+        editFieldCounts = {};
+        addEditVenue();
+        builderEl.style.display = 'block';
+    }
+
+    function addEditVenue() {
+        const idx = editVenueCount++;
+        editFieldCounts[idx] = 0;
+        const div = document.createElement('div');
+        div.className = 'venue-block';
+        div.id = 'edit-venue-' + idx;
+        div.innerHTML = `
+            <div class="venue-block-header">
+                <div class="venue-block-title">New Venue ${idx + 1}</div>
+                <button class="btn-remove-venue" onclick="removeEditVenue(${idx})">Remove</button>
+            </div>
+            <div class="fg">
+                <label>Venue Name <span style="color:#e74c3c">*</span></label>
+                <input type="text" class="edit-venue-name" placeholder="e.g. Plainfield High School">
+            </div>
+            <div class="form-row">
+                <div class="fg" style="margin-bottom:0;">
+                    <label>Address</label>
+                    <input type="text" class="edit-venue-addr" placeholder="123 Main St">
+                </div>
+                <div class="fg" style="margin-bottom:0;">
+                    <label>City</label>
+                    <input type="text" class="edit-venue-city" placeholder="Plainfield">
+                </div>
+            </div>
+            <div class="form-row" style="margin-top:12px;">
+                <div class="fg" style="margin-bottom:0;">
+                    <label>State</label>
+                    <input type="text" class="edit-venue-state" value="CT" maxlength="2" style="text-transform:uppercase;">
+                </div>
+                <div class="fg" style="margin-bottom:0;">
+                    <label>Zip</label>
+                    <input type="text" class="edit-venue-zip" placeholder="06354" maxlength="5">
+                </div>
+            </div>
+            <div style="margin-top:14px; padding-top:14px; border-top:1px solid #e2d9ce;">
+                <div style="font-size:0.78rem; font-weight:700; color:#09142a; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px; font-family:'DM Sans',sans-serif;">Fields <span style="color:#e74c3c">*</span></div>
+                <div class="fields-list" id="edit-fields-${idx}"></div>
+                <button class="btn-add-field" onclick="addEditField(${idx})">+ Add Field</button>
+            </div>`;
+        document.getElementById('editVenueList').appendChild(div);
+        addEditField(idx);
+        renumberEditVenues();
+    }
+
+    function removeEditVenue(idx) {
+        const el = document.getElementById('edit-venue-' + idx);
+        if (el) el.remove();
+        renumberEditVenues();
+    }
+
+    function renumberEditVenues() {
+        document.querySelectorAll('#editVenueList .venue-block').forEach((vb, i) => {
+            vb.querySelector('.venue-block-title').textContent = `New Venue ${i + 1}`;
+        });
+    }
+
+    function addEditField(venueIdx) {
+        const fIdx = editFieldCounts[venueIdx]++;
+        const container = document.getElementById('edit-fields-' + venueIdx);
+        const row = document.createElement('div');
+        row.className = 'field-row';
+        row.id = `edit-field-${venueIdx}-${fIdx}`;
+        row.innerHTML = `
+            <input type="text" class="field-name-input" placeholder="e.g. Field 1, Varsity Field">
+            <button class="btn-remove-field" onclick="removeEditField('${venueIdx}-${fIdx}')" title="Remove">×</button>`;
+        container.appendChild(row);
+    }
+
+    function removeEditField(id) {
+        const el = document.getElementById('edit-field-' + id);
+        if (el) el.remove();
+    }
+
+    async function saveEditVenues() {
+        const clubId   = document.getElementById('editClubSelect').value;
+        const clubName = allClubRecords.find(c => c.id === clubId)?.name || '';
+        if (!clubId) { alert('Select a club first.'); return; }
+
+        const venueBlocks = document.querySelectorAll('#editVenueList .venue-block');
+        if (venueBlocks.length === 0) { alert('Add at least one venue.'); return; }
+
+        // Validate
+        let valid = true;
+        venueBlocks.forEach((vb, i) => {
+            if (!vb.querySelector('.edit-venue-name').value.trim()) {
+                alert(`Venue ${i + 1} needs a name.`); valid = false;
+            }
+            const fields = vb.querySelectorAll('.field-name-input');
+            if (![...fields].some(f => f.value.trim())) {
+                alert(`Venue ${i + 1} needs at least one field.`); valid = false;
+            }
+        });
+        if (!valid) return;
+
+        const btn   = document.getElementById('saveEditBtn');
+        const logEl = document.getElementById('editLog');
+        btn.disabled = true;
+        logEl.style.display = 'block';
+        logEl.innerHTML = '';
+
+        const log = (msg, type = '') => {
+            logEl.innerHTML += `<div class="${type ? 'log-' + type : ''}">${msg}</div>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        };
+
+        try {
+            log(`Adding venues to ${clubName}…`, 'info');
+            let totalVenues = 0, totalFields = 0;
+
+            for (const vb of venueBlocks) {
+                const venueName  = vb.querySelector('.edit-venue-name').value.trim();
+                const venueAddr  = vb.querySelector('.edit-venue-addr').value.trim();
+                const venueCity  = vb.querySelector('.edit-venue-city').value.trim();
+                const venueState = (vb.querySelector('.edit-venue-state').value.trim() || 'CT').toUpperCase();
+                const venueZip   = vb.querySelector('.edit-venue-zip').value.trim();
+
+                const venueFields = {
+                    'Venue Name': venueName,
+                    'Clubs':      [clubId]
+                };
+                if (venueAddr)  venueFields['Address'] = venueAddr;
+                if (venueCity)  venueFields['City']    = venueCity;
+                if (venueState) venueFields['State']   = venueState;
+                if (venueZip)   venueFields['Zip']     = venueZip;
+
+                log(`  Creating venue: ${venueName}…`, 'info');
+                const venueRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.VENUES, venueFields);
+                log(`  ✓ Venue created — ${venueName}`, 'ok');
+                totalVenues++;
+
+                const fieldInputs = [...vb.querySelectorAll('.field-name-input')]
+                    .map(el => el.value.trim()).filter(Boolean);
+
+                for (const fieldName of fieldInputs) {
+                    log(`    Creating field: ${fieldName}…`, 'info');
+                    await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.FIELDS, {
+                        'Field Name': fieldName,
+                        'Venue':      [venueRec.id]
+                    });
+                    log(`    ✓ Field created — ${fieldName}`, 'ok');
+                    totalFields++;
+                }
+            }
+
+            log('', '');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            log(`✅ Done — ${totalVenues} venue${totalVenues !== 1 ? 's' : ''} and ${totalFields} field${totalFields !== 1 ? 's' : ''} added to ${clubName}.`, 'ok');
+
+            // Refresh current venues display
+            await onEditClubChange();
+
+        } catch(e) {
+            log(`✗ Error: ${e.message}`, 'err');
+        } finally {
             btn.disabled = false;
         }
     }
