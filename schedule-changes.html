@@ -202,6 +202,7 @@
     <script src="js/airtable-client.js"></script>
     <script>
     let refById   = {};
+    let clubById  = {}; // Airtable club record ID → club name
     let sortDir   = 'desc';
     let dateRange = 'all';
     let clubFilter = '';
@@ -367,12 +368,14 @@
         container.innerHTML = '<p style="color:#888; font-size:0.9rem;">Loading…</p>';
 
         try {
-            const [games, refs] = await Promise.all([
+            const [games, refs, clubs] = await Promise.all([
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 1000 }),
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 })
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,    { maxRecords: 200 })
             ]);
 
-            refs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
+            refs.forEach(r  => { refById[r.id]  = r.fields['Name']      || ''; });
+            clubs.forEach(r => { clubById[r.id] = r.fields['Club Name'] || ''; });
 
             const changeGames = games.filter(r => {
                 const s = (r.fields['Game Status'] || '').toLowerCase();
@@ -420,7 +423,11 @@
     }
 
     function getClubName(r) {
-        return (r.fields['Home Team'] || r.fields['Club'] || 'Unknown').split(' vs ')[0].trim();
+        const linked = r.fields['Club'];
+        if (Array.isArray(linked) && linked.length > 0) {
+            return clubById[linked[0]] || r.fields['Home Team'] || 'Unknown';
+        }
+        return r.fields['Home Team'] || 'Unknown';
     }
 
     // ── Render (uses cached records + current filter/sort state) ──────────────
