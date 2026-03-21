@@ -1189,13 +1189,6 @@
             // ── Change Requests section (shown if any pending or recently resolved) ──
             if (pendingChanges.length > 0 || resolvedChanges.length > 0) {
                 const pendingHtml = pendingChanges.map(r => buildGameCard(r, { changePending: true })).join('');
-                const resolvedHtml = [...resolvedChanges]
-                    .sort((a, b) => {
-                        const tsA = new Date(extractResolvedTimestamp(a.fields['Notes'] || '') || 0);
-                        const tsB = new Date(extractResolvedTimestamp(b.fields['Notes'] || '') || 0);
-                        return tsB - tsA; // newest resolved first
-                    })
-                    .map(r => buildGameCard(r, { changeResolved: true })).join('');
                 const currentWeekKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
                 const resolvedThisWeek = resolvedChanges.filter(r => {
                     const ts = extractResolvedTimestamp(r.fields['Notes'] || '');
@@ -1205,16 +1198,71 @@
                     const isoDate = d.toISOString().split('T')[0];
                     return getWeekLabel(isoDate).key === currentWeekKey;
                 }).length;
+
+                // Store resolved data + state on window so inline onclick handlers can reach them
+                window._clubResolved = resolvedChanges.slice();
+                window._resolvedCollapsed = false;
+                window._resolvedSort = 'newest';
+
+                window._renderResolvedCards = function() {
+                    const container = document.getElementById('resolvedCardsContainer');
+                    if (!container) return;
+                    if (window._resolvedCollapsed) {
+                        container.style.display = 'none';
+                        return;
+                    }
+                    container.style.display = 'block';
+                    const sorted = [...window._clubResolved].sort((a, b) => {
+                        const tsA = new Date(extractResolvedTimestamp(a.fields['Notes'] || '') || 0);
+                        const tsB = new Date(extractResolvedTimestamp(b.fields['Notes'] || '') || 0);
+                        return window._resolvedSort === 'newest' ? tsB - tsA : tsA - tsB;
+                    });
+                    container.innerHTML = sorted.map(r => buildGameCard(r, { changeResolved: true })).join('');
+                };
+
+                window._toggleResolved = function() {
+                    window._resolvedCollapsed = !window._resolvedCollapsed;
+                    window._renderResolvedCards();
+                    const arrow = document.getElementById('resolvedArrow');
+                    if (arrow) arrow.textContent = window._resolvedCollapsed ? '▶' : '▼';
+                    const countBadge = document.getElementById('resolvedCountBadge');
+                    if (countBadge) countBadge.style.opacity = window._resolvedCollapsed ? '0.5' : '1';
+                };
+
+                window._setResolvedSort = function(sort) {
+                    window._resolvedSort = sort;
+                    ['newest','oldest'].forEach(s => {
+                        const btn = document.getElementById('resolvedSort_' + s);
+                        if (!btn) return;
+                        btn.style.background = s === sort ? '#09142a' : 'transparent';
+                        btn.style.color = s === sort ? '#fff' : '#09142a';
+                        btn.style.borderColor = '#09142a';
+                    });
+                    window._renderResolvedCards();
+                };
+
+                const sortBtnBase = 'cursor:pointer; font-size:0.72rem; font-weight:700; font-family:\'DM Sans\',sans-serif; padding:3px 10px; border-radius:8px; border:1px solid #09142a; transition:background 0.15s,color 0.15s;';
+
                 html += `<div style="margin-bottom:32px;">
                     <div class="chg-section-hdr pending" style="justify-content:space-between;">
                         <span>⚠️ Open Change Requests</span>
                         <span style="background:#fef3c7; color:#78350f; font-size:0.78rem; padding:2px 10px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif;">${pendingChanges.length}</span>
                     </div>
                     ${pendingHtml}
-                    ${resolvedChanges.length > 0 ? `<div class="chg-section-hdr resolved" style="margin-top:16px; justify-content:space-between;">
-                        <span>✅ Recently Resolved Change Requests</span>
-                        <span style="background:#dcfce7; color:#14532d; font-size:0.78rem; padding:2px 10px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif;">${resolvedThisWeek} this week</span>
-                    </div>${resolvedHtml}` : ''}
+                    ${resolvedChanges.length > 0 ? `
+                    <div class="chg-section-hdr resolved" style="margin-top:16px; justify-content:space-between; flex-wrap:wrap; gap:6px; align-items:center;">
+                        <span style="display:flex; align-items:center; gap:7px; cursor:pointer; user-select:none;" onclick="window._toggleResolved()">
+                            <span id="resolvedArrow" style="font-size:0.8rem; transition:transform 0.2s;">▼</span>
+                            <span>✅ Recently Resolved Change Requests</span>
+                            <span id="resolvedCountBadge" style="background:#dcfce7; color:#14532d; font-size:0.78rem; padding:2px 10px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif; transition:opacity 0.2s;">${resolvedThisWeek} this week</span>
+                        </span>
+                        <span style="display:flex; align-items:center; gap:5px;">
+                            <span style="font-size:0.72rem; color:#6b7280; font-family:'DM Sans',sans-serif;">Sort:</span>
+                            <button id="resolvedSort_newest" onclick="window._setResolvedSort('newest')" style="${sortBtnBase} background:#09142a; color:#fff;">Most Recent</button>
+                            <button id="resolvedSort_oldest" onclick="window._setResolvedSort('oldest')" style="${sortBtnBase} background:transparent; color:#09142a;">Oldest</button>
+                        </span>
+                    </div>
+                    <div id="resolvedCardsContainer"></div>` : ''}
                 </div>`;
             }
 
@@ -1256,6 +1304,9 @@
             }
 
             content.innerHTML = html;
+
+            // Populate collapsible resolved section after DOM is ready
+            if (window._renderResolvedCards) window._renderResolvedCards();
 
         } catch(err) {
             content.innerHTML = `<p style="color:#e74c3c; font-size:0.85rem;">Could not load games: ${err.message}</p>`;
