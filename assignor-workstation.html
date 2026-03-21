@@ -2177,26 +2177,43 @@
         }
 
         async function cancelGame(gameId, label) {
-            if (!confirm(`Cancel "${label}"?\n\nThe game will remain visible with a CANCELLED stamp.`)) return;
-            cancelledGameIds.add(gameId);
+            if (!confirm(`Cancel "${label}"?\n\nThe game will remain visible with a CANCELLED stamp and all referee assignments will be cleared.`)) return;
             const game = allGames.find(g => g.id === gameId);
+            // Cache current ref assignments for rollback
+            const prevCenter = game ? [...(game.fields['Center Referee'] || [])] : [];
+            const prevAR1    = game ? [...(game.fields['AR 1']            || [])] : [];
+            const prevAR2    = game ? [...(game.fields['AR 2']            || [])] : [];
+            cancelledGameIds.add(gameId);
             if (game) {
-                game.fields['Status'] = 'Cancelled';
-                // Remove from conflict detection — cancelled games should not block refs
+                // Remove from conflict detection BEFORE clearing fields
                 const dt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
                 ['Center Referee','AR 1','AR 2'].forEach(pos => {
                     (game.fields[pos] || []).forEach(rid => {
                         assignedAt[rid]?.get(dt)?.delete(gameId);
                     });
                 });
+                game.fields['Status'] = 'Cancelled';
+                game.fields['Center Referee'] = [];
+                game.fields['AR 1'] = [];
+                game.fields['AR 2'] = [];
             }
             renderGames();
             try {
-                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Status': 'Cancelled' });
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                    'Status': 'Cancelled',
+                    'Center Referee': [],
+                    'AR 1': [],
+                    'AR 2': []
+                });
             } catch(e) {
                 // Roll back on failure
                 cancelledGameIds.delete(gameId);
-                if (game) game.fields['Status'] = '';
+                if (game) {
+                    game.fields['Status'] = '';
+                    game.fields['Center Referee'] = prevCenter;
+                    game.fields['AR 1'] = prevAR1;
+                    game.fields['AR 2'] = prevAR2;
+                }
                 alert('Could not cancel game: ' + e.message);
                 renderGames();
             }

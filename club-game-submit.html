@@ -180,8 +180,10 @@
             transition: box-shadow 0.15s;
         }
         .game-card:hover { box-shadow: var(--shadow-md); }
-        .game-card.change-req  { border-left-color: var(--amber); background: #fffbeb; }
-        .game-card.change-done { border-left-color: var(--accent); background: #f0fdf4; }
+        .game-card.change-req     { border-left-color: var(--amber); background: #fffbeb; }
+        .game-card.change-done    { border-left-color: var(--accent); background: #f0fdf4; }
+        .game-card.cancelled-game { border-left-color: #dc2626; background: #fef2f2; opacity: 0.82; }
+        .game-card.cancelled-game .game-matchup { color: #991b1b; text-decoration: line-through; }
         .game-card-main { flex: 1 1 280px; min-width: 0; }
         .game-matchup { font-family: 'Barlow Condensed', sans-serif; font-size: 1rem; font-weight: 800; color: var(--deep); margin-bottom: 1px; letter-spacing: 0.2px; }
         .game-card.change-req  .game-matchup { color: #92400e; }
@@ -1171,6 +1173,19 @@
             </div>`;
         }
 
+        if (opts.cancelled) {
+            return `<div class="game-card cancelled-game">
+                <div class="game-card-main">
+                    <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                    <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
+                    <div class="game-refs"><span style="color:#dc2626; font-size:0.78rem; font-style:italic;">Referee assignments cleared</span></div>
+                </div>
+                <div class="game-card-side">
+                    <span class="status-badge" style="background:#fee2e2; color:#991b1b; font-weight:800; letter-spacing:0.5px;">🚫 CANCELLED</span>
+                </div>
+            </div>`;
+        }
+
         // Regular submitted/assigned game card
         const isAssigned = !!(center || ar1 || ar2);
         const canModify  = !isAssigned && isFutureWeek(dateStr);
@@ -1269,10 +1284,13 @@
             // Classify into buckets
             const pendingChanges  = [];
             const resolvedChanges = [];
+            const cancelledGames  = [];
             const regularGames    = [];
             clubGames.forEach(r => {
                 const rawStatus = (r.fields['Game Status'] || r.fields['Status'] || '').trim();
-                if (rawStatus === 'Change Requested') {
+                if (rawStatus === 'Cancelled') {
+                    cancelledGames.push(r);
+                } else if (rawStatus === 'Change Requested') {
                     pendingChanges.push(r);
                 } else if (rawStatus === 'Change Resolved') {
                     resolvedChanges.push(r);
@@ -1424,6 +1442,27 @@
                     <p style="color:#6b7280; font-size:0.83rem; margin-bottom:14px;">Games on file with the assignor. Assigned referees appear once the assignor fills them in.</p>
                     ${weekBlocks}
                 </div>`;
+
+                if (cancelledGames.length > 0) {
+                    window._cancelledCollapsed = true;
+                    window._toggleCancelled = function() {
+                        window._cancelledCollapsed = !window._cancelledCollapsed;
+                        const el = document.getElementById('cancelledCardsContainer');
+                        const arrow = document.getElementById('cancelledArrow');
+                        if (el) el.style.display = window._cancelledCollapsed ? 'none' : 'block';
+                        if (arrow) arrow.textContent = window._cancelledCollapsed ? '▶' : '▼';
+                    };
+                    html += `<div style="margin-top:28px;">
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; color:#991b1b; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #fca5a5; padding-bottom:6px; cursor:pointer; user-select:none;" onclick="window._toggleCancelled()">
+                            <span id="cancelledArrow" style="font-size:0.78rem;">▶</span>
+                            🚫 Cancelled Games
+                            <span style="background:#fee2e2; color:#991b1b; font-size:0.72rem; font-weight:700; padding:2px 10px; border-radius:8px; font-family:'DM Sans',sans-serif;">${cancelledGames.length}</span>
+                        </div>
+                        <div id="cancelledCardsContainer" style="display:none;">
+                            ${cancelledGames.map(r => buildGameCard(r, { cancelled: true })).join('')}
+                        </div>
+                    </div>`;
+                }
             }
 
             content.innerHTML = html;
