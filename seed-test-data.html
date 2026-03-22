@@ -49,9 +49,9 @@
             <div class="section-card">
                 <h2 style="color:#0f3460; margin-bottom:6px;" id="weekendLabel">Weekend: loading…</h2>
                 <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">
-                    Creates realistic schedules for <strong>Griswold</strong> and <strong>East Haddam</strong> — 7 games each per day (56 total across both weekends).
+                    Creates realistic schedules for <strong>Griswold</strong> and <strong>East Haddam</strong> — 7 games each per day (28 total for the weekend).
                     Also creates <strong>75 fake referees</strong> (mix of 1st Season through 20+ years across all clubs)
-                    and submits <strong>availability for all of them</strong> for all four days.
+                    and submits <strong>availability for all of them</strong> for both days.
                 </p>
                 <p style="color:#e74c3c; font-size:0.85rem; margin-bottom:20px;">
                     ⚠ This will add records to your live Airtable base. Only run once.
@@ -84,25 +84,21 @@
     <script>
         checkAdminAccess();
 
-        // Dynamic dates — seed for this weekend AND next weekend
-        function getTwoWeekends() {
+        // Dynamic dates — seed for the next coming weekend only
+        function getNextWeekend() {
             const today = new Date();
             const day = today.getDay(); // 0=Sun, 6=Sat
-            const daysToSat = (6 - day + 7) % 7; // 0 if today is Saturday
+            const daysToSat = day === 0 ? 6 : (6 - day + 7) % 7 || 7;
             const fmt = d => d.toISOString().split('T')[0];
             const sat1 = new Date(today); sat1.setDate(today.getDate() + daysToSat);
             const sun1 = new Date(sat1);  sun1.setDate(sat1.getDate() + 1);
-            const sat2 = new Date(sat1);  sat2.setDate(sat1.getDate() + 7);
-            const sun2 = new Date(sat2);  sun2.setDate(sat2.getDate() + 1);
             const mo = { month: 'long', day: 'numeric' };
             const label = sat1.toLocaleDateString('en-US', mo) + '–' + sun1.toLocaleDateString('en-US', { day: 'numeric' })
-                        + '  &  '
-                        + sat2.toLocaleDateString('en-US', mo) + '–' + sun2.toLocaleDateString('en-US', { day: 'numeric' })
                         + ', ' + sat1.getFullYear();
-            return { SAT1: fmt(sat1), SUN1: fmt(sun1), SAT2: fmt(sat2), SUN2: fmt(sun2), label };
+            return { SAT1: fmt(sat1), SUN1: fmt(sun1), label };
         }
-        const { SAT1, SUN1, SAT2, SUN2, label } = getTwoWeekends();
-        document.getElementById('weekendLabel').innerHTML = 'Weekends: ' + label;
+        const { SAT1, SUN1, label } = getNextWeekend();
+        document.getElementById('weekendLabel').innerHTML = 'Weekend: ' + label;
 
         const GAMES_TO_SEED = [
             // ══ WEEKEND 1 ════════════════════════════════════════════════════
@@ -143,120 +139,83 @@
             { date: SUN1, time: '15:00', home: 'East Haddam SC',       away: 'Cromwell SC',              age: 'U15', gender: 'Male',   venue: 'East Haddam', field: 'Main Field' },
             { date: SUN1, time: '16:30', home: 'East Haddam SC',       away: 'East Hampton SC',          age: 'U19', gender: 'Female', venue: 'East Haddam', field: 'Main Field' },
 
-            // ══ WEEKEND 2 ════════════════════════════════════════════════════
-
-            // ── GRISWOLD — Saturday 2 ─────────────────────────────────────────
-            { date: SAT2, time: '08:30', home: 'Griswold FC Girls', away: 'Wethersfield SC Girls',   age: 'U8',  gender: 'Female', venue: 'Griswold', field: 'Field 1' },
-            { date: SAT2, time: '08:30', home: 'Griswold FC Boys',  away: 'Enfield SC Boys',         age: 'U8',  gender: 'Male',   venue: 'Griswold', field: 'Field 2' },
-            { date: SAT2, time: '10:30', home: 'Griswold FC Girls', away: 'Stonington SC Girls',     age: 'U10', gender: 'Female', venue: 'Griswold', field: 'Field 1' },
-            { date: SAT2, time: '10:30', home: 'Griswold FC Boys',  away: 'Groton SC Boys',          age: 'U10', gender: 'Male',   venue: 'Griswold', field: 'Field 2' },
-            { date: SAT2, time: '13:00', home: 'Griswold FC',       away: 'New London SC',           age: 'U12', gender: 'Male',   venue: 'Griswold', field: 'Field 1' },
-            { date: SAT2, time: '15:00', home: 'Griswold FC',       away: 'Ledyard SC',              age: 'U15', gender: 'Male',   venue: 'Griswold', field: 'Field 1' },
-            { date: SAT2, time: '11:00', home: 'Griswold FC',       away: 'Killingly SC',            age: 'U19', gender: 'Female', venue: 'Griswold', field: 'Varsity Field' },
-
-            // ── GRISWOLD — Sunday 2 ───────────────────────────────────────────
-            { date: SUN2, time: '08:30', home: 'Griswold FC Girls', away: 'Vernon SC Girls',         age: 'U8',  gender: 'Female', venue: 'Griswold', field: 'Field 1' },
-            { date: SUN2, time: '08:30', home: 'Griswold FC Boys',  away: 'Somers SC Boys',          age: 'U8',  gender: 'Male',   venue: 'Griswold', field: 'Field 2' },
-            { date: SUN2, time: '10:30', home: 'Griswold FC Girls', away: 'Windham SC Girls',        age: 'U10', gender: 'Female', venue: 'Griswold', field: 'Field 1' },
-            { date: SUN2, time: '10:30', home: 'Griswold FC Boys',  away: 'Lebanon SC Boys',         age: 'U10', gender: 'Male',   venue: 'Griswold', field: 'Field 2' },
-            { date: SUN2, time: '13:00', home: 'Griswold FC',       away: 'Montville SC',            age: 'U12', gender: 'Male',   venue: 'Griswold', field: 'Field 1' },
-            { date: SUN2, time: '15:00', home: 'Griswold FC',       away: 'Waterford SC',            age: 'U15', gender: 'Female', venue: 'Griswold', field: 'Field 1' },
-            { date: SUN2, time: '11:00', home: 'Griswold FC',       away: 'Preston SC',              age: 'U19', gender: 'Male',   venue: 'Griswold', field: 'Varsity Field' },
-
-            // ── EAST HADDAM — Saturday 2 ──────────────────────────────────────
-            { date: SAT2, time: '09:00', home: 'East Haddam SC Girls', away: 'Old Saybrook SC Girls', age: 'U8',  gender: 'Female', venue: 'East Haddam', field: 'Main Field' },
-            { date: SAT2, time: '09:00', home: 'East Haddam SC Boys',  away: 'Essex SC Boys',         age: 'U8',  gender: 'Male',   venue: 'East Haddam', field: 'Main Field' },
-            { date: SAT2, time: '11:00', home: 'East Haddam SC Girls', away: 'Portland SC Girls',     age: 'U10', gender: 'Female', venue: 'East Haddam', field: 'Main Field' },
-            { date: SAT2, time: '11:00', home: 'East Haddam SC Boys',  away: 'East Lyme SC Boys',     age: 'U10', gender: 'Male',   venue: 'East Haddam', field: 'Main Field' },
-            { date: SAT2, time: '13:00', home: 'East Haddam SC',       away: 'Guilford SC',           age: 'U12', gender: 'Male',   venue: 'East Haddam', field: 'Main Field' },
-            { date: SAT2, time: '15:00', home: 'East Haddam SC',       away: 'Madison SC',            age: 'U15', gender: 'Female', venue: 'East Haddam', field: 'Main Field' },
-            { date: SAT2, time: '16:30', home: 'East Haddam SC',       away: 'Branford SC',           age: 'U19', gender: 'Female', venue: 'East Haddam', field: 'Main Field' },
-
-            // ── EAST HADDAM — Sunday 2 ────────────────────────────────────────
-            { date: SUN2, time: '09:00', home: 'East Haddam SC Girls', away: 'North Haven SC Girls',  age: 'U8',  gender: 'Female', venue: 'East Haddam', field: 'Main Field' },
-            { date: SUN2, time: '09:00', home: 'East Haddam SC Boys',  away: 'Durham SC Boys',        age: 'U8',  gender: 'Male',   venue: 'East Haddam', field: 'Main Field' },
-            { date: SUN2, time: '11:00', home: 'East Haddam SC Girls', away: 'Wallingford SC Girls',  age: 'U10', gender: 'Female', venue: 'East Haddam', field: 'Main Field' },
-            { date: SUN2, time: '11:00', home: 'East Haddam SC Boys',  away: 'Meriden SC Boys',       age: 'U10', gender: 'Male',   venue: 'East Haddam', field: 'Main Field' },
-            { date: SUN2, time: '13:00', home: 'East Haddam SC',       away: 'Berlin SC',             age: 'U12', gender: 'Female', venue: 'East Haddam', field: 'Main Field' },
-            { date: SUN2, time: '15:00', home: 'East Haddam SC',       away: 'Newington SC',          age: 'U15', gender: 'Male',   venue: 'East Haddam', field: 'Main Field' },
-            { date: SUN2, time: '16:30', home: 'East Haddam SC',       away: 'Rocky Hill SC',         age: 'U19', gender: 'Male',   venue: 'East Haddam', field: 'Main Field' },
         ];
 
         // 75 fake referees — 1st Season through 20+ years, across all clubs
-        // Mix: ~45 normal CT names, ~20 silly, ~10 dirty
+        // All realistic, appropriate CT-style names
         const FAKE_REFS = [
             // ── 1st Season (years: 0) ────────────────────────────────────────
             { name: 'Tyler Marchetti',      phone: '860-555-0101', years: '0', age: 14, prefs: 'Griswold',                      gender: 'Male',   zip: '06351' }, // Jewett City
             { name: 'Sofia Ostrowski',      phone: '860-555-0102', years: '0', age: 14, prefs: 'East Haddam',                   gender: 'Female', zip: '06457' }, // Middletown
-            { name: 'Turd Ferguson',        phone: '860-555-0103', years: '0', age: 15, prefs: 'Glastonbury',                   gender: 'Male',   zip: '06040' }, // Manchester
+            { name: 'Carlo Marchetti',      phone: '860-555-0103', years: '0', age: 15, prefs: 'Glastonbury',                   gender: 'Male',   zip: '06040' }, // Manchester
             { name: 'Liam Kowalski',        phone: '860-555-0104', years: '0', age: 14, prefs: 'NECONN, Griswold',              gender: 'Male',   zip: '06374' }, // Plainfield
             { name: 'Brianna Ferris',       phone: '860-555-0105', years: '0', age: 14, prefs: 'WAM',                           gender: 'Female', zip: '06266' }, // Windham
-            { name: 'Cornhole Jackson',     phone: '860-555-0106', years: '0', age: 15, prefs: 'East Haddam, NECONN',           gender: 'Male',   zip: '06415' }, // Colchester
+            { name: 'Danny Kozlowski',        phone: '860-555-0106', years: '0', age: 15, prefs: 'East Haddam, NECONN',           gender: 'Male',   zip: '06415' }, // Colchester
             { name: 'Maeve Callahan',       phone: '860-555-0107', years: '0', age: 14, prefs: 'Stonington, New London',        gender: 'Female', zip: '06355' }, // Mystic
             { name: 'Owen Szymanski',       phone: '860-555-0108', years: '0', age: 15, prefs: 'Portland',                      gender: 'Male',   zip: '06480' }, // Portland
             { name: 'Nadia Petrov',         phone: '860-555-0109', years: '0', age: 14, prefs: 'Griswold',                      gender: 'Female', zip: '06384' }, // Voluntown
-            { name: 'Seymour Butts',        phone: '860-555-0110', years: '0', age: 16, prefs: 'Lebanon, Valley',               gender: 'Male',   zip: '06249' }, // Lebanon
+            { name: 'Grant Calloway',      phone: '860-555-0110', years: '0', age: 16, prefs: 'Lebanon, Valley',               gender: 'Male',   zip: '06249' }, // Lebanon
             { name: 'Caden Reyes',          phone: '860-555-0126', years: '0', age: 14, prefs: 'NECONN',                        gender: 'Male',   zip: '06360' }, // Norwich
-            { name: 'Anita Hooker',         phone: '860-555-0127', years: '0', age: 15, prefs: 'East Haddam, WAM',              gender: 'Female', zip: '06423' }, // East Haddam
+            { name: 'Maya Fontaine',          phone: '860-555-0127', years: '0', age: 15, prefs: 'East Haddam, WAM',              gender: 'Female', zip: '06423' }, // East Haddam
             { name: 'Zoe Blanchard',        phone: '860-555-0128', years: '0', age: 15, prefs: 'Griswold',                      gender: 'Female', zip: '06066' }, // Vernon
-            { name: 'Phuc Dat Bich',        phone: '860-555-0129', years: '0', age: 14, prefs: 'East Haddam',                   gender: 'Male',   zip: '06412' }, // Haddam
+            { name: 'Nick Fabrizio',          phone: '860-555-0129', years: '0', age: 14, prefs: 'East Haddam',                   gender: 'Male',   zip: '06412' }, // Haddam
             { name: 'Marcus Delgado',       phone: '860-555-0130', years: '0', age: 16, prefs: 'NECONN, Stonington',            gender: 'Male',   zip: '06339' }, // Ledyard
 
             // ── 2nd Season (years: 1) ─────────────────────────────────────────
-            { name: 'Hugh Jass',            phone: '860-555-0111', years: '1', age: 16, prefs: 'NECONN, East Haddam',           gender: 'Male',   zip: '06365' }, // Preston
+            { name: 'Jake Sullivan',       phone: '860-555-0111', years: '1', age: 16, prefs: 'NECONN, East Haddam',           gender: 'Male',   zip: '06365' }, // Preston
             { name: 'Kayla Nowicki',        phone: '860-555-0112', years: '1', age: 17, prefs: 'Glastonbury',                   gender: 'Female', zip: '06033' }, // Glastonbury
-            { name: 'Mike Hunt',            phone: '860-555-0113', years: '1', age: 17, prefs: 'Haddam-Killingworth',           gender: 'Male',   zip: '06419' }, // Killingworth
+            { name: 'Brian Morrow',             phone: '860-555-0113', years: '1', age: 17, prefs: 'Haddam-Killingworth',           gender: 'Male',   zip: '06419' }, // Killingworth
             { name: 'Abby Whitmore',        phone: '860-555-0131', years: '1', age: 16, prefs: 'Portland, Lebanon',             gender: 'Female', zip: '06456' }, // Middle Haddam
-            { name: 'Ben Dover',            phone: '860-555-0132', years: '1', age: 16, prefs: 'WAM',                           gender: 'Male',   zip: '06256' }, // North Windham
+            { name: 'Sam Bertolini',            phone: '860-555-0132', years: '1', age: 16, prefs: 'WAM',                           gender: 'Male',   zip: '06256' }, // North Windham
             { name: 'Jordan Fitzpatrick',   phone: '860-555-0133', years: '1', age: 17, prefs: 'NECONN, East Haddam',           gender: 'Male',   zip: '06380' }, // Taftville
             { name: 'Emma Leblanc',         phone: '860-555-0160', years: '1', age: 17, prefs: 'Griswold, East Haddam',         gender: 'Female', zip: '06354' }, // Moosup
-            { name: 'Damn It Janet',        phone: '860-555-0161', years: '1', age: 16, prefs: 'Glastonbury, Griswold',         gender: 'Female', zip: '06108' }, // East Hartford
+            { name: 'Rachel Winslow',   phone: '860-555-0161', years: '1', age: 16, prefs: 'Glastonbury, Griswold',         gender: 'Female', zip: '06108' }, // East Hartford
             { name: 'Evan Rodrigues',       phone: '860-555-0162', years: '1', age: 18, prefs: 'Haddam-Killingworth',           gender: 'Male',   zip: '06437' }, // Guilford
 
             // ── 2–3 years ─────────────────────────────────────────────────────
-            { name: 'Drew Peacock',         phone: '860-555-0114', years: '2', age: 18, prefs: 'RHAMYS, Portland',              gender: 'Male',   zip: '06237' }, // Columbia
+            { name: 'Tyler Beaumont',      phone: '860-555-0114', years: '2', age: 18, prefs: 'RHAMYS, Portland',              gender: 'Male',   zip: '06237' }, // Columbia
             { name: 'Haley Oconnor',        phone: '860-555-0115', years: '2', age: 18, prefs: 'NECONN',                        gender: 'Female', zip: '06382' }, // Uncasville
-            { name: 'Haywood Jablomi',      phone: '860-555-0134', years: '2', age: 19, prefs: 'Glastonbury',                   gender: 'Male',   zip: '06074' }, // South Windsor
+            { name: 'Marco Bianchi',              phone: '860-555-0134', years: '2', age: 19, prefs: 'Glastonbury',                   gender: 'Male',   zip: '06074' }, // South Windsor
             { name: 'Claire Bouchard',      phone: '860-555-0135', years: '2', age: 19, prefs: 'Griswold, Haddam-Killingworth', gender: 'Female', zip: '06336' }, // Gilman
             { name: 'Noah Szymanski',       phone: '860-555-0137', years: '2', age: 20, prefs: 'New London, Valley',            gender: 'Male',   zip: '06320' }, // New London
-            { name: 'Rusty Trombone',       phone: '860-555-0140', years: '3', age: 22, prefs: 'WAM, Glastonbury',              gender: 'Male',   zip: '06279' }, // Woodstock Valley
+            { name: 'Cal Whitmore',         phone: '860-555-0140', years: '3', age: 22, prefs: 'WAM, Glastonbury',              gender: 'Male',   zip: '06279' }, // Woodstock Valley
             { name: 'Paige Hollingsworth',  phone: '860-555-0141', years: '3', age: 22, prefs: 'Stonington',                    gender: 'Female', zip: '06378' }, // Stonington
             { name: 'Jake Ostrowski',       phone: '860-555-0142', years: '3', age: 24, prefs: 'NECONN, Griswold',              gender: 'Male',   zip: '06330' }, // Baltic
-            { name: 'Connie Lingus',        phone: '860-555-0143', years: '3', age: 23, prefs: 'Lebanon, Valley',               gender: 'Female', zip: '06416' }, // Cromwell
+            { name: 'Connie Carmichael',     phone: '860-555-0143', years: '3', age: 23, prefs: 'Lebanon, Valley',               gender: 'Female', zip: '06416' }, // Cromwell
 
             // ── 4–5 years ─────────────────────────────────────────────────────
-            { name: 'Dick Trickle',         phone: '860-555-0116', years: '4', age: 20, prefs: 'Griswold, Stonington',          gender: 'Male',   zip: '06351' }, // Jewett City (real NASCAR legend)
+            { name: 'Danny Gallagher',     phone: '860-555-0116', years: '4', age: 20, prefs: 'Griswold, Stonington',          gender: 'Male',   zip: '06351' }, // Jewett City
             { name: 'Meghan Carlisle',      phone: '860-555-0117', years: '4', age: 21, prefs: 'WAM, Glastonbury',              gender: 'Female', zip: '06029' }, // Ellington
             { name: 'Cole Thibeault',       phone: '860-555-0136', years: '4', age: 21, prefs: 'NECONN',                        gender: 'Male',   zip: '06360' }, // Norwich
-            { name: 'Ophelia Balls',        phone: '860-555-0118', years: '5', age: 22, prefs: 'East Haddam, NECONN',           gender: 'Female', zip: '06469' }, // Moodus
+            { name: 'Fiona Beaumont',         phone: '860-555-0118', years: '5', age: 22, prefs: 'East Haddam, NECONN',           gender: 'Female', zip: '06469' }, // Moodus
             { name: 'Ryan Beauchamp',       phone: '860-555-0138', years: '5', age: 23, prefs: 'RHAMYS, Portland',              gender: 'Male',   zip: '06238' }, // Coventry
             { name: 'Alexis Moreau',        phone: '860-555-0139', years: '5', age: 24, prefs: 'East Haddam, NECONN',           gender: 'Female', zip: '06247' }, // Hampton
 
             // ── 6–10 years ────────────────────────────────────────────────────
-            { name: 'Amanda Hugginkiss',    phone: '860-555-0119', years: '6', age: 24, prefs: 'NECONN',                        gender: 'Female', zip: '06370' }, // Oakdale
+            { name: 'Cassie Fontaine',         phone: '860-555-0119', years: '6', age: 24, prefs: 'NECONN',                        gender: 'Female', zip: '06370' }, // Oakdale
             { name: 'Derek Kowalski',       phone: '860-555-0120', years: '7', age: 27, prefs: 'New London, Valley',            gender: 'Male',   zip: '06333' }, // East Lyme
             { name: 'Tina Wrzesniewski',    phone: '860-555-0121', years: '8', age: 29, prefs: 'Portland, Haddam-Killingworth', gender: 'Female', zip: '06441' }, // Higganum
-            { name: 'Dick Hertz',           phone: '860-555-0144', years: '9', age: 34, prefs: 'Portland',                      gender: 'Male',   zip: '06450' }, // Meriden
+            { name: 'Frank Bertrand',            phone: '860-555-0144', years: '9', age: 34, prefs: 'Portland',                      gender: 'Male',   zip: '06450' }, // Meriden
             { name: 'Brendan Gallagher',    phone: '860-555-0122', years: '10',age: 33, prefs: 'Glastonbury, Griswold',         gender: 'Male',   zip: '06067' }, // Rocky Hill
             { name: 'Sara Leboeuf',         phone: '860-555-0145', years: '10',age: 36, prefs: 'Glastonbury, East Haddam',      gender: 'Female', zip: '06424' }, // East Hampton
-            { name: 'Eileen Dover',         phone: '860-555-0163', years: '7', age: 28, prefs: 'Griswold, East Haddam',         gender: 'Female', zip: '06353' }, // Montville
+            { name: 'Claire Holloway',        phone: '860-555-0163', years: '7', age: 28, prefs: 'Griswold, East Haddam',         gender: 'Female', zip: '06353' }, // Montville
             { name: 'Marcus Webb',          phone: '860-555-0164', years: '8', age: 31, prefs: 'East Haddam, NECONN',           gender: 'Male',   zip: '06420' }, // Salem
-            { name: 'Helen Waite',          phone: '860-555-0165', years: '6', age: 26, prefs: 'Griswold',                      gender: 'Female', zip: '06264' }, // Scotland
+            { name: 'Diane Kozlowski',       phone: '860-555-0165', years: '6', age: 26, prefs: 'Griswold',                      gender: 'Female', zip: '06264' }, // Scotland
             { name: 'Chris Beausoleil',     phone: '860-555-0166', years: '9', age: 30, prefs: 'East Haddam, Valley',           gender: 'Male',   zip: '06475' }, // Old Saybrook
 
             // ── 11–20 years ───────────────────────────────────────────────────
-            { name: 'Balls Mahoney',        phone: '860-555-0123', years: '12',age: 38, prefs: 'NECONN, Stonington',            gender: 'Male',   zip: '06359' }, // North Stonington (real WWE wrestler)
+            { name: 'Tim Maguire',          phone: '860-555-0123', years: '12',age: 38, prefs: 'NECONN, Stonington',            gender: 'Male',   zip: '06359' }, // North Stonington
             { name: 'Karen Ostrowski',      phone: '860-555-0146', years: '12',age: 39, prefs: 'NECONN, WAM',                   gender: 'Female', zip: '06280' }, // Windham
             { name: 'Patrick Villeneuve',   phone: '860-555-0124', years: '15',age: 42, prefs: 'East Haddam, RHAMYS',           gender: 'Male',   zip: '06409' }, // Centerbrook
-            { name: 'Dick Pound',           phone: '860-555-0147', years: '14',age: 43, prefs: 'Griswold, RHAMYS',              gender: 'Male',   zip: '06373' }, // Oneco (real IOC official)
+            { name: 'Greg Fabrizio',           phone: '860-555-0147', years: '14',age: 43, prefs: 'Griswold, RHAMYS',              gender: 'Male',   zip: '06373' }, // Oneco
             { name: 'Donna Marchetti',      phone: '860-555-0148', years: '16',age: 46, prefs: 'New London, Stonington',        gender: 'Female', zip: '06340' }, // Groton
-            { name: 'Al Coholic',           phone: '860-555-0149', years: '18',age: 49, prefs: 'NECONN, Portland',              gender: 'Male',   zip: '06457' }, // Middletown
+            { name: 'Lou Marchetti',             phone: '860-555-0149', years: '18',age: 49, prefs: 'NECONN, Portland',              gender: 'Male',   zip: '06457' }, // Middletown
             { name: 'Steve Kowalski',       phone: '860-555-0125', years: '18',age: 51, prefs: 'WAM, Lebanon, Glastonbury',     gender: 'Male',   zip: '06043' }, // Bolton
-            { name: 'Chris P. Bacon',       phone: '860-555-0150', years: '20',age: 55, prefs: 'WAM, Glastonbury, Lebanon',     gender: 'Male',   zip: '06232' }, // Andover
+            { name: 'Kevin Beauchamp',      phone: '860-555-0150', years: '20',age: 55, prefs: 'WAM, Glastonbury, Lebanon',     gender: 'Male',   zip: '06232' }, // Andover
             { name: 'Janet Tremblay',       phone: '860-555-0167', years: '11',age: 37, prefs: 'Griswold, East Haddam',         gender: 'Female', zip: '06334' }, // Bozrah
-            { name: 'Phil McKrevice',       phone: '860-555-0168', years: '13',age: 41, prefs: 'East Haddam',                   gender: 'Male',   zip: '06414' }, // Cobalt
+            { name: 'Dan Calloway',         phone: '860-555-0168', years: '13',age: 41, prefs: 'East Haddam',                   gender: 'Male',   zip: '06414' }, // Cobalt
             { name: 'Linda Beauchamp',      phone: '860-555-0169', years: '16',age: 45, prefs: 'Griswold, NECONN',              gender: 'Female', zip: '06095' }, // Windsor
-            { name: 'Buster Hyman',         phone: '860-555-0170', years: '20',age: 52, prefs: 'East Haddam, Portland',         gender: 'Male',   zip: '06469' }, // Moodus
+            { name: 'Walt Whitmore',         phone: '860-555-0170', years: '20',age: 52, prefs: 'East Haddam, Portland',         gender: 'Male',   zip: '06469' }, // Moodus
         ];
 
         let seededGameIds  = [];
@@ -450,7 +409,7 @@
 
                 // ── Step 4: Create availability for all fake refs ─────────────
                 log('Creating availability records…', 'info');
-                const dates = [SAT, SUN];
+                const dates = [SAT1, SUN1];
                 let avCount = 0;
                 const avTotal = createdRefNames.length * dates.length;
 
@@ -626,7 +585,7 @@
 
                 // Create availability for all created refs
                 log('Creating availability records…', 'info');
-                const dates = [SAT1, SUN1, SAT2, SUN2];
+                const dates = [SAT1, SUN1];
                 let avCount = 0;
                 const avTotal = createdRefNames.length * dates.length;
                 for (const name of createdRefNames) {
@@ -700,8 +659,8 @@
                     return;
                 }
 
-                const dates = [SAT1, SUN1, SAT2, SUN2];
-                log(`Creating availability for ${SAT1}, ${SUN1}, ${SAT2}, and ${SUN2}…`, 'info');
+                const dates = [SAT1, SUN1];
+                log(`Creating availability for ${SAT1} and ${SUN1}…`, 'info');
                 let avCount = 0;
                 const avTotal = fakeRefs.length * dates.length;
 
@@ -731,7 +690,7 @@
                 const summary = document.getElementById('summaryBox');
                 summary.style.display = 'block';
                 summary.innerHTML = `<strong style="color:#27ae60;">✓ Availability seeded</strong><br>
-                    <span style="font-size:0.88rem;">${avCount} availability records created for ${fakeRefs.length} referees on ${SAT} and ${SUN}.</span>`;
+                    <span style="font-size:0.88rem;">${avCount} availability records created for ${fakeRefs.length} referees on ${SAT1} and ${SUN1}.</span>`;
                 log('Done!', 'info');
 
             } catch(e) {
@@ -833,7 +792,14 @@
             }
         }
 
-        const FAKE_REF_NAMES = new Set(FAKE_REFS.map(r => r.name));
+        const FAKE_REF_NAMES = new Set([
+            ...FAKE_REFS.map(r => r.name),
+            // Legacy dirty names replaced on 2026-03-22 — keep until all are cleared from Airtable
+            'Phil McKrevice','Phuc Dat Bich','Buster Hyman','Anita Hooker','Hugh Jass',
+            'Eileen Dover','Damn It Janet','Helen Waite','Cornhole Jackson','Dick Pound',
+            'Ophelia Balls','Dick Trickle','Turd Ferguson','Ben Dover','Phil Harmonic',
+            'Buster Keaton','Al Coholic','Seymour Butts','Harry Balzac','Jack Mehoff',
+        ]);
 
         async function clearData() {
             if (!confirm('Fetch all seeded records from Airtable and delete them? This removes ALL test games, all 61 test referees (by name), and all availability records.')) return;
