@@ -303,6 +303,87 @@
         }
         .cmd-row.fully-assigned { border-left: 4px solid #27ae60; }
         .cmd-row.cancelled { border-left: 4px solid #e74c3c; opacity: 0.65; }
+        .cmd-commit-col {
+            flex: 0 0 54px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 6px 4px;
+            border-right: 1px solid #eee;
+            background: #f4f6fa;
+        }
+        .cmd-commit-col input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: #0f3460;
+        }
+        .cmd-commit-btn {
+            background: #0f3460;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 7px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            white-space: nowrap;
+            line-height: 1.3;
+        }
+        .cmd-commit-btn:disabled { opacity: 0.55; cursor: default; }
+        .cmd-commit-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .cmd-commit-dropdown-btn {
+            background: #0f3460;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .cmd-commit-dropdown-btn::after {
+            content: '▾';
+            font-size: 0.9rem;
+        }
+        .cmd-commit-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 4px);
+            background: white;
+            border: 1px solid #dde3f0;
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.13);
+            z-index: 999;
+            min-width: 160px;
+            overflow: hidden;
+        }
+        .cmd-commit-menu.open { display: block; }
+        .cmd-commit-menu button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 9px 16px;
+            background: none;
+            border: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #0f3460;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .cmd-commit-menu button:hover { background: #f0f4ff; }
         .cmd-game-info {
             flex: 0 0 240px;
             padding: 8px 12px;
@@ -1241,7 +1322,13 @@
             }
 
             let html = `<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
-                <button onclick="commitAll(this)" style="background:#0f3460;color:white;border:none;border-radius:8px;padding:7px 18px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;">Commit All</button>
+                <div class="cmd-commit-dropdown" id="commitDropdown">
+                    <button class="cmd-commit-dropdown-btn" onclick="toggleCommitMenu(event)">Commit</button>
+                    <div class="cmd-commit-menu" id="commitMenu">
+                        <button onclick="commitAll(this);closeCommitMenu()">Commit All</button>
+                        <button onclick="commitSelected(this);closeCommitMenu()">Commit Selected</button>
+                    </div>
+                </div>
             </div>`;
             filtered.forEach(g => {
                 const f    = g.fields;
@@ -1351,10 +1438,13 @@
                 }
 
                 html += `<div class="cmd-row ${fullyAssigned ? 'fully-assigned' : ''} ${isCancelled ? 'cancelled' : ''}" id="cmd2row-${gid}">
+                    <div class="cmd-commit-col">
+                        <input type="checkbox" class="game-select-chk" data-game="${gid}" onchange="toggleGameSelect('${gid}',this.checked)" title="Select for Commit Selected">
+                        ${!fullyAssigned && !isCancelled ? `<button class="cmd-commit-btn" onclick="commitGame('${gid}', this)">Commit</button>` : ''}
+                    </div>
                     <div class="cmd-game-info">
                         <div class="cg-title">${home} vs ${away}</div>
                         <div class="cg-meta">${date}${time ? ' @ ' + time : ''}${age ? ' · ' + age : ''}${club ? ' · ' + club : ''}</div>
-                        ${!fullyAssigned && !isCancelled ? `<button onclick="commitGame('${gid}', this)" style="margin-top:6px;width:100%;background:#0f3460;color:white;border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:inherit;">Commit</button>` : ''}
                     </div>
                     <div class="cmd-strips">
                         ${buildStrip2('Center Referee', 'CR',  cRef, f['Center Referee'])}
@@ -1561,6 +1651,38 @@
                 btnEl.textContent = assigned ? `✓ ${assigned} assigned` : 'Nothing to commit';
                 setTimeout(() => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Commit'; } }, 2000);
             }
+        }
+
+        // ── Commit dropdown + selected games tracking ─────────────────────────
+        const selectedGames = new Set();
+
+        function toggleGameSelect(gameId, checked) {
+            if (checked) selectedGames.add(gameId);
+            else selectedGames.delete(gameId);
+        }
+
+        function toggleCommitMenu(event) {
+            event.stopPropagation();
+            document.getElementById('commitMenu').classList.toggle('open');
+        }
+
+        function closeCommitMenu() {
+            const m = document.getElementById('commitMenu');
+            if (m) m.classList.remove('open');
+        }
+
+        document.addEventListener('click', () => closeCommitMenu());
+
+        async function commitSelected(btnEl) {
+            if (!selectedGames.size) { alert('No games checked. Use the checkboxes on the left to select games.'); return; }
+            const ids = [...selectedGames];
+            if (!confirm(`Commit staged refs to ${ids.length} selected game(s)?`)) return;
+            if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Committing…'; }
+            for (const gid of ids) {
+                await commitGame(gid, null);
+            }
+            if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Commit Selected'; }
+            renderGames();
         }
 
         async function commitAll(btnEl) {
