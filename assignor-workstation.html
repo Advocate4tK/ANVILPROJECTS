@@ -255,55 +255,39 @@
         /* Global styles.css sets .container { overflow: hidden } which breaks
            both page scrolling and position:sticky. Override it here. */
         .container { overflow: visible; }
-        /* ── Staging View ── */
+        /* ── Wide View ── */
         .staging-row {
             display: flex;
             align-items: stretch;
             background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 10px;
-            margin-bottom: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            margin-bottom: 12px;
             overflow: hidden;
         }
-        .staging-row.fully-assigned { border-left: 4px solid #27ae60; }
-        .staging-game-info {
-            flex: 0 0 280px;
-            padding: 10px 14px;
-            border-right: 1px solid #eee;
-            background: #f9f9f9;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
+        .staging-row.fully-assigned { border-color: #27ae60; }
+        .staging-row.cancelled      { border-color: #e0e0e0; opacity: 0.7; }
+        /* Left: full game card */
+        .staging-card-area {
+            flex: 0 0 460px;
+            padding: 12px 14px;
+            border-right: 2px solid #eee;
+            position: relative;
         }
-        .staging-game-info .sg-title { font-weight: 700; font-size: 0.88rem; color: #0f3460; }
-        .staging-game-info .sg-meta  { font-size: 0.75rem; color: #888; margin-top: 2px; }
-        .staging-right {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
+        /* Right: ref queue */
         .staging-refs-scroll {
             flex: 1;
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 8px 14px;
+            gap: 0;
+            padding: 12px 16px;
             overflow-x: auto;
             scrollbar-width: thin;
-            border-bottom: 1px solid #f0f0f0;
+            min-width: 0;
+            background: #f9fbfd;
         }
-        .staging-refs-scroll::-webkit-scrollbar { height: 4px; }
-        .staging-refs-scroll::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
-        .staging-slots {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 6px;
-            padding: 8px 14px;
-            background: #fafafa;
-        }
-        .staging-slots .slot { min-height: 38px; font-size: 0.75rem; }
-        .staging-slots .slot-label { font-size: 0.64rem; }
+        .staging-refs-scroll::-webkit-scrollbar { height: 5px; }
+        .staging-refs-scroll::-webkit-scrollbar-thumb { background: #ccd8e0; border-radius: 4px; }
 
         /* ── Command View ── */
         .cmd-row {
@@ -890,14 +874,8 @@
 
             let html = '';
             filtered.forEach(g => {
-                const f    = g.fields;
-                const gid  = g.id;
-                const date = f['Date'] ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '—';
-                const time = f['Time'] ? formatTime(f['Time']) : '';
-                const home = f['Home Team'] || '?';
-                const away = f['Away Team'] || '?';
-                const age  = f['Age Group'] || '';
-                const club = resolveGameClub(f) || '';
+                const f   = g.fields;
+                const gid = g.id;
                 const cRef = resolveRefName(f['Center Referee']);
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
@@ -942,20 +920,12 @@
                     }).join('')
                     : '<span class="staging-empty">No refs available this date</span>';
 
-                const isU8 = age === 'U8';
-                html += `<div class="staging-row ${fullyAssigned ? 'fully-assigned' : ''}" id="srow-${gid}">
-                    <div class="staging-game-info">
-                        <div class="sg-title">${home} vs ${away}</div>
-                        <div class="sg-meta">${date}${time ? ' @ ' + time : ''}${age ? ' · ' + age : ''}${club ? ' · ' + club : ''}</div>
+                const isCancelled = cancelledGameIds.has(gid) || g.fields['Status'] === 'Cancelled';
+                html += `<div class="staging-row ${fullyAssigned ? 'fully-assigned' : ''} ${isCancelled ? 'cancelled' : ''}" id="srow-${gid}">
+                    <div class="staging-card-area">
+                        ${buildGameCardInner(g)}
                     </div>
-                    <div class="staging-right">
-                        <div class="staging-refs-scroll" id="stagescroll-${gid}">${cards}</div>
-                        <div class="staging-slots">
-                            ${makeSlot(gid, 'Center Referee', 'Center', cRef, g.fields['Center Referee'])}
-                            ${isU8 ? '' : makeSlot(gid, 'AR 1', 'AR 1', ar1, g.fields['AR 1'])}
-                            ${isU8 ? '' : makeSlot(gid, 'AR 2', 'AR 2', ar2, g.fields['AR 2'])}
-                        </div>
-                    </div>
+                    <div class="staging-refs-scroll" id="stagescroll-${gid}">${cards}</div>
                 </div>`;
             });
 
@@ -1943,8 +1913,7 @@
                 const isChangeReq   = (f['Game Status'] || '') === 'Change Requested';
 
                 html += `<div class="game-card ${fullyAssigned ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}" onclick="selectGame('${gid}')" id="card-${gid}">
-                    ${isCancelled ? '<div class="cancelled-stamp">CANCELLED</div>' : ''}
-                    ${isChangeReq ? '<div style="font-size:0.72rem; font-weight:700; color:#935116; background:#fdebd0; border-radius:4px; padding:2px 8px; margin-bottom:6px; display:inline-block;">⚠ Change Requested</div>' : ''}
+                    ${buildGameCardInner(g)}
                     <div class="game-header">
                         <div>
                             ${(() => { const gn = buildGameNumber(f); return gn ? `<span style="font-size:0.65rem; font-weight:700; color:#aaa; letter-spacing:0.5px; margin-right:6px;">${gn}</span>` : ''; })()}
@@ -1958,94 +1927,122 @@
                             <button onclick="event.stopPropagation(); toggleGameEdit('${gid}')" title="Edit game" style="background:none; border:1px solid #ccc; border-radius:6px; padding:2px 7px; font-size:0.78rem; cursor:pointer; color:#555; line-height:1.4;">✏️</button>
                         </div>
                     </div>
-                    ${(() => {
-                        const hideARs = hideU8Games && age === 'U8';
-                        return `<div class="slots" style="${hideARs ? 'grid-template-columns:1fr;' : ''}">
-                        ${makeSlot(gid, 'Center Referee', 'Center', cRef, f['Center Referee'])}
-                        ${hideARs ? '' : makeSlot(gid, 'AR 1', 'AR 1', ar1, f['AR 1'])}
-                        ${hideARs ? '' : makeSlot(gid, 'AR 2', 'AR 2', ar2, f['AR 2'])}
-                    </div>`;
-                    })()}
-                    ${(() => {
-                        const curVenueId = f['Venue ID'] || '';
-                        const curFieldId = f['Field ID'] || '';
-                        const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
-                        // Also use selected club pill if only one club is active
-                        const pillClub = selectedClubs.size === 1 ? [...selectedClubs][0].toLowerCase() : '';
-                        const activeClub = gameClubLower || pillClub;
-                        const venuesFiltered = allVenues.filter(v =>
-                            !activeClub || v.clubs.some(c => c.includes(activeClub) || activeClub.includes(c))
-                        );
-                        const venueOpts = venuesFiltered.map(v =>
-                            `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
-                        ).join('');
-                        const fieldOpts = (() => {
-                            if (!curVenueId) return '';
-                            const takenFieldIds = new Set(
-                                allGames
-                                    .filter(og => og.id !== gid && og.fields['Field ID'] && gamesOverlap(g, og))
-                                    .map(og => String(og.fields['Field ID']))
-                            );
-                            return allFields
-                                .filter(fi => fi.venueId == curVenueId)
-                                .map(fi => {
-                                    const taken = takenFieldIds.has(String(fi.fieldId));
-                                    return `<option value="${fi.fieldId}" ${fi.fieldId == curFieldId ? 'selected' : ''} ${taken ? 'disabled style="color:#bbb;"' : ''}>${fi.name}${taken ? ' — in use' : ''}</option>`;
-                                })
-                                .join('');
-                        })();
-                        return `<div class="venue-field-row" onclick="event.stopPropagation()">
-                            <span style="font-size:0.72rem;color:#888;">📍</span>
-                            <select class="vf-select" onchange="onVenueChange('${gid}', this)" style="flex:2;">
-                                <option value="">Venue…</option>${venueOpts}
-                            </select>
-                            <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;" ${!curVenueId ? 'disabled' : ''}>
-                                <option value="">Field…</option>${fieldOpts}
-                            </select>
-                        </div>`;
-                    })()}
-                    <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
-                        ${(() => {
-                            if (!isChangeReq) return '';
-                            const notes  = f['Notes'] || '';
-                            const blocks = notes.split(/\[CHANGE REQUEST/i);
-                            if (blocks.length < 2) return '';
-                            const last    = '[CHANGE REQUEST' + blocks[blocks.length - 1];
-                            const reqDate = (last.match(/Requested Date:\s*(\S+)/i))?.[1] || '';
-                            const reqTime = (last.match(/Requested Time:\s*(\S+)/i))?.[1] || '';
-                            const reason  = (last.match(/Reason:\s*(.+)/i))?.[1]?.trim()  || '';
-                            const parts   = [];
-                            if (reqDate || reqTime) parts.push(`📅 ${reqDate || ''}${reqDate && reqTime ? ' @ ' : ''}${reqTime ? formatTime(reqTime) : ''}`);
-                            if (reason) parts.push(`💬 "${reason}"`);
-                            if (!parts.length) return '';
-                            return `<div style="background:#fff3cd; border:1px solid #f0a500; border-radius:6px; padding:7px 12px; margin-bottom:10px; font-size:0.78rem; color:#7d4e00; line-height:1.6;">
-                                <strong>Club requested:</strong> ${parts.join(' &nbsp;·&nbsp; ')}
-                            </div>`;
-                        })()}
-                        <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px;">
-                            <div>
-                                <label>Date</label>
-                                <input type="date" id="editDate-${gid}" value="${f['Date'] || ''}">
-                            </div>
-                            <div>
-                                <label>Time</label>
-                                <input type="time" id="editTime-${gid}" value="${f['Time'] || ''}">
-                            </div>
-                        </div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
-                            <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
-                            ${isCancelled
-                                ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
-                                : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`
-                            }
-                        </div>
-                    </div>
                 </div>`;
             });
 
             wrap.innerHTML = html;
             wireSlotDragDrop();
+        }
+
+        // ── Shared game card inner HTML (used by Standard and Wide views) ─────
+        function buildGameCardInner(g) {
+            const f    = g.fields;
+            const gid  = g.id;
+            const date = f['Date'] ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '—';
+            const time = f['Time'] || '';
+            const home = f['Home Team'] || '?';
+            const away = f['Away Team'] || '?';
+            const age    = f['Age Group'] || '';
+            const gender = f['Gender'] === 'Female' ? 'F' : f['Gender'] === 'Male' ? 'M' : '';
+            const club = resolveGameClub(f);
+            const cRef = resolveRefName(f['Center Referee']);
+            const ar1  = resolveRefName(f['AR 1']);
+            const ar2  = resolveRefName(f['AR 2']);
+            const isCancelled = cancelledGameIds.has(gid) || f['Status'] === 'Cancelled';
+            const isChangeReq = (f['Game Status'] || '') === 'Change Requested';
+            const hideARs     = hideU8Games && age === 'U8';
+
+            const gn = buildGameNumber(f);
+
+            // Venue/field row
+            const curVenueId = f['Venue ID'] || '';
+            const curFieldId = f['Field ID'] || '';
+            const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
+            const pillClub      = selectedClubs.size === 1 ? [...selectedClubs][0].toLowerCase() : '';
+            const activeClub    = gameClubLower || pillClub;
+            const venuesFiltered = allVenues.filter(v =>
+                !activeClub || v.clubs.some(c => c.includes(activeClub) || activeClub.includes(c))
+            );
+            const venueOpts = venuesFiltered.map(v =>
+                `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
+            ).join('');
+            const fieldOpts = (() => {
+                if (!curVenueId) return '';
+                const takenFieldIds = new Set(
+                    allGames
+                        .filter(og => og.id !== gid && og.fields['Field ID'] && gamesOverlap(g, og))
+                        .map(og => String(og.fields['Field ID']))
+                );
+                return allFields
+                    .filter(fi => fi.venueId == curVenueId)
+                    .map(fi => {
+                        const taken = takenFieldIds.has(String(fi.fieldId));
+                        return `<option value="${fi.fieldId}" ${fi.fieldId == curFieldId ? 'selected' : ''} ${taken ? 'disabled style="color:#bbb;"' : ''}>${fi.name}${taken ? ' — in use' : ''}</option>`;
+                    }).join('');
+            })();
+
+            // Change request details for edit panel
+            let changeReqNote = '';
+            if (isChangeReq) {
+                const notes  = f['Notes'] || '';
+                const blocks = notes.split(/\[CHANGE REQUEST/i);
+                if (blocks.length >= 2) {
+                    const last    = '[CHANGE REQUEST' + blocks[blocks.length - 1];
+                    const reqDate = (last.match(/Requested Date:\s*(\S+)/i))?.[1] || '';
+                    const reqTime = (last.match(/Requested Time:\s*(\S+)/i))?.[1] || '';
+                    const reason  = (last.match(/Reason:\s*(.+)/i))?.[1]?.trim() || '';
+                    const parts   = [];
+                    if (reqDate || reqTime) parts.push(`📅 ${reqDate || ''}${reqDate && reqTime ? ' @ ' : ''}${reqTime ? formatTime(reqTime) : ''}`);
+                    if (reason) parts.push(`💬 "${reason}"`);
+                    if (parts.length) changeReqNote = `<div style="background:#fff3cd;border:1px solid #f0a500;border-radius:6px;padding:7px 12px;margin-bottom:10px;font-size:0.78rem;color:#7d4e00;line-height:1.6;"><strong>Club requested:</strong> ${parts.join(' &nbsp;·&nbsp; ')}</div>`;
+                }
+            }
+
+            return `
+                ${isCancelled ? '<div class="cancelled-stamp">CANCELLED</div>' : ''}
+                ${isChangeReq ? '<div style="font-size:0.72rem;font-weight:700;color:#935116;background:#fdebd0;border-radius:4px;padding:2px 8px;margin-bottom:6px;display:inline-block;">⚠ Change Requested</div>' : ''}
+                <div class="game-header">
+                    <div>
+                        ${gn ? `<span style="font-size:0.65rem;font-weight:700;color:#aaa;letter-spacing:0.5px;margin-right:6px;">${gn}</span>` : ''}
+                        <span class="game-title">${home} vs ${away}</span>
+                        <span class="game-meta">&nbsp;— ${date} ${time ? '@ ' + formatTime(time) : ''}</span>
+                    </div>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        ${age  ? `<span class="game-badge">${age}${gender ? ' · ' + gender : ''}</span>` : ''}
+                        ${club ? `<span class="game-badge" style="background:#f0f0f0;">${club}</span>` : ''}
+                        ${isChangeReq ? `<button onclick="event.stopPropagation(); markChangeResolved('${gid}')" style="background:#27ae60;color:white;border:none;border-radius:6px;padding:2px 9px;font-size:0.78rem;cursor:pointer;font-weight:700;line-height:1.4;">✅ Mark Resolved</button>` : ''}
+                        <button onclick="event.stopPropagation(); toggleGameEdit('${gid}')" style="background:none;border:1px solid #ccc;border-radius:6px;padding:2px 7px;font-size:0.78rem;cursor:pointer;color:#555;line-height:1.4;">✏️</button>
+                    </div>
+                </div>
+                <div class="slots" style="${hideARs ? 'grid-template-columns:1fr;' : ''}">
+                    ${makeSlot(gid, 'Center Referee', 'Center', cRef, f['Center Referee'])}
+                    ${hideARs ? '' : makeSlot(gid, 'AR 1', 'AR 1', ar1, f['AR 1'])}
+                    ${hideARs ? '' : makeSlot(gid, 'AR 2', 'AR 2', ar2, f['AR 2'])}
+                </div>
+                <div class="venue-field-row" onclick="event.stopPropagation()">
+                    <span style="font-size:0.72rem;color:#888;">📍</span>
+                    <select class="vf-select" onchange="onVenueChange('${gid}', this)" style="flex:2;">
+                        <option value="">Venue…</option>${venueOpts}
+                    </select>
+                    <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;" ${!curVenueId ? 'disabled' : ''}>
+                        <option value="">Field…</option>${fieldOpts}
+                    </select>
+                </div>
+                <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
+                    ${changeReqNote}
+                    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
+                        <div><label>Date</label><input type="date" id="editDate-${gid}" value="${f['Date'] || ''}"></div>
+                        <div><label>Time</label><input type="time" id="editTime-${gid}" value="${f['Time'] || ''}"></div>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
+                        <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
+                        ${isCancelled
+                            ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
+                            : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`
+                        }
+                    </div>
+                </div>`;
         }
 
         // ── Shared slot drag/drop wiring (used by all three views) ───────────
