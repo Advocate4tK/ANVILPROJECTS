@@ -329,7 +329,7 @@
             min-height: 46px;
         }
         .cmd-strip:last-child { border-bottom: none; }
-        .cmd-strip-label {
+        .cmd-strip-label-btn {
             flex: 0 0 38px;
             font-size: 0.62rem;
             font-weight: 800;
@@ -337,12 +337,21 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             text-align: center;
+            border: none;
             border-right: 1px solid #f0f0f0;
+            background: none;
             align-self: stretch;
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
+            padding: 0;
+            font-family: inherit;
+            transition: background 0.15s, color 0.15s;
+            white-space: nowrap;
         }
+        .cmd-strip-label-btn:hover  { background: #f4f6fa; color: #0f3460; }
+        .cmd-strip-label-btn.active { color: #0f3460; background: #e8eef8; }
         .cmd-slot-wrap {
             flex: 0 0 148px;
             padding: 5px 8px;
@@ -427,17 +436,105 @@
         .scard-yrs  { font-size: 0.67rem; color: #7fb3d3; font-weight: 400; margin-top: 1px; pointer-events: none; }
         .staging-empty { color: #bbb; font-size: 0.82rem; font-style: italic; padding: 0 8px; align-self: center; }
         .staging-save-badge { font-size: 0.68rem; color: #27ae60; margin-left: 6px; display: none; }
-        /* Command view chips — same hexagon, smaller */
-        .cmd-chip.stage-ref-card {
-            padding: 5px 20px;
+        /* Command 2 chips — pill shape */
+        .cmd2-chip {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px 4px 8px;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 20px;
+            border-left-width: 4px;
             font-size: 0.74rem;
-            clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0% 50%);
+            font-weight: 600;
+            color: #0f3460;
+            cursor: grab;
+            user-select: none;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: box-shadow 0.15s, opacity 0.15s;
+        }
+        .cmd2-chip:hover     { box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+        .cmd2-chip.dragging  { opacity: 0.35; cursor: grabbing; }
+        .cmd2-chip.drop-before { box-shadow: -4px 0 0 #e94560; }
+        .cmd2-chip.drop-after  { box-shadow:  4px 0 0 #e94560; }
+        .cmd2-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            pointer-events: none;
+        }
+        .cmd2-name {
+            font-weight: 600;
+            color: #0f3460;
             cursor: pointer;
         }
-        .cmd-chip .scard-tip  { width: 20px; }
-        .cmd-chip .scard-rank { width: 16px; height: 16px; font-size: 0.6rem; }
-        .cmd-chip .scard-yrs  { display: none; }
+        .cmd2-name:hover { text-decoration: underline; }
+        .cmd2-badge {
+            font-size: 0.6rem;
+            font-weight: 700;
+            opacity: 0.75;
+            pointer-events: none;
+        }
+        .cmd2-gender {
+            font-size: 0.6rem;
+            font-weight: 800;
+            width: 14px; height: 14px;
+            border-radius: 3px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #fff;
+            flex-shrink: 0;
+            pointer-events: none;
+        }
+        /* Speech bubble */
+        #ref-bubble {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            background: #fff;
+            border: 1px solid #dde3f0;
+            border-radius: 10px;
+            padding: 12px 14px;
+            min-width: 180px;
+            max-width: 240px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+            font-size: 0.78rem;
+            color: #333;
+            transform: translate(-50%, calc(-100% - 12px));
+        }
+        #ref-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -8px; left: 50%;
+            transform: translateX(-50%);
+            border: 8px solid transparent;
+            border-bottom: none;
+            border-top-color: #fff;
+            filter: drop-shadow(0 2px 1px rgba(0,0,0,0.08));
+        }
+        #ref-bubble::before {
+            content: '';
+            position: absolute;
+            bottom: -9px; left: 50%;
+            transform: translateX(-50%);
+            border: 9px solid transparent;
+            border-bottom: none;
+            border-top-color: #dde3f0;
+        }
         .cmd-empty { color: #bbb; font-size: 0.78rem; font-style: italic; white-space: nowrap; }
+        .cmd-strip-sort {
+            flex-shrink: 0;
+            font-size: 0.65rem;
+            padding: 2px 4px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f8f9fa;
+            color: #555;
+            cursor: pointer;
+            align-self: center;
+        }
     </style>
 </head>
 <body>
@@ -867,6 +964,7 @@
         // ── View Mode ────────────────────────────────────────────────────────
         let viewMode       = 'standard'; // 'standard' | 'staging'
         let stageData      = {};         // { gameId: [refName, refName, ...] } — loaded from/saved to Airtable
+        let stripSortState = {};         // { 'gameId|position': sortMode } — per-strip sort in Command 2
         let stageSaveTimer = null;
 
         function setViewMode(mode, save = true) {
@@ -1152,38 +1250,75 @@
                 const assignedNames = [cRef, ar1, ar2].filter(Boolean);
 
                 function buildStrip2(position, label, assignedRef, linkedIds) {
-                    const chips = total
-                        ? orderedNames.map((name, idx) => {
+                    const stripKey  = `${gid}|${position}`;
+                    const sortMode  = stripSortState[stripKey] || 'staging';
+                    let stripNames  = [...orderedNames];
+                    if (sortMode === 'exp-desc') {
+                        stripNames.sort((a, b) => {
+                            const yA = parseInt(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'] ?? -1);
+                            const yB = parseInt(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'] ?? -1);
+                            return yB - yA;
+                        });
+                    } else if (sortMode === 'exp-asc') {
+                        stripNames.sort((a, b) => {
+                            const yA = parseInt(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'] ?? 999);
+                            const yB = parseInt(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'] ?? 999);
+                            return yA - yB;
+                        });
+                    } else if (sortMode === 'male-first') {
+                        stripNames.sort((a, b) => {
+                            const gA = availRefs.find(r => r.fields['Name'] === a)?.fields['Gender'] || '';
+                            const gB = availRefs.find(r => r.fields['Name'] === b)?.fields['Gender'] || '';
+                            return (gA === 'Male' ? 0 : 1) - (gB === 'Male' ? 0 : 1);
+                        });
+                    } else if (sortMode === 'female-first') {
+                        stripNames.sort((a, b) => {
+                            const gA = availRefs.find(r => r.fields['Name'] === a)?.fields['Gender'] || '';
+                            const gB = availRefs.find(r => r.fields['Name'] === b)?.fields['Gender'] || '';
+                            return (gA === 'Female' ? 0 : 1) - (gB === 'Female' ? 0 : 1);
+                        });
+                    }
+                    const stripTotal = stripNames.length;
+                    const chips = stripTotal
+                        ? stripNames.map((name, idx) => {
                             const chipRef   = availRefs.find(r => r.fields['Name'] === name);
                             const chipRefId = chipRef ? chipRef.id : '';
                             const yrs       = parseInt(chipRef?.fields['Years Reffing'] ?? -1);
                             const color     = yrs >= 0 ? expColor(yrs) : '#ccc';
                             const yrsLabel  = yrs === 0 ? '1st' : yrs === 1 ? '2nd' : yrs > 1 ? `${yrs}yr` : '';
-                            const rank      = idx + 1;
+                            const gender    = chipRef?.fields['Gender'] || '';
+                            const gColor    = gender === 'Male' ? '#2980b9' : gender === 'Female' ? '#e91e8c' : '#aaa';
+                            const gLetter   = gender === 'Male' ? 'M' : gender === 'Female' ? 'F' : '';
                             const safeName  = name.replace(/'/g, "\\'");
-                            const isFirst   = idx === 0;
-                            const isLast    = idx === total - 1;
-                            const hereStyle = name === assignedRef ? 'opacity:0.3; pointer-events:none;' : '';
-                            const elseStyle = !hereStyle && assignedNames.includes(name) ? 'opacity:0.45;' : '';
-                            const dimStyle  = hereStyle || elseStyle;
-                            return `<div class="cmd-chip stage-ref-card" draggable="true"
+                            const dimStyle  = name === assignedRef ? 'opacity:0.3; pointer-events:none;'
+                                            : assignedNames.includes(name) ? 'opacity:0.45;' : '';
+                            return `<div class="cmd2-chip" draggable="true"
                                 data-game="${gid}" data-name="${name}" data-ref-id="${chipRefId}"
                                 ondragstart="onChipDragStart(event,'${gid}','${chipRefId}','${safeName}')"
-                                style="border-left:4px solid ${color}; ${dimStyle}">
-                                <div class="scard-tip left${isFirst ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',-1)" style="display:flex;align-items:center;justify-content:center;font-size:0.55rem;color:rgba(0,0,0,0.35);">◄</div>
-                                <span style="font-size:0.62rem; font-weight:800; color:${color}; min-width:22px; text-align:center; pointer-events:none;">${rank}</span>
-                                <div style="pointer-events:none; line-height:1.2;">
-                                    <div class="scard-name" style="pointer-events:auto;" onclick="cmdAssign('${gid}','${position}','${safeName}')">${name}</div>
-                                    ${yrsLabel ? `<div style="font-size:0.6rem; color:${color}; font-weight:700;">${yrsLabel}</div>` : ''}
-                                </div>
-                                <div class="scard-tip right${isLast ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',1)" style="display:flex;align-items:center;justify-content:center;font-size:0.55rem;color:rgba(0,0,0,0.35);">►</div>
+                                onclick="showRefBubble(event,'${chipRefId}')"
+                                style="border-left-color:${color}; ${dimStyle}">
+                                <span class="cmd2-dot" style="background:${color};"></span>
+                                <span class="cmd2-name" onclick="event.stopPropagation(); cmdAssign('${gid}','${position}','${safeName}')">${name}</span>
+                                ${gLetter ? `<span class="cmd2-gender" style="background:${gColor};">${gLetter}</span>` : ''}
+                                ${yrsLabel ? `<span class="cmd2-badge" style="color:${color};">${yrsLabel}</span>` : ''}
                             </div>`;
                         }).join('')
                         : `<span class="cmd-empty">No refs available</span>`;
 
+                    const safePos = position.replace(/'/g, "\\'");
+                    const expCycle   = sortMode === 'exp-desc' ? 'exp-asc' : sortMode === 'exp-asc' ? 'staging' : 'exp-desc';
+                    const labelArrow = sortMode === 'exp-desc' ? ' ↓' : sortMode === 'exp-asc' ? ' ↑' : '';
+                    const labelActive = sortMode === 'exp-desc' || sortMode === 'exp-asc';
                     return `<div class="cmd-strip">
-                        <div class="cmd-strip-label">${label}</div>
+                        <button class="cmd-strip-label-btn${labelActive ? ' active' : ''}" onclick="setStripSort('${gid}','${safePos}','${expCycle}')" title="Sort by experience">${label}${labelArrow}</button>
                         <div class="cmd-slot-wrap">${makeSlot(gid, position, label, assignedRef, linkedIds)}</div>
+                        <select class="cmd-strip-sort" onchange="setStripSort('${gid}','${safePos}',this.value)" title="Sort this row">
+                            <option value="staging"${sortMode==='staging'?' selected':''}>— staged —</option>
+                            <option value="exp-desc"${sortMode==='exp-desc'?' selected':''}>Most exp</option>
+                            <option value="exp-asc"${sortMode==='exp-asc'?' selected':''}>Least exp</option>
+                            <option value="male-first"${sortMode==='male-first'?' selected':''}>M first</option>
+                            <option value="female-first"${sortMode==='female-first'?' selected':''}>F first</option>
+                        </select>
                         <div class="cmd-strip-queue" data-game="${gid}">${chips}</div>
                     </div>`;
                 }
@@ -1205,6 +1340,89 @@
             wireSlotDragDrop();
             initStageDragReorder();
         }
+
+        // Per-strip sort for Command 2
+        function setStripSort(gameId, position, mode) {
+            stripSortState[`${gameId}|${position}`] = mode;
+            renderGames();
+        }
+
+        // ── Ref Speech Bubble (Command 2) ────────────────────────────────────
+        let _bubbleRefId = null;
+
+        function showRefBubble(event, refId) {
+            event.stopPropagation();
+            const bubble = document.getElementById('ref-bubble');
+            if (!bubble) return;
+
+            // Toggle off if same chip
+            if (_bubbleRefId === refId && bubble.style.display === 'block') {
+                closeRefBubble(); return;
+            }
+            _bubbleRefId = refId;
+
+            const ref = allRefs.find(r => r.id === refId);
+            if (!ref) { closeRefBubble(); return; }
+            const f = ref.fields;
+
+            const name   = f['Name'] || '—';
+            const yrsNum = parseInt(f['Years Reffing'] ?? -1);
+            const color  = yrsNum >= 0 ? expColor(yrsNum) : '#aaa';
+            const yrsText = yrsNum === 0 ? '1st Season' : yrsNum === 1 ? '2nd Season' : yrsNum > 1 ? `${yrsNum} yrs` : '—';
+            const gender  = f['Gender'] || '';
+            const age     = f['Age'] ? `Age ${f['Age']}` : '';
+            const cert    = f['Certification Level'] || '';
+            const rating  = parseInt(f['Rating'] || 0);
+            const stars   = [1,2,3,4,5].map(i => i <= rating ? '★' : '☆').join('');
+            const notes   = f['Assignor Notes'] || '';
+            const prefs   = parsePreferences(f['Club Preference'] || '');
+
+            // Availability window for current game date (if known)
+            const gameDate = selectedGame?.fields['Date'] || document.getElementById('dateFilter')?.value || '';
+            const refNameKey = name.trim().toLowerCase();
+            let avail = '';
+            if (gameDate && availTimeByName[refNameKey]?.[gameDate]) {
+                const slot = availTimeByName[refNameKey][gameDate];
+                const fmtT = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+                if (slot.start && slot.end) avail = `${fmtT(slot.start)} – ${fmtT(slot.end)}`;
+                else if (slot.start) avail = `from ${fmtT(slot.start)}`;
+            }
+
+            const genderHtml = gender
+                ? `<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:${gender==='Male'?'#2980b9':'#e91e8c'};color:#fff;font-size:0.68rem;font-weight:700;">${gender}</span>`
+                : '';
+            const certHtml = cert ? `<span style="font-size:0.68rem;font-weight:700;color:#0f3460;">${cert}</span>` : '';
+
+            bubble.innerHTML = `
+                <div style="font-weight:700;font-size:0.85rem;color:#0f3460;margin-bottom:6px;">${name}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                    <span style="font-size:0.72rem;font-weight:700;color:${color};">${yrsText}</span>
+                    ${genderHtml}${certHtml}
+                    ${age ? `<span style="font-size:0.68rem;color:#888;">${age}</span>` : ''}
+                </div>
+                ${avail ? `<div style="font-size:0.7rem;color:#555;margin-bottom:4px;">🕐 ${avail}</div>` : ''}
+                ${prefs.length ? `<div style="font-size:0.7rem;color:#0f3460;font-weight:600;margin-bottom:4px;">⭐ ${prefs.join(', ')}</div>` : ''}
+                <div style="font-size:0.82rem;color:#f1c40f;letter-spacing:2px;margin-bottom:${notes?'4px':'0'};">${stars}</div>
+                ${notes ? `<div style="font-size:0.7rem;color:#777;font-style:italic;">"${notes}"</div>` : ''}
+            `;
+
+            const rect = event.currentTarget.getBoundingClientRect();
+            bubble.style.display = 'block';
+            bubble.style.left = (rect.left + rect.width / 2) + 'px';
+            bubble.style.top  = (rect.top + window.scrollY) + 'px';
+        }
+
+        function closeRefBubble() {
+            const bubble = document.getElementById('ref-bubble');
+            if (bubble) bubble.style.display = 'none';
+            _bubbleRefId = null;
+        }
+
+        document.addEventListener('click', e => {
+            if (!e.target.closest('#ref-bubble') && !e.target.closest('.cmd2-chip')) {
+                closeRefBubble();
+            }
+        });
 
         // Assign chip click in command view — explicit position
         function cmdAssign(gameId, position, refName) {
@@ -1275,7 +1493,7 @@
             allQueues.forEach(scroll => {
                 const gameId = scroll.dataset.game;
 
-                scroll.querySelectorAll('.stage-ref-card').forEach(card => {
+                scroll.querySelectorAll('.stage-ref-card, .cmd2-chip').forEach(card => {
                     card.addEventListener('dragstart', e => {
                         dragName   = card.dataset.name;
                         dragGameId = card.dataset.game;
@@ -1290,7 +1508,7 @@
                     });
                     card.addEventListener('dragend', () => {
                         dragName = null; dragGameId = null;
-                        document.querySelectorAll('.stage-ref-card').forEach(c =>
+                        document.querySelectorAll('.stage-ref-card, .cmd2-chip').forEach(c =>
                             c.classList.remove('dragging', 'drop-before', 'drop-after'));
                     });
                     card.addEventListener('dragover', e => {
@@ -3121,5 +3339,9 @@
             <div class="modal-countdown" id="changeCompleteCountdown"></div>
         </div>
     </div>
+
+    <!-- Speech bubble for Command 2 ref profile -->
+    <div id="ref-bubble"></div>
+
 </body>
 </html>
