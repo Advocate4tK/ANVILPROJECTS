@@ -1224,6 +1224,10 @@
                         const gender   = ref?.fields['Gender'] || '';
                         const gColor   = gender === 'Male' ? '#2980b9' : gender === 'Female' ? '#e91e8c' : '#aaa';
                         const gLetter  = gender === 'Male' ? 'M' : gender === 'Female' ? 'F' : '';
+                        const posPref  = (ref?.fields['Position Preference'] || '').trim();
+                        const posBadge = posPref === 'AR Only' ? `<span style="font-size:0.6rem;font-weight:800;background:#e67e22;color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;">AR</span>`
+                                       : posPref === 'Center Only' ? `<span style="font-size:0.6rem;font-weight:800;background:#8e44ad;color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;">CR</span>`
+                                       : '';
                         const safeName = name.replace(/'/g, "\\'");
                         const dimStyle = assignedNames.includes(name) ? 'opacity:0.45;' : '';
                         return `<div class="cmd2-chip" draggable="true"
@@ -1235,6 +1239,7 @@
                             <span class="cmd2-name">${name}</span>
                             ${gLetter ? `<span class="cmd2-gender" style="background:${gColor};">${gLetter}</span>` : ''}
                             ${yrsLabel ? `<span class="cmd2-badge" style="color:${color};">${yrsLabel}</span>` : ''}
+                            ${posBadge}
                         </div>`;
                     }).join('')
                     : '<span class="staging-empty">No refs available this date</span>';
@@ -1460,6 +1465,10 @@
                             const gender    = chipRef?.fields['Gender'] || '';
                             const gColor    = gender === 'Male' ? '#2980b9' : gender === 'Female' ? '#e91e8c' : '#aaa';
                             const gLetter   = gender === 'Male' ? 'M' : gender === 'Female' ? 'F' : '';
+                            const posPref   = (chipRef?.fields['Position Preference'] || '').trim();
+                            const posBadge  = posPref === 'AR Only' ? `<span style="font-size:0.6rem;font-weight:800;background:#e67e22;color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;">AR</span>`
+                                           : posPref === 'Center Only' ? `<span style="font-size:0.6rem;font-weight:800;background:#8e44ad;color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;">CR</span>`
+                                           : '';
                             const safeName  = name.replace(/'/g, "\\'");
                             const dimStyle  = name === assignedRef ? 'opacity:0.3; pointer-events:none;'
                                             : assignedNames.includes(name) ? 'opacity:0.45;' : '';
@@ -1472,6 +1481,7 @@
                                 <span class="cmd2-name">${name}</span>
                                 ${gLetter ? `<span class="cmd2-gender" style="background:${gColor};">${gLetter}</span>` : ''}
                                 ${yrsLabel ? `<span class="cmd2-badge" style="color:${color};">${yrsLabel}</span>` : ''}
+                                ${posBadge}
                             </div>`;
                         }).join('')
                         : `<span class="cmd-empty">No refs available</span>`;
@@ -1817,6 +1827,29 @@
                 ...document.querySelectorAll('.staging-refs-scroll'),
                 ...document.querySelectorAll('.cmd-strip-queue')
             ];
+
+            // Horizontal auto-scroll for each chip queue during drag
+            const _stripScrollRafs = new Map();
+            allQueues.forEach(queue => {
+                queue.addEventListener('dragover', e => {
+                    const ZONE  = 80;
+                    const SPEED = 14;
+                    const rect  = queue.getBoundingClientRect();
+                    const x     = e.clientX - rect.left;
+                    cancelAnimationFrame(_stripScrollRafs.get(queue));
+                    if (x < ZONE) {
+                        const power = (ZONE - x) / ZONE;
+                        const step  = () => { queue.scrollLeft -= SPEED * power; _stripScrollRafs.set(queue, requestAnimationFrame(step)); };
+                        _stripScrollRafs.set(queue, requestAnimationFrame(step));
+                    } else if (x > rect.width - ZONE) {
+                        const power = (x - (rect.width - ZONE)) / ZONE;
+                        const step  = () => { queue.scrollLeft += SPEED * power; _stripScrollRafs.set(queue, requestAnimationFrame(step)); };
+                        _stripScrollRafs.set(queue, requestAnimationFrame(step));
+                    }
+                });
+                queue.addEventListener('dragleave', () => cancelAnimationFrame(_stripScrollRafs.get(queue)));
+                queue.addEventListener('drop',      () => cancelAnimationFrame(_stripScrollRafs.get(queue)));
+            });
 
             allQueues.forEach(scroll => {
                 const gameId = scroll.dataset.game;
@@ -2793,6 +2826,20 @@
                     const targetPosition = slot.dataset.position;
                     if (!dragRefId || !targetGameId || !targetPosition) return;
 
+                    // Position preference check
+                    const _dragRef  = allRefs.find(r => r.id === dragRefId);
+                    const _posPref  = (_dragRef?.fields['Position Preference'] || '').trim();
+                    const _isCR     = targetPosition === 'Center Referee';
+                    const _isAR     = targetPosition === 'AR 1' || targetPosition === 'AR 2';
+                    if (_posPref === 'AR Only' && _isCR) {
+                        alert(`${dragRefName} prefers AR positions only and cannot be assigned as Center Referee.`);
+                        return;
+                    }
+                    if (_posPref === 'Center Only' && _isAR) {
+                        alert(`${dragRefName} prefers Center Referee only and cannot be assigned to an AR slot.`);
+                        return;
+                    }
+
                     if (dragSourceGameId && dragSourcePosition &&
                         (dragSourceGameId !== targetGameId || dragSourcePosition !== targetPosition)) {
                         const targetGame   = allGames.find(g => g.id === targetGameId);
@@ -3236,13 +3283,18 @@
                 const prefs = parsePreferences(r.fields['Club Preference']);
                 const clubLine = prefs.length ? `⭐ ${prefs.join(', ')}` : '';
 
+                const posPref  = (r.fields['Position Preference'] || '').trim();
+                const posBadge = posPref === 'AR Only'     ? `<span style="font-size:0.6rem;font-weight:800;background:#e67e22;color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;">AR</span>`
+                               : posPref === 'Center Only' ? `<span style="font-size:0.6rem;font-weight:800;background:#8e44ad;color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;">CR</span>`
+                               : '';
+
                 html += `<div class="ref-card ${cardClass}" draggable="${cls !== 2}"
                     data-ref-id="${rid}" data-ref-name="${name}"
                     ${expColor ? `style="border-left-color:${expColor};"` : ''}
                     ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
                         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; min-width:0;">
-                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}${genderDot}${distBadge}</div>
+                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}${genderDot}${distBadge}${posBadge}</div>
                         </div>
                         <span id="rtri-${rid}" onclick="event.stopPropagation(); toggleRefCardWS('${rid}')" style="cursor:pointer; font-size:0.7rem; color:${cls === 2 ? '#e74c3c' : '#aaa'}; padding:2px 4px; flex-shrink:0; font-weight:${cls === 2 ? '900' : 'normal'};">▶</span>
                     </div>
