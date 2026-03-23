@@ -693,7 +693,15 @@
                     <span id="lastLoadedLabel" style="font-size:0.75rem; color:#aaa; align-self:flex-end; padding-bottom:8px; white-space:nowrap;"></span>
                 </div>
                 <div style="margin-top:20px;">
-                    <div style="font-size:0.95rem; font-weight:700; color:#333; margin-bottom:8px;">Filter by Club:</div>
+                    <div style="display:flex; align-items:center; gap:14px; margin-bottom:8px; flex-wrap:wrap;">
+                        <div style="font-size:0.95rem; font-weight:700; color:#333;">Filter by Club:</div>
+                        <label style="display:flex; align-items:center; gap:4px; font-size:0.82rem; font-weight:600; color:#555; cursor:pointer;">
+                            <input type="radio" name="assignFilter" id="filterAll" checked onchange="setAssignFilter('all')"> All
+                        </label>
+                        <label style="display:flex; align-items:center; gap:4px; font-size:0.82rem; font-weight:700; color:#e94560; cursor:pointer;">
+                            <input type="radio" name="assignFilter" id="filterUnassigned" onchange="setAssignFilter('unassigned')"> Unassigned
+                        </label>
+                    </div>
                     <div class="club-pills" id="clubPills"></div>
                 </div>
             </div>
@@ -802,12 +810,7 @@
                                 <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">U8 ARs:</label>
                                 <button id="hideU8Btn" onclick="toggleHideU8()" style="font-size:0.78rem; font-weight:700; font-family:inherit; padding:4px 10px; border-radius:6px; border:1px solid #0f3460; background:#0f3460; color:#fff; cursor:pointer;">Show U8 ARs</button>
                             </div>
-                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                                <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">Show:</label>
-                                <label style="font-size:0.78rem; color:#555; display:flex; align-items:center; gap:5px; cursor:pointer;">
-                                    <input type="checkbox" id="unassignedOnlyFilter"> Unassigned games only
-                                </label>
-                            </div>
+                            <input type="checkbox" id="unassignedOnlyFilter" style="display:none;">
                             <div style="text-align:right; margin-top:4px; padding-bottom:8px;">
                                 <button onclick="clearGameFilters()" style="background:#eee; color:#555; border:1px solid #ccc; border-radius:6px; padding:6px 14px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; margin-right:6px;">Clear</button>
                                 <button onclick="applyGameFilters()" style="background:#0f3460; color:#fff; border:none; border-radius:6px; padding:6px 20px; font-size:0.85rem; font-weight:700; cursor:pointer; font-family:inherit;">Go</button>
@@ -1036,12 +1039,14 @@
             setViewMode(hasGameFocus ? 'standard' : (currentAssignor.defaultView || 'standard'), false);
             loadStageData();
 
-            // If ?filter=unassigned, check the box + highlight button then load/render
+            // If ?filter=unassigned, check the box + sync all controls then load/render
             if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
                 const cb = document.getElementById('unassignedOnlyFilter');
                 if (cb) cb.checked = true;
                 const ubtn = document.getElementById('unassignedQuickBtn');
                 if (ubtn) ubtn.classList.add('active');
+                const radio = document.getElementById('filterUnassigned');
+                if (radio) radio.checked = true;
                 if (allGames.length > 0) {
                     setTimeout(() => renderGames(), 100);
                 } else {
@@ -2191,11 +2196,23 @@
             document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
         }
 
+        function setAssignFilter(mode) {
+            const cb  = document.getElementById('unassignedOnlyFilter');
+            const btn = document.getElementById('unassignedQuickBtn');
+            const on  = mode === 'unassigned';
+            if (cb)  cb.checked = on;
+            if (btn) btn.classList.toggle('active', on);
+            renderGames();
+        }
+
         function toggleUnassignedFilter(btn) {
             const cb = document.getElementById('unassignedOnlyFilter');
             if (!cb) return;
             cb.checked = !cb.checked;
             btn.classList.toggle('active', cb.checked);
+            // Sync radio buttons
+            const radio = document.getElementById(cb.checked ? 'filterUnassigned' : 'filterAll');
+            if (radio) radio.checked = true;
             renderGames();
         }
 
