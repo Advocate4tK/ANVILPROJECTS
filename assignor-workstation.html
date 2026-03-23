@@ -935,6 +935,7 @@
                 const cards = total
                     ? orderedNames.map((name, idx) => {
                         const ref      = availRefs.find(r => r.fields['Name'] === name);
+                        const refId    = ref ? ref.id : '';
                         const years    = ref ? (ref.fields['Years Experience'] || ref.fields['Experience'] || '') : '';
                         const rank     = idx + 1;
                         const rankCls  = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : rank === 4 ? 'top4' : '';
@@ -942,7 +943,7 @@
                         const safeName = name.replace(/'/g, "\\'");
                         const isFirst  = idx === 0;
                         const isLast   = idx === total - 1;
-                        return `<div class="stage-ref-card ${cardCls}" draggable="true" data-game="${gid}" data-name="${name}">
+                        return `<div class="stage-ref-card ${cardCls}" draggable="true" data-game="${gid}" data-name="${name}" data-ref-id="${refId}">
                             <div class="scard-tip left${isFirst ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',-1)" title="Move left"></div>
                             <span class="scard-rank ${rankCls}">${rank}</span>
                             <div>
@@ -1015,6 +1016,8 @@
                 function buildStrip(position, label, assignedRef, linkedIds, stripKey) {
                     const chips = total
                         ? orderedNames.map((name, idx) => {
+                            const chipRef   = availRefs.find(r => r.fields['Name'] === name);
+                            const chipRefId = chipRef ? chipRef.id : '';
                             const rank      = idx + 1;
                             const rankCls   = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : rank === 4 ? 'top4' : '';
                             const cardCls   = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : rank === 4 ? 'rank-4' : '';
@@ -1025,7 +1028,7 @@
                             const hereStyle  = name === assignedRef ? 'opacity:0.3; pointer-events:none;' : '';
                             const elseStyle  = !hereStyle && assignedNames.includes(name) ? 'opacity:0.45;' : '';
                             const dimStyle   = hereStyle || elseStyle;
-                            return `<div class="cmd-chip stage-ref-card ${cardCls}" draggable="true" data-game="${gid}" data-name="${name}" style="${dimStyle}">
+                            return `<div class="cmd-chip stage-ref-card ${cardCls}" draggable="true" data-game="${gid}" data-name="${name}" data-ref-id="${chipRefId}" style="${dimStyle}">
                                 <div class="scard-tip left${isFirst ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',-1)"></div>
                                 <span class="scard-rank ${rankCls}">${rank}</span>
                                 <span class="scard-name" onclick="cmdAssign('${gid}','${position}','${safeName}')">${name}</span>
@@ -1137,6 +1140,11 @@
                     card.addEventListener('dragstart', e => {
                         dragName   = card.dataset.name;
                         dragGameId = card.dataset.game;
+                        // Bridge into slot drop system so chips can be dropped onto assignment slots
+                        dragRefId          = card.dataset.refId || '';
+                        dragRefName        = card.dataset.name;
+                        dragSourceGameId   = null;
+                        dragSourcePosition = null;
                         card.classList.add('dragging');
                         e.dataTransfer.effectAllowed = 'move';
                         e.stopPropagation();
