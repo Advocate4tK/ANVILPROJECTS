@@ -3304,6 +3304,27 @@
             e.dataTransfer.effectAllowed = 'move';
         }
 
+        // ── Auto-scroll page during drag ─────────────────────────────────────
+        let _autoScrollRaf = null;
+        document.addEventListener('dragover', function(e) {
+            const ZONE  = 100; // px from edge to start scrolling
+            const SPEED = 14;
+            const y = e.clientY;
+            const h = window.innerHeight;
+            cancelAnimationFrame(_autoScrollRaf);
+            if (y < ZONE) {
+                const power = (ZONE - y) / ZONE;
+                const step  = () => { window.scrollBy(0, -SPEED * power); _autoScrollRaf = requestAnimationFrame(step); };
+                _autoScrollRaf = requestAnimationFrame(step);
+            } else if (y > h - ZONE) {
+                const power = (y - (h - ZONE)) / ZONE;
+                const step  = () => { window.scrollBy(0,  SPEED * power); _autoScrollRaf = requestAnimationFrame(step); };
+                _autoScrollRaf = requestAnimationFrame(step);
+            }
+        });
+        document.addEventListener('dragend', () => cancelAnimationFrame(_autoScrollRaf));
+        document.addEventListener('drop',    () => cancelAnimationFrame(_autoScrollRaf));
+
         // ── Assign ref to slot ────────────────────────────────────────────────
         async function assignRef(gameId, position, refId, refName) {
             const targetGame = allGames.find(g => g.id === gameId);
