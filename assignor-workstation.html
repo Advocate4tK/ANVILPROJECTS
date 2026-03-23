@@ -1100,9 +1100,110 @@
             renderCommandView(filtered);
         }
 
-        // ── Command 2 View — sandbox fork of Command ─────────────────────────
+        // ── Command 2 View — Command + experience colors + years badge ──────
         function renderCommand2View(filtered) {
-            renderCommandView(filtered);
+            const wrap = document.getElementById('gamesListWrap');
+            if (!filtered.length) {
+                wrap.innerHTML = '<p class="hint">No games for selected clubs/dates.</p>';
+                return;
+            }
+
+            const expColor = yrs => yrs === 0 ? '#e74c3c' : yrs === 1 ? '#27ae60' : yrs <= 3 ? '#f1c40f' : yrs <= 10 ? '#2980b9' : '#8e44ad';
+
+            let html = '';
+            filtered.forEach(g => {
+                const f    = g.fields;
+                const gid  = g.id;
+                const date = f['Date'] ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '—';
+                const time = f['Time'] ? formatTime(f['Time']) : '';
+                const home = f['Home Team'] || '?';
+                const away = f['Away Team'] || '?';
+                const age  = f['Age Group'] || '';
+                const club = resolveGameClub(f) || '';
+                const cRef = resolveRefName(f['Center Referee']);
+                const ar1  = resolveRefName(f['AR 1']);
+                const ar2  = resolveRefName(f['AR 2']);
+                const fullyAssigned = cRef && (age === 'U8' || (ar1 && ar2));
+                const isCancelled   = cancelledGameIds.has(gid) || f['Status'] === 'Cancelled';
+                const isU8          = age === 'U8';
+
+                const gameDate      = f['Date'] || '';
+                const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
+                const availRefs     = allRefs.filter(r => {
+                    const name = r.fields['Name'] || '';
+                    if (!name) return false;
+                    const hasDate = allAvail.some(a =>
+                        (a.fields['Referee Name'] || '').trim().toLowerCase() === name.toLowerCase() &&
+                        (a.fields['Date'] || '') === gameDate
+                    );
+                    if (!hasDate) return false;
+                    if (gameClubLower) {
+                        const prefs = parsePreferences(r.fields['Club Preference'] || '');
+                        if (prefs.length > 0 && !prefs.some(p => p.toLowerCase() === gameClubLower)) return false;
+                    }
+                    return true;
+                });
+                const saved        = stageData[gid] || [];
+                const orderedNames = [
+                    ...saved.filter(n => availRefs.some(r => r.fields['Name'] === n)),
+                    ...availRefs.map(r => r.fields['Name']).filter(n => !saved.includes(n))
+                ];
+                const total         = orderedNames.length;
+                const assignedNames = [cRef, ar1, ar2].filter(Boolean);
+
+                function buildStrip2(position, label, assignedRef, linkedIds) {
+                    const chips = total
+                        ? orderedNames.map((name, idx) => {
+                            const chipRef   = availRefs.find(r => r.fields['Name'] === name);
+                            const chipRefId = chipRef ? chipRef.id : '';
+                            const yrs       = parseInt(chipRef?.fields['Years Reffing'] ?? -1);
+                            const color     = yrs >= 0 ? expColor(yrs) : '#ccc';
+                            const yrsLabel  = yrs === 0 ? '1st' : yrs === 1 ? '2nd' : yrs > 1 ? `${yrs}yr` : '';
+                            const rank      = idx + 1;
+                            const safeName  = name.replace(/'/g, "\\'");
+                            const isFirst   = idx === 0;
+                            const isLast    = idx === total - 1;
+                            const hereStyle = name === assignedRef ? 'opacity:0.3; pointer-events:none;' : '';
+                            const elseStyle = !hereStyle && assignedNames.includes(name) ? 'opacity:0.45;' : '';
+                            const dimStyle  = hereStyle || elseStyle;
+                            return `<div class="cmd-chip stage-ref-card" draggable="true"
+                                data-game="${gid}" data-name="${name}" data-ref-id="${chipRefId}"
+                                ondragstart="onChipDragStart(event,'${gid}','${chipRefId}','${safeName}')"
+                                style="border-left:4px solid ${color}; ${dimStyle}">
+                                <div class="scard-tip left${isFirst ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',-1)"></div>
+                                <span style="font-size:0.62rem; font-weight:800; color:${color}; min-width:22px; text-align:center; pointer-events:none;">${rank}</span>
+                                <div style="pointer-events:none; line-height:1.2;">
+                                    <div class="scard-name" style="pointer-events:auto;" onclick="cmdAssign('${gid}','${position}','${safeName}')">${name}</div>
+                                    ${yrsLabel ? `<div style="font-size:0.6rem; color:${color}; font-weight:700;">${yrsLabel}</div>` : ''}
+                                </div>
+                                <div class="scard-tip right${isLast ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',1)"></div>
+                            </div>`;
+                        }).join('')
+                        : `<span class="cmd-empty">No refs available</span>`;
+
+                    return `<div class="cmd-strip">
+                        <div class="cmd-strip-label">${label}</div>
+                        <div class="cmd-slot-wrap">${makeSlot(gid, position, label, assignedRef, linkedIds)}</div>
+                        <div class="cmd-strip-queue" data-game="${gid}">${chips}</div>
+                    </div>`;
+                }
+
+                html += `<div class="cmd-row ${fullyAssigned ? 'fully-assigned' : ''} ${isCancelled ? 'cancelled' : ''}" id="cmd2row-${gid}">
+                    <div class="cmd-game-info">
+                        <div class="cg-title">${home} vs ${away}</div>
+                        <div class="cg-meta">${date}${time ? ' @ ' + time : ''}${age ? ' · ' + age : ''}${club ? ' · ' + club : ''}</div>
+                    </div>
+                    <div class="cmd-strips">
+                        ${buildStrip2('Center Referee', 'CR',  cRef, f['Center Referee'])}
+                        ${isU8 ? '' : buildStrip2('AR 1', 'AR1', ar1, f['AR 1'])}
+                        ${isU8 ? '' : buildStrip2('AR 2', 'AR2', ar2, f['AR 2'])}
+                    </div>
+                </div>`;
+            });
+
+            wrap.innerHTML = html;
+            wireSlotDragDrop();
+            initStageDragReorder();
         }
 
         // Assign chip click in command view — explicit position
