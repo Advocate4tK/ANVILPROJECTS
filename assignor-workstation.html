@@ -300,9 +300,7 @@
             user-select: none;
             transition: background 0.15s, box-shadow 0.15s;
         }
-        .stage-ref-card:active { cursor: grabbing; }
-        .stage-ref-card.dragging { opacity: 0.4; }
-        .stage-ref-card.drag-over { background: #d4eafa; box-shadow: 0 0 0 2px #3498db; }
+        .stage-ref-card:hover { background: #d4eafa; }
         .stage-ref-card .ref-yrs { font-size: 0.68rem; color: #7fb3d3; font-weight: 400; margin-top: 1px; }
         .staging-empty { color: #bbb; font-size: 0.82rem; font-style: italic; padding: 0 8px; }
         .staging-save-badge { font-size: 0.68rem; color: #27ae60; margin-left: 6px; display: none; }
@@ -799,15 +797,15 @@
                     ? orderedNames.map(name => {
                         const ref   = availRefs.find(r => r.fields['Name'] === name);
                         const years = ref ? (ref.fields['Years Experience'] || ref.fields['Experience'] || '') : '';
-                        return `<div class="stage-ref-card" draggable="true"
-                            data-game="${gid}" data-name="${name}"
-                            ondragstart="onStageDragStart(event)"
-                            ondragover="onStageDragOver(event)"
-                            ondragleave="onStageDragLeave(event)"
-                            ondrop="onStageDrop(event)"
-                            ondragend="onStageDragEnd(event)">
-                            ${name}
-                            ${years ? `<div class="ref-yrs">${years} yr${years == 1 ? '' : 's'}</div>` : ''}
+                        return `<div class="stage-ref-card" data-game="${gid}" data-name="${name}">
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <button onclick="stageMove('${gid}','${name}',-1)" title="Move left" style="background:none; border:none; cursor:pointer; color:#7fb3d3; font-size:0.85rem; padding:0 2px; line-height:1;">◀</button>
+                                <div>
+                                    <div>${name}</div>
+                                    ${years ? `<div class="ref-yrs">${years} yr${years == 1 ? '' : 's'}</div>` : ''}
+                                </div>
+                                <button onclick="stageMove('${gid}','${name}',1)" title="Move right" style="background:none; border:none; cursor:pointer; color:#7fb3d3; font-size:0.85rem; padding:0 2px; line-height:1;">▶</button>
+                            </div>
                         </div>`;
                     }).join('')
                     : '<span class="staging-empty">No refs available this date</span>';
@@ -825,68 +823,23 @@
             wrap.innerHTML = html;
         }
 
-        // ── Drag and Drop for staging ─────────────────────────────────────────
-        let dragSrcName = null;
-        let dragSrcGame = null;
-
-        function onStageDragStart(e) {
-            dragSrcName = e.currentTarget.dataset.name;
-            dragSrcGame = e.currentTarget.dataset.game;
-            e.currentTarget.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-        }
-        function onStageDragOver(e) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            e.currentTarget.classList.add('drag-over');
-        }
-        function onStageDragLeave(e) {
-            e.currentTarget.classList.remove('drag-over');
-        }
-        function onStageDragEnd(e) {
-            e.currentTarget.classList.remove('dragging');
-            document.querySelectorAll('.stage-ref-card').forEach(c => c.classList.remove('drag-over'));
-        }
-        function onStageDrop(e) {
-            e.preventDefault();
-            const targetName = e.currentTarget.dataset.name;
-            const targetGame = e.currentTarget.dataset.game;
-            e.currentTarget.classList.remove('drag-over');
-            if (!dragSrcName || dragSrcName === targetName || dragSrcGame !== targetGame) return;
-
-            // Get current order for this game
-            const scroll   = document.getElementById(`stagescroll-${targetGame}`);
-            const cards    = [...scroll.querySelectorAll('.stage-ref-card')];
-            const names    = cards.map(c => c.dataset.name);
-            const fromIdx  = names.indexOf(dragSrcName);
-            const toIdx    = names.indexOf(targetName);
-            if (fromIdx === -1 || toIdx === -1) return;
-
-            names.splice(fromIdx, 1);
-            names.splice(toIdx, 0, dragSrcName);
-
-            stageData[targetGame] = names;
+        // ── Staging move ──────────────────────────────────────────────────────
+        function stageMove(gameId, refName, dir) {
+            const scroll = document.getElementById(`stagescroll-${gameId}`);
+            const names  = [...scroll.querySelectorAll('.stage-ref-card')].map(c => c.dataset.name);
+            const idx    = names.indexOf(refName);
+            if (idx === -1) return;
+            const newIdx = idx + dir;
+            if (newIdx < 0 || newIdx >= names.length) return;
+            names.splice(idx, 1);
+            names.splice(newIdx, 0, refName);
+            stageData[gameId] = names;
             saveStageData();
-
-            // Re-render just this row's scroll area
-            const availRefs = [...scroll.querySelectorAll('.stage-ref-card')].map(c => ({
-                name: c.dataset.name,
-                html: c.outerHTML
-            }));
-            scroll.innerHTML = names.map(n => {
-                const card = availRefs.find(r => r.name === n);
-                return card ? card.html : '';
-            }).join('');
-            // Re-attach event listeners by re-rendering the whole staging view
-            const wrap = document.getElementById('gamesListWrap');
-            const allCards = wrap.querySelectorAll('.stage-ref-card');
-            allCards.forEach(c => {
-                c.addEventListener('dragstart',  onStageDragStart);
-                c.addEventListener('dragover',   onStageDragOver);
-                c.addEventListener('dragleave',  onStageDragLeave);
-                c.addEventListener('drop',       onStageDrop);
-                c.addEventListener('dragend',    onStageDragEnd);
-            });
+            // Re-render the scroll area in new order
+            const cards = Object.fromEntries(
+                [...scroll.querySelectorAll('.stage-ref-card')].map(c => [c.dataset.name, c.outerHTML])
+            );
+            scroll.innerHTML = names.map(n => cards[n] || '').join('');
         }
 
         // ── State ────────────────────────────────────────────────────────────
