@@ -315,29 +315,61 @@
         }
         .cmd-game-info .cg-title { font-weight: 700; font-size: 0.82rem; color: #0f3460; }
         .cmd-game-info .cg-meta  { font-size: 0.7rem; color: #888; margin-top: 1px; }
-        .cmd-slots {
-            flex: 0 0 auto;
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 5px;
-            padding: 8px 10px;
-            border-right: 1px solid #eee;
-            width: 310px;
+        /* Three-strip layout */
+        .cmd-strips {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
         }
-        .cmd-slots .slot { min-height: 38px; font-size: 0.74rem; }
-        .cmd-slots .slot-label { font-size: 0.62rem; }
-        .cmd-queue {
+        .cmd-strip {
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #f0f0f0;
+            min-height: 46px;
+        }
+        .cmd-strip:last-child { border-bottom: none; }
+        .cmd-strip-label {
+            flex: 0 0 38px;
+            font-size: 0.62rem;
+            font-weight: 800;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+            border-right: 1px solid #f0f0f0;
+            align-self: stretch;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .cmd-slot-wrap {
+            flex: 0 0 148px;
+            padding: 5px 8px;
+            border-right: 1px solid #f0f0f0;
+            align-self: stretch;
+            display: flex;
+            align-items: center;
+        }
+        .cmd-slot-wrap .slot {
+            width: 100%;
+            min-height: 34px;
+            font-size: 0.74rem;
+            margin: 0;
+        }
+        .cmd-slot-wrap .slot-label { font-size: 0.6rem; }
+        .cmd-strip-queue {
             flex: 1;
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 8px 12px;
+            gap: 8px;
+            padding: 6px 12px;
             overflow-x: auto;
             scrollbar-width: thin;
             min-width: 0;
         }
-        .cmd-queue::-webkit-scrollbar { height: 4px; }
-        .cmd-queue::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+        .cmd-strip-queue::-webkit-scrollbar { height: 3px; }
+        .cmd-strip-queue::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
         /* ── Staging / Command ref cards — hexagon / arrow shape ── */
         .stage-ref-card {
             flex: 0 0 auto;
@@ -931,7 +963,7 @@
                     <div class="staging-card-area">
                         ${buildGameCardInner(g)}
                     </div>
-                    <div class="staging-refs-scroll" id="stagescroll-${gid}">${cards}</div>
+                    <div class="staging-refs-scroll" id="stagescroll-${gid}" data-game="${gid}">${cards}</div>
                 </div>`;
             });
 
@@ -965,7 +997,7 @@
                 const isCancelled   = cancelledGameIds.has(gid) || f['Status'] === 'Cancelled';
                 const isU8          = age === 'U8';
 
-                // Build staged queue chips (reuse staged order + available refs)
+                // Available refs for this date in staged order
                 const gameDate  = f['Date'] || '';
                 const availRefs = allRefs.filter(r => {
                     const name = r.fields['Name'] || '';
@@ -980,73 +1012,95 @@
                     ...saved.filter(n => availRefs.some(r => r.fields['Name'] === n)),
                     ...availRefs.map(r => r.fields['Name']).filter(n => !saved.includes(n))
                 ];
-                const total = orderedNames.length;
+                const total          = orderedNames.length;
+                const assignedNames  = [cRef, ar1, ar2].filter(Boolean);
 
-                const chips = total
-                    ? orderedNames.map((name, idx) => {
-                        const rank     = idx + 1;
-                        const rankCls  = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : rank === 4 ? 'top4' : '';
-                        const cardCls  = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : rank === 4 ? 'rank-4' : '';
-                        const isFirst  = idx === 0;
-                        const isLast   = idx === total - 1;
-                        return `<div class="cmd-chip stage-ref-card ${cardCls}" draggable="true" data-game="${gid}" data-name="${name}" title="Click to assign ${name}">
-                            <div class="scard-tip left${isFirst ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',-1)" title="Move left"></div>
-                            <span class="scard-rank ${rankCls}">${rank}</span>
-                            <span class="scard-name" onclick="cmdAssign('${gid}','${name}')">${name}</span>
-                            <div class="scard-tip right${isLast ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',1)" title="Move right"></div>
-                        </div>`;
-                    }).join('')
-                    : '<span class="cmd-empty">No refs available</span>';
+                // Build one strip (slot + chip queue) for a given position
+                function buildStrip(position, label, assignedRef, linkedIds, stripKey) {
+                    const chips = total
+                        ? orderedNames.map((name, idx) => {
+                            const rank      = idx + 1;
+                            const rankCls   = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : rank === 4 ? 'top4' : '';
+                            const cardCls   = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : rank === 4 ? 'rank-4' : '';
+                            const safeName  = name.replace(/'/g, "\\'");
+                            const isFirst   = idx === 0;
+                            const isLast    = idx === total - 1;
+                            // Dim if already assigned to THIS position; fade if assigned elsewhere on game
+                            const hereStyle  = name === assignedRef ? 'opacity:0.3; pointer-events:none;' : '';
+                            const elseStyle  = !hereStyle && assignedNames.includes(name) ? 'opacity:0.45;' : '';
+                            const dimStyle   = hereStyle || elseStyle;
+                            return `<div class="cmd-chip stage-ref-card ${cardCls}" draggable="true" data-game="${gid}" data-name="${name}" style="${dimStyle}">
+                                <div class="scard-tip left${isFirst ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',-1)"></div>
+                                <span class="scard-rank ${rankCls}">${rank}</span>
+                                <span class="scard-name" onclick="cmdAssign('${gid}','${position}','${safeName}')">${name}</span>
+                                <div class="scard-tip right${isLast ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',1)"></div>
+                            </div>`;
+                        }).join('')
+                        : `<span class="cmd-empty">No refs available</span>`;
+
+                    return `<div class="cmd-strip">
+                        <div class="cmd-strip-label">${label}</div>
+                        <div class="cmd-slot-wrap">${makeSlot(gid, position, label, assignedRef, linkedIds)}</div>
+                        <div class="cmd-strip-queue" data-game="${gid}">${chips}</div>
+                    </div>`;
+                }
 
                 html += `<div class="cmd-row ${fullyAssigned ? 'fully-assigned' : ''} ${isCancelled ? 'cancelled' : ''}" id="cmdrow-${gid}">
                     <div class="cmd-game-info">
                         <div class="cg-title">${home} vs ${away}</div>
                         <div class="cg-meta">${date}${time ? ' @ ' + time : ''}${age ? ' · ' + age : ''}${club ? ' · ' + club : ''}</div>
                     </div>
-                    <div class="cmd-slots">
-                        ${makeSlot(gid, 'Center Referee', 'CR', cRef, f['Center Referee'])}
-                        ${isU8 ? '' : makeSlot(gid, 'AR 1', 'AR1', ar1, f['AR 1'])}
-                        ${isU8 ? '' : makeSlot(gid, 'AR 2', 'AR2', ar2, f['AR 2'])}
+                    <div class="cmd-strips">
+                        ${buildStrip('Center Referee', 'CR',  cRef, f['Center Referee'])}
+                        ${isU8 ? '' : buildStrip('AR 1', 'AR1', ar1, f['AR 1'])}
+                        ${isU8 ? '' : buildStrip('AR 2', 'AR2', ar2, f['AR 2'])}
                     </div>
-                    <div class="cmd-queue" id="cmdqueue-${gid}">${chips}</div>
                 </div>`;
             });
 
             wrap.innerHTML = html;
             wireSlotDragDrop();
+            initStageDragReorder();
         }
 
-        // Click a staged chip in command view → auto-assign to next open slot
-        function cmdAssign(gameId, refName) {
+        // Assign chip click in command view — explicit position
+        function cmdAssign(gameId, position, refName) {
             const game = allGames.find(g => g.id === gameId);
             if (!game) return;
-            const f      = game.fields;
-            const isU8   = (f['Age Group'] || '') === 'U8';
-            const cRef   = resolveRefName(f['Center Referee']);
-            const ar1    = resolveRefName(f['AR 1']);
-            const ar2    = resolveRefName(f['AR 2']);
-            // Find the ref record
-            const ref    = allRefs.find(r => r.fields['Name'] === refName);
-            const refId  = ref ? ref.id : '';
+            const f = game.fields;
+            // Guard: already in this slot
+            if (resolveRefName(f[position]) === refName) return;
+            // Guard: assigned elsewhere on this game
+            const otherPos = ['Center Referee','AR 1','AR 2'].find(p => p !== position && resolveRefName(f[p]) === refName);
+            if (otherPos) { alert(`${refName} is already assigned to this game as ${otherPos}.`); return; }
+            const ref = allRefs.find(r => r.fields['Name'] === refName);
+            assignRef(gameId, position, ref ? ref.id : '', refName);
+        }
 
-            // Guard: already assigned to this game?
-            if ([cRef, ar1, ar2].includes(refName)) {
-                alert(`${refName} is already assigned to this game.`); return;
-            }
-
-            // Assign to first open slot
-            if (!cRef)       assignRef(gameId, 'Center Referee', refId, refName);
-            else if (!ar1 && !isU8) assignRef(gameId, 'AR 1', refId, refName);
-            else if (!ar2 && !isU8) assignRef(gameId, 'AR 2', refId, refName);
-            else alert('All slots are already filled for this game.');
+        // ── Staging helpers: build canonical ordered names from state ─────────
+        function stageOrderedNames(gameId) {
+            const gameDate = (allGames.find(g => g.id === gameId)?.fields['Date']) || '';
+            const availNames = allRefs
+                .filter(r => {
+                    const name = r.fields['Name'] || '';
+                    if (!name) return false;
+                    return allAvail.some(a =>
+                        (a.fields['Referee Name'] || '').trim().toLowerCase() === name.toLowerCase() &&
+                        (a.fields['Date'] || '') === gameDate
+                    );
+                })
+                .map(r => r.fields['Name']);
+            const saved = stageData[gameId] || [];
+            return [
+                ...saved.filter(n => availNames.includes(n)),
+                ...availNames.filter(n => !saved.includes(n))
+            ];
         }
 
         // ── Staging: move a ref card left or right by name ───────────────────
         function stageMoveRef(gameId, refName, dir) {
-            const scroll = document.getElementById(`stagescroll-${gameId}`);
-            if (!scroll) return;
-            const names = [...scroll.querySelectorAll('.stage-ref-card')].map(c => c.dataset.name);
-            const idx   = names.indexOf(refName);
+            const names  = stageOrderedNames(gameId);
+            const idx    = names.indexOf(refName);
             if (idx === -1) return;
             const newIdx = idx + dir;
             if (newIdx < 0 || newIdx >= names.length) return;
@@ -1056,11 +1110,9 @@
             renderGames();
         }
 
-        // ── Staging: swap adjacent cards by index (used by command view) ─────
+        // ── Staging: swap adjacent cards by index ────────────────────────────
         function stageSwap(gameId, idx) {
-            const scroll = document.getElementById(`stagescroll-${gameId}`);
-            if (!scroll) return;
-            const names = [...scroll.querySelectorAll('.stage-ref-card')].map(c => c.dataset.name);
+            const names = stageOrderedNames(gameId);
             if (idx < 0 || idx >= names.length - 1) return;
             [names[idx], names[idx + 1]] = [names[idx + 1], names[idx]];
             stageData[gameId] = names;
@@ -1068,12 +1120,17 @@
             renderGames();
         }
 
-        // ── Staging: drag-to-reorder within a row ────────────────────────────
+        // ── Staging: drag-to-reorder within a row (works for Wide + Command) ──
         function initStageDragReorder() {
             let dragName = null, dragGameId = null;
 
-            document.querySelectorAll('.staging-refs-scroll').forEach(scroll => {
-                const gameId = scroll.id.replace('stagescroll-', '');
+            const allQueues = [
+                ...document.querySelectorAll('.staging-refs-scroll'),
+                ...document.querySelectorAll('.cmd-strip-queue')
+            ];
+
+            allQueues.forEach(scroll => {
+                const gameId = scroll.dataset.game;
 
                 scroll.querySelectorAll('.stage-ref-card').forEach(card => {
                     card.addEventListener('dragstart', e => {
@@ -1081,11 +1138,11 @@
                         dragGameId = card.dataset.game;
                         card.classList.add('dragging');
                         e.dataTransfer.effectAllowed = 'move';
-                        e.stopPropagation(); // don't trigger slot drag system
+                        e.stopPropagation();
                     });
                     card.addEventListener('dragend', () => {
                         dragName = null; dragGameId = null;
-                        scroll.querySelectorAll('.stage-ref-card').forEach(c =>
+                        document.querySelectorAll('.stage-ref-card').forEach(c =>
                             c.classList.remove('dragging', 'drop-before', 'drop-after'));
                     });
                     card.addEventListener('dragover', e => {
@@ -1100,11 +1157,11 @@
                     card.addEventListener('drop', e => {
                         e.preventDefault(); e.stopPropagation();
                         if (!dragName || card.dataset.name === dragName || dragGameId !== gameId) return;
-                        const names   = [...scroll.querySelectorAll('.stage-ref-card')].map(c => c.dataset.name);
+                        const names   = stageOrderedNames(gameId);
                         const fromIdx = names.indexOf(dragName);
-                        const toIdx   = names.indexOf(card.dataset.name);
-                        const mid     = card.getBoundingClientRect().left + card.getBoundingClientRect().width / 2;
-                        const before  = e.clientX < mid;
+                        if (fromIdx === -1 || names.indexOf(card.dataset.name) === -1) return;
+                        const mid    = card.getBoundingClientRect().left + card.getBoundingClientRect().width / 2;
+                        const before = e.clientX < mid;
                         names.splice(fromIdx, 1);
                         const insertAt = names.indexOf(card.dataset.name) + (before ? 0 : 1);
                         names.splice(insertAt, 0, dragName);
