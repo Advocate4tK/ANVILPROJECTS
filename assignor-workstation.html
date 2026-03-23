@@ -913,15 +913,22 @@
                 const ar2  = resolveRefName(f['AR 2']);
                 const fullyAssigned = cRef && ar1 && ar2;
 
-                // Available refs for this game's date
+                // Available refs for this game's date + club preference
                 const gameDate  = f['Date'] || '';
+                const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
                 const availRefs = allRefs.filter(r => {
                     const name = r.fields['Name'] || '';
                     if (!name) return false;
-                    return allAvail.some(a =>
+                    const hasDate = allAvail.some(a =>
                         (a.fields['Referee Name'] || '').trim().toLowerCase() === name.toLowerCase() &&
                         (a.fields['Date'] || '') === gameDate
                     );
+                    if (!hasDate) return false;
+                    if (gameClubLower) {
+                        const prefs = parsePreferences(r.fields['Club Preference'] || '');
+                        if (prefs.length > 0 && !prefs.some(p => p.toLowerCase() === gameClubLower)) return false;
+                    }
+                    return true;
                 });
 
                 // Get saved preference order for this game, then add remaining refs at end
@@ -994,15 +1001,22 @@
                 const isCancelled   = cancelledGameIds.has(gid) || f['Status'] === 'Cancelled';
                 const isU8          = age === 'U8';
 
-                // Available refs for this date in staged order
+                // Available refs for this date in staged order, filtered by club preference
                 const gameDate  = f['Date'] || '';
+                const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
                 const availRefs = allRefs.filter(r => {
                     const name = r.fields['Name'] || '';
                     if (!name) return false;
-                    return allAvail.some(a =>
+                    const hasDate = allAvail.some(a =>
                         (a.fields['Referee Name'] || '').trim().toLowerCase() === name.toLowerCase() &&
                         (a.fields['Date'] || '') === gameDate
                     );
+                    if (!hasDate) return false;
+                    if (gameClubLower) {
+                        const prefs = parsePreferences(r.fields['Club Preference'] || '');
+                        if (prefs.length > 0 && !prefs.some(p => p.toLowerCase() === gameClubLower)) return false;
+                    }
+                    return true;
                 });
                 const saved        = stageData[gid] || [];
                 const orderedNames = [
