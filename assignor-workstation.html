@@ -1061,25 +1061,28 @@
                 ];
 
                 const total = orderedNames.length;
+                const assignedNames = [cRef, ar1, ar2].filter(Boolean);
                 const cards = total
                     ? orderedNames.map((name, idx) => {
                         const ref      = availRefs.find(r => r.fields['Name'] === name);
                         const refId    = ref ? ref.id : '';
-                        const years    = ref ? (ref.fields['Years Experience'] || ref.fields['Experience'] || '') : '';
-                        const rank     = idx + 1;
-                        const rankCls  = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : rank === 4 ? 'top4' : '';
-                        const cardCls  = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : rank === 4 ? 'rank-4' : '';
+                        const yrs      = parseInt(ref?.fields['Years Reffing'] ?? -1);
+                        const color    = yrs >= 0 ? expColor(yrs) : '#ccc';
+                        const yrsLabel = yrs === 0 ? '1st' : yrs === 1 ? '2nd' : yrs > 1 ? `${yrs}yr` : '';
+                        const gender   = ref?.fields['Gender'] || '';
+                        const gColor   = gender === 'Male' ? '#2980b9' : gender === 'Female' ? '#e91e8c' : '#aaa';
+                        const gLetter  = gender === 'Male' ? 'M' : gender === 'Female' ? 'F' : '';
                         const safeName = name.replace(/'/g, "\\'");
-                        const isFirst  = idx === 0;
-                        const isLast   = idx === total - 1;
-                        return `<div class="stage-ref-card ${cardCls}" draggable="true" data-game="${gid}" data-name="${name}" data-ref-id="${refId}" ondragstart="onChipDragStart(event,'${gid}','${refId}','${safeName}')">
-                            <div class="scard-tip left${isFirst ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',-1)" title="Move left"></div>
-                            <span class="scard-rank ${rankCls}">${rank}</span>
-                            <div>
-                                <div class="scard-name">${name}</div>
-                                ${years ? `<div class="scard-yrs">${years} yr${years==1?'':'s'}</div>` : ''}
-                            </div>
-                            <div class="scard-tip right${isLast ? ' disabled' : ''}" onclick="stageMoveRef('${gid}','${safeName}',1)" title="Move right"></div>
+                        const dimStyle = assignedNames.includes(name) ? 'opacity:0.45;' : '';
+                        return `<div class="cmd2-chip" draggable="true"
+                            data-game="${gid}" data-name="${name}" data-ref-id="${refId}"
+                            ondragstart="onChipDragStart(event,'${gid}','${refId}','${safeName}')"
+                            onclick="showRefBubble(event,'${refId}')"
+                            style="border-left-color:${color}; ${dimStyle}">
+                            <span class="cmd2-dot" style="background:${color};"></span>
+                            <span class="cmd2-name">${name}</span>
+                            ${gLetter ? `<span class="cmd2-gender" style="background:${gColor};">${gLetter}</span>` : ''}
+                            ${yrsLabel ? `<span class="cmd2-badge" style="color:${color};">${yrsLabel}</span>` : ''}
                         </div>`;
                     }).join('')
                     : '<span class="staging-empty">No refs available this date</span>';
