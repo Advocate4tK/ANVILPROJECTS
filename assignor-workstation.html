@@ -1033,6 +1033,18 @@
             document.getElementById('workstationContent').style.display = 'block';
             setViewMode(currentAssignor.defaultView || 'standard', false);
             loadStageData();
+
+            // If coming from schedule-changes, re-apply the game focus after setViewMode re-rendered
+            const focusGameId = new URLSearchParams(window.location.search).get('game');
+            if (focusGameId) {
+                const banner = document.getElementById('changeRequestBanner');
+                if (banner) banner.style.display = 'flex';
+                if (allGames.length > 0) {
+                    applyGameFocus(focusGameId);
+                }
+                // If data hasn't loaded yet (loadAll still running), applyGameFocus will fire
+                // from loadAll's completion handler once allGames is populated
+            }
         }
 
         function resetProfile() {
@@ -1073,6 +1085,45 @@
                     'Default View': mode
                 }).catch(e => console.warn('Could not save default view:', e.message));
                 currentAssignor.defaultView = mode;
+            }
+        }
+
+        // ── Apply ?game= focus after any render (called from loadAll + openWorkstation) ──
+        function applyGameFocus(focusGameId) {
+            if (!focusGameId || !allGames.length) return;
+            selectGame(focusGameId);
+            // Highlight the game card — works for Standard (card-) and Command/Wide (cmd2row-, cmdrow-)
+            const el = document.getElementById('card-' + focusGameId)
+                    || document.getElementById('cmd2row-' + focusGameId)
+                    || document.getElementById('cmdrow-' + focusGameId);
+            if (el) {
+                el.classList.add('change-focus');
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            // Parse requested date/time from game notes and update banner
+            const focusedGame = allGames.find(g => g.id === focusGameId);
+            if (focusedGame) {
+                const f      = focusedGame.fields;
+                const notes  = f['Notes'] || '';
+                const blocks = notes.split(/\[CHANGE REQUEST/i);
+                if (blocks.length > 1) {
+                    const last = '[CHANGE REQUEST' + blocks[blocks.length - 1];
+                    requestedChangeDate = (last.match(/Requested Date:\s*(\S+)/i))?.[1] || null;
+                    requestedChangeTime = (last.match(/Requested Time:\s*(\S+)/i))?.[1] || null;
+                }
+                if (requestedChangeDate) { renderGames(); renderRefs(''); selectGame(focusGameId); }
+                const reqLabel = requestedChangeDate
+                    ? ` &nbsp;→&nbsp; <span style="color:#c0392b; font-weight:700;">Requested: ${requestedChangeDate}${requestedChangeTime ? ' @ ' + formatTime(requestedChangeTime) : ''}</span>`
+                    : '';
+                const refsVisible = document.getElementById('refsListWrap')?.querySelectorAll('.ref-card').length || 0;
+                const noAvailMsg  = (requestedChangeDate && refsVisible === 0)
+                    ? ' &nbsp;⚠️ No refs available for the requested date.'
+                    : '';
+                document.getElementById('changeRequestBannerText').innerHTML =
+                    `<strong>${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</strong> &nbsp;·&nbsp; Current: ${f['Date'] || '—'} @ ${formatTime(f['Time'] || '')}${reqLabel}${noAvailMsg}`;
+            } else {
+                document.getElementById('changeRequestBannerText').textContent =
+                    'Game not found in the current date range — try widening the date filter.';
             }
         }
 
@@ -2479,40 +2530,7 @@
 
                 // If opened with ?game=, select and scroll to that game
                 const focusGameId = new URLSearchParams(window.location.search).get('game');
-                if (focusGameId) {
-                    selectGame(focusGameId);
-                    // Add the amber highlight ring
-                    const card = document.getElementById('card-' + focusGameId);
-                    if (card) card.classList.add('change-focus');
-                    // Update banner with game details + availability warning if needed
-                    const focusedGame = allGames.find(g => g.id === focusGameId);
-                    if (focusedGame) {
-                        const f = focusedGame.fields;
-                        // Parse requested new date/time from Notes
-                        const notes  = f['Notes'] || '';
-                        const blocks = notes.split(/\[CHANGE REQUEST/i);
-                        if (blocks.length > 1) {
-                            const last = '[CHANGE REQUEST' + blocks[blocks.length - 1];
-                            requestedChangeDate = (last.match(/Requested Date:\s*(\S+)/i))?.[1] || null;
-                            requestedChangeTime = (last.match(/Requested Time:\s*(\S+)/i))?.[1] || null;
-                        }
-                        // Re-render games + refs using the requested date as the effective game date
-                        if (requestedChangeDate) { renderGames(); renderRefs(''); selectGame(focusGameId); }
-
-                        const reqLabel = requestedChangeDate
-                            ? ` &nbsp;→&nbsp; <span style="color:#c0392b; font-weight:700;">Requested: ${requestedChangeDate}${requestedChangeTime ? ' @ ' + formatTime(requestedChangeTime) : ''}</span>`
-                            : '';
-                        const refsVisible = document.getElementById('refsListWrap')?.querySelectorAll('.ref-card').length || 0;
-                        const noAvailMsg  = (requestedChangeDate && refsVisible === 0)
-                            ? ' &nbsp;⚠️ No refs available for the requested date.'
-                            : '';
-                        document.getElementById('changeRequestBannerText').innerHTML =
-                            `<strong>${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</strong> &nbsp;·&nbsp; Current: ${f['Date'] || '—'} @ ${formatTime(f['Time'] || '')}${reqLabel}${noAvailMsg}`;
-                    } else {
-                        document.getElementById('changeRequestBannerText').textContent =
-                            'Game not found in the current date range — try widening the date filter.';
-                    }
-                }
+                if (focusGameId) applyGameFocus(focusGameId);
 
             } catch(e) {
                 alert('Failed to load: ' + e.message);
