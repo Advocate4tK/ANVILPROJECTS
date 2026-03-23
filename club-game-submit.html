@@ -624,10 +624,48 @@
         showMainForm();
     }
 
+    async function loadAssignorBanner() {
+        try {
+            const BANNER_PRESETS = {
+                default: { bar: '#09142a', text: '#ffffff', badge: '#00c853', badgeText: '#09142a' },
+                alert:   { bar: '#dc2626', text: '#ffffff', badge: '#991b1b', badgeText: '#fecaca' },
+                warning: { bar: '#d97706', text: '#09142a', badge: '#92400e', badgeText: '#fef3c7' },
+                info:    { bar: '#2563eb', text: '#ffffff', badge: '#1e40af', badgeText: '#bfdbfe' },
+                green:   { bar: '#14532d', text: '#ffffff', badge: '#86efac', badgeText: '#14532d' },
+            };
+            const settings = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.SETTINGS, {
+                filterByFormula: `AND(LOWER({Key})='banner', {Active}=TRUE())`,
+                maxRecords: 1
+            });
+            if (settings.length > 0) {
+                const msg   = settings[0].fields['Value'] || '';
+                const style = settings[0].fields['Style'] || 'default';
+                if (msg.trim()) {
+                    const preset = BANNER_PRESETS[style] || BANNER_PRESETS.default;
+                    const spacer = '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0';
+                    const doubled = msg + spacer + msg + spacer;
+                    const bar     = document.getElementById('tickerBar');
+                    const badge   = bar.querySelector('.ticker-badge');
+                    const content = bar.querySelector('.ticker-content');
+                    content.textContent = doubled;
+                    bar.style.background        = preset.bar;
+                    bar.style.borderBottomColor = preset.badge;
+                    badge.style.background      = preset.badge;
+                    badge.style.color           = preset.badgeText;
+                    content.style.color         = preset.text;
+                    bar.style.display = 'flex';
+                    const duration = Math.max(20, Math.round(msg.length * 0.38));
+                    content.style.animationDuration = duration + 's';
+                }
+            }
+        } catch(e) { /* banner is non-critical — fail silently */ }
+    }
+
     function showMainForm() {
         document.getElementById('doorwayStep1').style.display = 'none';
         document.getElementById('doorwayStep2').style.display = 'none';
         document.getElementById('mainForm').style.display     = 'block';
+        loadAssignorBanner();
         const [f1, ...rest] = currentSubmitter.split(' ');
         localStorage.setItem(SUBMITTER_KEY, JSON.stringify({ first: f1, last: rest.join(' ') }));
         loadScheduledGames();
@@ -672,42 +710,7 @@
 
         await loadReferenceData();
 
-        // Load assignor banner from Settings table
-        try {
-            const BANNER_PRESETS = {
-                default: { bar: '#09142a', text: '#ffffff', badge: '#00c853', badgeText: '#09142a' },
-                alert:   { bar: '#dc2626', text: '#ffffff', badge: '#991b1b', badgeText: '#fecaca' },
-                warning: { bar: '#d97706', text: '#09142a', badge: '#92400e', badgeText: '#fef3c7' },
-                info:    { bar: '#2563eb', text: '#ffffff', badge: '#1e40af', badgeText: '#bfdbfe' },
-                green:   { bar: '#14532d', text: '#ffffff', badge: '#86efac', badgeText: '#14532d' },
-            };
-            const settings = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.SETTINGS, {
-                filterByFormula: `AND(LOWER({Key})='banner', {Active}=TRUE())`,
-                maxRecords: 1
-            });
-            if (settings.length > 0) {
-                const msg   = settings[0].fields['Value'] || '';
-                const style = settings[0].fields['Style'] || 'default';
-                if (msg.trim()) {
-                    const preset = BANNER_PRESETS[style] || BANNER_PRESETS.default;
-                    const spacer = '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0';
-                    const doubled = msg + spacer + msg + spacer;
-                    const bar     = document.getElementById('tickerBar');
-                    const badge   = bar.querySelector('.ticker-badge');
-                    const content = bar.querySelector('.ticker-content');
-                    content.textContent = doubled;
-                    bar.style.background       = preset.bar;
-                    bar.style.borderBottomColor = preset.badge;
-                    badge.style.background     = preset.badge;
-                    badge.style.color          = preset.badgeText;
-                    content.style.color        = preset.text;
-                    bar.style.display = 'flex';
-                    // Scale scroll speed with message length
-                    const duration = Math.max(20, Math.round(msg.length * 0.38));
-                    content.style.animationDuration = duration + 's';
-                }
-            }
-        } catch(e) { /* banner is non-critical — fail silently */ }
+        // Banner loads after login — see loadAssignorBanner()
 
         if (urlParam) {
             // Match club by slug (lowercase, spaces/dashes normalized)
