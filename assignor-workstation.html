@@ -1240,7 +1240,9 @@
                 return;
             }
 
-            let html = '';
+            let html = `<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+                <button onclick="commitAll(this)" style="background:#0f3460;color:white;border:none;border-radius:8px;padding:7px 18px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;">Commit All</button>
+            </div>`;
             filtered.forEach(g => {
                 const f    = g.fields;
                 const gid  = g.id;
@@ -1352,6 +1354,7 @@
                     <div class="cmd-game-info">
                         <div class="cg-title">${home} vs ${away}</div>
                         <div class="cg-meta">${date}${time ? ' @ ' + time : ''}${age ? ' · ' + age : ''}${club ? ' · ' + club : ''}</div>
+                        ${!fullyAssigned && !isCancelled ? `<button onclick="commitGame('${gid}', this)" style="margin-top:6px;width:100%;background:#0f3460;color:white;border:none;border-radius:6px;padding:4px 8px;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:inherit;">Commit</button>` : ''}
                     </div>
                     <div class="cmd-strips">
                         ${buildStrip2('Center Referee', 'CR',  cRef, f['Center Referee'])}
@@ -1495,6 +1498,87 @@
             }
         });
 
+
+        // ── Commit staged refs to assignment slots ────────────────────────────
+        async function commitGame(gameId, btnEl) {
+            const game = allGames.find(g => g.id === gameId);
+            if (!game) return;
+            const f       = game.fields;
+            const age     = f['Age Group'] || '';
+            const isU8    = age === 'U8';
+            const positions = isU8
+                ? ['Center Referee']
+                : ['Center Referee', 'AR 1', 'AR 2'];
+
+            // Build per-position ordered names (respecting strip sort)
+            const gameDate      = f['Date'] || '';
+            const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
+            const availRefs     = allRefs.filter(r => {
+                const name = r.fields['Name'] || '';
+                if (!name) return false;
+                const hasDate = allAvail.some(a =>
+                    (a.fields['Referee Name'] || '').trim().toLowerCase() === name.toLowerCase() &&
+                    (a.fields['Date'] || '') === gameDate
+                );
+                if (!hasDate) return false;
+                if (gameClubLower) {
+                    const prefs = parsePreferences(r.fields['Club Preference'] || '');
+                    if (prefs.length > 0 && !prefs.some(p => p.toLowerCase() === gameClubLower)) return false;
+                }
+                return true;
+            });
+            const saved        = stageData[gameId] || [];
+            const orderedNames = [
+                ...saved.filter(n => availRefs.some(r => r.fields['Name'] === n)),
+                ...availRefs.map(r => r.fields['Name']).filter(n => !saved.includes(n))
+            ];
+
+            if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Committing…'; }
+
+            let assigned = 0;
+            const usedNames = [];
+            for (const pos of positions) {
+                if (resolveRefName(f[pos])) continue; // already assigned — skip
+                // Get strip sort for this position
+                const stripKey  = `${gameId}|${pos}`;
+                const sortMode  = stripSortState[stripKey] || 'staging';
+                let stripNames  = [...orderedNames];
+                if (sortMode === 'exp-desc') {
+                    stripNames.sort((a, b) => (parseInt(availRefs.find(r=>r.fields['Name']===b)?.fields['Years Reffing']??-1)) - (parseInt(availRefs.find(r=>r.fields['Name']===a)?.fields['Years Reffing']??-1)));
+                } else if (sortMode === 'exp-asc') {
+                    stripNames.sort((a, b) => (parseInt(availRefs.find(r=>r.fields['Name']===a)?.fields['Years Reffing']??999)) - (parseInt(availRefs.find(r=>r.fields['Name']===b)?.fields['Years Reffing']??999)));
+                }
+                // Pick first ref not already used on this game
+                const pick = stripNames.find(n => !usedNames.includes(n));
+                if (!pick) continue;
+                usedNames.push(pick);
+                const ref = allRefs.find(r => r.fields['Name'] === pick);
+                await assignRef(gameId, pos, ref ? ref.id : '', pick);
+                assigned++;
+            }
+
+            if (btnEl) {
+                btnEl.textContent = assigned ? `✓ ${assigned} assigned` : 'Nothing to commit';
+                setTimeout(() => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Commit'; } }, 2000);
+            }
+        }
+
+        async function commitAll(btnEl) {
+            const unassigned = allGames.filter(g => {
+                const f   = g.fields;
+                const age = f['Age Group'] || '';
+                if (age === 'U8') return !resolveRefName(f['Center Referee']);
+                return !resolveRefName(f['Center Referee']) || !resolveRefName(f['AR 1']) || !resolveRefName(f['AR 2']);
+            });
+            if (!unassigned.length) { alert('All games are already assigned.'); return; }
+            if (!confirm(`Commit staged refs to ${unassigned.length} game(s) with open slots?`)) return;
+            if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Committing…'; }
+            for (const g of unassigned) {
+                await commitGame(g.id, null);
+            }
+            if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Commit All'; }
+            renderGames();
+        }
 
         // Assign chip click in command view — explicit position
         function cmdAssign(gameId, position, refName) {
