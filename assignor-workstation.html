@@ -270,6 +270,35 @@
                 <a href="schedule-changes.html" id="changeRequestsLink" class="btn" style="font-size:0.85rem; padding:8px 16px; background:#e94560; color:white; display:none;">⚠️ Schedule Change Requests <span id="changeRequestsCount"></span></a>
             </div>
 
+            <!-- Profile Doorway -->
+            <div id="profileDoorway" style="max-width:480px; margin:40px auto; background:white; border-radius:12px; padding:40px; box-shadow:0 4px 20px rgba(0,0,0,0.1); text-align:center;">
+                <div style="font-size:2.5rem; margin-bottom:12px;">📋</div>
+                <h2 style="color:#0f3460; margin-bottom:6px;">Open Workstation</h2>
+                <p style="color:#888; font-size:0.9rem; margin-bottom:24px;">Select your profile to continue</p>
+                <div id="profileLoading" style="color:#aaa; font-size:0.9rem; margin-bottom:16px;">Loading profiles…</div>
+                <select id="profileSelect" style="display:none; width:100%; padding:10px 14px; border:1px solid #ccc; border-radius:8px; font-size:1rem; font-family:inherit; margin-bottom:16px;">
+                    <option value="">— Select Profile —</option>
+                </select>
+                <!-- Admin: view-as step -->
+                <div id="viewAsWrap" style="display:none; margin-bottom:16px;">
+                    <p style="color:#0f3460; font-size:0.88rem; font-weight:700; margin-bottom:8px;">View workstation as:</p>
+                    <select id="viewAsSelect" style="width:100%; padding:10px 14px; border:1px solid #ccc; border-radius:8px; font-size:1rem; font-family:inherit;">
+                        <option value="__self__">Myself (Admin view)</option>
+                    </select>
+                </div>
+                <button id="openWorkstationBtn" onclick="openWorkstation()" style="display:none; width:100%; background:#0f3460; color:white; border:none; border-radius:8px; padding:12px; font-size:1rem; font-weight:700; cursor:pointer;">Open Workstation →</button>
+                <div id="profileError" style="display:none; color:#e74c3c; font-size:0.85rem; margin-top:10px;"></div>
+            </div>
+
+            <!-- Profile badge (shown after login) -->
+            <div id="profileBadge" style="display:none; margin-bottom:16px; background:#eaf4fb; border:1px solid #aed6f1; border-radius:8px; padding:8px 14px; font-size:0.88rem; color:#0f3460; display:flex; align-items:center; gap:10px;">
+                <span>👤 <strong id="profileBadgeName"></strong></span>
+                <a href="#" onclick="resetProfile(); return false;" style="color:#e74c3c; font-size:0.8rem; font-weight:600; text-decoration:none; margin-left:auto;">Switch Profile</a>
+            </div>
+
+            <!-- Main workstation content (hidden until profile selected) -->
+            <div id="workstationContent" style="display:none;">
+
             <!-- Filters -->
             <div class="filters-bar">
                 <div class="filters-row" style="margin-bottom:10px;">
@@ -526,6 +555,7 @@
                 </div>
 
             </div>
+            </div> <!-- /workstationContent -->
         </main>
 
         <footer>
@@ -539,6 +569,90 @@
     <script>
         checkAdminAccess();
 
+
+        // ── Assignor Profile ─────────────────────────────────────────────────
+        let currentAssignor     = null; // { id, name, role } — set after profile selection
+        let allAssignorProfiles = [];   // loaded from Airtable
+
+        async function loadProfiles() {
+            try {
+                const recs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.ASSIGNORS, { maxRecords: 100 });
+                allAssignorProfiles = recs.map(r => ({
+                    id:   r.id,
+                    name: r.fields['Name'] || '',
+                    role: (r.fields['Role'] || 'Assignor').trim()
+                })).filter(p => p.name);
+
+                const sel = document.getElementById('profileSelect');
+                allAssignorProfiles.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name + (p.role === 'Admin' ? ' (Admin)' : '');
+                    sel.appendChild(opt);
+                });
+
+                document.getElementById('profileLoading').style.display = 'none';
+                sel.style.display = 'block';
+                document.getElementById('openWorkstationBtn').style.display = 'block';
+
+                sel.addEventListener('change', () => {
+                    const chosen = allAssignorProfiles.find(p => p.id === sel.value);
+                    const viewAsWrap = document.getElementById('viewAsWrap');
+                    if (chosen && chosen.role === 'Admin') {
+                        // Populate view-as dropdown with all assignors
+                        const viewAs = document.getElementById('viewAsSelect');
+                        viewAs.innerHTML = '<option value="__self__">Myself (Admin view)</option>';
+                        allAssignorProfiles.filter(p => p.role !== 'Admin').forEach(p => {
+                            const o = document.createElement('option');
+                            o.value = p.id;
+                            o.textContent = p.name;
+                            viewAs.appendChild(o);
+                        });
+                        viewAsWrap.style.display = 'block';
+                    } else {
+                        viewAsWrap.style.display = 'none';
+                    }
+                });
+            } catch(e) {
+                document.getElementById('profileLoading').textContent = 'Could not load profiles. Check Airtable connection.';
+            }
+        }
+
+        function openWorkstation() {
+            const selId = document.getElementById('profileSelect').value;
+            if (!selId) {
+                document.getElementById('profileError').textContent = 'Please select a profile.';
+                document.getElementById('profileError').style.display = 'block';
+                return;
+            }
+            document.getElementById('profileError').style.display = 'none';
+
+            let chosen = allAssignorProfiles.find(p => p.id === selId);
+            if (chosen && chosen.role === 'Admin') {
+                const viewAsId = document.getElementById('viewAsSelect').value;
+                if (viewAsId !== '__self__') {
+                    const viewAs = allAssignorProfiles.find(p => p.id === viewAsId);
+                    if (viewAs) chosen = { ...viewAs, viewingAs: true };
+                }
+            }
+
+            currentAssignor = chosen;
+            document.getElementById('profileDoorway').style.display    = 'none';
+            document.getElementById('profileBadge').style.display      = 'flex';
+            document.getElementById('profileBadgeName').textContent    = chosen.viewingAs
+                ? `${chosen.name} (viewed by Admin)`
+                : chosen.name;
+            document.getElementById('workstationContent').style.display = 'block';
+        }
+
+        function resetProfile() {
+            currentAssignor = null;
+            document.getElementById('profileDoorway').style.display     = 'block';
+            document.getElementById('profileBadge').style.display       = 'none';
+            document.getElementById('workstationContent').style.display = 'none';
+            document.getElementById('profileSelect').value              = '';
+            document.getElementById('viewAsWrap').style.display         = 'none';
+        }
 
         // ── State ────────────────────────────────────────────────────────────
         let allGames      = [];
@@ -819,6 +933,8 @@
 
         // ── Init ─────────────────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
+            loadProfiles();
+
             const focusGameId = new URLSearchParams(window.location.search).get('game');
 
             if (focusGameId) {
