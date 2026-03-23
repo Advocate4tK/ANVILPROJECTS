@@ -967,6 +967,7 @@
         let viewMode       = 'standard'; // 'standard' | 'staging'
         let stageData      = {};         // { gameId: [refName, refName, ...] } — loaded from/saved to Airtable
         let stripSortState = {};         // { 'gameId|position': sortMode } — per-strip sort in Command 2
+        let wideSortState  = {};         // { gameId: sortMode } — exp sort in Wide view
         let stageSaveTimer = null;
 
         // Global experience color scale (shared across all views)
@@ -1060,10 +1061,30 @@
                     ...availRefs.map(r => r.fields['Name']).filter(n => !saved.includes(n))
                 ];
 
-                const total = orderedNames.length;
+                // Apply wide sort
+                const wideSort = wideSortState[gid] || 'staging';
+                let sortedNames = [...orderedNames];
+                if (wideSort === 'exp-desc') {
+                    sortedNames.sort((a, b) => {
+                        const yA = parseInt(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'] ?? -1);
+                        const yB = parseInt(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'] ?? -1);
+                        return yB - yA;
+                    });
+                } else if (wideSort === 'exp-asc') {
+                    sortedNames.sort((a, b) => {
+                        const yA = parseInt(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'] ?? 999);
+                        const yB = parseInt(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'] ?? 999);
+                        return yA - yB;
+                    });
+                }
+
+                const total = sortedNames.length;
                 const assignedNames = [cRef, ar1, ar2].filter(Boolean);
+                const wideCycle   = wideSort === 'exp-desc' ? 'exp-asc' : wideSort === 'exp-asc' ? 'staging' : 'exp-desc';
+                const wideArrow   = wideSort === 'exp-desc' ? ' ↓' : wideSort === 'exp-asc' ? ' ↑' : '';
+                const wideActive  = wideSort !== 'staging';
                 const cards = total
-                    ? orderedNames.map((name, idx) => {
+                    ? sortedNames.map((name, idx) => {
                         const ref      = availRefs.find(r => r.fields['Name'] === name);
                         const refId    = ref ? ref.id : '';
                         const yrs      = parseInt(ref?.fields['Years Reffing'] ?? -1);
@@ -1092,7 +1113,12 @@
                     <div class="staging-card-area">
                         ${buildGameCardInner(g)}
                     </div>
-                    <div class="staging-refs-scroll" id="stagescroll-${gid}" data-game="${gid}">${cards}</div>
+                    <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
+                        <div style="padding:4px 8px 2px;display:flex;align-items:center;gap:6px;">
+                            <button class="cmd-strip-label-btn${wideActive ? ' active' : ''}" onclick="setWideSort('${gid}','${wideCycle}')" title="Sort by experience" style="flex:0 0 auto;align-self:auto;">Exp${wideArrow}</button>
+                        </div>
+                        <div class="staging-refs-scroll" id="stagescroll-${gid}" data-game="${gid}">${cards}</div>
+                    </div>
                 </div>`;
             });
 
@@ -1343,6 +1369,12 @@
         // Per-strip sort for Command 2
         function setStripSort(gameId, position, mode) {
             stripSortState[`${gameId}|${position}`] = mode;
+            renderGames();
+        }
+
+        // Exp sort for Wide view
+        function setWideSort(gameId, mode) {
+            wideSortState[gameId] = mode;
             renderGames();
         }
 
