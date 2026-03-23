@@ -1298,9 +1298,7 @@
                             return `<div class="cmd2-chip" draggable="true"
                                 data-game="${gid}" data-name="${name}" data-ref-id="${chipRefId}"
                                 ondragstart="onChipDragStart(event,'${gid}','${chipRefId}','${safeName}')"
-                                onmousedown="showRefBubble(event,'${chipRefId}')"
-                                onmouseup="closeRefBubble()"
-                                onmouseleave="closeRefBubble()"
+                                onclick="showRefBubble(event,'${chipRefId}')"
                                 style="border-left-color:${color}; ${dimStyle}">
                                 <span class="cmd2-dot" style="background:${color};"></span>
                                 <span class="cmd2-name">${name}</span>
@@ -1400,8 +1398,17 @@
                 </div>
                 ${avail ? `<div style="font-size:0.7rem;color:#555;margin-bottom:4px;">🕐 ${avail}</div>` : ''}
                 ${prefs.length ? `<div style="font-size:0.7rem;color:#0f3460;font-weight:600;margin-bottom:4px;">⭐ ${prefs.join(', ')}</div>` : ''}
-                <div style="font-size:0.82rem;color:#f1c40f;letter-spacing:2px;margin-bottom:${notes?'4px':'0'};">${stars}</div>
-                ${notes ? `<div style="font-size:0.7rem;color:#777;font-style:italic;">"${notes}"</div>` : ''}
+                <div style="margin-top:8px;padding-top:7px;border-top:1px dashed #dde3f0;">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                        <span id="bubble-stars" style="font-size:1rem;color:#f1c40f;letter-spacing:2px;cursor:pointer;">
+                            ${[1,2,3,4,5].map(i => `<span onclick="setBubbleStar('${refId}',${i})" style="color:#f1c40f;">${i<=rating?'★':'☆'}</span>`).join('')}
+                        </span>
+                    </div>
+                    <textarea id="bubble-notes" rows="2" placeholder="Assignor notes…" onclick="event.stopPropagation()"
+                        style="width:100%;font-size:0.75rem;padding:5px 7px;border:1px solid #ccc;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:none;">${notes}</textarea>
+                    <button onclick="event.stopPropagation();saveBubbleRef('${refId}')"
+                        style="margin-top:5px;width:100%;background:#0f3460;color:white;border:none;border-radius:6px;padding:4px;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:inherit;">Save</button>
+                </div>
             `;
 
             const rect = event.currentTarget.getBoundingClientRect();
@@ -1415,6 +1422,43 @@
             if (bubble) bubble.style.display = 'none';
             _bubbleRefId = null;
         }
+
+        function setBubbleStar(refId, val) {
+            const starsEl = document.getElementById('bubble-stars');
+            if (starsEl) starsEl.innerHTML = [1,2,3,4,5].map(i =>
+                `<span onclick="setBubbleStar('${refId}',${i})" style="color:#f1c40f;">${i<=val?'★':'☆'}</span>`
+            ).join('');
+            // Store on the ref record so saveBubbleRef can pick it up
+            const ref = allRefs.find(r => r.id === refId);
+            if (ref) ref._bubbleRating = val;
+        }
+
+        async function saveBubbleRef(refId) {
+            const ref = allRefs.find(r => r.id === refId);
+            if (!ref) return;
+            const rating = ref._bubbleRating ?? ref.fields['Rating'] ?? 0;
+            const notes  = document.getElementById('bubble-notes')?.value.trim() || '';
+            const btn    = document.querySelector('#ref-bubble button');
+            if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, refId, {
+                    'Rating': rating || null,
+                    'Assignor Notes': notes || null
+                });
+                ref.fields['Rating'] = rating;
+                ref.fields['Assignor Notes'] = notes;
+                delete ref._bubbleRating;
+                if (btn) { btn.textContent = 'Saved ✓'; setTimeout(() => closeRefBubble(), 800); }
+            } catch(e) {
+                if (btn) { btn.disabled = false; btn.textContent = 'Error — retry'; }
+            }
+        }
+
+        document.addEventListener('click', e => {
+            if (!e.target.closest('#ref-bubble') && !e.target.closest('.cmd2-chip')) {
+                closeRefBubble();
+            }
+        });
 
 
         // Assign chip click in command view — explicit position
