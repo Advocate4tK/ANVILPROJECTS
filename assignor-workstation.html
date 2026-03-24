@@ -673,7 +673,6 @@
                             <button class="date-quick-btn" onclick="setDateRange('next-sat', event)">Next Sat</button>
                             <button class="date-quick-btn" onclick="setDateRange('next-sun', event)">Next Sun</button>
                             <button class="date-quick-btn" onclick="setDateRange('next-weekend', event)">Next Weekend</button>
-                            <button class="date-quick-btn" id="unassignedQuickBtn" onclick="toggleUnassignedFilter(this)" style="border-color:#e94560;">Unassigned</button>
                         </div>
                     </div>
                 </div>
@@ -810,7 +809,6 @@
                                 <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">U8 ARs:</label>
                                 <button id="hideU8Btn" onclick="toggleHideU8()" style="font-size:0.78rem; font-weight:700; font-family:inherit; padding:4px 10px; border-radius:6px; border:1px solid #0f3460; background:#0f3460; color:#fff; cursor:pointer;">Show U8 ARs</button>
                             </div>
-                            <input type="checkbox" id="unassignedOnlyFilter" style="display:none;">
                             <div style="text-align:right; margin-top:4px; padding-bottom:8px;">
                                 <button onclick="clearGameFilters()" style="background:#eee; color:#555; border:1px solid #ccc; border-radius:6px; padding:6px 14px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; margin-right:6px;">Clear</button>
                                 <button onclick="applyGameFilters()" style="background:#0f3460; color:#fff; border:none; border-radius:6px; padding:6px 20px; font-size:0.85rem; font-weight:700; cursor:pointer; font-family:inherit;">Go</button>
@@ -1039,19 +1037,10 @@
             setViewMode(hasGameFocus ? 'standard' : (currentAssignor.defaultView || 'standard'), false);
             loadStageData();
 
-            // If ?filter=unassigned, check the box + sync all controls then load/render
+            // If ?filter=unassigned, sync all controls; load if needed
             if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
-                const cb = document.getElementById('unassignedOnlyFilter');
-                if (cb) cb.checked = true;
-                const ubtn = document.getElementById('unassignedQuickBtn');
-                if (ubtn) ubtn.classList.add('active');
-                const radio = document.getElementById('filterUnassigned');
-                if (radio) radio.checked = true;
-                if (allGames.length > 0) {
-                    setTimeout(() => renderGames(), 100);
-                } else {
-                    loadAll();
-                }
+                setAssignFilter('unassigned');
+                if (allGames.length === 0) loadAll();
             }
 
             // If coming from schedule-changes, re-apply focus after DOM settles from setViewMode render
@@ -2166,10 +2155,9 @@
         function getWeekendDates(weeksAhead) {
             const today = new Date();
             const day   = today.getDay(); // 0=Sun … 6=Sat
-            // Days until this/coming Saturday (0 if today is Sat)
-            let daysToSat = (6 - day + 7) % 7;
-            // "This weekend" = the nearest upcoming Saturday
-            // "Next weekend"  = the one after that
+            // On Sunday, step back to yesterday's Saturday so "This Weekend" = Sat+Sun of same weekend
+            // On other days, step forward to the coming Saturday
+            let daysToSat = day === 0 ? -1 : (6 - day + 7) % 7;
             daysToSat += weeksAhead * 7;
             const sat = new Date(today); sat.setDate(today.getDate() + daysToSat);
             const sun = new Date(sat);   sun.setDate(sat.getDate() + 1);
@@ -2213,22 +2201,11 @@
         }
 
         function setAssignFilter(mode) {
-            const cb  = document.getElementById('unassignedOnlyFilter');
-            const btn = document.getElementById('unassignedQuickBtn');
-            const on  = mode === 'unassigned';
-            if (cb)  cb.checked = on;
-            if (btn) btn.classList.toggle('active', on);
-            renderGames();
-        }
-
-        function toggleUnassignedFilter(btn) {
-            const cb = document.getElementById('unassignedOnlyFilter');
-            if (!cb) return;
-            cb.checked = !cb.checked;
-            btn.classList.toggle('active', cb.checked);
-            // Sync radio buttons
-            const radio = document.getElementById(cb.checked ? 'filterUnassigned' : 'filterAll');
-            if (radio) radio.checked = true;
+            const rAll = document.getElementById('filterAll');
+            const rUna = document.getElementById('filterUnassigned');
+            const on   = mode === 'unassigned';
+            if (rAll) rAll.checked = !on;
+            if (rUna) rUna.checked = on;
             renderGames();
         }
 
@@ -2351,9 +2328,7 @@
             document.getElementById('gameTimeFilter').value = '';
             document.getElementById('gameAgeFilter').value  = '';
             document.getElementById('gameSort').value = 'datetime';
-            const unassignedEl = document.getElementById('unassignedOnlyFilter');
-            if (unassignedEl) unassignedEl.checked = false;
-            renderGames();
+            setAssignFilter('all');
         }
 
         function toggleRefFilter() {
@@ -2437,7 +2412,14 @@
                 pill.dataset.club = club;
                 pill.addEventListener('click', () => {
                     userHasFilteredClubs = true;
-                    if (selectedClubs.has(club)) {
+                    if (selectedClubs.size === clubsList.length && selectedClubs.has(club)) {
+                        // All clubs active → first click = "show only this club"
+                        selectedClubs.clear();
+                        selectedClubs.add(club);
+                        document.querySelectorAll('.club-pill').forEach(p => {
+                            p.classList.toggle('active', p.dataset.club === club);
+                        });
+                    } else if (selectedClubs.has(club)) {
                         selectedClubs.delete(club);
                         pill.classList.remove('active');
                     } else {
@@ -2610,13 +2592,12 @@
 
                 document.getElementById('workstation').style.display = 'grid';
 
-                // If launched with ?filter=unassigned, pre-check the filter
+                // If launched with ?filter=unassigned, sync all filter controls
                 if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
-                    const cb = document.getElementById('unassignedOnlyFilter');
-                    if (cb) cb.checked = true;
+                    setAssignFilter('unassigned');
+                } else {
+                    renderGames();
                 }
-
-                renderGames();
                 renderRefs('');
 
                 // If opened with ?game=, select and scroll to that game
@@ -2656,7 +2637,7 @@
             const gameDateF      = document.getElementById('gameDateFilter')?.value || '';
             const gameTimeF      = document.getElementById('gameTimeFilter')?.value || '';
             const gameAgeF       = document.getElementById('gameAgeFilter')?.value  || '';
-            const unassignedOnly = document.getElementById('unassignedOnlyFilter')?.checked || false;
+            const unassignedOnly = document.getElementById('filterUnassigned')?.checked || false;
 
             const filtered = allGames.filter(g => {
                 // Cancelled games always show regardless of any filter
