@@ -28,6 +28,11 @@
  */
 
 const CONFIG = {
+    // Supabase credentials
+    SUPABASE_URL: 'https://kaniccdqieyesezpousu.supabase.co',
+    SUPABASE_ANON_KEY: 'sb_publishable_pJX6Fsg4YrSNEhfNTHbkLA_tzFJmEUb',
+
+
     // Your Airtable Personal Access Token
     // Example: 'patAbCdEfGhIjKlMnOpQrStUvWxYz'
     AIRTABLE_API_KEY: 'pat43h03yDHILzEtF.6f3ee6e4f539632e12b9e8b70c447f586f884e842f3a47d7c582aaf7efaf0205',
