@@ -30,8 +30,8 @@ class SupabaseClientWrapper {
         return map[name] || name.toLowerCase();
     }
 
-    // Map Airtable field names → Supabase column names where they differ
-    _normalizeFields(fields) {
+    // Map a single Airtable column name → Supabase column name
+    _col(name) {
         const map = {
             'Name':    'name',
             'Email':   'email',
@@ -47,9 +47,14 @@ class SupabaseClientWrapper {
             'Rating':  'rating',
             'League':  'league'
         };
+        return map[name] || name;
+    }
+
+    // Normalize all keys in a fields object
+    _normalizeFields(fields) {
         const out = {};
         for (const [k, v] of Object.entries(fields)) {
-            out[map[k] || k] = v;
+            out[this._col(k)] = v;
         }
         return out;
     }
@@ -82,9 +87,9 @@ class SupabaseClientWrapper {
                 // Handle OR({Email} = "x", {Email 2} = "x")
                 const orMatch = formula.match(/^OR\(\{(.+?)\}\s*=\s*"(.+?)",\s*\{(.+?)\}\s*=\s*"(.+?)"\)$/i);
                 if (orMatch) {
-                    const col1 = orMatch[1];
+                    const col1 = this._col(orMatch[1]);
                     const val1 = orMatch[2];
-                    const col2 = orMatch[3];
+                    const col2 = this._col(orMatch[3]);
                     const val2 = orMatch[4];
                     query = query.or(`${col1}.eq.${val1},${col2}.eq.${val2}`);
                 }
@@ -92,7 +97,7 @@ class SupabaseClientWrapper {
                 // Handle {Field} = "value"
                 const eqMatch = formula.match(/^\{(.+?)\}\s*=\s*"(.+?)"$/);
                 if (eqMatch) {
-                    query = query.eq(eqMatch[1], eqMatch[2]);
+                    query = query.eq(this._col(eqMatch[1]), eqMatch[2]);
                 }
             }
 
@@ -211,6 +216,7 @@ class SupabaseClientWrapper {
                 .from('referees')
                 .select('*')
                 .or(`email.eq.${email},"Email 2".eq.${email}`)
+                // email = lowercase col, Email 2 = kept as-is from CSV import
                 .limit(1);
             if (error) throw new Error(error.message);
             return data && data.length > 0 ? this._wrap(data[0]) : null;
