@@ -295,7 +295,7 @@ class SupabaseClientWrapper {
             const { data, error } = await this.client
                 .from('availability')
                 .select('*')
-                .eq('Referee Name', refereeName)
+                .ilike('Referee Name', refereeName)
                 .gte('date', today)
                 .order('date', { ascending: true })
                 .order('Start Time', { ascending: true });

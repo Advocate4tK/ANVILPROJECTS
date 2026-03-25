@@ -55,7 +55,7 @@
                     <!-- Option 1: Returning referee — profile found -->
                     <div id="returningWelcome" style="display:none; background:linear-gradient(135deg,#0f3460,#e94560); border-radius:12px; padding:20px 25px; margin-bottom:20px; color:white;">
                         <div style="font-size:1.3rem; font-weight:700;" id="welcomeName"></div>
-                        <div style="font-size:0.95rem; opacity:0.9; margin-top:6px;" id="welcomeSubtitle">✅ We found your profile — your information has been pre-filled. Just fill in your availability below.</div>
+                        <div style="font-size:0.95rem; opacity:0.9; margin-top:6px;" id="welcomeSubtitle">✅ We found your profile — your personal information has been confirmed and pre-filled. Just fill in your availability below.</div>
                         <button type="button" id="notMeBtn" style="margin-top:10px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:white; border-radius:8px; padding:4px 12px; font-size:0.8rem; cursor:pointer;">Not me?</button>
                     </div>
 
@@ -397,7 +397,7 @@
 
     <script src="config.js?v=4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="js/supabase-client.js?v=8"></script>
+    <script src="js/supabase-client.js?v=9"></script>
     <script>
         // Point airtableClient at Supabase so all existing code works unchanged
         var airtableClient = supabaseClient;
@@ -556,9 +556,7 @@
 
             // Load and render upcoming availability for the logged-in ref
             async function loadUpcomingAvailability() {
-                const firstName = document.getElementById('refereeFirstName').value.trim();
-                const lastName  = document.getElementById('refereeLastName').value.trim();
-                const fullName  = `${firstName} ${lastName}`.trim();
+                const fullName = window._foundRefName || '';
                 if (!fullName || !supabaseClient) return;
 
                 const records = await supabaseClient.getUpcomingAvailability(fullName);
@@ -689,9 +687,10 @@
                         if (f['Zip Code'])             document.getElementById('refereeZip').value           = f['Zip Code'];
                         if (f['Date of Birth'])        document.getElementById('refereeBirthDate').value     = f['Date of Birth'];
 
-                        // Store for age recalculation on submit
-                        window._foundRefId  = referee.id;
-                        window._foundRefDob = f['Date of Birth'] || null;
+                        // Store for age recalculation, upcoming query, and submit
+                        window._foundRefId   = referee.id;
+                        window._foundRefDob  = f['Date of Birth'] || null;
+                        window._foundRefName = f['Name'] || fullName; // use DB name for queries
 
                         // Check ALL profile fields — catches early refs who pre-date newly added fields
                         const missingFields = [
@@ -722,6 +721,7 @@
                         } else {
                             // Complete profile — skip contact step, go straight to availability
                             document.getElementById('welcomeName').textContent    = `🎉 Welcome back, ${fullName}!`;
+                            document.getElementById('welcomeSubtitle').textContent = '✅ We found your profile — your personal information has been confirmed and pre-filled. Just fill in your availability below.';
                             document.getElementById('contactSection').style.display = 'none';
                             unlockAvailability();
                         }
