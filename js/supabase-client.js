@@ -45,7 +45,21 @@ class SupabaseClientWrapper {
             'Games':   'games',
             'Age':     'age',
             'Rating':  'rating',
-            'League':  'league'
+            'League':  'league',
+            // Availability fields
+            'Date':                     'date',
+            'Start Time':               'start_time',
+            'End Time':                 'end_time',
+            'Total Years Reffing':      'total_years_reffing',
+            'Maximum Travel Distance':  'maximum_travel_distance',
+            'Preferred Locations':      'preferred_locations',
+            'Positions Willing to Work':'positions_willing_to_work',
+            'Age Groups Preferred':     'age_groups_preferred',
+            'Submitted At':             'submitted_at',
+            'Max Games':                'max_games',
+            'Referee Name':             'referee_name',
+            'Referee Email':            'referee_email',
+            'Referee Phone':            'referee_phone',
         };
         return map[name] || name;
     }
