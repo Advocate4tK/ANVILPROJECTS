@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
 
-            const selectedDate = new Date(date);
+            const selectedDate = new Date(date + 'T00:00:00'); // local time, not UTC
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             if (selectedDate < today) {
