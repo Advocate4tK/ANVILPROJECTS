@@ -210,7 +210,7 @@ class SupabaseClientWrapper {
             const { data, error } = await this.client
                 .from('referees')
                 .select('*')
-                .or(`Email.eq.${email},"Email 2".eq.${email}`)
+                .or(`email.eq.${email},"Email 2".eq.${email}`)
                 .limit(1);
             if (error) throw new Error(error.message);
             return data && data.length > 0 ? this._wrap(data[0]) : null;
