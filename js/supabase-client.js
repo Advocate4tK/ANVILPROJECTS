@@ -287,6 +287,27 @@ class SupabaseClientWrapper {
     }
 
     /**
+     * Get upcoming availability records for a referee (today and future)
+     */
+    async getUpcomingAvailability(refereeName) {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const { data, error } = await this.client
+                .from('availability')
+                .select('*')
+                .eq('Referee Name', refereeName)
+                .gte('date', today)
+                .order('date', { ascending: true })
+                .order('Start Time', { ascending: true });
+            if (error) throw new Error(error.message);
+            return this._wrapAll(data);
+        } catch (error) {
+            console.error('SupabaseClient getUpcomingAvailability error:', error);
+            return [];
+        }
+    }
+
+    /**
      * Test the connection
      */
     async testConnection() {

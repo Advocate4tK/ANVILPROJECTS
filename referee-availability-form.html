@@ -206,6 +206,14 @@
                         <!-- STEP 2: Availability + remaining sections (hidden until contact saved) -->
                         <div id="availabilitySection" style="display:none; opacity:0; transition:opacity 0.4s ease;">
 
+                    <!-- My Upcoming Availability -->
+                    <div id="upcomingSection" style="display:none; margin-bottom:24px;">
+                        <fieldset>
+                            <legend>My Upcoming Availability</legend>
+                            <div id="upcomingList"></div>
+                        </fieldset>
+                    </div>
+
                     <!-- Availability Details -->
                     <fieldset>
                         <legend>Availability Details</legend>
@@ -386,7 +394,7 @@
 
     <script src="config.js?v=4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="js/supabase-client.js?v=7"></script>
+    <script src="js/supabase-client.js?v=8"></script>
     <script>
         // Point airtableClient at Supabase so all existing code works unchanged
         var airtableClient = supabaseClient;
@@ -540,7 +548,62 @@
                 sec.style.display = 'block';
                 requestAnimationFrame(() => { sec.style.opacity = '1'; });
                 sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                loadUpcomingAvailability();
             }
+
+            // Load and render upcoming availability for the logged-in ref
+            async function loadUpcomingAvailability() {
+                const firstName = document.getElementById('refereeFirstName').value.trim();
+                const lastName  = document.getElementById('refereeLastName').value.trim();
+                const fullName  = `${firstName} ${lastName}`.trim();
+                if (!fullName || !supabaseClient) return;
+
+                const records = await supabaseClient.getUpcomingAvailability(fullName);
+                const section = document.getElementById('upcomingSection');
+                const list    = document.getElementById('upcomingList');
+
+                if (records.length === 0) { section.style.display = 'none'; return; }
+
+                section.style.display = 'block';
+                list.innerHTML = records.map(r => {
+                    const f    = r.fields;
+                    const date = f['Date'] ? new Date(f['Date'] + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '—';
+                    const time = `${f['Start Time'] || '?'} – ${f['End Time'] || '?'}`;
+                    return `
+                        <div style="display:flex; justify-content:space-between; align-items:center;
+                                    padding:10px 0; border-bottom:1px solid #eee;">
+                            <div>
+                                <strong>${date}</strong>
+                                <span style="margin-left:12px; color:#555;">${time}</span>
+                            </div>
+                            <button type="button"
+                                onclick="cancelAvailability('${r.id}', this)"
+                                style="background:none; border:1px solid #c0392b; color:#c0392b;
+                                       padding:4px 12px; border-radius:4px; cursor:pointer; font-size:0.85rem;">
+                                Cancel
+                            </button>
+                        </div>`;
+                }).join('');
+            }
+
+            // Cancel a single availability record
+            window.cancelAvailability = async function(recordId, btn) {
+                if (!confirm('Remove this availability slot?')) return;
+                btn.disabled = true;
+                btn.textContent = '...';
+                try {
+                    await supabaseClient.deleteRecord('Availability', recordId);
+                    btn.closest('div[style]').remove();
+                    const list = document.getElementById('upcomingList');
+                    if (!list.querySelector('div')) {
+                        document.getElementById('upcomingSection').style.display = 'none';
+                    }
+                } catch(e) {
+                    btn.disabled = false;
+                    btn.textContent = 'Cancel';
+                    alert('Could not remove slot. Please try again.');
+                }
+            };
 
             // Hide form groups for fields already on file so returning refs only see what's missing
             function hideFilledFields(f) {
