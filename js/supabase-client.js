@@ -30,6 +30,30 @@ class SupabaseClientWrapper {
         return map[name] || name.toLowerCase();
     }
 
+    // Map Airtable field names → Supabase column names where they differ
+    _normalizeFields(fields) {
+        const map = {
+            'Name':    'name',
+            'Email':   'email',
+            'Phone':   'phone',
+            'Address': 'address',
+            'City':    'city',
+            'State':   'state',
+            'Notes':   'notes',
+            'Status':  'status',
+            'Gender':  'gender',
+            'Games':   'games',
+            'Age':     'age',
+            'Rating':  'rating',
+            'League':  'league'
+        };
+        const out = {};
+        for (const [k, v] of Object.entries(fields)) {
+            out[map[k] || k] = v;
+        }
+        return out;
+    }
+
     // Wrap a Supabase row into Airtable-shaped record: { id, fields: {...} }
     _wrap(row) {
         if (!row) return null;
@@ -112,7 +136,7 @@ class SupabaseClientWrapper {
             const tbl = this._tableName(tableName);
             const { data, error } = await this.client
                 .from(tbl)
-                .insert(fields)
+                .insert(this._normalizeFields(fields))
                 .select()
                 .single();
             if (error) throw new Error(error.message);
@@ -131,7 +155,7 @@ class SupabaseClientWrapper {
             const tbl = this._tableName(tableName);
             const { data, error } = await this.client
                 .from(tbl)
-                .update(fields)
+                .update(this._normalizeFields(fields))
                 .eq('id', recordId)
                 .select()
                 .single();
