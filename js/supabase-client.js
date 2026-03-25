@@ -52,7 +52,29 @@ class SupabaseClientWrapper {
         return map[name] || name;
     }
 
-    // Normalize all keys in a fields object
+    // Reverse map: Supabase lowercase col → Airtable field name
+    // Only needed for cols that were lowercased on import (single-word cols)
+    _colReverse(name) {
+        const map = {
+            'name':    'Name',
+            'email':   'Email',
+            'phone':   'Phone',
+            'address': 'Address',
+            'city':    'City',
+            'state':   'State',
+            'notes':   'Notes',
+            'status':  'Status',
+            'gender':  'Gender',
+            'games':   'Games',
+            'age':     'Age',
+            'rating':  'Rating',
+            'league':  'League',
+            'date':    'Date',
+        };
+        return map[name] || name;
+    }
+
+    // Normalize all keys in a fields object (Airtable → Supabase, for writes)
     _normalizeFields(fields) {
         const out = {};
         for (const [k, v] of Object.entries(fields)) {
@@ -61,11 +83,20 @@ class SupabaseClientWrapper {
         return out;
     }
 
+    // Re-key fields from Supabase col names → Airtable field names (for reads)
+    _denormalizeFields(fields) {
+        const out = {};
+        for (const [k, v] of Object.entries(fields)) {
+            out[this._colReverse(k)] = v;
+        }
+        return out;
+    }
+
     // Wrap a Supabase row into Airtable-shaped record: { id, fields: {...} }
     _wrap(row) {
         if (!row) return null;
-        const { id, ...fields } = row;
-        return { id, fields };
+        const { id, created_at, club_id, zip_code, ...fields } = row;
+        return { id, fields: this._denormalizeFields(fields) };
     }
 
     _wrapAll(rows) {
