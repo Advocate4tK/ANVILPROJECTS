@@ -713,7 +713,7 @@
             document.getElementById('bannerEditorMsg').textContent = '';
             document.getElementById('bannerEditorTitle').textContent = id ? 'Edit Banner' : 'New Banner';
             if (id) {
-                const b = _banners.find(x => x.id === id);
+                const b = _banners.find(x => String(x.id) === String(id));
                 if (!b) return;
                 document.getElementById('bannerEditorText').value = b.msg;
                 _editingStyle = b.style;
@@ -784,7 +784,7 @@
                 const fields = { 'Key': 'banner', 'Value': msg, 'Style': _editingStyle, 'Clubs': _editingClubs.join(',') };
                 if (_editingBannerId) {
                     await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, _editingBannerId, fields);
-                    const b = _banners.find(x => x.id === _editingBannerId);
+                    const b = _banners.find(x => String(x.id) === String(_editingBannerId));
                     if (b) { b.msg = msg; b.style = _editingStyle; b.clubs = [..._editingClubs]; }
                 } else {
                     const newRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, { ...fields, 'Active': false });
@@ -799,8 +799,8 @@
         }
 
         async function toggleBannerById(id) {
-            const b = _banners.find(x => x.id === id);
-            if (!b) { alert('DEBUG: banner not found. id=' + id + ' | known ids=' + _banners.map(x=>x.id).join(',')); return; }
+            const b = _banners.find(x => String(x.id) === String(id));
+            if (!b) return;
             b.active = !b.active;
             renderBannerList();
             try {
@@ -815,7 +815,7 @@
             if (!confirm('Delete this banner?')) return;
             try {
                 await airtableClient.deleteRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, id);
-                _banners = _banners.filter(b => b.id !== id);
+                _banners = _banners.filter(b => String(b.id) !== String(id));
                 renderBannerList();
             } catch(e) { alert('Delete failed: ' + e.message); }
         }
