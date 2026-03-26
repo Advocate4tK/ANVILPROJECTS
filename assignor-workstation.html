@@ -2543,7 +2543,7 @@
                 allGames.forEach(g => { if (g.fields['Status'] === 'Cancelled') cancelledGameIds.add(g.id); });
 
                 // Show change requests badge if any open requests exist
-                const changeCount = allGames.filter(g => (g.fields['Game Status'] || '').toLowerCase() === 'change requested').length;
+                const changeCount = allGames.filter(g => (g.fields['Status'] || '').toLowerCase() === 'change requested').length;
                 const changeLink  = document.getElementById('changeRequestsLink');
                 if (changeCount > 0) {
                     document.getElementById('changeRequestsCount').textContent = `(${changeCount})`;
@@ -2735,7 +2735,7 @@
                 const fullyAssigned = cRef && ar1 && ar2;
                 const selected      = selectedGame && selectedGame.id === gid;
                 const isCancelled   = cancelledGameIds.has(gid) || f['Status'] === 'Cancelled';
-                const isChangeReq   = (f['Game Status'] || '') === 'Change Requested';
+                const isChangeReq   = (f['Status'] || '') === 'Change Requested';
 
                 html += `<div class="game-card ${fullyAssigned ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}" onclick="selectGame('${gid}')" id="card-${gid}">
                     ${buildGameCardInner(g)}
@@ -2761,7 +2761,7 @@
             const ar1  = resolveRefName(f['AR 1']);
             const ar2  = resolveRefName(f['AR 2']);
             const isCancelled = cancelledGameIds.has(gid) || f['Status'] === 'Cancelled';
-            const isChangeReq = (f['Game Status'] || '') === 'Change Requested';
+            const isChangeReq = (f['Status'] || '') === 'Change Requested';
             const hideARs     = hideU8Games && age === 'U8';
 
             const gn = buildGameNumber(f);
@@ -2933,7 +2933,7 @@
                 let availWarn = '', availOverride = '';
                 if (requestedChangeDate) {
                     const thisGame = allGames.find(g => g.id === gameId);
-                    const isChangeReqGame = thisGame && (thisGame.fields['Game Status'] || '') === 'Change Requested';
+                    const isChangeReqGame = thisGame && (thisGame.fields['Status'] || '') === 'Change Requested';
                     if (isChangeReqGame) {
                         const refKey   = refName.trim().toLowerCase();
                         const gameClub = (resolveGameClub(thisGame.fields) || '').toLowerCase();
@@ -3066,7 +3066,7 @@
         function selectGame(gameId) {
             selectedGame = allGames.find(g => g.id === gameId) || null;
             // Clear change request context if switching to a non-change game
-            if (!selectedGame || (selectedGame.fields['Game Status'] || '') !== 'Change Requested') {
+            if (!selectedGame || (selectedGame.fields['Status'] || '') !== 'Change Requested') {
                 requestedChangeDate = null;
                 requestedChangeTime = null;
             }
@@ -3101,7 +3101,7 @@
             const wrap = document.getElementById('refsListWrap');
             if (!allRefs.length) { wrap.innerHTML = '<p class="hint">Load games first.</p>'; return; }
 
-            const isSelectedChangeReq = selectedGame && (selectedGame.fields['Game Status'] || '') === 'Change Requested';
+            const isSelectedChangeReq = selectedGame && (selectedGame.fields['Status'] || '') === 'Change Requested';
             const gameDate  = (isSelectedChangeReq && requestedChangeDate) ? requestedChangeDate
                             : (selectedGame ? selectedGame.fields['Date'] : null);
             const gameTime  = (isSelectedChangeReq && requestedChangeTime) ? requestedChangeTime
@@ -3621,13 +3621,13 @@
                     game.fields['Time'] = newTime || '';
 
                     // Auto-clear "Change Requested" flag when assignor reschedules the game
-                    if ((game.fields['Game Status'] || '') === 'Change Requested') {
+                    if ((game.fields['Status'] || '') === 'Change Requested') {
                         try {
                             const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
                             const prevNotes = game.fields['Notes'] || '';
                             const updatedNotes = prevNotes + `\n[RESOLVED – ${now}]`;
                             await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Change Resolved', 'Notes': updatedNotes });
-                            game.fields['Game Status'] = 'Change Resolved';
+                            game.fields['Status'] = 'Change Resolved';
                             game.fields['Notes'] = updatedNotes;
                             document.getElementById('card-' + gameId)?.classList.remove('change-focus');
                             const matchup = `${game.fields['Home Team'] || '—'} vs ${game.fields['Away Team'] || '—'}`;
@@ -3714,7 +3714,7 @@
                 const prevNotes = game?.fields['Notes'] || '';
                 const updatedNotes = prevNotes + `\n[RESOLVED – ${now}]`;
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Change Resolved', 'Notes': updatedNotes });
-                if (game) { game.fields['Game Status'] = 'Change Resolved'; game.fields['Notes'] = updatedNotes; }
+                if (game) { game.fields['Status'] = 'Change Resolved'; game.fields['Notes'] = updatedNotes; }
                 window.location.href = 'schedule-changes.html';
             } catch(e) {
                 alert('Could not mark resolved: ' + e.message);
