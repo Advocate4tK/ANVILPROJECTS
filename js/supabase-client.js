@@ -56,6 +56,21 @@ class SupabaseClientWrapper {
             'Key':    'key',
             'Active': 'active',
             'Clubs':  'clubs',
+            // Games table
+            'Center Referee': 'center_referee',
+            'AR 1':           'ar_1',
+            'AR 2':           'ar_2',
+            'Age Group':      'age_group',
+            'Home Team':      'home_team',
+            'Away Team':      'away_team',
+            'Game Status':    'game_status',
+            'Payment Status': 'payment_status',
+            'Uploaded By':    'uploaded_by',
+            'Auto Number':    'auto_number',
+            'Source Club':    'source_club',
+            'Venue ID':       'venue_id',
+            'Field ID':       'field_id',
+            'GAME ID':        'game_id',
         };
         return map[name] || name;
     }
@@ -91,6 +106,21 @@ class SupabaseClientWrapper {
             'clubs':     'Clubs',
             'active':    'Active',
             'key':       'Key',
+            // Games table
+            'center_referee': 'Center Referee',
+            'ar_1':           'AR 1',
+            'ar_2':           'AR 2',
+            'age_group':      'Age Group',
+            'home_team':      'Home Team',
+            'away_team':      'Away Team',
+            'game_status':    'Game Status',
+            'payment_status': 'Payment Status',
+            'uploaded_by':    'Uploaded By',
+            'auto_number':    'Auto Number',
+            'source_club':    'Source Club',
+            'venue_id':       'Venue ID',
+            'field_id':       'Field ID',
+            'game_id':        'GAME ID',
         };
         return map[name] || name;
     }
