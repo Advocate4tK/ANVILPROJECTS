@@ -2559,13 +2559,11 @@
                 allAvail  = avail;
                 allVenues = venues
                     .map(v => {
-                        const linkedClubs = v.fields['Clubs'];
-                        const clubIds = Array.isArray(linkedClubs) ? linkedClubs : (linkedClubs != null ? [linkedClubs] : []);
-                        const clubNames = clubIds.map(id => (clubLookup[id] || '')).filter(Boolean).map(c => c.toLowerCase());
+                        const clubName = (v.fields['club_name'] || '').toLowerCase();
                         return {
                             id:    v.fields['Venue ID'] || v.id,
                             name:  v.fields['Venue Name'] || v.fields['Name'],
-                            clubs: clubNames
+                            clubs: clubName ? [clubName] : []
                         };
                     })
                     .filter(v => v.id && v.name)
@@ -2594,12 +2592,8 @@
                 venues.forEach(v => {
                     const zip = (v.fields['Zip'] || '').toString().trim();
                     if (!zip) return;
-                    const _vc = v.fields['Clubs'];
-                    const linkedClubs = Array.isArray(_vc) ? _vc : (_vc != null ? [_vc] : []);
-                    linkedClubs.forEach(clubId => {
-                        const clubName = (clubLookup[clubId] || '').toLowerCase();
-                        if (clubName && !clubVenueZipMap[clubName]) clubVenueZipMap[clubName] = zip;
-                    });
+                    const clubName = (v.fields['club_name'] || '').toLowerCase();
+                    if (clubName && !clubVenueZipMap[clubName]) clubVenueZipMap[clubName] = zip;
                 });
 
                 document.getElementById('workstation').style.display = 'grid';
@@ -2782,7 +2776,7 @@
             const pillClub      = selectedClubs.size === 1 ? [...selectedClubs][0].toLowerCase() : '';
             const activeClub    = gameClubLower || pillClub;
             const venuesFiltered = allVenues.filter(v =>
-                !activeClub || v.clubs.some(c => c.includes(activeClub) || activeClub.includes(c))
+                !activeClub || v.clubs.length === 0 || v.clubs.some(c => c.includes(activeClub) || activeClub.includes(c))
             );
             const venueOpts = venuesFiltered.map(v =>
                 `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
