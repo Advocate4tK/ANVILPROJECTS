@@ -200,6 +200,13 @@
                         <button class="banner-preset" data-style="green" onclick="selectBannerPreset('green')"
                             style="background:#14532d; color:#86efac; border:2px solid transparent; border-radius:8px; padding:5px 13px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s;">Green</button>
                     </div>
+                    <!-- Club targeting -->
+                    <div style="margin-top:14px;">
+                        <div style="font-size:0.72rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">Send To:</div>
+                        <div id="bannerClubPickerWrap">
+                            <span style="font-size:0.82rem; color:#aaa;">Loading clubs…</span>
+                        </div>
+                    </div>
                     <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
                         <button onclick="saveBanner()" style="background:#09142a; color:#fff; border:none; border-radius:8px; padding:8px 22px; font-size:0.85rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">Save Banner</button>
                         <span id="bannerSaveMsg" style="font-size:0.8rem; color:#888;"></span>
@@ -654,6 +661,49 @@
         let _bannerRecordId = null;
         let _bannerActive   = false;
         let _bannerStyle    = 'default';
+        let _bannerClubs    = []; // empty = all clubs
+
+        function renderBannerClubPicker() {
+            const wrap = document.getElementById('bannerClubPickerWrap');
+            if (!wrap) return;
+            const allMode = _bannerClubs.length === 0;
+            const clubNames = personSearchClubs
+                .map(c => c.fields['Name'] || c.fields['Club Name'] || '')
+                .filter(Boolean).sort();
+            wrap.innerHTML = `
+                <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; cursor:pointer; font-weight:600;">
+                        <input type="radio" name="bannerTarget" value="all" ${allMode ? 'checked' : ''} onchange="setBannerTargetAll(true)"> All Clubs
+                    </label>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; cursor:pointer; font-weight:600;">
+                        <input type="radio" name="bannerTarget" value="selected" ${!allMode ? 'checked' : ''} onchange="setBannerTargetAll(false)"> Selected Clubs
+                    </label>
+                </div>
+                <div id="bannerClubChecks" style="display:${allMode ? 'none' : 'flex'}; flex-wrap:wrap; gap:8px 16px; padding:10px 12px; background:#f8f9fc; border:1px solid #e2d9ce; border-radius:8px;">
+                    ${clubNames.map(name => `
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.82rem; cursor:pointer;">
+                            <input type="checkbox" value="${name}" ${_bannerClubs.includes(name) ? 'checked' : ''}
+                                onchange="toggleBannerClub(this.value, this.checked)">
+                            ${name}
+                        </label>`).join('')}
+                </div>`;
+        }
+
+        function setBannerTargetAll(allClubs) {
+            if (allClubs) {
+                _bannerClubs = [];
+                const checks = document.getElementById('bannerClubChecks');
+                if (checks) checks.style.display = 'none';
+            } else {
+                const checks = document.getElementById('bannerClubChecks');
+                if (checks) checks.style.display = 'flex';
+            }
+        }
+
+        function toggleBannerClub(name, checked) {
+            if (checked && !_bannerClubs.includes(name)) _bannerClubs.push(name);
+            if (!checked) _bannerClubs = _bannerClubs.filter(c => c !== name);
+        }
 
         function selectBannerPreset(style) {
             _bannerStyle = style;
@@ -672,11 +722,14 @@
                     _bannerRecordId = recs[0].id;
                     _bannerActive   = !!recs[0].fields['Active'];
                     _bannerStyle    = recs[0].fields['Style'] || 'default';
+                    const savedClubs = recs[0].fields['Clubs'] || '';
+                    _bannerClubs = savedClubs ? savedClubs.split(',').map(s => s.trim()).filter(Boolean) : [];
                     document.getElementById('bannerTextarea').value = recs[0].fields['Value'] || '';
                     selectBannerPreset(_bannerStyle);
                 }
                 // No record yet is fine — saveBanner will create one on first save
                 updateBannerToggleUI();
+                renderBannerClubPicker();
             } catch(e) {
                 console.error('loadBannerState error:', e);
                 document.getElementById('bannerStatusLabel').textContent = 'Error loading';
@@ -728,16 +781,16 @@
             const saveEl = document.getElementById('bannerSaveMsg');
             saveEl.textContent = 'Saving…'; saveEl.style.color = '#888';
             try {
+                const clubsVal = _bannerClubs.join(',');
                 if (!_bannerRecordId) {
                     // First save — create the record
                     const newRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, {
-                        'Key': 'banner', 'Value': msg, 'Active': false, 'Style': _bannerStyle
+                        'Key': 'banner', 'Value': msg, 'Active': false, 'Style': _bannerStyle, 'Clubs': clubsVal
                     });
                     _bannerRecordId = newRec.id;
                 } else {
                     await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, _bannerRecordId, {
-                        'Value': msg,
-                        'Style': _bannerStyle
+                        'Value': msg, 'Style': _bannerStyle, 'Clubs': clubsVal
                     });
                 }
                 saveEl.textContent = '✓ Saved'; saveEl.style.color = '#00c853';
@@ -1164,6 +1217,7 @@
                 personSearchClubs     = allClubs;
                 personSearchGames     = allGames;
                 personSearchAssignors = allAssignors;
+                renderBannerClubPicker();
                 proximityVenues   = allVenues
                     .map(v => ({ name: v.fields['Venue Name'] || '', zip: (v.fields['Zip'] || '').toString().trim().padStart(5, '0') }))
                     .filter(v => v.name && v.zip);
