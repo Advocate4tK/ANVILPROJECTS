@@ -642,20 +642,28 @@
             });
             const container = document.getElementById('tickerContainer');
             container.innerHTML = '';
-            matches.forEach(match => {
+            // Red banners first, then everything else
+            const sorted = [...matches].sort((a, b) => {
+                const aRed = (a.fields['Style'] || '').toLowerCase() === 'red';
+                const bRed = (b.fields['Style'] || '').toLowerCase() === 'red';
+                return bRed - aRed;
+            });
+            sorted.forEach(match => {
                 const msg   = (match.fields['Value'] || '').trim();
                 const style = match.fields['Style'] || 'default';
                 if (!msg) return;
-                const preset   = BANNER_PRESETS[style] || BANNER_PRESETS.default;
+                const isRed  = style.toLowerCase() === 'red';
+                const preset = BANNER_PRESETS[style] || BANNER_PRESETS.default;
                 const duration = Math.max(12, Math.round(msg.length * 0.28));
                 const bar = document.createElement('div');
                 bar.className = 'ticker-bar';
-                bar.style.background       = preset.bar;
-                bar.style.borderBottom     = `2px solid ${preset.badge}`;
+                bar.style.background   = preset.bar;
+                bar.style.borderBottom = `2px solid ${preset.badge}`;
+                if (isRed) bar.style.height = '52px';
                 bar.innerHTML = `
-                    <span class="ticker-badge" style="background:${preset.badge}; color:${preset.badgeText};">📢 Notice</span>
+                    <span class="ticker-badge" style="background:${preset.badge}; color:${preset.badgeText};">${isRed ? '⚠️ URGENT' : '📢 Notice'}</span>
                     <div class="ticker-track">
-                        <span class="ticker-content" style="color:${preset.text}; animation-duration:${duration}s;">${msg}</span>
+                        <span class="ticker-content" style="color:${preset.text}; animation-duration:${duration}s; ${isRed ? 'font-size:1.05rem; font-weight:700;' : ''}">${msg}</span>
                     </div>`;
                 container.appendChild(bar);
             });
