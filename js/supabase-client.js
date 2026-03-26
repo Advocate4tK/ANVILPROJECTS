@@ -56,39 +56,8 @@ class SupabaseClientWrapper {
             'Key':    'key',
             'Active': 'active',
             'Clubs':  'clubs',
-            // Games table
-            'Center Referee': 'center_referee',
-            'AR 1':           'ar_1',
-            'AR 2':           'ar_2',
-            'Age Group':      'age_group',
-            'Home Team':      'home_team',
-            'Away Team':      'away_team',
-            'Payment Status': 'payment_status',
-            'Uploaded By':    'uploaded_by',
-            'Auto Number':    'auto_number',
-            'Source Club':    'source_club',
-            'Venue ID':       'venue_id',
-            'Field ID':       'field_id',
-            'GAME ID':        'game_id',
-            // Venues table
-            'Venue Name':     'venue_name',
-            'Fields 2':       'fields_2',
-            // Fields table
-            'Field Name':          'field_name',
-            'Parking Notes':       'parking_notes',
-            'Field Notes':         'field_notes',
-            'Position Preference': 'position_preference',
-            // Clubs table
-            'Club Name':           'club_name',
-            'Club Admin':          'club_admin',
-            'Club Admin Email':    'club_admin_email',
-            'Club Admin Phone':    'club_admin_phone',
-            'Club Game Upload':    'club_game_upload',
-            'President Email':     'president_email',
-            'President Phone':     'president_phone',
-            'Contact Name':        'contact_name',
-            'Contact Email':       'contact_email',
-            'Contact Phone':       'contact_phone',
+            // NOTE: All multi-word columns (Home Team, Center Referee, AR 1, etc.)
+            // are stored with spaces in Supabase — they pass through as-is (no mapping needed)
         };
         return map[name] || name;
     }
@@ -124,40 +93,8 @@ class SupabaseClientWrapper {
             'clubs':     'Clubs',
             'active':    'Active',
             'key':       'Key',
-            // Games table
-            'center_referee': 'Center Referee',
-            'ar_1':           'AR 1',
-            'ar_2':           'AR 2',
-            'age_group':      'Age Group',
-            'home_team':      'Home Team',
-            'away_team':      'Away Team',
-            'status':         'Status',
-            'payment_status': 'Payment Status',
-            'uploaded_by':    'Uploaded By',
-            'auto_number':    'Auto Number',
-            'source_club':    'Source Club',
-            'venue_id':       'Venue ID',
-            'field_id':       'Field ID',
-            'game_id':        'GAME ID',
-            // Venues table
-            'venue_name':     'Venue Name',
-            'fields_2':       'Fields 2',
-            // Fields table
-            'field_name':     'Field Name',
-            'parking_notes':  'Parking Notes',
-            'field_notes':    'Field Notes',
-            'position_preference': 'Position Preference',
-            // Clubs table
-            'club_name':           'Club Name',
-            'club_admin':          'Club Admin',
-            'club_admin_email':    'Club Admin Email',
-            'club_admin_phone':    'Club Admin Phone',
-            'club_game_upload':    'Club Game Upload',
-            'president_email':     'President Email',
-            'president_phone':     'President Phone',
-            'contact_name':        'Contact Name',
-            'contact_email':       'Contact Email',
-            'contact_phone':       'Contact Phone',
+            // NOTE: All multi-word columns pass through with their original names (spaces preserved)
+            // Only single-word lowercased cols need reverse mapping (handled above)
         };
         return map[name] || name;
     }
