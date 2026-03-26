@@ -339,8 +339,12 @@
 
     function resolveRef(val) {
         if (!val) return '';
-        if (Array.isArray(val)) return val.map(id => refById[id] || id).filter(Boolean).join(', ');
-        return val;
+        // Handle JSON array string from pre-migration Airtable data e.g. '["1140"]'
+        if (typeof val === 'string' && val.startsWith('[')) {
+            try { val = JSON.parse(val); } catch(e) { return val; }
+        }
+        if (Array.isArray(val)) return val.map(id => refById[id] || '').filter(Boolean).join(', ');
+        return val; // plain string name (Supabase new assignments)
     }
 
     function extractRequests(notes) {
