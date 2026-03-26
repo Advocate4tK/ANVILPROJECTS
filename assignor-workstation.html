@@ -1934,6 +1934,7 @@
         let allFields     = []; // { fieldId, name, venueId }
         let clubLookup    = {}; // airtable record ID → club name
         let refLookup     = {}; // airtable record ID → ref object
+        let refLookupByName = {}; // lowercase name → ref object (for Supabase string refs)
         let venueZipMap     = {}; // Airtable field record ID → venue zip string
         let clubVenueZipMap = {}; // club name (lowercase) → representative venue zip
 
@@ -2485,9 +2486,14 @@
                     clubLookup[c.id] = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || c.id;
                 });
 
-                // Build ref lookup
+                // Build ref lookup by ID and by name
                 refLookup = {};
-                refs.forEach(r => { refLookup[r.id] = r; });
+                refLookupByName = {};
+                refs.forEach(r => {
+                    refLookup[r.id] = r;
+                    const n = (r.fields['Name'] || '').toLowerCase();
+                    if (n) refLookupByName[n] = r;
+                });
 
                 // Build assignedAt: refId → Map<'date|time', Set<gameId>>
                 assignedAt = {};
@@ -2551,14 +2557,17 @@
                 }
                 allRefs   = refs;
                 allAvail  = avail;
-                if (venues.length > 0) console.log('DEBUG venue sample fields:', Object.keys(venues[0].fields), venues[0].fields);
                 allVenues = venues
                     .map(v => {
                         const linkedClubs = v.fields['Clubs'] || [];
                         const clubNames = Array.isArray(linkedClubs)
                             ? linkedClubs.map(id => clubLookup[id]).filter(Boolean).map(c => c.toLowerCase())
                             : [];
-                        return { id: v.fields['Venue ID'], name: v.fields['Venue Name'], clubs: clubNames };
+                        return {
+                            id:    v.fields['Venue ID'] || v.id,
+                            name:  v.fields['Venue Name'] || v.fields['Name'],
+                            clubs: clubNames
+                        };
                     })
                     .filter(v => v.id && v.name)
                     .sort((a, b) => a.name.localeCompare(b.name));
@@ -2924,7 +2933,8 @@
                 const refId = typeof linkedIds === 'string' ? '' : (Array.isArray(linkedIds) && linkedIds.length > 0 ? linkedIds[0] : '');
                 const safeName = refName.replace(/'/g, "\\'");
                 // Use the same experience color scale as the ref panel cards
-                const ref = refLookup[refId];
+                // For Supabase games, ref name is stored as a string — look up by name if no ID
+                const ref = refLookup[refId] || refLookupByName[(refName || '').toLowerCase()];
                 const yrsNum = ref ? (parseInt(ref.fields['Years Reffing']) || 0) : 0;
                 const expColor = yrsNum === 0 ? '#e74c3c' : yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad';
                 const borderStyle = expColor ? `border-color:${expColor};` : '';
