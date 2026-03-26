@@ -47,12 +47,14 @@ class SupabaseClientWrapper {
             'Rating':  'rating',
             'League':  'league',
             // Availability fields — only single-word cols went lowercase on import
-            'Date':                     'date',
+            'Date':   'date',
             'Time':   'time',
             'Value':  'value',
             'Style':  'style',
             'Role':   'role',
             'Zip':    'zip',
+            'Key':    'key',
+            'Active': 'active',
         };
         return map[name] || name;
     }
@@ -87,6 +89,7 @@ class SupabaseClientWrapper {
             'club':      'Club',
             'clubs':     'Clubs',
             'active':    'Active',
+            'key':       'Key',
         };
         return map[name] || name;
     }
