@@ -1131,31 +1131,38 @@
                     if (n) clubRecordByName[n] = c;
                 });
 
-                // Build club ID → venue count
-                // Venues table uses 'Clubs' (linked record array) to link to a club
-                const venueCountByClubId = {};
-                // Map numeric Venue ID → club record ID (for field→club lookup)
-                // Fields table stores 'Venue ID' as a plain number, not a linked record
+                // Build Airtable Venue ID → Supabase club record ID
+                // (clubs.venues stores Airtable autonumbers, not Supabase IDs)
+                function parseAirtableIds(str) {
+                    if (!str) return [];
+                    return (str.match(/[\d,]+(?:\.\d+)?/g) || [])
+                        .map(s => parseInt(s.replace(/,/g, ''), 10))
+                        .filter(n => !isNaN(n));
+                }
+                const venueAirtableIdToClubId = {};
+                allClubs.forEach(c => {
+                    parseAirtableIds(c.fields['venues']).forEach(vid => {
+                        venueAirtableIdToClubId[vid] = c.id;
+                    });
+                });
+
+                // Build club ID → venue count + numeric Venue ID → club ID map
+                const venueCountByClubId  = {};
                 const numericVenueIdToClubId = {};
                 allVenues.forEach(v => {
-                    const linked = v.fields['Clubs'] || v.fields['Club'] || [];
-                    const arr = Array.isArray(linked) ? linked : (linked ? [linked] : []);
-                    arr.forEach(clubRecId => {
-                        venueCountByClubId[clubRecId] = (venueCountByClubId[clubRecId] || 0) + 1;
-                    });
-                    // Build numeric Venue ID → first linked club record ID
-                    const numVenueId = v.fields['Venue ID'];
-                    if (numVenueId !== undefined && numVenueId !== null && arr.length > 0) {
-                        numericVenueIdToClubId[numVenueId] = arr[0];
+                    const numVenueId = parseInt(v.fields['Venue ID']);
+                    if (!numVenueId) return;
+                    const cid = venueAirtableIdToClubId[numVenueId];
+                    if (cid) {
+                        venueCountByClubId[cid] = (venueCountByClubId[cid] || 0) + 1;
+                        numericVenueIdToClubId[numVenueId] = cid;
                     }
                 });
 
-                // Build club ID → field count
-                // Fields table stores numeric 'Venue ID', look it up via numericVenueIdToClubId
+                // Build club ID → field count via Venue ID → club ID
                 const fieldCountByClubId = {};
                 allFields.forEach(fi => {
-                    const numVenueId = fi.fields['Venue ID'];
-                    const cid = numericVenueIdToClubId[numVenueId];
+                    const cid = numericVenueIdToClubId[parseInt(fi.fields['Venue ID'])];
                     if (cid) fieldCountByClubId[cid] = (fieldCountByClubId[cid] || 0) + 1;
                 });
 
