@@ -640,16 +640,18 @@
             };
             const settings = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.SETTINGS, {
                 filterByFormula: `AND(LOWER({Key})='banner', {Active}=TRUE())`,
-                maxRecords: 1
+                maxRecords: 50
             });
-            if (settings.length > 0) {
-                const msg        = settings[0].fields['Value'] || '';
-                const style      = settings[0].fields['Style'] || 'default';
-                const clubsField = settings[0].fields['Clubs'] || '';
-                const targets    = clubsField ? clubsField.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
-                const thisClub   = (currentClubRecord ? (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '') : '').toLowerCase().trim();
-                const clubMatch  = targets.length === 0 || targets.includes(thisClub);
-                if (msg.trim() && clubMatch) {
+            const thisClub = (currentClubRecord ? (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '') : '').toLowerCase().trim();
+            // Pick best match: club-specific banner first, then all-clubs banner
+            const match = settings.find(r => {
+                const targets = (r.fields['Clubs'] || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+                return targets.length > 0 && targets.includes(thisClub);
+            }) || settings.find(r => !(r.fields['Clubs'] || '').trim());
+            if (match) {
+                const msg   = match.fields['Value'] || '';
+                const style = match.fields['Style'] || 'default';
+                if (msg.trim()) {
                     const preset = BANNER_PRESETS[style] || BANNER_PRESETS.default;
                     const bar     = document.getElementById('tickerBar');
                     const badge   = bar.querySelector('.ticker-badge');
