@@ -133,16 +133,52 @@ class SupabaseClientWrapper {
                     query = query.eq(this._col(eqMatch[1]), eqMatch[2]);
                 }
 
-                // Handle RECORD_ID()='value' → .eq('id', value)
+                // RECORD_ID()='value' → .eq('id', value)
                 const recIdMatch = formula.match(/^RECORD_ID\(\)\s*=\s*'(.+?)'$/i);
                 if (recIdMatch) {
                     query = query.eq('id', recIdMatch[1]);
                 }
 
-                // Handle AND(LOWER({Key})='value', {Active}=TRUE()) → settings banner lookup
-                const settingsMatch = formula.match(/^AND\(LOWER\(\{Key\}\)\s*=\s*'(.+?)',\s*\{Active\}\s*=\s*TRUE\(\)\)$/i);
-                if (settingsMatch) {
-                    query = query.eq('key', settingsMatch[1]).eq('active', true);
+                // AND(LOWER({Key})='value', {Active}=TRUE()) → settings banner lookup
+                const settingsActiveMatch = formula.match(/^AND\(LOWER\(\{Key\}\)\s*=\s*'(.+?)',\s*\{Active\}\s*=\s*TRUE\(\)\)$/i);
+                if (settingsActiveMatch) {
+                    query = query.eq('key', settingsActiveMatch[1]).eq('active', true);
+                }
+
+                // LOWER({Key})='value' → simple key match
+                const lowerKeyMatch = formula.match(/^LOWER\(\{Key\}\)\s*=\s*'(.+?)'$/i);
+                if (lowerKeyMatch) {
+                    query = query.eq('key', lowerKeyMatch[1]);
+                }
+
+                // AND(NOT(IS_BEFORE({Date},'x')), NOT(IS_AFTER({Date},'y'))) → date range
+                const andDateMatch = formula.match(/^AND\(NOT\(IS_BEFORE\(\{Date\},\s*'(.+?)'\)\),\s*NOT\(IS_AFTER\(\{Date\},\s*'(.+?)'\)\)\)$/i);
+                if (andDateMatch) {
+                    query = query.gte('date', andDateMatch[1]).lte('date', andDateMatch[2]);
+                }
+
+                // NOT(IS_BEFORE({Date},'value')) → .gte
+                const notBeforeMatch = formula.match(/^NOT\(IS_BEFORE\(\{Date\},\s*'(.+?)'\)\)$/i);
+                if (notBeforeMatch) {
+                    query = query.gte('date', notBeforeMatch[1]);
+                }
+
+                // NOT(IS_AFTER({Date},'value')) → .lte
+                const notAfterMatch = formula.match(/^NOT\(IS_AFTER\(\{Date\},\s*'(.+?)'\)\)$/i);
+                if (notAfterMatch) {
+                    query = query.lte('date', notAfterMatch[1]);
+                }
+
+                // IS_AFTER({Date},'value') → .gt
+                const isAfterMatch = formula.match(/^IS_AFTER\(\{Date\},\s*'(.+?)'\)$/i);
+                if (isAfterMatch) {
+                    query = query.gt('date', isAfterMatch[1]);
+                }
+
+                // OR(IS_SAME({Date},'x','day'), IS_SAME({Date},'y','day')) → .in()
+                const orSameMatch = formula.match(/^OR\(IS_SAME\(\{Date\},'(.+?)','day'\),\s*IS_SAME\(\{Date\},'(.+?)','day'\)\)$/i);
+                if (orSameMatch) {
+                    query = query.in('date', [orSameMatch[1], orSameMatch[2]]);
                 }
             }
 
