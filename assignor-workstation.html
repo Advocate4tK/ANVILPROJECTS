@@ -3600,16 +3600,18 @@
 
             if (!newDate) { alert('Please enter a date.'); return; }
             if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { alert('Invalid date format. Use YYYY-MM-DD.'); return; }
-            if (newTime && !/^\d{2}:\d{2}$/.test(newTime)) { alert('Invalid time format. Use HH:MM (24-hour).'); return; }
+            // Normalize time — strip seconds if browser returns HH:MM:SS
+            const cleanTime = newTime ? newTime.substring(0, 5) : '';
+            if (cleanTime && !/^\d{2}:\d{2}$/.test(cleanTime)) { alert('Invalid time format. Use HH:MM (24-hour).'); return; }
 
             try {
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
                     'Date': newDate,
-                    'Time': newTime || null
+                    'Time': cleanTime || null
                 });
 
                 // Update local state
-                const game = allGames.find(g => g.id === gameId);
+                const game = allGames.find(g => String(g.id) === String(gameId));
                 if (game) {
                     const oldDt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
                     const newDt = `${newDate}|${newTime}`;
