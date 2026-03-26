@@ -71,6 +71,25 @@ class SupabaseClientWrapper {
             'Venue ID':       'venue_id',
             'Field ID':       'field_id',
             'GAME ID':        'game_id',
+            // Venues table
+            'Venue Name':     'venue_name',
+            'Fields 2':       'fields_2',
+            // Fields table
+            'Field Name':          'field_name',
+            'Parking Notes':       'parking_notes',
+            'Field Notes':         'field_notes',
+            'Position Preference': 'position_preference',
+            // Clubs table
+            'Club Name':           'club_name',
+            'Club Admin':          'club_admin',
+            'Club Admin Email':    'club_admin_email',
+            'Club Admin Phone':    'club_admin_phone',
+            'Club Game Upload':    'club_game_upload',
+            'President Email':     'president_email',
+            'President Phone':     'president_phone',
+            'Contact Name':        'contact_name',
+            'Contact Email':       'contact_email',
+            'Contact Phone':       'contact_phone',
         };
         return map[name] || name;
     }
@@ -121,6 +140,25 @@ class SupabaseClientWrapper {
             'venue_id':       'Venue ID',
             'field_id':       'Field ID',
             'game_id':        'GAME ID',
+            // Venues table
+            'venue_name':     'Venue Name',
+            'fields_2':       'Fields 2',
+            // Fields table
+            'field_name':     'Field Name',
+            'parking_notes':  'Parking Notes',
+            'field_notes':    'Field Notes',
+            'position_preference': 'Position Preference',
+            // Clubs table
+            'club_name':           'Club Name',
+            'club_admin':          'Club Admin',
+            'club_admin_email':    'Club Admin Email',
+            'club_admin_phone':    'Club Admin Phone',
+            'club_game_upload':    'Club Game Upload',
+            'president_email':     'President Email',
+            'president_phone':     'President Phone',
+            'contact_name':        'Contact Name',
+            'contact_email':       'Contact Email',
+            'contact_phone':       'Contact Phone',
         };
         return map[name] || name;
     }
