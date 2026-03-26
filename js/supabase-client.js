@@ -63,7 +63,6 @@ class SupabaseClientWrapper {
             'Age Group':      'age_group',
             'Home Team':      'home_team',
             'Away Team':      'away_team',
-            'Game Status':    'status',
             'Payment Status': 'payment_status',
             'Uploaded By':    'uploaded_by',
             'Auto Number':    'auto_number',
