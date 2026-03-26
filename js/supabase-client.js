@@ -69,7 +69,8 @@ class SupabaseClientWrapper {
             'age':     'Age',
             'rating':  'Rating',
             'league':  'League',
-            'date':    'Date',
+            'date':      'Date',
+            'president': 'President',
         };
         return map[name] || name;
     }
