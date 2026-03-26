@@ -55,6 +55,7 @@ class SupabaseClientWrapper {
             'Zip':    'zip',
             'Key':    'key',
             'Active': 'active',
+            'Clubs':  'clubs',
         };
         return map[name] || name;
     }
