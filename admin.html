@@ -674,15 +674,11 @@
                     _bannerStyle    = recs[0].fields['Style'] || 'default';
                     document.getElementById('bannerTextarea').value = recs[0].fields['Value'] || '';
                     selectBannerPreset(_bannerStyle);
-                } else {
-                    // No banner record yet — create a default one
-                    const newRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, {
-                        'Key': 'banner', 'Value': '', 'Active': false, 'Style': 'default'
-                    });
-                    _bannerRecordId = newRec.id;
                 }
+                // No record yet is fine — saveBanner will create one on first save
                 updateBannerToggleUI();
             } catch(e) {
+                console.error('loadBannerState error:', e);
                 document.getElementById('bannerStatusLabel').textContent = 'Error loading';
             }
         }
@@ -708,11 +704,18 @@
         }
 
         async function toggleBannerActive() {
-            if (!_bannerRecordId) { alert('Banner record not found — reload the page and try again.'); return; }
             _bannerActive = !_bannerActive;
             updateBannerToggleUI();
             try {
-                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, _bannerRecordId, { 'Active': _bannerActive });
+                if (!_bannerRecordId) {
+                    const msg = document.getElementById('bannerTextarea').value.trim();
+                    const newRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, {
+                        'Key': 'banner', 'Value': msg, 'Active': _bannerActive, 'Style': _bannerStyle
+                    });
+                    _bannerRecordId = newRec.id;
+                } else {
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, _bannerRecordId, { 'Active': _bannerActive });
+                }
             } catch(e) {
                 _bannerActive = !_bannerActive; // revert on failure
                 updateBannerToggleUI();
@@ -721,15 +724,22 @@
         }
 
         async function saveBanner() {
-            if (!_bannerRecordId) { alert('Banner record not found — reload the page and try again.'); return; }
             const msg    = document.getElementById('bannerTextarea').value.trim();
             const saveEl = document.getElementById('bannerSaveMsg');
             saveEl.textContent = 'Saving…'; saveEl.style.color = '#888';
             try {
-                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, _bannerRecordId, {
-                    'Value': msg,
-                    'Style': _bannerStyle
-                });
+                if (!_bannerRecordId) {
+                    // First save — create the record
+                    const newRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, {
+                        'Key': 'banner', 'Value': msg, 'Active': false, 'Style': _bannerStyle
+                    });
+                    _bannerRecordId = newRec.id;
+                } else {
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.SETTINGS, _bannerRecordId, {
+                        'Value': msg,
+                        'Style': _bannerStyle
+                    });
+                }
                 saveEl.textContent = '✓ Saved'; saveEl.style.color = '#00c853';
                 setTimeout(() => saveEl.textContent = '', 3000);
             } catch(e) {
