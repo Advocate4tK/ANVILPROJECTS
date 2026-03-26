@@ -10,20 +10,18 @@
     <link rel="stylesheet" href="css/styles.css">
     <style>
         /* ── Ticker tape ── */
-        #tickerBar {
-            background: #09142a;
-            overflow: hidden;
-            display: none;
-            align-items: center;
-            height: 40px;
+        #tickerContainer {
             position: sticky;
             top: 0;
             z-index: 200;
-            border-bottom: 2px solid #00c853;
+        }
+        .ticker-bar {
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            height: 40px;
         }
         .ticker-badge {
-            background: #00c853;
-            color: #09142a;
             padding: 0 16px;
             height: 100%;
             display: flex;
@@ -46,7 +44,6 @@
         .ticker-content {
             display: inline-block;
             white-space: nowrap;
-            color: #fff;
             font-family: 'DM Sans', sans-serif;
             font-size: 0.84rem;
             font-weight: 600;
@@ -225,13 +222,8 @@
     </style>
 </head>
 <body>
-    <!-- Assignor ticker tape banner (hidden until active in Airtable Settings) -->
-    <div id="tickerBar">
-        <span class="ticker-badge">📢 Notice</span>
-        <div class="ticker-track">
-            <span class="ticker-content" id="tickerContent"></span>
-        </div>
-    </div>
+    <!-- Assignor ticker tape banners (stacked, hidden until loaded) -->
+    <div id="tickerContainer"></div>
 
     <div class="container">
         <header>
@@ -643,31 +635,30 @@
                 maxRecords: 50
             });
             const thisClub = (currentClubRecord ? (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '') : '').toLowerCase().trim();
-            // Pick best match: club-specific banner first, then all-clubs banner
-            const match = settings.find(r => {
+            // Collect all matching banners: club-specific + all-clubs
+            const matches = settings.filter(r => {
                 const targets = (r.fields['Clubs'] || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-                return targets.length > 0 && targets.includes(thisClub);
-            }) || settings.find(r => !(r.fields['Clubs'] || '').trim());
-            if (match) {
-                const msg   = match.fields['Value'] || '';
+                return targets.length === 0 || targets.includes(thisClub);
+            });
+            const container = document.getElementById('tickerContainer');
+            container.innerHTML = '';
+            matches.forEach(match => {
+                const msg   = (match.fields['Value'] || '').trim();
                 const style = match.fields['Style'] || 'default';
-                if (msg.trim()) {
-                    const preset = BANNER_PRESETS[style] || BANNER_PRESETS.default;
-                    const bar     = document.getElementById('tickerBar');
-                    const badge   = bar.querySelector('.ticker-badge');
-                    const content = bar.querySelector('.ticker-content');
-                    content.textContent = msg;
-                    bar.style.background        = preset.bar;
-                    bar.style.borderBottomColor = preset.badge;
-                    badge.style.background      = preset.badge;
-                    badge.style.color           = preset.badgeText;
-                    content.style.color         = preset.text;
-                    bar.style.display = 'flex';
-                    // Duration accounts for full travel: viewport width + element width
-                    const duration = Math.max(12, Math.round(msg.length * 0.28));
-                    content.style.animationDuration = duration + 's';
-                }
-            }
+                if (!msg) return;
+                const preset   = BANNER_PRESETS[style] || BANNER_PRESETS.default;
+                const duration = Math.max(12, Math.round(msg.length * 0.28));
+                const bar = document.createElement('div');
+                bar.className = 'ticker-bar';
+                bar.style.background       = preset.bar;
+                bar.style.borderBottom     = `2px solid ${preset.badge}`;
+                bar.innerHTML = `
+                    <span class="ticker-badge" style="background:${preset.badge}; color:${preset.badgeText};">📢 Notice</span>
+                    <div class="ticker-track">
+                        <span class="ticker-content" style="color:${preset.text}; animation-duration:${duration}s;">${msg}</span>
+                    </div>`;
+                container.appendChild(bar);
+            });
         } catch(e) { /* banner is non-critical — fail silently */ }
     }
 
