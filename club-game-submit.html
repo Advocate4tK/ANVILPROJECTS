@@ -761,6 +761,14 @@
         }
     });
 
+    // Parse Airtable autonumber list stored as CSV string e.g. '"1,128.0",867.0' → [1128, 867]
+    function parseAirtableIds(str) {
+        if (!str) return [];
+        return (str.match(/[\d,]+(?:\.\d+)?/g) || [])
+            .map(s => parseInt(s.replace(/,/g, ''), 10))
+            .filter(n => !isNaN(n));
+    }
+
     // ── Load reference data ───────────────────────────────────────────────────
     async function loadReferenceData() {
         try {
@@ -772,35 +780,41 @@
             ]);
             refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
 
+            // Build Airtable Venue ID → Supabase record id lookup
+            const venueByAirtableId = {};
+            venues.forEach(v => {
+                const aid = v.fields['Venue ID'];
+                if (aid) venueByAirtableId[parseInt(aid)] = v.id;
+            });
+
             allClubs = clubs.map(c => ({
                 id:          c.id,
                 name:        c.fields['Club Name'] || c.fields['Name'] || '',
                 displayName: c.fields['Display Name'] || '',
                 league:      c.fields['League'] || 21,
+                venueIds:    parseAirtableIds(c.fields['venues'])
+                                 .map(aid => venueByAirtableId[aid]).filter(Boolean),
                 record:      c
             })).filter(c => c.name).sort((a, b) => a.name.localeCompare(b.name));
 
             allClubs.forEach(c => { clubLeagueMap[c.id] = c.league; });
 
             allVenues = venues.map(v => ({
-                id:      v.id,
-                numId:   v.fields['Venue ID'] || null,
-                name:    v.fields['Venue Name'] || '',
-                clubIds: Array.isArray(v.fields['Clubs']) ? v.fields['Clubs'] : []
+                id:    v.id,
+                numId: v.fields['Venue ID'] || null,
+                name:  v.fields['Venue Name'] || '',
             })).filter(v => v.name);
 
-            allFields = fieldRecs.map(f => {
-                const linked = f.fields['Venue'];
-                return {
-                    id:      f.id,
-                    numId:   f.fields['Field ID'] || null,
-                    name:    f.fields['Field Name'] || '',
-                    venueId: Array.isArray(linked) && linked.length > 0 ? linked[0] : null
-                };
-            }).filter(f => f.name);
+            allFields = fieldRecs.map(f => ({
+                id:      f.id,
+                numId:   f.fields['Field ID'] || null,
+                name:    f.fields['Field Name'] || '',
+                venueId: f.fields['Venue ID']
+                             ? venueByAirtableId[parseInt(f.fields['Venue ID'])] : null
+            })).filter(f => f.name);
 
         } catch (err) {
-            alert('Could not load data from Airtable: ' + err.message);
+            alert('Could not load data: ' + err.message);
         }
     }
 
@@ -819,8 +833,9 @@
     function populateVenues() {
         const clubId   = document.getElementById('clubSelect').value;
         const venueEl  = document.getElementById('gVenue');
-        const filtered = clubId
-            ? allVenues.filter(v => v.clubIds.includes(clubId))
+        const club     = allClubs.find(c => String(c.id) === String(clubId));
+        const filtered = (club?.venueIds?.length > 0)
+            ? allVenues.filter(v => club.venueIds.includes(v.id))
             : allVenues;
 
         venueEl.innerHTML = '<option value="">— Select venue —</option>'
@@ -836,7 +851,7 @@
             fieldEl.disabled = true;
             return;
         }
-        const fields = allFields.filter(f => f.venueId === venueId);
+        const fields = allFields.filter(f => String(f.venueId) === String(venueId));
         fieldEl.innerHTML = '<option value="">— Select field —</option>'
             + fields.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
         fieldEl.disabled = fields.length === 0;
