@@ -83,6 +83,7 @@ class SupabaseClientWrapper {
             'field':     'Field',
             'venue':     'Venue',
             'zip':       'Zip',
+            'zip_code':  'Zip Code',
             'club':      'Club',
             'clubs':     'Clubs',
             'active':    'Active',
@@ -111,7 +112,7 @@ class SupabaseClientWrapper {
     // Wrap a Supabase row into Airtable-shaped record: { id, fields: {...} }
     _wrap(row) {
         if (!row) return null;
-        const { id, created_at, club_id, zip_code, ...fields } = row;
+        const { id, created_at, club_id, ...fields } = row;
         return { id, fields: this._denormalizeFields(fields) };
     }
 
