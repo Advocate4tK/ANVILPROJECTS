@@ -2559,10 +2559,9 @@
                 allAvail  = avail;
                 allVenues = venues
                     .map(v => {
-                        const linkedClubs = v.fields['Clubs'] || [];
-                        const clubNames = Array.isArray(linkedClubs)
-                            ? linkedClubs.map(id => clubLookup[id]).filter(Boolean).map(c => c.toLowerCase())
-                            : [];
+                        const linkedClubs = v.fields['Clubs'];
+                        const clubIds = Array.isArray(linkedClubs) ? linkedClubs : (linkedClubs != null ? [linkedClubs] : []);
+                        const clubNames = clubIds.map(id => (clubLookup[id] || '')).filter(Boolean).map(c => c.toLowerCase());
                         return {
                             id:    v.fields['Venue ID'] || v.id,
                             name:  v.fields['Venue Name'] || v.fields['Name'],
@@ -2595,7 +2594,8 @@
                 venues.forEach(v => {
                     const zip = (v.fields['Zip'] || '').toString().trim();
                     if (!zip) return;
-                    const linkedClubs = Array.isArray(v.fields['Clubs']) ? v.fields['Clubs'] : [];
+                    const _vc = v.fields['Clubs'];
+                    const linkedClubs = Array.isArray(_vc) ? _vc : (_vc != null ? [_vc] : []);
                     linkedClubs.forEach(clubId => {
                         const clubName = (clubLookup[clubId] || '').toLowerCase();
                         if (clubName && !clubVenueZipMap[clubName]) clubVenueZipMap[clubName] = zip;
@@ -2782,7 +2782,7 @@
             const pillClub      = selectedClubs.size === 1 ? [...selectedClubs][0].toLowerCase() : '';
             const activeClub    = gameClubLower || pillClub;
             const venuesFiltered = allVenues.filter(v =>
-                !activeClub || v.clubs.length === 0 || v.clubs.some(c => c.includes(activeClub) || activeClub.includes(c))
+                !activeClub || v.clubs.some(c => c.includes(activeClub) || activeClub.includes(c))
             );
             const venueOpts = venuesFiltered.map(v =>
                 `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
