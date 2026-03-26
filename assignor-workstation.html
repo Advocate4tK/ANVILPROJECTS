@@ -3011,9 +3011,13 @@
 
         function resolveRefName(linkedIds) {
             if (!linkedIds) return '';
+            // Supabase migration: old Airtable IDs stored as JSON array string e.g. '["1140"]'
+            if (typeof linkedIds === 'string' && linkedIds.startsWith('[')) {
+                try { linkedIds = JSON.parse(linkedIds); } catch(e) { return linkedIds; }
+            }
             // Supabase: plain text name stored directly
             if (typeof linkedIds === 'string') return linkedIds;
-            // Airtable: array of record IDs → look up name
+            // Array of record IDs → look up name in refLookup
             if (!Array.isArray(linkedIds) || linkedIds.length === 0) return '';
             const ref = refLookup[linkedIds[0]];
             return ref ? (ref.fields['Name'] || '') : linkedIds[0];
