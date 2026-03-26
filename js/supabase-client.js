@@ -132,6 +132,18 @@ class SupabaseClientWrapper {
                 if (eqMatch) {
                     query = query.eq(this._col(eqMatch[1]), eqMatch[2]);
                 }
+
+                // Handle RECORD_ID()='value' → .eq('id', value)
+                const recIdMatch = formula.match(/^RECORD_ID\(\)\s*=\s*'(.+?)'$/i);
+                if (recIdMatch) {
+                    query = query.eq('id', recIdMatch[1]);
+                }
+
+                // Handle AND(LOWER({Key})='value', {Active}=TRUE()) → settings banner lookup
+                const settingsMatch = formula.match(/^AND\(LOWER\(\{Key\}\)\s*=\s*'(.+?)',\s*\{Active\}\s*=\s*TRUE\(\)\)$/i);
+                if (settingsMatch) {
+                    query = query.eq('key', settingsMatch[1]).eq('active', true);
+                }
             }
 
             if (options.maxRecords) {
