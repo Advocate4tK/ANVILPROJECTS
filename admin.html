@@ -658,6 +658,7 @@
         let _editingBannerId = null;
         let _editingStyle    = 'default';
         let _editingClubs    = [];
+        let _clubUrlMap      = {}; // club name (lowercase) → submit URL
 
         async function loadBanners() {
             try {
@@ -687,9 +688,17 @@
             el.innerHTML = _banners.map(b => {
                 const preset  = BANNER_PRESETS[b.style] || BANNER_PRESETS.default;
                 const preview = b.msg ? (b.msg.length > 60 ? b.msg.slice(0, 60) + '…' : b.msg) : '<em style="color:#aaa;">No message</em>';
-                const target  = b.clubs.length === 0
-                    ? '<span style="background:#e8f4fd; color:#0f3460; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px;">ALL CLUBS</span>'
-                    : b.clubs.map(c => `<span style="background:#f0ece6; color:#555; font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:10px;">${c}</span>`).join(' ');
+                const allClubsOptions = Object.entries(_clubUrlMap).sort((a,b) => a[0].localeCompare(b[0])).map(([name, url]) => `<option value="${url}">${name.replace(/\b\w/g, l => l.toUpperCase())}</option>`).join('');
+                const target = b.clubs.length === 0
+                    ? (b.active && allClubsOptions
+                        ? `<select onchange="if(this.value){window.open(this.value,'_blank');this.value='';}" style="background:#e8f4fd; color:#0f3460; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px; border:none; cursor:pointer; font-family:'DM Sans',sans-serif;"><option value="">ALL CLUBS ↗</option>${allClubsOptions}</select>`
+                        : `<span style="background:#e8f4fd; color:#0f3460; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px;">ALL CLUBS</span>`)
+                    : b.clubs.map(c => {
+                        const url = _clubUrlMap[c.toLowerCase()];
+                        return (b.active && url)
+                            ? `<a href="${url}" target="_blank" style="background:#f0ece6; color:#555; font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:10px; text-decoration:none; cursor:pointer;" title="View ${c} scheduling page">${c} ↗</a>`
+                            : `<span style="background:#f0ece6; color:#555; font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:10px;">${c}</span>`;
+                    }).join(' ');
                 return `<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px; background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; margin-bottom:8px;">
                     <span style="width:10px; height:10px; border-radius:50%; flex-shrink:0; background:${b.active ? '#00c853' : '#ccc'};"></span>
                     <span style="width:10px; height:28px; background:${preset.bar}; border-radius:3px; flex-shrink:0;"></span>
@@ -1238,6 +1247,13 @@
                 personSearchGames     = allGames;
                 personSearchAssignors = allAssignors;
                 renderBannerEditorClubPicker();
+                // Build club name → submit URL map for banner view links
+                _clubUrlMap = {};
+                allClubs.forEach(c => {
+                    const name = (c.fields['Name'] || c.fields['Club Name'] || '').trim();
+                    const url  = c.fields['Club Game Upload'] || '';
+                    if (name && url) _clubUrlMap[name.toLowerCase()] = url;
+                });
                 proximityVenues   = allVenues
                     .map(v => ({ name: v.fields['Venue Name'] || '', zip: (v.fields['Zip'] || '').toString().trim().padStart(5, '0') }))
                     .filter(v => v.name && v.zip);
