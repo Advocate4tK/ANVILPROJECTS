@@ -832,9 +832,10 @@
         }
 
         // ── Person search — module-level data so search works anytime ──────────
-        let personSearchRefs  = [];
-        let personSearchClubs = [];
-        let personSearchGames = [];
+        let personSearchRefs      = [];
+        let personSearchClubs     = [];
+        let personSearchGames     = [];
+        let personSearchAssignors = [];
         let proximityVenues   = []; // { name, zip } for venue-name lookup
 
         function runPersonSearch(val) {
@@ -849,6 +850,24 @@
 
             const roleRef      = ['referee', 'ref', 'official'].some(kw => q === kw || q.startsWith(kw));
             const rolePresident = ['president', 'pres', 'club contact', 'club admin'].some(kw => q === kw || q.startsWith(kw));
+
+            // Build president email/name → club names map for multi-role detection
+            const presEmailToClubs = {};
+            const presNameToClubs  = {};
+            personSearchClubs.forEach(c => {
+                const cf = c.fields;
+                const cName  = cf['Name'] || cf['Club Name'] || cf['Club'] || '';
+                if (!cName) return;
+                const pEmail = (cf['Club Admin Email'] || cf['President Email'] || cf['Email'] || cf['Contact Email'] || '').toLowerCase().trim();
+                const pName  = (cf['Club Admin'] || cf['PRESIDENT'] || cf['President'] || cf['President Name'] || cf['Contact Name'] || cf['Contact'] || '').toLowerCase().trim();
+                if (pEmail) { if (!presEmailToClubs[pEmail]) presEmailToClubs[pEmail] = []; presEmailToClubs[pEmail].push(cName); }
+                if (pName)  { if (!presNameToClubs[pName])  presNameToClubs[pName]  = []; presNameToClubs[pName].push(cName);  }
+            });
+
+            // Build assignor name set for role detection
+            const assignorNameSet = new Set(
+                personSearchAssignors.map(a => (a.fields['Name'] || '').toLowerCase().trim()).filter(Boolean)
+            );
 
             personSearchRefs.forEach(r => {
                 const f = r.fields;
@@ -870,6 +889,16 @@
                 const phoneMatch    = hasDigits && phone.replace(/\D/g,'').includes(cleanQ);
 
                 if (nameMatch || emailMatch || phoneMatch) {
+                    // Detect multi-role
+                    const emailKey  = email.toLowerCase().trim();
+                    const email2Key = email2.toLowerCase().trim();
+                    const nameKey   = name.toLowerCase().trim();
+                    const presidentOf = presEmailToClubs[emailKey] || presEmailToClubs[email2Key] || presNameToClubs[nameKey] || null;
+                    const isAssignor  = assignorNameSet.has(nameKey);
+                    const roles = ['REFEREE'];
+                    if (presidentOf) roles.push('PRESIDENT');
+                    if (isAssignor)  roles.push('ASSIGNOR');
+
                     // Find upcoming assignments for this referee
                     const today = new Date(); today.setHours(0,0,0,0);
                     const refId = r.id;
@@ -892,7 +921,7 @@
                         }));
 
                     hits.push({
-                        type: 'referee', name, email, email2, phone,
+                        type: 'referee', roles, presidentOf, name, email, email2, phone,
                         cert:  f['Certification Level'] || '',
                         dob:   f['Date of Birth']       || '',
                         age:   f['Age']                 || '',
@@ -942,7 +971,7 @@
                     return `<div style="background:#f8f9fc; border:1px solid #dde3f0; border-radius:8px; overflow:hidden;">
                         <div onclick="toggleRefCard('${cardId}')" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 14px; cursor:pointer; user-select:none;">
                             <span id="tri-${cardId}" style="font-size:0.75rem; color:#888; display:inline-block;">▶</span>
-                            <span style="background:#0f3460; color:white; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:12px; letter-spacing:0.5px;">REFEREE</span>
+                            ${p.roles.map(role => { const bg = role==='REFEREE'?'#0f3460':role==='PRESIDENT'?'#e94560':'#1a7a40'; return `<span style="background:${bg}; color:white; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:12px; letter-spacing:0.5px;">${role}</span>`; }).join('')}
                             <span style="font-weight:700; font-size:0.95rem; color:#0f3460;">${p.name}</span>
                             ${p.gender ? `<span style="color:#666; font-size:0.85rem;">${p.gender}</span>` : ''}
                             ${p.cert   ? `<span style="background:#e8f4fd; color:#0f3460; font-size:0.75rem; padding:2px 8px; border-radius:10px;">${p.cert}</span>` : ''}
@@ -955,6 +984,7 @@
                                 ${p.email2 && p.email2.toLowerCase() !== p.email.toLowerCase() ? `<span>✉️ <a href="mailto:${p.email2}" style="color:#0f3460;">${p.email2}</a></span>` : ''}
                                 ${meta     ? `<span style="color:#666;">${meta}</span>` : ''}
                                 ${p.clubs ? `<span>⭐ ${p.clubs}</span>` : ''}
+                                ${p.presidentOf ? `<span>🏛 President of ${p.presidentOf.join(', ')}</span>` : ''}
                             </div>
                             ${isMinor ? `<div style="font-size:0.82rem; color:#666; background:#fff8e1; border-radius:6px; padding:5px 10px; display:flex; flex-wrap:wrap; gap:14px; margin-top:6px;">
                                 <span style="font-weight:600; color:#856404;">Guardian:</span>
@@ -1092,12 +1122,13 @@
 
             try {
                 // Fetch games, referees, clubs, venues, and fields in parallel
-                const [allGames, allReferees, allClubs, allVenues, allFields] = await Promise.all([
-                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 1000 }),
-                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
-                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,    { maxRecords: 200 }),
-                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 200 }),
-                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 500 }),
+                const [allGames, allReferees, allClubs, allVenues, allFields, allAssignors] = await Promise.all([
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,     { maxRecords: 1000 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES,  { maxRecords: 1000 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,     { maxRecords: 200 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,    { maxRecords: 200 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,    { maxRecords: 500 }),
+                    airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.ASSIGNORS, { maxRecords: 100 }),
                 ]);
 
                 // ── Schedule Change Alert ─────────────────────────────────────
@@ -1113,9 +1144,10 @@
                 }
 
                 // Populate module-level search data
-                personSearchRefs  = allReferees;
-                personSearchClubs = allClubs;
-                personSearchGames = allGames;
+                personSearchRefs      = allReferees;
+                personSearchClubs     = allClubs;
+                personSearchGames     = allGames;
+                personSearchAssignors = allAssignors;
                 proximityVenues   = allVenues
                     .map(v => ({ name: v.fields['Venue Name'] || '', zip: (v.fields['Zip'] || '').toString().trim() }))
                     .filter(v => v.name && v.zip);
