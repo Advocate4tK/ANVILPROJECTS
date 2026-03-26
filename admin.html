@@ -1149,7 +1149,7 @@
                 personSearchGames     = allGames;
                 personSearchAssignors = allAssignors;
                 proximityVenues   = allVenues
-                    .map(v => ({ name: v.fields['Venue Name'] || '', zip: (v.fields['Zip'] || '').toString().trim() }))
+                    .map(v => ({ name: v.fields['Venue Name'] || '', zip: (v.fields['Zip'] || '').toString().trim().padStart(5, '0') }))
                     .filter(v => v.name && v.zip);
 
                 // Build club ID → name lookup
@@ -1381,7 +1381,7 @@
                                 onchange="if(this.value){ document.getElementById('proximityVenueDD').value=''; runRefToVenueSearch(this.value); } else { document.getElementById('proximityResults').innerHTML=''; }"
                                 style="width:100%; padding:10px 14px; border:1px solid #ccc; border-radius:8px; font-size:0.9rem; font-family:inherit; color:#0f3460; box-sizing:border-box;">
                                 <option value="">— Select a referee —</option>
-                                ${personSearchRefs.filter(r => (r.fields['Zip Code'] || '').toString().trim()).slice().sort((a,b)=>(a.fields['Name']||'').localeCompare(b.fields['Name']||'')).map(r=>`<option value="${r.fields['Name']||''}">${r.fields['Name']||''}</option>`).join('')}
+                                ${personSearchRefs.filter(r => (r.fields['Zip Code'] || '').toString().trim().replace(/^0+$/,'')).slice().sort((a,b)=>(a.fields['Name']||'').localeCompare(b.fields['Name']||'')).map(r=>`<option value="${r.fields['Name']||''}">${r.fields['Name']||''}</option>`).join('')}
                             </select>
                         </div>
                         <span style="color:#888; font-size:0.85rem; white-space:nowrap; padding-bottom:11px;">or</span>
@@ -1664,7 +1664,7 @@
             const ref = personSearchRefs.find(r => (r.fields['Name'] || '') === refName);
             if (!ref) { resultsDiv.innerHTML = ''; return; }
 
-            const refZip = (ref.fields['Zip Code'] || '').toString().trim();
+            const refZip = (ref.fields['Zip Code'] || '').toString().trim().padStart(5, '0');
             const refLoc = refZip ? ZIP_LATLNG[refZip] : null;
             if (!refLoc) {
                 resultsDiv.innerHTML = `<p style="color:#888; font-size:0.85rem;">No zip code on file for ${refName}.</p>`;
@@ -1730,8 +1730,8 @@
 
             const results = [];
             personSearchRefs.forEach(r => {
-                const refZip = (r.fields['Zip Code'] || '').toString().trim();
-                if (!refZip) return;
+                const refZip = (r.fields['Zip Code'] || '').toString().trim().padStart(5, '0');
+                if (!refZip || refZip === '00000') return;
                 const refLoc = ZIP_LATLNG[refZip];
                 if (!refLoc) return;
                 const miles = Math.round(haversine(fromLoc[0], fromLoc[1], refLoc[0], refLoc[1]));
