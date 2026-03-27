@@ -257,42 +257,67 @@ loadBtn.addEventListener('click', async () => {
 });
 
 // ── Render Games Table ────────────────────────────────────────────────────────
-function renderGamesTable(records) {
-    gameCount.textContent = `${records.length} game${records.length !== 1 ? 's' : ''} found`;
+function refBadge(val) {
+    const extracted = extractRefVal(val);
+    if (!extracted) return `<span style="background:#fdecea;color:#c0392b;padding:2px 7px;border-radius:10px;font-size:0.75rem;font-weight:700;">— None</span>`;
+    const caId = resolveRefCA(extracted);
+    return caId
+        ? `<span style="background:#e8f5e9;color:#1a7a40;padding:2px 7px;border-radius:10px;font-size:0.75rem;font-weight:700;">✓ ${caId}</span>`
+        : `<span style="background:#fff3e0;color:#e67e22;padding:2px 7px;border-radius:10px;font-size:0.75rem;font-weight:700;">⚠ No CA ID</span>`;
+}
 
-    let html = `<thead><tr>
-        <th><input type="checkbox" id="masterCheck"></th>
+function venueBadge(f) {
+    const { name, caId } = resolveVenue(f);
+    return caId
+        ? `<span style="background:#e8f5e9;color:#1a7a40;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:700;" title="CA ID: ${caId}">✓ ${name}</span>`
+        : `<span style="background:#fdecea;color:#c0392b;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:700;" title="${name || 'Unknown'}">⚠ No Venue ID</span>`;
+}
+
+function fmtTime(t) {
+    if (!t) return '';
+    const [h, m] = t.split(':').map(Number);
+    if (isNaN(h)) return t;
+    return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
+function renderGamesTable(records) {
+    // Summary counts
+    let venueOk = 0, refOk = 0;
+    records.forEach(rec => {
+        const f = rec.fields;
+        if (resolveVenue(f).caId) venueOk++;
+        const cr = extractRefVal(f['Center Referee']);
+        if (cr && resolveRefCA(cr)) refOk++;
+    });
+    const total = records.length;
+    gameCount.innerHTML = `
+        <span style="font-weight:700;">${total} game${total !== 1 ? 's' : ''}</span>
+        &nbsp;|&nbsp;
+        <span style="color:${venueOk===total?'#27ae60':'#e67e22'}">Venues: ${venueOk}/${total} ✓</span>
+        &nbsp;|&nbsp;
+        <span style="color:${refOk===total?'#27ae60':'#e67e22'}">Refs: ${refOk}/${total} ✓</span>`;
+
+    let html = `<thead><tr style="font-size:0.8rem;">
+        <th style="width:32px;"><input type="checkbox" id="masterCheck"></th>
         <th>#</th><th>Date</th><th>Time</th>
-        <th>Home Team</th><th>Away Team</th>
-        <th>Venue</th><th>Age Group</th><th>Center Ref</th>
+        <th>Home</th><th>Away</th>
+        <th>Age</th><th>Venue</th><th>CR</th><th>AR1</th><th>AR2</th>
     </tr></thead><tbody>`;
 
     records.forEach((rec, i) => {
         const f = rec.fields;
-        const { name: venueName, caId: venueId, fieldName } = resolveVenue(f);
-        const venueDisplay = venueId
-            ? `<span style="color:#27ae60">✓ ${venueName} (ID: ${venueId})</span>`
-            : `<span style="color:#e74c3c">⚠ No ID: ${venueName || 'Unknown'}</span>`;
-
-        const crVal     = extractRefVal(f['Center Referee']);
-        const crAssigned = !!crVal;
-        const crCaId    = crVal ? resolveRefCA(crVal) : null;
-        const refDisplay = crCaId
-            ? `<span style="color:#27ae60">✓ ID: ${crCaId}</span>`
-            : crAssigned
-                ? `<span style="color:#e67e22">⚠ Assigned — no CA ID</span>`
-                : `<span style="color:#e74c3c">⚠ No ref assigned</span>`;
-
-        html += `<tr>
+        html += `<tr style="font-size:0.82rem;">
             <td><input type="checkbox" class="game-check" data-index="${i}" checked></td>
-            <td>${i + 1}</td>
-            <td>${formatDate(f['Date'] || '')}</td>
-            <td>${f['Time'] || ''}</td>
+            <td style="color:#999;">${i + 1}</td>
+            <td style="white-space:nowrap;">${formatDate(f['Date'] || '')}</td>
+            <td style="white-space:nowrap;">${fmtTime(f['Time'] || '')}</td>
             <td>${f['Home Team'] || ''}</td>
             <td>${f['Away Team'] || ''}</td>
-            <td>${venueDisplay}</td>
-            <td>${f['Age Group'] || ''}</td>
-            <td>${refDisplay}</td>
+            <td style="text-align:center;">${f['Age Group'] || ''}</td>
+            <td>${venueBadge(f)}</td>
+            <td>${refBadge(f['Center Referee'])}</td>
+            <td>${refBadge(f['AR 1'])}</td>
+            <td>${refBadge(f['AR 2'])}</td>
         </tr>`;
     });
 
