@@ -46,11 +46,11 @@
         </div>
 
         <!-- CA Import tool -->
-        <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #e94560;">
+        <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #e94560; margin-bottom:24px;">
             <h2 style="color:#0f3460; margin-bottom:6px;">📥 Central Assign Referee Import</h2>
             <p style="color:#666; font-size:0.9rem; margin-bottom:20px;">
-                Matches each Central Assign referee to an existing Airtable record by email, then updates their
-                phone number and email. Referees not yet in Airtable will be created as new records.
+                Matches each Central Assign referee to an existing record by email or name, then writes their
+                CA ID, CA Name, and phone. Referees not yet in the system will be created as new records.
             </p>
 
             <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px;">
@@ -60,6 +60,30 @@
 
             <div id="previewTable"></div>
             <div id="logBox" class="log" style="display:none;"></div>
+        </div>
+
+        <!-- Venue Management -->
+        <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #3b82f6; margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:6px;">
+                <h2 style="color:#0f3460; margin:0;">🏟 Venue Management</h2>
+                <button onclick="loadVenues()" id="loadVenuesBtn" class="btn btn-secondary" style="padding:6px 16px; font-size:0.85rem;">Load Venues</button>
+            </div>
+            <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">
+                The <strong>Venue ID</strong> column is the CA numeric venue ID sent in the export file. Verify these match what Central Assign expects.
+            </p>
+            <div id="venueTable"><p style="color:#aaa; font-size:0.9rem;">Click Load Venues to view.</p></div>
+        </div>
+
+        <!-- Field Management -->
+        <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #8b5cf6; margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:6px;">
+                <h2 style="color:#0f3460; margin:0;">⚽ Field Management</h2>
+                <button onclick="loadFields()" id="loadFieldsBtn" class="btn btn-secondary" style="padding:6px 16px; font-size:0.85rem;">Load Fields</button>
+            </div>
+            <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">
+                Fields are grouped by venue. <strong>Field Name</strong> appears in the CA export's Venue Field column.
+            </p>
+            <div id="fieldTable"><p style="color:#aaa; font-size:0.9rem;">Click Load Fields to view.</p></div>
         </div>
     </main>
 
@@ -463,6 +487,162 @@
         log('', '');
         log(`Done. Updated: ${updated}  Created: ${created}  Failed: ${failed}`, 'log-head');
         document.getElementById('importBtn').textContent = 'Import Complete';
+    }
+
+    // ── Venue Management ───────────────────────────────────────────────────────
+    async function loadVenues() {
+        const wrap = document.getElementById('venueTable');
+        const btn  = document.getElementById('loadVenuesBtn');
+        btn.disabled = true; btn.textContent = 'Loading…';
+        wrap.innerHTML = '<p style="color:#888;">Loading…</p>';
+        try {
+            const venues = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 });
+            venues.sort((a, b) => (a.fields['Venue Name'] || a.fields['Name'] || '').localeCompare(b.fields['Venue Name'] || b.fields['Name'] || ''));
+
+            if (!venues.length) { wrap.innerHTML = '<p style="color:#aaa;">No venues found.</p>'; return; }
+
+            let html = `<div style="overflow-x:auto;"><table>
+                <thead><tr>
+                    <th>Venue Name</th><th>Venue ID (CA)</th><th>Club</th><th>Zip</th><th></th>
+                </tr></thead><tbody>`;
+
+            venues.forEach(v => {
+                const id       = v.id;
+                const name     = v.fields['Venue Name'] || v.fields['Name'] || '—';
+                const venueId  = v.fields['Venue ID'] || '';
+                const club     = v.fields['club_name'] || v.fields['Clubs'] || '';
+                const zip      = v.fields['Zip'] || v.fields['zip'] || '';
+                const hasId    = !!venueId;
+                html += `<tr id="vrow-${id}">
+                    <td><strong>${name}</strong></td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <input id="vid-${id}" value="${venueId}" placeholder="CA Venue ID"
+                                style="border:1px solid #ccc; border-radius:6px; padding:4px 8px; font-size:0.85rem; width:110px; font-family:inherit;"
+                                onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#ccc'"
+                                onkeydown="if(event.key==='Enter') saveVenue('${id}')">
+                            ${!hasId ? '<span style="color:#e67e22; font-size:0.75rem; font-weight:700;">⚠ NOT SET</span>' : ''}
+                        </div>
+                    </td>
+                    <td style="color:#555; font-size:0.85rem;">${club}</td>
+                    <td style="color:#555; font-size:0.85rem;">${zip}</td>
+                    <td>
+                        <button onclick="saveVenue('${id}')" style="background:#3b82f6; color:#fff; border:none; border-radius:6px; padding:4px 12px; font-size:0.8rem; font-weight:700; cursor:pointer;">Save</button>
+                        <span id="vsaved-${id}" style="display:none; color:#27ae60; font-size:0.8rem; font-weight:700; margin-left:6px;">✓ Saved</span>
+                    </td>
+                </tr>`;
+            });
+
+            html += '</tbody></table></div>';
+            wrap.innerHTML = html;
+        } catch(e) {
+            wrap.innerHTML = `<p style="color:#e74c3c;">Failed to load venues: ${e.message}</p>`;
+        } finally {
+            btn.disabled = false; btn.textContent = 'Refresh';
+        }
+    }
+
+    async function saveVenue(id) {
+        const newVenueId = document.getElementById(`vid-${id}`).value.trim();
+        const badge = document.getElementById(`vsaved-${id}`);
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.VENUES, id, { 'Venue ID': newVenueId });
+            badge.style.display = 'inline';
+            setTimeout(() => { badge.style.display = 'none'; }, 2000);
+        } catch(e) {
+            alert(`Failed to save: ${e.message}`);
+        }
+    }
+
+    // ── Field Management ───────────────────────────────────────────────────────
+    async function loadFields() {
+        const wrap = document.getElementById('fieldTable');
+        const btn  = document.getElementById('loadFieldsBtn');
+        btn.disabled = true; btn.textContent = 'Loading…';
+        wrap.innerHTML = '<p style="color:#888;">Loading…</p>';
+        try {
+            const [fields, venues] = await Promise.all([
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,  { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,  { maxRecords: 500 })
+            ]);
+
+            // Build numeric Venue ID → venue name map
+            const venueNameByNumId = {};
+            venues.forEach(v => {
+                const numId = parseInt(v.fields['Venue ID']) || null;
+                const name  = v.fields['Venue Name'] || v.fields['Name'] || '';
+                if (numId && name) venueNameByNumId[numId] = name;
+            });
+
+            // Group fields by venue
+            const byVenue = {};
+            fields.forEach(f => {
+                const venueNumId = parseInt(f.fields['Venue ID']) || 0;
+                const venueName  = venueNameByNumId[venueNumId] || `Venue ID ${venueNumId || '?'}`;
+                if (!byVenue[venueName]) byVenue[venueName] = [];
+                byVenue[venueName].push(f);
+            });
+
+            if (!fields.length) { wrap.innerHTML = '<p style="color:#aaa;">No fields found.</p>'; return; }
+
+            const sortedVenues = Object.keys(byVenue).sort();
+            let html = '';
+
+            sortedVenues.forEach(venueName => {
+                const vFields = byVenue[venueName].sort((a, b) =>
+                    (a.fields['Field Name'] || '').localeCompare(b.fields['Field Name'] || ''));
+
+                html += `<div style="margin-bottom:20px;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid #f0ece6;">
+                        🏟 ${venueName} <span style="font-size:0.8rem; color:#aaa; font-weight:400;">(${vFields.length} field${vFields.length !== 1 ? 's' : ''})</span>
+                    </div>
+                    <div style="overflow-x:auto;"><table>
+                    <thead><tr><th>Field ID</th><th>Field Name</th><th>Venue ID</th><th></th></tr></thead><tbody>`;
+
+                vFields.forEach(f => {
+                    const id        = f.id;
+                    const fieldId   = f.fields['Field ID']   || '';
+                    const fieldName = f.fields['Field Name'] || '';
+                    const venueId   = f.fields['Venue ID']   || '';
+                    html += `<tr>
+                        <td style="color:#888; font-size:0.85rem;">${fieldId}</td>
+                        <td>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <input id="fn-${id}" value="${fieldName}" placeholder="Field Name"
+                                    style="border:1px solid #ccc; border-radius:6px; padding:4px 8px; font-size:0.85rem; width:180px; font-family:inherit;"
+                                    onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#ccc'"
+                                    onkeydown="if(event.key==='Enter') saveField('${id}')">
+                            </div>
+                        </td>
+                        <td style="color:#555; font-size:0.85rem;">${venueId}</td>
+                        <td>
+                            <button onclick="saveField('${id}')" style="background:#8b5cf6; color:#fff; border:none; border-radius:6px; padding:4px 12px; font-size:0.8rem; font-weight:700; cursor:pointer;">Save</button>
+                            <span id="fsaved-${id}" style="display:none; color:#27ae60; font-size:0.8rem; font-weight:700; margin-left:6px;">✓</span>
+                        </td>
+                    </tr>`;
+                });
+
+                html += '</tbody></table></div></div>';
+            });
+
+            wrap.innerHTML = html;
+        } catch(e) {
+            wrap.innerHTML = `<p style="color:#e74c3c;">Failed to load fields: ${e.message}</p>`;
+        } finally {
+            btn.disabled = false; btn.textContent = 'Refresh';
+        }
+    }
+
+    async function saveField(id) {
+        const newName = document.getElementById(`fn-${id}`).value.trim();
+        const badge   = document.getElementById(`fsaved-${id}`);
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.FIELDS, id, { 'Field Name': newName });
+            badge.style.display = 'inline';
+            setTimeout(() => { badge.style.display = 'none'; }, 2000);
+        } catch(e) {
+            alert(`Failed to save: ${e.message}`);
+        }
     }
 </script>
 </body>
