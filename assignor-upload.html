@@ -10,61 +10,62 @@
         .top-bar {
             background: #09142a;
             color: white;
-            padding: 14px 28px;
+            padding: 10px 20px;
             display: flex;
             align-items: center;
-            gap: 20px;
-            flex-wrap: wrap;
+            gap: 16px;
+            flex-wrap: nowrap;
         }
         .top-bar a {
             color: rgba(255,255,255,0.55);
             text-decoration: none;
-            font-size: 0.82rem;
+            font-size: 0.78rem;
             font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
         .top-bar a:hover { color: white; }
-        .top-bar h1 {
-            margin: 0;
-            font-size: 1.1rem;
+        .top-bar .title {
+            font-size: 0.95rem;
             font-weight: 800;
             color: white;
-            flex: 1;
-        }
-        .club-selector {
-            background: white;
-            border-bottom: 1px solid #dde3f0;
-            padding: 14px 28px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-        .club-selector label {
-            font-weight: 700;
-            font-size: 0.9rem;
-            color: #09142a;
             white-space: nowrap;
+            flex-shrink: 0;
         }
-        .club-selector select {
+        .top-bar .divider {
+            color: rgba(255,255,255,0.2);
+            flex-shrink: 0;
+        }
+        .top-bar label {
+            color: rgba(255,255,255,0.65);
+            font-size: 0.8rem;
+            font-weight: 700;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .top-bar select {
             font-family: 'DM Sans', sans-serif;
-            font-size: 0.9rem;
-            padding: 8px 16px;
-            border: 2px solid #09142a;
-            border-radius: 8px;
-            background: white;
-            color: #09142a;
+            font-size: 0.85rem;
+            padding: 5px 12px;
+            border: 1.5px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.1);
+            color: white;
             cursor: pointer;
-            min-width: 240px;
+            min-width: 220px;
+            flex-shrink: 0;
         }
-        .club-selector .hint {
-            font-size: 0.82rem;
-            color: #888;
+        .top-bar select option { background: #09142a; color: white; }
+        .top-bar .hint {
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.35);
+            white-space: nowrap;
         }
         #clubFrame {
             width: 100%;
             border: none;
             display: block;
-            height: calc(100vh - 110px);
+            height: calc(100vh - 46px);
         }
         #noClubMsg {
             text-align: center;
@@ -78,16 +79,15 @@
 <body>
 
     <div class="top-bar">
-        <a href="admin.html">← Admin Portal</a>
-        <h1>📅 Assignor Game Upload</h1>
-    </div>
-
-    <div class="club-selector">
+        <a href="admin.html">← Admin</a>
+        <span class="divider">|</span>
+        <span class="title">📅 Game Upload</span>
+        <span class="divider">|</span>
         <label for="clubSelect">Club:</label>
         <select id="clubSelect" onchange="loadClub()">
             <option value="">— Select a club —</option>
         </select>
-        <span class="hint" id="selectorHint">Loading clubs…</span>
+        <span class="hint" id="selectorHint">Loading…</span>
     </div>
 
     <div id="noClubMsg">
@@ -104,7 +104,7 @@
         var airtableClient = supabaseClient;
 
         async function init() {
-            if (!airtableClient) { document.getElementById('selectorHint').textContent = 'Database not connected.'; return; }
+            if (!airtableClient) { document.getElementById('selectorHint').textContent = 'Not connected'; return; }
             try {
                 const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
                 clubs.sort((a, b) => {
@@ -124,15 +124,15 @@
                     sel.appendChild(opt);
                 });
 
-                document.getElementById('selectorHint').textContent = `${sel.options.length - 1} clubs loaded`;
+                document.getElementById('selectorHint').textContent = `${sel.options.length - 1} clubs`;
             } catch (err) {
-                document.getElementById('selectorHint').textContent = 'Failed to load clubs.';
+                document.getElementById('selectorHint').textContent = 'Failed to load';
                 console.error(err);
             }
         }
 
         function loadClub() {
-            const url = document.getElementById('clubSelect').value;
+            const url   = document.getElementById('clubSelect').value;
             const frame = document.getElementById('clubFrame');
             const msg   = document.getElementById('noClubMsg');
             if (!url) {
@@ -141,7 +141,6 @@
                 frame.src = '';
                 return;
             }
-            // Convert absolute URL to relative path so it loads within same origin
             const rel = url.replace(/^https?:\/\/[^/]+/, '');
             frame.src = rel;
             frame.style.display = 'block';
