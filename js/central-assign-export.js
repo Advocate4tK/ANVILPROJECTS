@@ -311,7 +311,7 @@ function renderGamesTable(records) {
 
     records.forEach((rec, i) => {
         const f = rec.fields;
-        const rowBg = i % 2 === 0 ? 'background:rgba(15,52,96,0.18);' : '';
+        const rowBg = i % 2 === 0 ? 'background:rgba(15,52,96,0.28);' : '';
         html += `<tr style="font-size:0.82rem;${rowBg}">
             <td><input type="checkbox" class="game-check" data-index="${i}" checked></td>
             <td style="color:#999;">${i + 1}</td>
