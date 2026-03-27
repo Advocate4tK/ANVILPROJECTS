@@ -112,17 +112,21 @@ async function loadClubCheckboxes() {
     try {
         const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
         const names = clubs
-            .map(c => c.fields['Club Name'] || '')
+            .map(c => c.fields['Club Name'] || c.fields['club_name'] || c.fields['Name'] || c.fields['name'] || '')
             .filter(Boolean)
             .sort();
         const wrap = document.getElementById('clubCheckboxes');
+        if (!names.length) {
+            wrap.innerHTML = '<span style="color:#e67e22; font-size:13px;">No clubs found — check clubs table.</span>';
+            return;
+        }
         wrap.innerHTML = names.map(n => `
             <label style="display:flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; white-space:nowrap;">
-                <input type="checkbox" class="club-cb" value="${n}"> ${n}
+                <input type="checkbox" class="club-cb" value="${n}" checked> ${n}
             </label>`).join('');
     } catch(e) {
         document.getElementById('clubCheckboxes').innerHTML =
-            '<span style="color:#e74c3c; font-size:13px;">Could not load clubs.</span>';
+            `<span style="color:#e74c3c; font-size:13px;">Could not load clubs: ${e.message}</span>`;
     }
 }
 loadClubCheckboxes();
