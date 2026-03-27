@@ -379,7 +379,7 @@
                 <div id="tabCSV" style="display:none;">
                     <div class="page-intro" style="margin-bottom:16px;">
                         Upload a CSV with your full game schedule. <strong>Venue and field will be assigned by your assignor</strong> — just include the game details.
-                        <a href="games-upload-template.csv" download style="color:var(--accent-dark); font-weight:700; margin-left:8px;">⬇ Download Template</a>
+                        <a href="referee-tool-games-upload-template.csv" download style="color:var(--accent-dark); font-weight:700; margin-left:8px;">⬇ Download Template</a>
                     </div>
                     <div class="csv-drop-zone" id="csvDropZone">
                         <div style="font-size:40px; margin-bottom:8px;">📂</div>
@@ -1668,10 +1668,10 @@
     // ── CSV Upload Tab ────────────────────────────────────────────────────────
 
     function switchTab(tab) {
-        document.getElementById('tabEnter').style.display    = tab === 'enter' ? 'block' : 'none';
-        document.getElementById('tabCSV').style.display      = tab === 'csv'   ? 'block' : 'none';
-        document.getElementById('tabBtnEnter').className     = 'tab-btn ' + (tab === 'enter' ? 'active' : 'inactive');
-        document.getElementById('tabBtnCSV').className       = 'tab-btn ' + (tab === 'csv'   ? 'active' : 'inactive');
+        document.getElementById('tabEnter').style.display = tab === 'enter' ? 'block' : 'none';
+        document.getElementById('tabCSV').style.display   = tab === 'csv'   ? 'block' : 'none';
+        document.getElementById('tabBtnEnter').className  = 'tab-btn ' + (tab === 'enter' ? 'active' : 'inactive');
+        document.getElementById('tabBtnCSV').className    = 'tab-btn ' + (tab === 'csv'   ? 'active' : 'inactive');
     }
 
     let csvParsedRows = [];
@@ -1700,52 +1700,113 @@
         return { headers, rows };
     }
 
-    // Normalize time: "10:30 AM" or "10:30:00" → "10:30"
+    // Normalize time → HH:MM (24hr)
+    // Handles: "10:30 AM", "10:30am", "10am", "1030", "10:30:00", "14:30"
     function normalizeTime(t) {
         if (!t) return '';
-        const ampm = t.match(/^(\d{1,2}):(\d{2})(?::\d+)?\s*(AM|PM)$/i);
+        t = t.trim();
+        // "1030" or "930" → insert colon
+        const compact = t.match(/^(\d{1,2})(\d{2})$/);
+        if (compact) t = compact[1] + ':' + compact[2];
+        // "10am" / "2pm"
+        const noColon = t.match(/^(\d{1,2})\s*(am|pm)$/i);
+        if (noColon) t = noColon[1] + ':00 ' + noColon[2];
+        // "H:MM AM/PM" or "H:MM:SS AM/PM"
+        const ampm = t.match(/^(\d{1,2}):(\d{2})(?::\d+)?\s*(am|pm)$/i);
         if (ampm) {
             let h = parseInt(ampm[1]);
-            const m = ampm[2];
-            const p = ampm[3].toUpperCase();
+            const m = ampm[2], p = ampm[3].toUpperCase();
             if (p === 'AM' && h === 12) h = 0;
             if (p === 'PM' && h !== 12) h += 12;
             return String(h).padStart(2,'0') + ':' + m;
         }
+        // "H:MM" or "HH:MM"
         const plain = t.match(/^(\d{1,2}):(\d{2})/);
         if (plain) return String(parseInt(plain[1])).padStart(2,'0') + ':' + plain[2];
-        return t;
+        return null; // unrecognized
     }
 
-    // Normalize date: M/D/YYYY → YYYY-MM-DD
+    // Normalize date → YYYY-MM-DD
+    // Handles: "4/5/2026", "04/05/26", "4-5-2026", "April 5 2026", "Apr 5, 2026", "2026-04-05"
+    const MONTH_NAMES = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
     function normalizeDate(d) {
-        if (!d) return '';
-        const slash = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (slash) return `${slash[3]}-${slash[1].padStart(2,'0')}-${slash[2].padStart(2,'0')}`;
-        return d; // assume already YYYY-MM-DD
+        if (!d) return null;
+        d = d.trim();
+        // Already YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+        // M/D/YYYY or M-D-YYYY (2 or 4 digit year)
+        const slash = d.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+        if (slash) {
+            let y = parseInt(slash[3]);
+            if (y < 100) y += 2000;
+            return `${y}-${slash[1].padStart(2,'0')}-${slash[2].padStart(2,'0')}`;
+        }
+        // "April 5, 2026" or "Apr 5 2026"
+        const named = d.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+        if (named) {
+            const mo = MONTH_NAMES[named[1].substring(0,3).toLowerCase()];
+            if (mo) return `${named[3]}-${String(mo).padStart(2,'0')}-${named[2].padStart(2,'0')}`;
+        }
+        return null; // unrecognized
     }
 
     const VALID_AGES    = ['U8','U10','U12','U13','U15','U16','U19'];
     const VALID_GENDERS = ['female','male','f','m'];
 
+    // Fuzzy match venue name → { id, numId, name } or null
+    function matchVenue(name) {
+        if (!name) return null;
+        const n = name.trim().toLowerCase();
+        return allVenues.find(v => v.name.toLowerCase() === n)
+            || allVenues.find(v => v.name.toLowerCase().includes(n) || n.includes(v.name.toLowerCase()))
+            || null;
+    }
+
+    // Fuzzy match field name within a venue → { id, numId, name } or null
+    function matchField(name, venueId) {
+        if (!name) return null;
+        const n = name.trim().toLowerCase();
+        const pool = venueId ? allFields.filter(f => f.venueId === venueId) : allFields;
+        return pool.find(f => f.name.toLowerCase() === n)
+            || pool.find(f => f.name.toLowerCase().includes(n) || n.includes(f.name.toLowerCase()))
+            || null;
+    }
+
     function validateCSVRow(row) {
-        const errors = [];
-        if (!row['Date'])       errors.push('Missing Date');
-        if (!row['Time'])       errors.push('Missing Time');
-        if (!row['Home Team'])  errors.push('Missing Home Team');
-        if (!row['Away Team'])  errors.push('Missing Away Team');
+        const errors = [], warnings = [];
+        // Required field checks
+        if (!row['Date'])      errors.push('Missing Date');
+        else if (!normalizeDate(row['Date'])) errors.push(`Unrecognized date format: "${row['Date']}"`);
+        if (!row['Time'])      errors.push('Missing Time');
+        else if (!normalizeTime(row['Time'])) errors.push(`Unrecognized time format: "${row['Time']}"`);
+        if (!row['Home Team']) errors.push('Missing Home Team');
+        if (!row['Away Team']) errors.push('Missing Away Team');
         const age = (row['Age Group'] || '').trim().toUpperCase();
-        if (!age || !VALID_AGES.includes(age)) errors.push(`Invalid Age Group (${age || 'blank'})`);
+        if (!age)                        errors.push('Missing Age Group');
+        else if (!VALID_AGES.includes(age)) errors.push(`Invalid Age Group "${row['Age Group']}" — use: ${VALID_AGES.join(', ')}`);
         const gender = (row['Gender'] || '').trim().toLowerCase();
-        if (!gender || !VALID_GENDERS.includes(gender)) errors.push(`Invalid Gender (${row['Gender'] || 'blank'})`);
-        return errors;
+        if (!gender)                          errors.push('Missing Gender');
+        else if (!VALID_GENDERS.includes(gender)) errors.push(`Invalid Gender "${row['Gender']}" — use: Female or Male`);
+        if (!row['Venue'])  errors.push('Missing Venue');
+        if (!row['Field'])  errors.push('Missing Field');
+
+        // Venue/field match warnings (not blocking — assignor can fix)
+        if (row['Venue'] && !errors.find(e => e.includes('Venue'))) {
+            const vm = matchVenue(row['Venue']);
+            if (!vm) warnings.push(`Venue "${row['Venue']}" not found in system`);
+            else if (row['Field']) {
+                const fm = matchField(row['Field'], vm.id);
+                if (!fm) warnings.push(`Field "${row['Field']}" not found under ${vm.name}`);
+            }
+        }
+        return { errors, warnings };
     }
 
     function handleCSVFile(file) {
         if (!file.name.endsWith('.csv')) { alert('Please select a .csv file.'); return; }
         const reader = new FileReader();
         reader.onload = e => {
-            const { headers, rows } = parseCSV(e.target.result);
+            const { rows } = parseCSV(e.target.result);
             if (!rows.length) { alert('No data rows found in the CSV.'); return; }
             csvParsedRows = rows;
             renderCSVPreview(rows);
@@ -1754,37 +1815,44 @@
     }
 
     function renderCSVPreview(rows) {
-        let valid = 0, invalid = 0;
-        let html = `<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Home Team</th><th>Away Team</th><th>Age</th><th>Gender</th><th>Notes</th><th>Status</th></tr></thead><tbody>`;
+        let valid = 0, warned = 0, invalid = 0;
+        let html = `<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Home Team</th><th>Away Team</th><th>Age</th><th>Gender</th><th>Venue</th><th>Field</th><th>Notes</th><th>Status</th></tr></thead><tbody>`;
         rows.forEach((row, i) => {
-            const errors = validateCSVRow(row);
-            const ok = errors.length === 0;
-            if (ok) valid++; else invalid++;
-            html += `<tr class="${ok ? '' : 'csv-row-invalid'}">
+            const { errors, warnings } = validateCSVRow(row);
+            const hasErrors = errors.length > 0, hasWarnings = warnings.length > 0;
+            if (hasErrors) invalid++;
+            else if (hasWarnings) warned++;
+            else valid++;
+            const rowClass = hasErrors ? 'csv-row-invalid' : '';
+            const statusHtml = hasErrors
+                ? `<span style="color:#991b1b;font-weight:700;font-size:0.72rem;">✗ ${errors[0]}</span>`
+                : hasWarnings
+                ? `<span style="color:#92400e;font-weight:700;font-size:0.72rem;">⚠ ${warnings[0]}</span>`
+                : `<span style="color:#14532d;font-weight:700;font-size:0.72rem;">✓ Ready</span>`;
+            html += `<tr class="${rowClass}">
                 <td>${i+1}</td>
-                <td>${row['Date'] || ''}</td>
-                <td>${row['Time'] || ''}</td>
-                <td>${row['Home Team'] || ''}</td>
-                <td>${row['Away Team'] || ''}</td>
-                <td>${row['Age Group'] || ''}</td>
-                <td>${row['Gender'] || ''}</td>
-                <td>${row['Notes'] || ''}</td>
-                <td style="font-size:0.72rem; font-weight:700;">${ok ? '<span style="color:#14532d;">✓ Valid</span>' : '<span style="color:#991b1b;">⚠ ' + errors.join(', ') + '</span>'}</td>
+                <td>${row['Date']||''}</td><td>${row['Time']||''}</td>
+                <td>${row['Home Team']||''}</td><td>${row['Away Team']||''}</td>
+                <td>${row['Age Group']||''}</td><td>${row['Gender']||''}</td>
+                <td>${row['Venue']||''}</td><td>${row['Field']||''}</td>
+                <td>${row['Notes']||''}</td>
+                <td>${statusHtml}</td>
             </tr>`;
         });
         html += '</tbody>';
         document.getElementById('csvPreviewTable').innerHTML = html;
-
         const countEl = document.getElementById('csvPreviewCount');
-        countEl.innerHTML = `<strong>${rows.length}</strong> rows found — <span style="color:#14532d;font-weight:700;">${valid} valid</span>` +
-            (invalid ? ` &nbsp;·&nbsp; <span style="color:#991b1b;font-weight:700;">${invalid} invalid (will be skipped)</span>` : '');
-
+        countEl.innerHTML =
+            `<strong>${rows.length}</strong> rows — ` +
+            `<span style="color:#14532d;font-weight:700;">${valid} ready</span>` +
+            (warned   ? ` &nbsp;·&nbsp; <span style="color:#92400e;font-weight:700;">${warned} venue warnings (will still add)</span>` : '') +
+            (invalid  ? ` &nbsp;·&nbsp; <span style="color:#991b1b;font-weight:700;">${invalid} errors (will be skipped)</span>` : '');
         document.getElementById('csvPreviewSection').style.display = 'block';
         document.getElementById('csvAddResult').textContent = '';
     }
 
     // Drop zone events
-    const csvDrop = document.getElementById('csvDropZone');
+    const csvDrop  = document.getElementById('csvDropZone');
     const csvInput = document.getElementById('csvFileInput');
     csvDrop.addEventListener('dragover',  e => { e.preventDefault(); csvDrop.classList.add('dragover'); });
     csvDrop.addEventListener('dragleave', () => csvDrop.classList.remove('dragover'));
@@ -1806,11 +1874,13 @@
         if (!csvParsedRows.length) return;
         let added = 0, skipped = 0;
         csvParsedRows.forEach(row => {
-            const errors = validateCSVRow(row);
+            const { errors } = validateCSVRow(row);
             if (errors.length) { skipped++; return; }
-            const age    = (row['Age Group'] || '').trim().toUpperCase();
-            const gender = (row['Gender'] || '').trim().toLowerCase();
-            const normGender = (gender === 'f' || gender === 'female') ? 'Female' : 'Male';
+            const age        = (row['Age Group'] || '').trim().toUpperCase();
+            const genderRaw  = (row['Gender'] || '').trim().toLowerCase();
+            const normGender = (genderRaw === 'f' || genderRaw === 'female') ? 'Female' : 'Male';
+            const venueMatch = matchVenue(row['Venue'] || '');
+            const fieldMatch = venueMatch ? matchField(row['Field'] || '', venueMatch.id) : matchField(row['Field'] || '', null);
             stagedGames.push({
                 date:      normalizeDate(row['Date']),
                 time:      normalizeTime(row['Time']),
@@ -1818,17 +1888,19 @@
                 away:      row['Away Team'],
                 age,
                 gender:    normGender,
-                venueId:   '', venueName: '',
-                fieldId:   '', fieldName: '',
+                venueId:   venueMatch ? venueMatch.id   : '',
+                venueName: venueMatch ? venueMatch.name : (row['Venue'] || ''),
+                fieldId:   fieldMatch ? fieldMatch.id   : '',
+                fieldName: fieldMatch ? fieldMatch.name : (row['Field'] || ''),
                 notes:     row['Notes'] || '',
                 status:    'pending'
             });
             added++;
         });
         renderStagedTable();
-        document.getElementById('csvAddResult').textContent = `✓ ${added} game${added !== 1 ? 's' : ''} added to queue` + (skipped ? ` (${skipped} skipped)` : '');
+        document.getElementById('csvAddResult').textContent =
+            `✓ ${added} game${added !== 1 ? 's' : ''} added to queue` + (skipped ? ` (${skipped} skipped)` : '');
         if (added) {
-            // Clear preview and switch back so user sees the queue
             csvParsedRows = [];
             csvInput.value = '';
             document.getElementById('csvPreviewSection').style.display = 'none';
