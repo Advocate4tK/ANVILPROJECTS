@@ -219,6 +219,21 @@
         .btn-cancel-game:hover { background:var(--danger); color:white; }
         .btn-modify-game { background:none; border:1px solid var(--deep); color:var(--deep); border-radius:6px; padding:3px 10px; font-size:0.76rem; font-weight:600; cursor:pointer; white-space:nowrap; transition:all 0.15s; }
         .btn-modify-game:hover { background:var(--deep); color:white; }
+
+        /* ── CSV upload tab ── */
+        .tab-toggle { display:flex; margin-bottom:20px; border-radius:8px; overflow:hidden; border:2px solid var(--deep); }
+        .tab-btn { flex:1; padding:10px 16px; border:none; font-family:'DM Sans',sans-serif; font-weight:700; font-size:0.88rem; cursor:pointer; transition:background 0.15s, color 0.15s; }
+        .tab-btn.active   { background:var(--deep); color:white; }
+        .tab-btn.inactive { background:white; color:var(--deep); }
+        .tab-btn.inactive:hover { background:rgba(9,20,42,0.06); }
+        .csv-drop-zone { border:2.5px dashed var(--deep); border-radius:10px; padding:36px 20px; text-align:center; cursor:pointer; background:rgba(9,20,42,0.03); transition:background 0.2s, border-color 0.2s; margin-bottom:16px; }
+        .csv-drop-zone.dragover { background:rgba(9,20,42,0.09); border-color:var(--accent); }
+        .csv-drop-zone p { margin:6px 0; color:var(--muted); font-size:0.88rem; }
+        .csv-preview-table { width:100%; border-collapse:collapse; font-size:0.78rem; margin-top:12px; }
+        .csv-preview-table th { background:var(--deep); color:white; padding:6px 10px; text-align:left; white-space:nowrap; }
+        .csv-preview-table td { padding:5px 10px; border-bottom:1px solid var(--border); }
+        .csv-preview-table tr:nth-child(even) td { background:var(--bg); }
+        .csv-preview-table tr.csv-row-invalid td { background:#fee2e2; color:#991b1b; }
     </style>
 </head>
 <body>
@@ -288,6 +303,14 @@
                     Club not found. Please check your link or contact your assignor.
                 </div>
 
+                <!-- Tab toggle -->
+                <div class="tab-toggle">
+                    <button class="tab-btn active" id="tabBtnEnter" onclick="switchTab('enter')">✏️ Enter Games</button>
+                    <button class="tab-btn inactive" id="tabBtnCSV" onclick="switchTab('csv')">📂 Upload CSV</button>
+                </div>
+
+                <!-- Tab: Enter Games -->
+                <div id="tabEnter">
                 <!-- Entry form -->
                 <div class="entry-form">
                     <h3>Game Details</h3>
@@ -350,6 +373,33 @@
                         <button class="btn btn-primary" id="createGameBtn" disabled>+ Create Game</button>
                     </div>
                 </div>
+                </div><!-- /tabEnter -->
+
+                <!-- Tab: Upload CSV -->
+                <div id="tabCSV" style="display:none;">
+                    <div class="page-intro" style="margin-bottom:16px;">
+                        Upload a CSV with your full game schedule. <strong>Venue and field will be assigned by your assignor</strong> — just include the game details.
+                        <a href="games-upload-template.csv" download style="color:var(--accent-dark); font-weight:700; margin-left:8px;">⬇ Download Template</a>
+                    </div>
+                    <div class="csv-drop-zone" id="csvDropZone">
+                        <div style="font-size:40px; margin-bottom:8px;">📂</div>
+                        <p><strong>Drag &amp; drop your CSV file here</strong></p>
+                        <p>or</p>
+                        <button class="btn btn-primary" type="button" onclick="document.getElementById('csvFileInput').click()">Browse File</button>
+                        <input type="file" id="csvFileInput" accept=".csv" style="display:none;">
+                    </div>
+                    <div id="csvPreviewSection" style="display:none;">
+                        <p id="csvPreviewCount" style="font-size:0.88rem; color:var(--muted); margin-bottom:8px;"></p>
+                        <div style="overflow-x:auto;">
+                            <table class="csv-preview-table" id="csvPreviewTable"></table>
+                        </div>
+                        <div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <button class="btn btn-primary" id="csvAddBtn">+ Add to Queue</button>
+                            <button class="btn btn-outline" id="csvClearBtn">Clear</button>
+                            <span id="csvAddResult" style="font-size:0.85rem; color:var(--accent-dark); font-weight:700;"></span>
+                        </div>
+                    </div>
+                </div><!-- /tabCSV -->
 
                 <!-- Staged games -->
                 <div class="staged-section" id="stagedSection">
@@ -1614,6 +1664,179 @@
     ['mousemove','keydown','click','touchstart'].forEach(ev =>
         document.addEventListener(ev, _resetIdle, { passive: true })
     );
+
+    // ── CSV Upload Tab ────────────────────────────────────────────────────────
+
+    function switchTab(tab) {
+        document.getElementById('tabEnter').style.display    = tab === 'enter' ? 'block' : 'none';
+        document.getElementById('tabCSV').style.display      = tab === 'csv'   ? 'block' : 'none';
+        document.getElementById('tabBtnEnter').className     = 'tab-btn ' + (tab === 'enter' ? 'active' : 'inactive');
+        document.getElementById('tabBtnCSV').className       = 'tab-btn ' + (tab === 'csv'   ? 'active' : 'inactive');
+    }
+
+    let csvParsedRows = [];
+
+    function parseCSVLine(line) {
+        const result = []; let cur = ''; let inQ = false;
+        for (let i = 0; i < line.length; i++) {
+            if (line[i] === '"') { inQ = !inQ; }
+            else if (line[i] === ',' && !inQ) { result.push(cur); cur = ''; }
+            else { cur += line[i]; }
+        }
+        result.push(cur);
+        return result;
+    }
+
+    function parseCSV(text) {
+        const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+        const headers = parseCSVLine(lines[0]).map(h => h.trim());
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+            const vals = parseCSVLine(lines[i]);
+            const row = {};
+            headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+            rows.push(row);
+        }
+        return { headers, rows };
+    }
+
+    // Normalize time: "10:30 AM" or "10:30:00" → "10:30"
+    function normalizeTime(t) {
+        if (!t) return '';
+        const ampm = t.match(/^(\d{1,2}):(\d{2})(?::\d+)?\s*(AM|PM)$/i);
+        if (ampm) {
+            let h = parseInt(ampm[1]);
+            const m = ampm[2];
+            const p = ampm[3].toUpperCase();
+            if (p === 'AM' && h === 12) h = 0;
+            if (p === 'PM' && h !== 12) h += 12;
+            return String(h).padStart(2,'0') + ':' + m;
+        }
+        const plain = t.match(/^(\d{1,2}):(\d{2})/);
+        if (plain) return String(parseInt(plain[1])).padStart(2,'0') + ':' + plain[2];
+        return t;
+    }
+
+    // Normalize date: M/D/YYYY → YYYY-MM-DD
+    function normalizeDate(d) {
+        if (!d) return '';
+        const slash = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (slash) return `${slash[3]}-${slash[1].padStart(2,'0')}-${slash[2].padStart(2,'0')}`;
+        return d; // assume already YYYY-MM-DD
+    }
+
+    const VALID_AGES    = ['U8','U10','U12','U13','U15','U16','U19'];
+    const VALID_GENDERS = ['female','male','f','m'];
+
+    function validateCSVRow(row) {
+        const errors = [];
+        if (!row['Date'])       errors.push('Missing Date');
+        if (!row['Time'])       errors.push('Missing Time');
+        if (!row['Home Team'])  errors.push('Missing Home Team');
+        if (!row['Away Team'])  errors.push('Missing Away Team');
+        const age = (row['Age Group'] || '').trim().toUpperCase();
+        if (!age || !VALID_AGES.includes(age)) errors.push(`Invalid Age Group (${age || 'blank'})`);
+        const gender = (row['Gender'] || '').trim().toLowerCase();
+        if (!gender || !VALID_GENDERS.includes(gender)) errors.push(`Invalid Gender (${row['Gender'] || 'blank'})`);
+        return errors;
+    }
+
+    function handleCSVFile(file) {
+        if (!file.name.endsWith('.csv')) { alert('Please select a .csv file.'); return; }
+        const reader = new FileReader();
+        reader.onload = e => {
+            const { headers, rows } = parseCSV(e.target.result);
+            if (!rows.length) { alert('No data rows found in the CSV.'); return; }
+            csvParsedRows = rows;
+            renderCSVPreview(rows);
+        };
+        reader.readAsText(file);
+    }
+
+    function renderCSVPreview(rows) {
+        let valid = 0, invalid = 0;
+        let html = `<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Home Team</th><th>Away Team</th><th>Age</th><th>Gender</th><th>Notes</th><th>Status</th></tr></thead><tbody>`;
+        rows.forEach((row, i) => {
+            const errors = validateCSVRow(row);
+            const ok = errors.length === 0;
+            if (ok) valid++; else invalid++;
+            html += `<tr class="${ok ? '' : 'csv-row-invalid'}">
+                <td>${i+1}</td>
+                <td>${row['Date'] || ''}</td>
+                <td>${row['Time'] || ''}</td>
+                <td>${row['Home Team'] || ''}</td>
+                <td>${row['Away Team'] || ''}</td>
+                <td>${row['Age Group'] || ''}</td>
+                <td>${row['Gender'] || ''}</td>
+                <td>${row['Notes'] || ''}</td>
+                <td style="font-size:0.72rem; font-weight:700;">${ok ? '<span style="color:#14532d;">✓ Valid</span>' : '<span style="color:#991b1b;">⚠ ' + errors.join(', ') + '</span>'}</td>
+            </tr>`;
+        });
+        html += '</tbody>';
+        document.getElementById('csvPreviewTable').innerHTML = html;
+
+        const countEl = document.getElementById('csvPreviewCount');
+        countEl.innerHTML = `<strong>${rows.length}</strong> rows found — <span style="color:#14532d;font-weight:700;">${valid} valid</span>` +
+            (invalid ? ` &nbsp;·&nbsp; <span style="color:#991b1b;font-weight:700;">${invalid} invalid (will be skipped)</span>` : '');
+
+        document.getElementById('csvPreviewSection').style.display = 'block';
+        document.getElementById('csvAddResult').textContent = '';
+    }
+
+    // Drop zone events
+    const csvDrop = document.getElementById('csvDropZone');
+    const csvInput = document.getElementById('csvFileInput');
+    csvDrop.addEventListener('dragover',  e => { e.preventDefault(); csvDrop.classList.add('dragover'); });
+    csvDrop.addEventListener('dragleave', () => csvDrop.classList.remove('dragover'));
+    csvDrop.addEventListener('drop', e => {
+        e.preventDefault(); csvDrop.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) handleCSVFile(file);
+    });
+    csvInput.addEventListener('change', () => { if (csvInput.files[0]) handleCSVFile(csvInput.files[0]); });
+
+    document.getElementById('csvClearBtn').addEventListener('click', () => {
+        csvParsedRows = [];
+        csvInput.value = '';
+        document.getElementById('csvPreviewSection').style.display = 'none';
+        document.getElementById('csvAddResult').textContent = '';
+    });
+
+    document.getElementById('csvAddBtn').addEventListener('click', () => {
+        if (!csvParsedRows.length) return;
+        let added = 0, skipped = 0;
+        csvParsedRows.forEach(row => {
+            const errors = validateCSVRow(row);
+            if (errors.length) { skipped++; return; }
+            const age    = (row['Age Group'] || '').trim().toUpperCase();
+            const gender = (row['Gender'] || '').trim().toLowerCase();
+            const normGender = (gender === 'f' || gender === 'female') ? 'Female' : 'Male';
+            stagedGames.push({
+                date:      normalizeDate(row['Date']),
+                time:      normalizeTime(row['Time']),
+                home:      row['Home Team'],
+                away:      row['Away Team'],
+                age,
+                gender:    normGender,
+                venueId:   '', venueName: '',
+                fieldId:   '', fieldName: '',
+                notes:     row['Notes'] || '',
+                status:    'pending'
+            });
+            added++;
+        });
+        renderStagedTable();
+        document.getElementById('csvAddResult').textContent = `✓ ${added} game${added !== 1 ? 's' : ''} added to queue` + (skipped ? ` (${skipped} skipped)` : '');
+        if (added) {
+            // Clear preview and switch back so user sees the queue
+            csvParsedRows = [];
+            csvInput.value = '';
+            document.getElementById('csvPreviewSection').style.display = 'none';
+            switchTab('enter');
+        }
+    });
+
+    // ── End CSV Upload Tab ────────────────────────────────────────────────────
 
     // Populate season badges in static headers
     const _season = getCurrentSeason();
