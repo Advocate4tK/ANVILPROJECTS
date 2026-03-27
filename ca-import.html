@@ -338,7 +338,7 @@
     async function runPreview() {
         document.getElementById('previewBtn').disabled = true;
         document.getElementById('previewBtn').textContent = 'Loading…';
-        document.getElementById('previewTable').innerHTML = '<p style="color:#888;">Loading Airtable records…</p>';
+        document.getElementById('previewTable').innerHTML = '<p style="color:#888;">Loading records…</p>';
         document.getElementById('logBox').style.display = 'none';
         document.getElementById('logBox').innerHTML = '';
         previewData = [];
@@ -346,11 +346,13 @@
         try {
             const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 2000 });
 
-            // Build email → record map (lowercase, check both primary fields)
+            // Build email → record map (lowercase, check both email columns)
             const emailMap = {};
             existing.forEach(r => {
-                const e = (r.fields['Email'] || '').toLowerCase();
-                if (e) emailMap[e] = r;
+                const e1 = (r.fields['Email']   || '').toLowerCase();
+                const e2 = (r.fields['Email 2'] || '').toLowerCase();
+                if (e1) emailMap[e1] = r;
+                if (e2) emailMap[e2] = r;
             });
 
             // Build name → record map (lowercase, trimmed)
@@ -381,21 +383,23 @@
             <div style="overflow-x:auto;">
             <table>
                 <thead><tr>
-                    <th>Action</th><th>CA ID</th><th>Name</th><th>Phone</th><th>Primary Email</th><th>Matched To</th>
+                    <th>Action</th><th>CA ID</th><th>CA Name</th><th>Phone</th><th>Primary Email</th><th>Matched To (Our DB)</th><th>Current CA ID</th>
                 </tr></thead><tbody>`;
 
             previewData.forEach(({ ca, match, phone }) => {
                 const action = match
                     ? `<span class="badge-update">UPDATE</span>`
                     : `<span class="badge-new">CREATE</span>`;
-                const matchedTo = match ? (match.fields['Name'] || match.fields['Email'] || match.id) : '—';
+                const matchedTo    = match ? (match.fields['Name'] || match.fields['Email'] || match.id) : '—';
+                const currentCaId  = match ? (match.fields['Central Assign ID'] || '<span style="color:#e67e22;">not set</span>') : '—';
                 html += `<tr>
                     <td>${action}</td>
-                    <td>${ca.caId}</td>
+                    <td><strong>${ca.caId}</strong></td>
                     <td>${ca.name}</td>
                     <td>${phone || '<span style="color:#aaa;">—</span>'}</td>
                     <td style="font-size:0.8rem;">${ca.email1}</td>
                     <td style="font-size:0.8rem; color:#555;">${matchedTo}</td>
+                    <td style="font-size:0.8rem;">${currentCaId}</td>
                 </tr>`;
             });
 
@@ -427,23 +431,24 @@
         for (const { ca, match, phone } of previewData) {
             try {
                 if (match) {
-                    // Update existing record
-                    const fields = {};
+                    // Update existing record — always set CA ID, CA Name, and phone
+                    const fields = {
+                        'Central Assign ID':   ca.caId,
+                        'Central Assign Name': ca.name,
+                    };
                     if (phone) fields['Phone'] = phone;
-                    // Fill email if blank
                     if (!match.fields['Email'] && ca.email1) fields['Email'] = ca.email1;
-
-                    if (Object.keys(fields).length > 0) {
-                        await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, match.id, fields);
-                    }
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, match.id, fields);
                     log(`✓ Updated: ${ca.name} (CA #${ca.caId})`, 'log-ok');
                     updated++;
                 } else {
-                    // Create new record
+                    // Create new record with full CA info
                     const fields = {
-                        'Name':  ca.name,
-                        'Email': ca.email1,
-                        'Phone': phone,
+                        'Name':                ca.name,
+                        'Email':               ca.email1,
+                        'Phone':               phone || '',
+                        'Central Assign ID':   ca.caId,
+                        'Central Assign Name': ca.name,
                     };
                     await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, fields);
                     log(`+ Created: ${ca.name} (CA #${ca.caId})`, 'log-new');
@@ -453,9 +458,6 @@
                 log(`✗ Failed: ${ca.name} — ${e.message}`, 'log-err');
                 failed++;
             }
-
-            // Small delay to stay within Airtable rate limits (5 req/sec)
-            await new Promise(r => setTimeout(r, 220));
         }
 
         log('', '');
