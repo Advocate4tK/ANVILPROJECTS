@@ -133,7 +133,7 @@ document.getElementById('clubClearAll').addEventListener('click', () =>
 // ── Load Games ────────────────────────────────────────────────────────────────
 loadBtn.addEventListener('click', async () => {
     if (!airtableClient) {
-        alert('Airtable client not initialized. Check config.js.');
+        alert('Database not connected. Check config.js.');
         return;
     }
 
@@ -145,7 +145,7 @@ loadBtn.addEventListener('click', async () => {
     progressWrap.style.display = 'block';
     progressBar.style.width = '50%';
     progressText.style.display = 'block';
-    progressText.textContent = 'Loading games from Airtable...';
+    progressText.textContent = 'Loading games...';
     gamesSection.style.display = 'none';
     noGamesMsg.style.display = 'none';
 
@@ -172,11 +172,15 @@ loadBtn.addEventListener('click', async () => {
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 500 })
         ]);
 
-        // Build lookup: Airtable record ID → Central Assign numeric ID
+        // Build lookup: record ID or name → Central Assign numeric ID
         refIdLookup = {};
         referees.forEach(r => {
             const caId = r.fields['Central Assign ID'];
-            if (caId) refIdLookup[r.id] = parseInt(caId) || caId;
+            if (caId) {
+                refIdLookup[r.id] = parseInt(caId) || caId;
+                const name = (r.fields['Name'] || '').toLowerCase();
+                if (name) refIdLookup[name] = parseInt(caId) || caId;
+            }
         });
 
         // Build lookups keyed by Airtable record ID.
@@ -220,7 +224,8 @@ loadBtn.addEventListener('click', async () => {
         const filtered = assignedOnly
             ? byClub.filter(r => {
                 const cr = r.fields['Center Referee'];
-                return Array.isArray(cr) && cr.length > 0 && refIdLookup[cr[0]];
+                const val = Array.isArray(cr) ? cr[0] : (cr || null);
+                return val && (refIdLookup[val] || refIdLookup[(val + '').toLowerCase()]);
               })
             : byClub;
 
@@ -264,8 +269,9 @@ function renderGamesTable(records) {
             : `<span style="color:#e74c3c">⚠ No ID: ${venueName || 'Unknown'}</span>`;
 
         const cr = f['Center Referee'];
-        const crAssigned = Array.isArray(cr) && cr.length > 0;
-        const crCaId = crAssigned ? refIdLookup[cr[0]] : null;
+        const crVal = Array.isArray(cr) ? cr[0] : (cr || null);
+        const crAssigned = !!crVal;
+        const crCaId = crVal ? (refIdLookup[crVal] || refIdLookup[(crVal + '').toLowerCase()]) : null;
         const refDisplay = crCaId
             ? `<span style="color:#27ae60">✓ ID: ${crCaId}</span>`
             : crAssigned
@@ -342,10 +348,8 @@ exportBtn.addEventListener('click', () => {
 
         // Resolve Center Referee → Central Assign numeric ID
         const centerRefField = f['Center Referee'];
-        let refId = 0;
-        if (Array.isArray(centerRefField) && centerRefField.length > 0) {
-            refId = refIdLookup[centerRefField[0]] || 0;
-        }
+        const crRaw = Array.isArray(centerRefField) ? centerRefField[0] : (centerRefField || null);
+        let refId = crRaw ? (refIdLookup[crRaw] || refIdLookup[(crRaw + '').toLowerCase()] || 0) : 0;
 
         // Map Airtable Gender field to CA format (M/F), fall back to default
         const gameGender = f['Gender'] === 'Male' ? 'M' : f['Gender'] === 'Female' ? 'F' : DEFAULTS.gender;

@@ -117,7 +117,9 @@
     <script src="js/admin-auth.js"></script>
     <script>checkAdminAccess();</script>
     <script src="config.js"></script>
-    <script src="js/airtable-client.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/supabase-client.js?v=9"></script>
+    <script>var airtableClient = supabaseClient;</script>
     <script>
         // ── Year selector ──────────────────────────────────────────────────────
         const yearSelect = document.getElementById('seasonYear');
@@ -161,7 +163,7 @@
         let reportData = [];
 
         document.getElementById('runBtn').addEventListener('click', async () => {
-            if (!airtableClient) { alert('Airtable not connected.'); return; }
+            if (!airtableClient) { alert('Database not connected.'); return; }
 
             const range = getDateRange();
             if (!range.from || !range.to) { alert('Please select a date range.'); return; }
@@ -176,7 +178,8 @@
             document.getElementById('progressText').textContent = 'Loading games...';
 
             try {
-                const filter = `AND(IS_AFTER({Date}, '${range.from}'), IS_BEFORE({Date}, '${range.to}'))`;
+                const filter = `AND(NOT(IS_BEFORE({Date},'${range.from}')),NOT(IS_AFTER({Date},'${range.to}')))`;
+
                 const [games, referees] = await Promise.all([
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, {
                         filterByFormula: filter,
@@ -188,24 +191,27 @@
                 document.getElementById('progressBar').style.width = '80%';
                 document.getElementById('progressText').textContent = 'Counting games...';
 
-                // Build referee ID → name lookup
+                // Build referee ID/name → display name lookup
                 const refLookup = {};
                 referees.forEach(r => {
                     const name = r.fields['Name'] ||
                         ((r.fields['First Name'] || '') + ' ' + (r.fields['Last Name'] || '')).trim();
-                    refLookup[r.id] = name || 'Unknown';
+                    if (name) {
+                        refLookup[r.id] = name;           // by Supabase integer ID
+                        refLookup[name.toLowerCase()] = name; // by lowercase name string
+                    }
                 });
 
-                // Count games per referee — try common field name variants
+                // Count games per referee
                 const counts = {};
                 games.forEach(rec => {
                     const f = rec.fields;
                     const centerRef = f['Center Referee'];
                     if (!centerRef) return;
-                    const ids = Array.isArray(centerRef) ? centerRef : [centerRef];
-                    ids.forEach(id => {
-                        const name = refLookup[id] || id;
-                        counts[name] = (counts[name] || 0) + 1;
+                    const vals = Array.isArray(centerRef) ? centerRef : [centerRef];
+                    vals.forEach(val => {
+                        const name = refLookup[val] || refLookup[(val || '').toLowerCase()] || val;
+                        if (name) counts[name] = (counts[name] || 0) + 1;
                     });
                 });
 
