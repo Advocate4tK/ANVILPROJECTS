@@ -435,15 +435,13 @@ function resolveVenue(f) {
         try { fieldValue = JSON.parse(fieldValue); } catch(e) {}
     }
     if (!fieldValue) return { name: '', caId: null, fieldName: '' };
-    if (Array.isArray(fieldValue) && fieldValue.length > 0) {
-        const rid = fieldValue[0];
-        return {
-            name:      venueNameMap[rid] || '',
-            caId:      venueCAId[rid]    || null,
-            fieldName: fieldNameMap[rid] || ''
-        };
-    }
-    return { name: String(fieldValue), caId: null, fieldName: '' };
+    // Normalize: unwrap array or use raw integer/string ID directly
+    const rid = Array.isArray(fieldValue) ? fieldValue[0] : fieldValue;
+    return {
+        name:      venueNameMap[rid] || String(rid),
+        caId:      venueCAId[rid]    || null,
+        fieldName: fieldNameMap[rid] || ''
+    };
 }
 
 function formatDate(dateStr) {
