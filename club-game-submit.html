@@ -135,11 +135,12 @@
         .staged-table th:nth-child(5), .staged-table td:nth-child(5) { width: 14%; }
         .staged-table th:nth-child(6), .staged-table td:nth-child(6) { width: 44px; }
         .staged-table th:nth-child(7), .staged-table td:nth-child(7) { width: 60px; }
-        .staged-table th:nth-child(8), .staged-table td:nth-child(8) { width: 14%; }
-        .staged-table th:nth-child(9), .staged-table td:nth-child(9) { width: 80px; }
-        .staged-table th:nth-child(10), .staged-table td:nth-child(10) { width: auto; }
-        .staged-table th:nth-child(11), .staged-table td:nth-child(11) { width: 220px; white-space: normal; }
-        .staged-table th:nth-child(12), .staged-table td:nth-child(12) { width: 28px; }
+        .staged-table th:nth-child(8), .staged-table td:nth-child(8) { width: 55px; }
+        .staged-table th:nth-child(9), .staged-table td:nth-child(9) { width: 14%; }
+        .staged-table th:nth-child(10), .staged-table td:nth-child(10) { width: 80px; }
+        .staged-table th:nth-child(11), .staged-table td:nth-child(11) { width: auto; }
+        .staged-table th:nth-child(12), .staged-table td:nth-child(12) { width: 220px; white-space: normal; }
+        .staged-table th:nth-child(13), .staged-table td:nth-child(13) { width: 28px; }
         .staged-table tr:nth-child(even) { background: var(--bg); }
         .staged-table tr.submitted-row td { background: #dcfce7; color: #14532d; }
         .staged-table tr.error-row td    { background: #fee2e2; color: #991b1b; }
@@ -353,6 +354,14 @@
                             </select>
                         </div>
                         <div class="field-group">
+                            <label>Game Type <span style="color:#e74c3c">*</span></label>
+                            <select id="gGameType">
+                                <option value="">— Select —</option>
+                                <option value="Rec">Rec</option>
+                                <option value="Comp">Comp / Travel</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
                             <label>Venue <span style="color:#e74c3c">*</span></label>
                             <select id="gVenue">
                                 <option value="">— Select venue —</option>
@@ -429,6 +438,7 @@
                                     <th>Away Team</th>
                                     <th>Age</th>
                                     <th>Gender</th>
+                                    <th>Type</th>
                                     <th>Venue</th>
                                     <th>Field</th>
                                     <th>Notes</th>
@@ -933,12 +943,13 @@
             && document.getElementById('gAway').value.trim()
             && document.getElementById('gAge').value
             && document.getElementById('gGender').value
+            && document.getElementById('gGameType').value
             && document.getElementById('gVenue').value
             && document.getElementById('gField').value;
         document.getElementById('createGameBtn').disabled = !ok;
     }
 
-    ['clubSelect','gDate','gTime','gHome','gAway','gAge','gGender','gVenue','gField'].forEach(id => {
+    ['clubSelect','gDate','gTime','gHome','gAway','gAge','gGender','gGameType','gVenue','gField'].forEach(id => {
         document.getElementById(id).addEventListener('input', updateCreateBtn);
         document.getElementById(id).addEventListener('change', updateCreateBtn);
     });
@@ -957,6 +968,7 @@
             away:      document.getElementById('gAway').value.trim(),
             age:       document.getElementById('gAge').value,
             gender:    document.getElementById('gGender').value,
+            gameType:  document.getElementById('gGameType').value,
             venueId,   venueName,
             fieldId,   fieldName,
             notes:     document.getElementById('gNotes').value.trim(),
@@ -971,6 +983,7 @@
         document.getElementById('gAway').value  = '';
         document.getElementById('gAge').value   = '';
         document.getElementById('gGender').value = '';
+        // keep gGameType — user likely entering same type repeatedly
         document.getElementById('gNotes').value = '';
         document.getElementById('gHome').focus();
         updateCreateBtn();
@@ -1011,6 +1024,7 @@
                 <td>${g.away}</td>
                 <td>${g.age}</td>
                 <td>${g.gender}</td>
+                <td>${g.gameType || 'Rec'}</td>
                 <td>${g.venueName}</td>
                 <td>${g.fieldName}</td>
                 <td>${g.notes}</td>
@@ -1085,9 +1099,10 @@
                     'Time':      g.time,
                     'Home Team': g.home,
                     'Away Team': g.away,
-                    'Age Group': g.age,
-                    'Gender':    g.gender,
-                    'League':    league
+                    'Age Group':  g.age,
+                    'Gender':     g.gender,
+                    'League':     league,
+                    'game_type':  g.gameType || 'Rec'
                 };
                 if (g.fieldId) {
                     fields['Field'] = [g.fieldId];
@@ -1172,7 +1187,8 @@
         const season = seasonCode(fields['Date'] || '');
         const year   = (fields['Date'] || '').slice(2, 4);
         const seq    = String(autoNum).padStart(3, '0');
-        return `${club}${season}${seq}${year}`;
+        const type   = (fields['game_type'] || 'Rec').toUpperCase() === 'COMP' ? 'COMP' : 'REC';
+        return `${club}${season}${type}${seq}${year}`;
     }
 
     // Extract the most recent change request block from Notes
@@ -1809,6 +1825,9 @@
         else if (!VALID_GENDERS.includes(gender)) errors.push(`Invalid Gender "${row['Gender']}" — use: Female or Male`);
         if (!row['Venue'])  errors.push('Missing Venue');
         if (!row['Field'])  errors.push('Missing Field');
+        const gameType = (row['Game Type'] || '').trim().toLowerCase();
+        if (!gameType)                              errors.push('Missing Game Type');
+        else if (!['rec','comp'].includes(gameType)) errors.push(`Invalid Game Type "${row['Game Type']}" — use: Rec or Comp`);
 
         // Venue/field match warnings (not blocking — assignor can fix)
         if (row['Venue'] && !errors.find(e => e.includes('Venue'))) {
@@ -1823,6 +1842,13 @@
     }
 
     // ── Glastonbury format parsers ────────────────────────────────────────────
+
+    // Normalize game type → 'Rec' or 'Comp'
+    function normalizeGameType(val) {
+        const v = (val || '').trim().toLowerCase();
+        if (v === 'comp' || v === 'travel' || v === 'comp / travel') return 'Comp';
+        return 'Rec';
+    }
 
     // Extract age group + gender from Glastonbury GROUPING field
     function parseGlastGrouping(grouping, mode) {
@@ -1874,6 +1900,7 @@
             'Gender':     gender,
             'Venue':      row['LOCATION'] || '',
             'Field':      row['SURFACE']  || '',
+            'Game Type':  mode === 'rec' ? 'Rec' : 'Comp',
             'Notes':      ''
         };
     }
@@ -1903,7 +1930,7 @@
 
     function renderCSVPreview(rows) {
         let valid = 0, warned = 0, invalid = 0;
-        let html = `<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Home Team</th><th>Away Team</th><th>Age</th><th>Gender</th><th>Venue</th><th>Field</th><th>Notes</th><th>Status</th></tr></thead><tbody>`;
+        let html = `<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Home Team</th><th>Away Team</th><th>Age</th><th>Gender</th><th>Type</th><th>Venue</th><th>Field</th><th>Notes</th><th>Status</th></tr></thead><tbody>`;
         rows.forEach((row, i) => {
             const { errors, warnings } = validateCSVRow(row);
             const hasErrors = errors.length > 0, hasWarnings = warnings.length > 0;
@@ -1921,6 +1948,7 @@
                 <td>${row['Date']||''}</td><td>${row['Time']||''}</td>
                 <td>${row['Home Team']||''}</td><td>${row['Away Team']||''}</td>
                 <td>${row['Age Group']||''}</td><td>${row['Gender']||''}</td>
+                <td>${row['Game Type']||''}</td>
                 <td>${row['Venue']||''}</td><td>${row['Field']||''}</td>
                 <td>${row['Notes']||''}</td>
                 <td>${statusHtml}</td>
@@ -1966,6 +1994,7 @@
             const age        = (row['Age Group'] || '').trim().toUpperCase();
             const genderRaw  = (row['Gender'] || '').trim().toLowerCase();
             const normGender = (genderRaw === 'f' || genderRaw === 'female') ? 'Female' : 'Male';
+            const gameType   = normalizeGameType(row['Game Type'] || '');
             const venueMatch = matchVenue(row['Venue'] || '');
             const fieldMatch = venueMatch ? matchField(row['Field'] || '', venueMatch.id) : matchField(row['Field'] || '', null);
             stagedGames.push({
@@ -1975,6 +2004,7 @@
                 away:      row['Away Team'],
                 age,
                 gender:    normGender,
+                gameType,
                 venueId:   venueMatch ? venueMatch.id   : '',
                 venueName: venueMatch ? venueMatch.name : (row['Venue'] || ''),
                 fieldId:   fieldMatch ? fieldMatch.id   : '',

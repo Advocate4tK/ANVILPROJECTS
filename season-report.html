@@ -81,6 +81,16 @@
                         </div>
                     </div>
 
+                    <!-- Game type filter -->
+                    <div class="form-group" style="margin-top:4px;">
+                        <label style="font-weight:600; display:block; margin-bottom:6px;">Game Type</label>
+                        <div style="display:flex; gap:20px;">
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:400;"><input type="radio" name="srGameType" value="all"  checked> All</label>
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:400;"><input type="radio" name="srGameType" value="Rec">  Rec only</label>
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:400;"><input type="radio" name="srGameType" value="Comp"> Comp / Travel only</label>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <button class="btn btn-primary" id="runBtn">Generate Report</button>
                     </div>
@@ -202,9 +212,15 @@
                     }
                 });
 
-                // Count games per referee
+                // Apply game type filter
+                const srGameType = document.querySelector('input[name="srGameType"]:checked')?.value || 'all';
+                const filteredGames = srGameType === 'all' ? games : games.filter(r => {
+                    return (r.fields['game_type'] || 'Rec') === srGameType;
+                });
+
+                // Count games per referee (from filtered set)
                 const counts = {};
-                games.forEach(rec => {
+                filteredGames.forEach(rec => {
                     const f = rec.fields;
                     const centerRef = f['Center Referee'];
                     if (!centerRef) return;
@@ -215,6 +231,10 @@
                     });
                 });
 
+                // Rec/Comp breakdown counts (always from full game list)
+                const recCount  = games.filter(r => (r.fields['game_type'] || 'Rec') === 'Rec').length;
+                const compCount = games.filter(r => (r.fields['game_type'] || 'Rec') === 'Comp').length;
+
                 reportData = Object.entries(counts)
                     .sort((a, b) => b[1] - a[1])
                     .map(([name, total], i) => ({ rank: i + 1, name, total }));
@@ -224,7 +244,7 @@
                 if (reportData.length === 0) {
                     document.getElementById('noDataMsg').style.display = 'block';
                 } else {
-                    renderReport(range.label, games.length, reportData);
+                    renderReport(range.label, filteredGames.length, reportData, recCount, compCount);
                     document.getElementById('reportSection').style.display = 'block';
                 }
 
@@ -239,14 +259,22 @@
         });
 
         // ── Render ─────────────────────────────────────────────────────────────
-        function renderReport(label, totalGames, rows) {
+        function renderReport(label, totalGames, rows, recCount, compCount) {
             document.getElementById('reportTitle').textContent = `${label} — Referee Game Counts`;
 
             const summaryRow = document.getElementById('summaryRow');
             summaryRow.innerHTML = `
                 <div style="background:#f0f2f5; border-radius:8px; padding:12px 20px; text-align:center; min-width:130px;">
                     <div style="font-size:1.8rem; font-weight:700; color:#0f3460;">${totalGames}</div>
-                    <div style="font-size:0.8rem; color:#555;">Assigned Games</div>
+                    <div style="font-size:0.8rem; color:#555;">Total Games</div>
+                </div>
+                <div style="background:#e8f4e8; border-radius:8px; padding:12px 20px; text-align:center; min-width:130px;">
+                    <div style="font-size:1.8rem; font-weight:700; color:#1a7a40;">${recCount}</div>
+                    <div style="font-size:0.8rem; color:#555;">Rec Games</div>
+                </div>
+                <div style="background:#fef3e2; border-radius:8px; padding:12px 20px; text-align:center; min-width:130px;">
+                    <div style="font-size:1.8rem; font-weight:700; color:#b45309;">${compCount}</div>
+                    <div style="font-size:0.8rem; color:#555;">Comp / Travel</div>
                 </div>
                 <div style="background:#f0f2f5; border-radius:8px; padding:12px 20px; text-align:center; min-width:130px;">
                     <div style="font-size:1.8rem; font-weight:700; color:#0f3460;">${rows.length}</div>

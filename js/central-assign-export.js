@@ -229,12 +229,19 @@ loadBtn.addEventListener('click', async () => {
 
         // Filter to assigned-only if checkbox is checked
         const assignedOnly = document.getElementById('assignedOnly').checked;
-        const filtered = assignedOnly
+        const byAssigned = assignedOnly
             ? byClub.filter(r => {
                 const val = extractRefVal(r.fields['Center Referee']);
                 return val && resolveRefCA(val);
               })
             : byClub;
+
+        // Game type filter
+        const gameTypeFilter = document.querySelector('input[name="gameTypeFilter"]:checked')?.value || 'all';
+        const filtered = gameTypeFilter === 'all' ? byAssigned : byAssigned.filter(r => {
+            const gt = (r.fields['game_type'] || 'Rec');
+            return gt === gameTypeFilter;
+        });
 
         if (filtered.length === 0) {
             noGamesMsg.textContent = assignedOnly

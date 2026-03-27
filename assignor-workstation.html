@@ -806,6 +806,14 @@
                                 </select>
                             </div>
                             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">Game Type:</label>
+                                <select id="gameTypeFilter" onchange="applyGameFilters()" style="flex:1; font-size:0.82rem; padding:4px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit;">
+                                    <option value="">Any</option>
+                                    <option value="Rec">Rec</option>
+                                    <option value="Comp">Comp / Travel</option>
+                                </select>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                                 <label style="font-size:0.78rem; color:#555; white-space:nowrap; width:90px;">U8 ARs:</label>
                                 <button id="hideU8Btn" onclick="toggleHideU8()" style="font-size:0.78rem; font-weight:700; font-family:inherit; padding:4px 10px; border-radius:6px; border:1px solid #0f3460; background:#0f3460; color:#fff; cursor:pointer;">Show U8 ARs</button>
                             </div>
@@ -2330,6 +2338,7 @@
             document.getElementById('gameDateFilter').value = '';
             document.getElementById('gameTimeFilter').value = '';
             document.getElementById('gameAgeFilter').value  = '';
+            document.getElementById('gameTypeFilter').value = '';
             document.getElementById('gameSort').value = 'datetime';
             setAssignFilter('all');
         }
@@ -2640,9 +2649,10 @@
 
         function renderGames() {
             const wrap = document.getElementById('gamesListWrap');
-            const gameDateF      = document.getElementById('gameDateFilter')?.value || '';
-            const gameTimeF      = document.getElementById('gameTimeFilter')?.value || '';
-            const gameAgeF       = document.getElementById('gameAgeFilter')?.value  || '';
+            const gameDateF      = document.getElementById('gameDateFilter')?.value  || '';
+            const gameTimeF      = document.getElementById('gameTimeFilter')?.value  || '';
+            const gameAgeF       = document.getElementById('gameAgeFilter')?.value   || '';
+            const gameTypeF      = document.getElementById('gameTypeFilter')?.value  || '';
             const unassignedOnly = document.getElementById('filterUnassigned')?.checked || false;
 
             const focusGameId = new URLSearchParams(window.location.search).get('game');
@@ -2654,9 +2664,10 @@
                 if ((g.fields['Game Status'] || '') === 'Change Requested') return false;
                 // Cancelled games always show regardless of any filter
                 if (cancelledGameIds.has(g.id) || g.fields['Game Status'] === 'Cancelled') return true;
-                if (gameDateF && g.fields['Date'] !== gameDateF) return false;
-                if (gameTimeF && (g.fields['Time'] || '') !== gameTimeF) return false;
-                if (gameAgeF  && (g.fields['Age Group'] || '').toUpperCase() !== gameAgeF.toUpperCase()) return false;
+                if (gameDateF  && g.fields['Date'] !== gameDateF) return false;
+                if (gameTimeF  && (g.fields['Time'] || '') !== gameTimeF) return false;
+                if (gameAgeF   && (g.fields['Age Group'] || '').toUpperCase() !== gameAgeF.toUpperCase()) return false;
+                if (gameTypeF  && (g.fields['game_type'] || 'Rec') !== gameTypeF) return false;
                 if (unassignedOnly) {
                     const cr  = g.fields['Center Referee'];
                     const ar1 = g.fields['AR 1'];
@@ -3017,7 +3028,8 @@
             const season = seasonCode(f['Date'] || '');
             const year   = (f['Date'] || '').slice(2, 4);
             const seq    = String(autoNum).padStart(3, '0');
-            return `${abbr}${season}${seq}${year}`;
+            const type   = (f['game_type'] || 'Rec').toUpperCase() === 'COMP' ? 'COMP' : 'REC';
+            return `${abbr}${season}${type}${seq}${year}`;
         }
 
         function resolveRefName(linkedIds) {
