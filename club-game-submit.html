@@ -377,9 +377,20 @@
 
                 <!-- Tab: Upload CSV -->
                 <div id="tabCSV" style="display:none;">
-                    <div class="page-intro" style="margin-bottom:16px;">
-                        Upload a CSV with your full game schedule. <strong>Venue and field will be assigned by your assignor</strong> — just include the game details.
-                        <a href="referee-tool-games-upload-template.csv" download style="color:var(--accent-dark); font-weight:700; margin-left:8px;">⬇ Download Template</a>
+                    <div class="page-intro" style="margin-bottom:12px;">
+                        Upload a CSV with your full game schedule. Select the format that matches your file, then drop it below.
+                    </div>
+                    <!-- Format selector -->
+                    <div style="margin-bottom:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <label style="font-weight:700; font-size:0.88rem; color:var(--deep);">File Format:</label>
+                        <select id="csvFormatSelect" style="font-family:'DM Sans',sans-serif; font-size:0.88rem; padding:6px 14px; border:2px solid var(--deep); border-radius:6px; background:white; color:var(--deep); cursor:pointer;">
+                            <option value="standard">Standard — Referee Tool Template</option>
+                            <option value="glast-rec">Glastonbury — Recreation</option>
+                            <option value="glast-travel">Glastonbury — Travel (Comp)</option>
+                        </select>
+                        <span id="csvTemplateLink" style="font-size:0.85rem;">
+                            <a href="referee-tool-games-upload-template.csv" download style="color:var(--accent-dark); font-weight:700;">⬇ Download Standard Template</a>
+                        </span>
                     </div>
                     <div class="csv-drop-zone" id="csvDropZone">
                         <div style="font-size:40px; margin-bottom:8px;">📂</div>
@@ -1674,6 +1685,16 @@
         document.getElementById('tabBtnCSV').className    = 'tab-btn ' + (tab === 'csv'   ? 'active' : 'inactive');
     }
 
+    document.getElementById('csvFormatSelect').addEventListener('change', function() {
+        const isStandard = this.value === 'standard';
+        document.getElementById('csvTemplateLink').style.display = isStandard ? '' : 'none';
+        // Clear any loaded preview when format changes
+        csvParsedRows = [];
+        document.getElementById('csvFileInput').value = '';
+        document.getElementById('csvPreviewSection').style.display = 'none';
+        document.getElementById('csvAddResult').textContent = '';
+    });
+
     let csvParsedRows = [];
 
     function parseCSVLine(line) {
@@ -1750,7 +1771,6 @@
         return null; // unrecognized
     }
 
-    const VALID_AGES    = ['U8','U10','U12','U13','U15','U16','U19'];
     const VALID_GENDERS = ['female','male','f','m'];
 
     // Fuzzy match venue name → { id, numId, name } or null
@@ -1782,8 +1802,8 @@
         if (!row['Home Team']) errors.push('Missing Home Team');
         if (!row['Away Team']) errors.push('Missing Away Team');
         const age = (row['Age Group'] || '').trim().toUpperCase();
-        if (!age)                        errors.push('Missing Age Group');
-        else if (!VALID_AGES.includes(age)) errors.push(`Invalid Age Group "${row['Age Group']}" — use: ${VALID_AGES.join(', ')}`);
+        if (!age)                          errors.push('Missing Age Group');
+        else if (!/^U\d+$/.test(age))      errors.push(`Invalid Age Group "${row['Age Group']}" — use format: U8, U10, U12, etc.`);
         const gender = (row['Gender'] || '').trim().toLowerCase();
         if (!gender)                          errors.push('Missing Gender');
         else if (!VALID_GENDERS.includes(gender)) errors.push(`Invalid Gender "${row['Gender']}" — use: Female or Male`);
@@ -1802,12 +1822,79 @@
         return { errors, warnings };
     }
 
+    // ── Glastonbury format parsers ────────────────────────────────────────────
+
+    // Extract age group + gender from Glastonbury GROUPING field
+    function parseGlastGrouping(grouping, mode) {
+        const g = grouping || '';
+        let age = '', gender = '';
+        if (mode === 'rec') {
+            // e.g. "U10 Rec > RecBoysU10" or "U12 Rec > RecGirlsU12"
+            const m = g.match(/Rec(Boys|Girls)U(\d+)/i);
+            if (m) { age = 'U' + m[2]; gender = /boys/i.test(m[1]) ? 'Male' : 'Female'; }
+        } else {
+            // e.g. "25-26 Travel Teams > BOYS > BOYS U10"
+            const m = g.match(/(BOYS|GIRLS)\s+U(\d+)/i);
+            if (m) { age = 'U' + m[2]; gender = /boys/i.test(m[1]) ? 'Male' : 'Female'; }
+        }
+        return { age, gender };
+    }
+
+    // Rec team name → RECU10B / RECU12G
+    function parseGlastRecTeam(name) {
+        const m = (name || '').match(/REC-([BG])U(\d+)-/i);
+        if (m) return 'RECU' + m[2] + (m[1].toUpperCase() === 'B' ? 'B' : 'G');
+        return name;
+    }
+
+    // Travel team name → U10B Blue / U13G Red
+    function parseGlastTravelTeam(name) {
+        let n = (name || '').replace(/^Game\s+OPP-/i, '').trim();
+        // "BU10 - Blue" or "GU13 - Red" or "BU14/15 Red"
+        const m = n.match(/^([BG])U(\d+)(?:\/\d+)?\s*[-–]\s*(.+)$/i);
+        if (m) return 'U' + m[2] + (m[1].toUpperCase() === 'B' ? 'B' : 'G') + ' ' + m[3].trim();
+        return n;
+    }
+
+    // Transform a Glastonbury row → standard row object, or null to skip
+    function transformGlastRow(row, mode) {
+        const home = row['HOME TEAM'] || '';
+        const away = row['AWAY TEAM'] || '';
+        // Skip "No Ref" scrimmages
+        if (/no ref/i.test(home) || /no ref/i.test(away)) return null;
+        // Skip away travel games (LOCATION starts with "x-")
+        if (mode === 'travel' && /^x-/i.test((row['LOCATION'] || '').trim())) return null;
+        const { age, gender } = parseGlastGrouping(row['GROUPING'], mode);
+        return {
+            'Date':       row['DATE']     || '',
+            'Time':       row['TIME']     || '',
+            'Home Team':  mode === 'rec' ? parseGlastRecTeam(home) : parseGlastTravelTeam(home),
+            'Away Team':  mode === 'rec' ? parseGlastRecTeam(away) : parseGlastTravelTeam(away),
+            'Age Group':  age,
+            'Gender':     gender,
+            'Venue':      row['LOCATION'] || '',
+            'Field':      row['SURFACE']  || '',
+            'Notes':      ''
+        };
+    }
+
+    // ── End Glastonbury parsers ───────────────────────────────────────────────
+
     function handleCSVFile(file) {
         if (!file.name.endsWith('.csv')) { alert('Please select a .csv file.'); return; }
         const reader = new FileReader();
         reader.onload = e => {
-            const { rows } = parseCSV(e.target.result);
-            if (!rows.length) { alert('No data rows found in the CSV.'); return; }
+            const { rows: rawRows } = parseCSV(e.target.result);
+            if (!rawRows.length) { alert('No data rows found in the CSV.'); return; }
+            const fmt = document.getElementById('csvFormatSelect').value;
+            let rows;
+            if (fmt === 'glast-rec' || fmt === 'glast-travel') {
+                const mode = fmt === 'glast-rec' ? 'rec' : 'travel';
+                rows = rawRows.map(r => transformGlastRow(r, mode)).filter(r => r !== null);
+                if (!rows.length) { alert('No importable rows found after applying Glastonbury filters (No Ref and away games removed).'); return; }
+            } else {
+                rows = rawRows;
+            }
             csvParsedRows = rows;
             renderCSVPreview(rows);
         };
