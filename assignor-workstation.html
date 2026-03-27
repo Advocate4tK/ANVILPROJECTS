@@ -761,6 +761,7 @@
                                     <option value="command"  style="color:#1a1a1a; background:white;">Command</option>
                                     <option value="wide2"     style="color:#1a1a1a; background:white;">Wide 2</option>
                                     <option value="command2"  style="color:#1a1a1a; background:white;">Command 2</option>
+                                    <option value="sheet"    style="color:#1a1a1a; background:white;">Sheet</option>
                                 </select></div>
                             </div>
                         </div>
@@ -1094,7 +1095,7 @@
             const refsPanel    = document.querySelector('.refs-panel');
             const gamesPanel   = document.querySelector('.games-panel');
             const sortControls = document.getElementById('sortControls');
-            const fullWidth    = mode === 'staging' || mode === 'command' || mode === 'wide2' || mode === 'command2';
+            const fullWidth    = mode === 'staging' || mode === 'command' || mode === 'wide2' || mode === 'command2' || mode === 'sheet';
             if (refsPanel)    refsPanel.style.display    = fullWidth ? 'none' : '';
             if (gamesPanel)   gamesPanel.style.gridColumn = fullWidth ? '1 / -1' : '';
             if (sortControls) sortControls.style.display  = fullWidth ? 'flex' : 'none';
@@ -1387,6 +1388,56 @@
         // ── Wide 2 View — copy of Command for experimentation ────────────────
         function renderWide2View(filtered) {
             renderCommandView(filtered);
+        }
+
+        // ── Sheet View — spreadsheet-style referee availability list ─────────
+        function renderSheetView() {
+            const wrap = document.getElementById('gamesListWrap');
+            if (!allAvail.length) { wrap.innerHTML = '<p class="hint">No availability data loaded.</p>'; return; }
+
+            // Build rows: one row per ref+date combination
+            const rows = [];
+            allAvail.forEach(a => {
+                const name  = (a.fields['Referee Name'] || '').trim();
+                const date  = a.fields['Date'] || '';
+                const start = a.fields['Start Time'] || '';
+                const end   = a.fields['End Time']   || '';
+                if (!name || !date) return;
+                const ref   = allRefs.find(r => (r.fields['Name'] || '').trim().toLowerCase() === name.toLowerCase());
+                const club  = ref ? (ref.fields['Club Preference'] || '') : '';
+                rows.push({ name, date, club, start, end });
+            });
+
+            // Sort by date then name
+            rows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+
+            const tdStyle = 'padding:6px 10px; border-bottom:1px solid #e5e7eb; font-size:0.8rem; color:#222;';
+            const thStyle = 'padding:6px 10px; background:#1a3a6b; color:#fff; font-size:0.75rem; font-weight:700; text-align:left; border-bottom:2px solid #0f2347;';
+
+            const rowsHtml = rows.map((r, i) => `
+                <tr style="background:${i % 2 === 0 ? '#fff' : '#f7f8fa'};">
+                    <td style="${tdStyle}">${r.name}</td>
+                    <td style="${tdStyle}">${r.date}</td>
+                    <td style="${tdStyle}">${r.club}</td>
+                    <td style="${tdStyle}">${r.start ? fmtT(r.start) : ''}</td>
+                    <td style="${tdStyle}">${r.end   ? fmtT(r.end)   : ''}</td>
+                </tr>`).join('');
+
+            wrap.innerHTML = `
+                <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; font-family:inherit;">
+                    <thead>
+                        <tr>
+                            <th style="${thStyle}">Name</th>
+                            <th style="${thStyle}">Date</th>
+                            <th style="${thStyle}">Club Preference</th>
+                            <th style="${thStyle}">Start</th>
+                            <th style="${thStyle}">End</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                </div>`;
         }
 
         // ── Command 2 View — Command + experience colors + years badge ──────
@@ -2731,6 +2782,10 @@
             }
             if (viewMode === 'command2') {
                 renderCommand2View(filtered);
+                return;
+            }
+            if (viewMode === 'sheet') {
+                renderSheetView();
                 return;
             }
 
