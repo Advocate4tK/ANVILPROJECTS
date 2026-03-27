@@ -241,6 +241,11 @@ loadBtn.addEventListener('click', async () => {
                 : 'No games found for the selected filters.';
             noGamesMsg.style.display = 'block';
         } else {
+            filtered.sort((a, b) => {
+                const d = (a.fields['Date'] || '').localeCompare(b.fields['Date'] || '');
+                if (d !== 0) return d;
+                return (a.fields['Time'] || '').localeCompare(b.fields['Time'] || '');
+            });
             loadedGames = filtered;
             renderGamesTable(filtered);
             gamesSection.style.display = 'block';
@@ -306,7 +311,7 @@ function renderGamesTable(records) {
 
     records.forEach((rec, i) => {
         const f = rec.fields;
-        const rowBg = i % 2 === 0 ? 'background:rgba(15,52,96,0.13);' : '';
+        const rowBg = i % 2 === 0 ? 'background:rgba(15,52,96,0.18);' : '';
         html += `<tr style="font-size:0.82rem;${rowBg}">
             <td><input type="checkbox" class="game-check" data-index="${i}" checked></td>
             <td style="color:#999;">${i + 1}</td>
