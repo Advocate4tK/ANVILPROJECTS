@@ -46,10 +46,12 @@ const progressBar    = document.getElementById('progressBar');
 const progressText   = document.getElementById('progressText');
 
 let loadedGames = [];
-let refIdLookup  = {}; // Airtable ref record ID  → Central Assign numeric ID
-let venueCAId    = {}; // Airtable record ID → Central Assign venue ID (number)
-let venueNameMap = {}; // Airtable record ID → venue name
-let fieldNameMap = {}; // Airtable field record ID → field name (e.g. "Field 1")
+let refIdLookup        = {}; // Supabase ref ID (int) or lowercase name → CA numeric ID
+let venueCAId          = {}; // Supabase record ID → CA venue ID (legacy fallback)
+let venueNameMap       = {}; // Supabase record ID → venue name (legacy fallback)
+let fieldNameMap       = {}; // Supabase record ID → field name (legacy fallback)
+let numericVenueToName = {}; // numeric Venue ID → venue name (primary)
+let numericFieldToName = {}; // numeric Field ID → field name (primary)
 
 // ── Mode toggle — show only the selected filter panel ─────────────────────────
 document.querySelectorAll('input[name="filterMode"]').forEach(radio => {
@@ -183,32 +185,33 @@ loadBtn.addEventListener('click', async () => {
             }
         });
 
-        // Build lookups keyed by Airtable record ID.
-        venueCAId    = {};
-        venueNameMap = {};
+        // Build venue lookups — primary: numeric Venue ID; fallback: Supabase record ID
+        venueCAId          = {};
+        venueNameMap       = {};
+        numericVenueToName = {};
 
-        // From Venues table — index by Venue record ID
         venues.forEach(v => {
-            const name    = v.fields['Venue Name'] || '';
-            const caIdNum = v.fields['Venue ID'] ? (parseInt(v.fields['Venue ID']) || null) : null;
-            if (name)     venueNameMap[v.id] = name;
-            if (caIdNum)  venueCAId[v.id]    = caIdNum;
+            const name    = v.fields['Venue Name'] || v.fields['Name'] || '';
+            const numId   = v.fields['Venue ID'] ? (parseInt(v.fields['Venue ID']) || null) : null;
+            if (name)  venueNameMap[v.id] = name;            // legacy fallback
+            if (numId) venueCAId[v.id]    = numId;           // legacy fallback
+            if (numId && name) numericVenueToName[numId] = name; // primary path
         });
 
-        // From Fields table — index by Field record ID using that record's Venue ID
-        // (Games link to Field records, not directly to Venues)
-        fieldNameMap = {};
+        // Build field lookups — primary: numeric Field ID; fallback: Supabase record ID
+        fieldNameMap       = {};
+        numericFieldToName = {};
+
         fieldRecs.forEach(f => {
-            const caIdNum   = f.fields['Venue ID'] ? (parseInt(f.fields['Venue ID']) || null) : null;
+            const fieldId   = f.fields['Field ID'] ? (parseInt(f.fields['Field ID']) || null) : null;
             const fieldName = f.fields['Field Name'] || '';
-            // Prefer the parent venue's name for display; fall back to field name
-            const linkedVenue = f.fields['Venue'];
-            const venueName   = (Array.isArray(linkedVenue) && linkedVenue.length > 0)
-                ? (venueNameMap[linkedVenue[0]] || fieldName)
-                : fieldName;
+            const venueNumId = f.fields['Venue ID'] ? (parseInt(f.fields['Venue ID']) || null) : null;
+            if (fieldId && fieldName) numericFieldToName[fieldId] = fieldName; // primary path
+            if (fieldName) fieldNameMap[f.id] = fieldName;   // legacy fallback
+            // Attach venue name and CA ID to field's record ID for legacy lookup
+            const venueName = venueNumId ? (numericVenueToName[venueNumId] || '') : '';
             if (venueName)  venueNameMap[f.id] = venueName;
-            if (fieldName)  fieldNameMap[f.id] = fieldName;
-            if (caIdNum)   venueCAId[f.id]    = caIdNum;
+            if (venueNumId) venueCAId[f.id]    = venueNumId;
         });
 
         progressBar.style.width = '100%';
@@ -223,9 +226,8 @@ loadBtn.addEventListener('click', async () => {
         const assignedOnly = document.getElementById('assignedOnly').checked;
         const filtered = assignedOnly
             ? byClub.filter(r => {
-                const cr = r.fields['Center Referee'];
-                const val = Array.isArray(cr) ? cr[0] : (cr || null);
-                return val && (refIdLookup[val] || refIdLookup[(val + '').toLowerCase()]);
+                const val = extractRefVal(r.fields['Center Referee']);
+                return val && resolveRefCA(val);
               })
             : byClub;
 
@@ -263,15 +265,14 @@ function renderGamesTable(records) {
 
     records.forEach((rec, i) => {
         const f = rec.fields;
-        const { name: venueName, caId: venueId, fieldName } = resolveVenue(f['Venue'] || f['Field']);
+        const { name: venueName, caId: venueId, fieldName } = resolveVenue(f);
         const venueDisplay = venueId
             ? `<span style="color:#27ae60">✓ ${venueName} (ID: ${venueId})</span>`
             : `<span style="color:#e74c3c">⚠ No ID: ${venueName || 'Unknown'}</span>`;
 
-        const cr = f['Center Referee'];
-        const crVal = Array.isArray(cr) ? cr[0] : (cr || null);
+        const crVal     = extractRefVal(f['Center Referee']);
         const crAssigned = !!crVal;
-        const crCaId = crVal ? (refIdLookup[crVal] || refIdLookup[(crVal + '').toLowerCase()]) : null;
+        const crCaId    = crVal ? resolveRefCA(crVal) : null;
         const refDisplay = crCaId
             ? `<span style="color:#27ae60">✓ ID: ${crCaId}</span>`
             : crAssigned
@@ -344,12 +345,11 @@ exportBtn.addEventListener('click', () => {
 
     const rows = selected.map(rec => {
         const f = rec.fields;
-        const { name: venueName, caId: venueId, fieldName } = resolveVenue(f['Venue'] || f['Field']);
+        const { name: venueName, caId: venueId, fieldName } = resolveVenue(f);
 
         // Resolve Center Referee → Central Assign numeric ID
-        const centerRefField = f['Center Referee'];
-        const crRaw = Array.isArray(centerRefField) ? centerRefField[0] : (centerRefField || null);
-        let refId = crRaw ? (refIdLookup[crRaw] || refIdLookup[(crRaw + '').toLowerCase()] || 0) : 0;
+        const crRaw = extractRefVal(f['Center Referee']);
+        let refId = crRaw ? (resolveRefCA(crRaw) || 0) : 0;
 
         // Map Airtable Gender field to CA format (M/F), fall back to default
         const gameGender = f['Gender'] === 'Male' ? 'M' : f['Gender'] === 'Female' ? 'F' : DEFAULTS.gender;
@@ -392,9 +392,44 @@ exportBtn.addEventListener('click', () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Resolve a game's venue from either f['Field'] or f['Venue'].
-// Returns { name, caId, fieldName } — caId/fieldName are null if not found.
-function resolveVenue(fieldValue) {
+// Extract the raw ref identifier from a Center Referee / AR field value.
+// Handles: null, integer, name string, actual array, JSON array string "[42]".
+function extractRefVal(val) {
+    if (!val && val !== 0) return null;
+    if (typeof val === 'string' && val.startsWith('[')) {
+        try { val = JSON.parse(val); } catch(e) { return val; }
+    }
+    if (Array.isArray(val)) return val.length > 0 ? val[0] : null;
+    return val;
+}
+
+// Resolve an extracted ref value → CA numeric ID using refIdLookup.
+function resolveRefCA(val) {
+    if (val === null || val === undefined) return null;
+    return refIdLookup[val] || refIdLookup[(val + '').toLowerCase()] || null;
+}
+
+// Resolve venue info from a game's fields object.
+// Primary path: use numeric Venue ID / Field ID (set by assignor workstation).
+// Fallback: old Airtable linked-record approach.
+// Returns { name, caId, fieldName } — caId is the CA venue number.
+function resolveVenue(f) {
+    const numVenueId = f['Venue ID'] ? (parseInt(f['Venue ID']) || null) : null;
+    const numFieldId = f['Field ID'] ? (parseInt(f['Field ID']) || null) : null;
+
+    if (numVenueId) {
+        return {
+            name:      numericVenueToName[numVenueId] || String(numVenueId),
+            caId:      numVenueId,   // Venue ID IS the CA venue ID
+            fieldName: numFieldId ? (numericFieldToName[numFieldId] || '') : ''
+        };
+    }
+
+    // Legacy fallback: old Airtable linked records stored as arrays or JSON strings
+    let fieldValue = f['Venue'] || f['Field'];
+    if (typeof fieldValue === 'string' && fieldValue.startsWith('[')) {
+        try { fieldValue = JSON.parse(fieldValue); } catch(e) {}
+    }
     if (!fieldValue) return { name: '', caId: null, fieldName: '' };
     if (Array.isArray(fieldValue) && fieldValue.length > 0) {
         const rid = fieldValue[0];
