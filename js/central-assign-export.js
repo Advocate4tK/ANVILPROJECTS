@@ -46,6 +46,7 @@ const progressBar    = document.getElementById('progressBar');
 const progressText   = document.getElementById('progressText');
 
 let loadedGames = [];
+let currentSort = { field: 'date', dir: 'asc' };
 let refIdLookup        = {}; // Supabase ref ID (int) or lowercase name → CA numeric ID
 let venueCAId          = {}; // Supabase record ID → CA venue ID (legacy fallback)
 let venueNameMap       = {}; // Supabase record ID → venue name (legacy fallback)
@@ -241,13 +242,8 @@ loadBtn.addEventListener('click', async () => {
                 : 'No games found for the selected filters.';
             noGamesMsg.style.display = 'block';
         } else {
-            filtered.sort((a, b) => {
-                const d = (a.fields['Date'] || '').localeCompare(b.fields['Date'] || '');
-                if (d !== 0) return d;
-                return (a.fields['Time'] || '').localeCompare(b.fields['Time'] || '');
-            });
             loadedGames = filtered;
-            renderGamesTable(filtered);
+            applySortAndRender();
             gamesSection.style.display = 'block';
         }
 
@@ -261,21 +257,49 @@ loadBtn.addEventListener('click', async () => {
     }
 });
 
+// ── Sort ──────────────────────────────────────────────────────────────────────
+function applySortAndRender() {
+    const { field, dir } = currentSort;
+    const mult = dir === 'asc' ? 1 : -1;
+    loadedGames.sort((a, b) => {
+        if (field === 'age') {
+            const ageOrder = ['U8','U10','U12','U13','U14','U15','U16','U19'];
+            const ai = ageOrder.indexOf(a.fields['Age Group'] || '');
+            const bi = ageOrder.indexOf(b.fields['Age Group'] || '');
+            return mult * ((ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi));
+        }
+        // default: date then time
+        const d = (a.fields['Date'] || '').localeCompare(b.fields['Date'] || '');
+        if (d !== 0) return mult * d;
+        return mult * (a.fields['Time'] || '').localeCompare(b.fields['Time'] || '');
+    });
+    renderGamesTable(loadedGames);
+}
+
+function sortBy(field) {
+    if (currentSort.field === field) {
+        currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort = { field, dir: 'asc' };
+    }
+    applySortAndRender();
+}
+
 // ── Render Games Table ────────────────────────────────────────────────────────
 function refBadge(val) {
     const extracted = extractRefVal(val);
-    if (!extracted) return `<span style="background:#fdecea;color:#c0392b;padding:2px 7px;border-radius:10px;font-size:0.75rem;font-weight:700;">— None</span>`;
+    if (!extracted) return `<span style="color:#c0392b;font-weight:600;" title="No referee assigned">—</span>`;
     const caId = resolveRefCA(extracted);
     return caId
-        ? `<span style="background:#e8f5e9;color:#1a7a40;padding:2px 7px;border-radius:10px;font-size:0.75rem;font-weight:700;">✓ ${caId}</span>`
-        : `<span style="background:#fff3e0;color:#e67e22;padding:2px 7px;border-radius:10px;font-size:0.75rem;font-weight:700;">⚠ No CA ID</span>`;
+        ? `<span style="color:#1a7a40;font-weight:600;" title="CA ID: ${caId}">✓ ${caId}</span>`
+        : `<span style="color:#e67e22;font-weight:600;" title="Assigned but missing CA ID">⚠</span>`;
 }
 
 function venueBadge(f) {
     const { name, caId } = resolveVenue(f);
     return caId
-        ? `<span style="background:#e8f5e9;color:#1a7a40;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:700;" title="CA ID: ${caId}">✓ ${name}</span>`
-        : `<span style="background:#fdecea;color:#c0392b;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:700;" title="${name || 'Unknown'}">⚠ No Venue ID</span>`;
+        ? `<span style="color:#1a7a40;font-weight:600;" title="CA ID: ${caId}">✓ ${name || caId}</span>`
+        : `<span style="color:#c0392b;font-weight:600;" title="${name || 'Unknown'}">⚠ ${name || 'No Venue ID'}</span>`;
 }
 
 function fmtTime(t) {
@@ -302,25 +326,37 @@ function renderGamesTable(records) {
         &nbsp;|&nbsp;
         <span style="color:${refOk===total?'#27ae60':'#e67e22'}">Refs: ${refOk}/${total} ✓</span>`;
 
-    const trunc = 'max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    const sortHdr = (field, label, width) => {
+        const active = currentSort.field === field;
+        const icon   = active ? (currentSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅';
+        const color  = active ? '#0f3460' : '#888';
+        return `<th onclick="sortBy('${field}')" style="cursor:pointer;user-select:none;color:${color};white-space:nowrap;width:${width};">${label}<span style="font-size:0.7em;">${icon}</span></th>`;
+    };
 
     let html = `<thead><tr style="font-size:0.78rem;">
-        <th style="width:28px;"><input type="checkbox" id="masterCheck"></th>
-        <th>#</th><th>Date</th><th>Time</th>
-        <th style="${trunc}">Home</th><th style="${trunc}">Away</th>
-        <th>Age</th><th>Venue</th><th>CR</th><th>AR1</th><th>AR2</th>
+        <th style="width:24px;"><input type="checkbox" id="masterCheck"></th>
+        <th style="width:24px;">#</th>
+        ${sortHdr('date','Date','85px')}
+        <th style="width:65px;">Time</th>
+        <th style="width:20%;">Home</th>
+        <th style="width:20%;">Away</th>
+        ${sortHdr('age','Age','44px')}
+        <th style="width:18%;">Venue</th>
+        <th style="width:52px;">CR</th>
+        <th style="width:52px;">AR1</th>
+        <th style="width:52px;">AR2</th>
     </tr></thead><tbody>`;
 
     records.forEach((rec, i) => {
         const f = rec.fields;
         const rowBg = i % 2 === 0 ? 'background:rgba(15,52,96,0.28);' : '';
         html += `<tr style="font-size:0.78rem;${rowBg}">
-            <td><input type="checkbox" class="game-check" data-index="${i}" checked></td>
-            <td style="color:#999;">${i + 1}</td>
+            <td style="padding:5px 4px;"><input type="checkbox" class="game-check" data-index="${i}" checked></td>
+            <td style="color:#999;padding:5px 4px;">${i + 1}</td>
             <td style="white-space:nowrap;">${formatDate(f['Date'] || '')}</td>
             <td style="white-space:nowrap;">${fmtTime(f['Time'] || '')}</td>
-            <td style="${trunc}" title="${f['Home Team'] || ''}">${f['Home Team'] || ''}</td>
-            <td style="${trunc}" title="${f['Away Team'] || ''}">${f['Away Team'] || ''}</td>
+            <td style="word-break:break-word;">${f['Home Team'] || ''}</td>
+            <td style="word-break:break-word;">${f['Away Team'] || ''}</td>
             <td style="text-align:center;">${f['Age Group'] || ''}</td>
             <td>${venueBadge(f)}</td>
             <td>${refBadge(f['Center Referee'])}</td>
