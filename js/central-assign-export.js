@@ -302,23 +302,25 @@ function renderGamesTable(records) {
         &nbsp;|&nbsp;
         <span style="color:${refOk===total?'#27ae60':'#e67e22'}">Refs: ${refOk}/${total} ✓</span>`;
 
-    let html = `<thead><tr style="font-size:0.8rem;">
-        <th style="width:32px;"><input type="checkbox" id="masterCheck"></th>
+    const trunc = 'max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+
+    let html = `<thead><tr style="font-size:0.78rem;">
+        <th style="width:28px;"><input type="checkbox" id="masterCheck"></th>
         <th>#</th><th>Date</th><th>Time</th>
-        <th>Home</th><th>Away</th>
+        <th style="${trunc}">Home</th><th style="${trunc}">Away</th>
         <th>Age</th><th>Venue</th><th>CR</th><th>AR1</th><th>AR2</th>
     </tr></thead><tbody>`;
 
     records.forEach((rec, i) => {
         const f = rec.fields;
         const rowBg = i % 2 === 0 ? 'background:rgba(15,52,96,0.28);' : '';
-        html += `<tr style="font-size:0.82rem;${rowBg}">
+        html += `<tr style="font-size:0.78rem;${rowBg}">
             <td><input type="checkbox" class="game-check" data-index="${i}" checked></td>
             <td style="color:#999;">${i + 1}</td>
             <td style="white-space:nowrap;">${formatDate(f['Date'] || '')}</td>
             <td style="white-space:nowrap;">${fmtTime(f['Time'] || '')}</td>
-            <td>${f['Home Team'] || ''}</td>
-            <td>${f['Away Team'] || ''}</td>
+            <td style="${trunc}" title="${f['Home Team'] || ''}">${f['Home Team'] || ''}</td>
+            <td style="${trunc}" title="${f['Away Team'] || ''}">${f['Away Team'] || ''}</td>
             <td style="text-align:center;">${f['Age Group'] || ''}</td>
             <td>${venueBadge(f)}</td>
             <td>${refBadge(f['Center Referee'])}</td>
