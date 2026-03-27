@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assignor Game Upload</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body { margin: 0; background: #f4f6fa; font-family: 'DM Sans', sans-serif; }
+        .top-bar {
+            background: #09142a;
+            color: white;
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .top-bar a {
+            color: rgba(255,255,255,0.55);
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+        .top-bar a:hover { color: white; }
+        .top-bar h1 {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: white;
+            flex: 1;
+        }
+        .club-selector {
+            background: white;
+            border-bottom: 1px solid #dde3f0;
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .club-selector label {
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #09142a;
+            white-space: nowrap;
+        }
+        .club-selector select {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            padding: 8px 16px;
+            border: 2px solid #09142a;
+            border-radius: 8px;
+            background: white;
+            color: #09142a;
+            cursor: pointer;
+            min-width: 240px;
+        }
+        .club-selector .hint {
+            font-size: 0.82rem;
+            color: #888;
+        }
+        #clubFrame {
+            width: 100%;
+            border: none;
+            display: block;
+            height: calc(100vh - 110px);
+        }
+        #noClubMsg {
+            text-align: center;
+            padding: 80px 20px;
+            color: #888;
+            font-size: 1rem;
+        }
+        #noClubMsg strong { display: block; font-size: 1.4rem; color: #09142a; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <a href="admin.html">← Admin Portal</a>
+        <h1>📂 Assignor Game Upload</h1>
+    </div>
+
+    <div class="club-selector">
+        <label for="clubSelect">Club:</label>
+        <select id="clubSelect" onchange="loadClub()">
+            <option value="">— Select a club —</option>
+        </select>
+        <span class="hint" id="selectorHint">Loading clubs…</span>
+    </div>
+
+    <div id="noClubMsg">
+        <strong>Select a club above</strong>
+        Choose a club to load their game upload form — including any custom format toggles.
+    </div>
+
+    <iframe id="clubFrame" style="display:none;" title="Club Game Upload"></iframe>
+
+    <script src="js/config.js"></script>
+    <script src="js/supabase-client.js"></script>
+    <script>
+        const airtableClient = typeof supabaseClient !== 'undefined' ? supabaseClient : null;
+
+        async function init() {
+            if (!airtableClient) { document.getElementById('selectorHint').textContent = 'Database not connected.'; return; }
+            try {
+                const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+                clubs.sort((a, b) => {
+                    const na = a.fields['Club Name'] || a.fields['Name'] || '';
+                    const nb = b.fields['Club Name'] || b.fields['Name'] || '';
+                    return na.localeCompare(nb);
+                });
+
+                const sel = document.getElementById('clubSelect');
+                clubs.forEach(c => {
+                    const name = c.fields['Club Name'] || c.fields['Name'] || '';
+                    const url  = c.fields['Club Game Upload'] || '';
+                    if (!name || !url) return;
+                    const opt = document.createElement('option');
+                    opt.value = url;
+                    opt.textContent = name;
+                    sel.appendChild(opt);
+                });
+
+                document.getElementById('selectorHint').textContent = `${sel.options.length - 1} clubs loaded`;
+            } catch (err) {
+                document.getElementById('selectorHint').textContent = 'Failed to load clubs.';
+                console.error(err);
+            }
+        }
+
+        function loadClub() {
+            const url = document.getElementById('clubSelect').value;
+            const frame = document.getElementById('clubFrame');
+            const msg   = document.getElementById('noClubMsg');
+            if (!url) {
+                frame.style.display = 'none';
+                msg.style.display   = 'block';
+                frame.src = '';
+                return;
+            }
+            // Convert absolute URL to relative path so it loads within same origin
+            const rel = url.replace(/^https?:\/\/[^/]+/, '');
+            frame.src = rel;
+            frame.style.display = 'block';
+            msg.style.display   = 'none';
+        }
+
+        init();
+    </script>
+</body>
+</html>
