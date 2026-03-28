@@ -1511,6 +1511,8 @@
         let sheet2ClearedAssigned = {};   // { gameId: { center:true, ar1:true, ar2:true } }
         let sheet2OptColors       = {};   // { 'gid-slot': '#hexcolor' }
         let sheet2DragData        = null; // { type:'ref'|'opt'|'assigned', name, fromGid, fromSlot, fromField }
+        let sheet2RefSort         = { col: null, dir: 1 }; // col: 'exp', dir: 1=asc -1=desc
+        let sheet2CachedRefRows   = [];   // holds built refRows for re-sort without full re-render
 
         function sheet2SaveLocalState() {
             try {
@@ -1651,6 +1653,7 @@
                 refRows.push({ name, date, club, start, end, exp });
             });
             refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+            sheet2CachedRefRows = refRows;
 
             const fmtExp = v => {
                 if (!v) return '';
@@ -1659,7 +1662,7 @@
                 return v;
             };
 
-            const refRowsHtml = refRows.length ? refRows.map((r, i) => {
+            const buildRefRowsHtml = rows => rows.length ? rows.map((r, i) => {
                 const safeName = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
                 return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
                     draggable="true"
@@ -1673,6 +1676,8 @@
                 </tr>`;
             }).join('') : `<tr><td colspan="6" style="${cell} color:#888;">No availability submitted.</td></tr>`;
 
+            const refRowsHtml = buildRefRowsHtml(refRows);
+
             const refsDivider = `<div style="background:#1a3a6b; color:#fff; padding:4px 14px; margin:12px -20px 8px -20px; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;">Referee Availability — drag a row into an Opt cell</div>`;
 
             wrap.innerHTML = `
@@ -1685,13 +1690,38 @@
                     <table style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; width:100%; direction:ltr;">
                         <thead style="position:sticky; top:0; z-index:2;"><tr>
                             <th style="${hdr}">Date</th><th style="${hdr}">Name</th>
-                            <th style="${hdr}">Ref Exp</th><th style="${hdr}">Club Preference</th><th style="${hdr}">Start</th><th style="${hdr}">End</th>
+                            <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet2SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet2RefSort.col==='exp'?(sheet2RefSort.dir===1?'▲':'▼'):''}</th>
+                            <th style="${hdr}">Club Preference</th><th style="${hdr}">Start</th><th style="${hdr}">End</th>
                         </tr></thead>
-                        <tbody>${refRowsHtml}</tbody>
+                        <tbody id="s2refTbody">${refRowsHtml}</tbody>
                     </table>
                 </div>
                 <div style="margin-top:6px; font-size:0.7rem; color:#888;">${refRows.length} records</div>
                 </div></div>`;
+        }
+
+        function sheet2SortRefs(col) {
+            if (sheet2RefSort.col === col) {
+                sheet2RefSort.dir *= -1;
+            } else {
+                sheet2RefSort.col = col;
+                sheet2RefSort.dir = 1;
+            }
+            const expVal = r => { const n = parseInt(r.exp); return isNaN(n) ? 9999 : n; };
+            sheet2CachedRefRows.sort((a, b) => expVal(a) === expVal(b) ? 0 : (expVal(a) - expVal(b)) * sheet2RefSort.dir);
+            const cell2 = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
+            const fmtT  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+            const fmtE  = v => { if (!v) return ''; const n = parseInt(v); return (!isNaN(n) && n <= 2) ? `Seas ${n}` : v; };
+            const tbody = document.getElementById('s2refTbody');
+            if (!tbody) return;
+            tbody.innerHTML = sheet2CachedRefRows.length ? sheet2CachedRefRows.map((r, i) => {
+                const safeName = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+                return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;" draggable="true" ondragstart="sheet2RefDragStart(event,'${safeName}')">
+                    <td style="${cell2}">${r.date}</td><td style="${cell2}">${r.name}</td>
+                    <td style="${cell2}">${fmtE(r.exp)}</td><td style="${cell2}">${r.club}</td>
+                    <td style="${cell2}">${fmtT(r.start)}</td><td style="${cell2}">${fmtT(r.end)}</td>
+                </tr>`;
+            }).join('') : `<tr><td colspan="6" style="${cell2} color:#888;">No availability submitted.</td></tr>`;
         }
 
         function sheet2RefDragStart(e, name) {
