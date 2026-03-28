@@ -1534,9 +1534,10 @@
                     const hasRef    = rawName !== '—' && !isCleared;
                     const display   = isCleared ? '—' : rawName;
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet2AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
-                    return `<td id="s2${field}-${gid}" style="${cell} cursor:${hasRef?'grab':'default'}; color:${isCleared?'#bbb':'inherit'};" ${drag}
-                        ondragover="if(window.sheet2DragData&&window.sheet2DragData.type==='assigned')event.preventDefault();"
-                        ondrop="sheet2AssignedSwap(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}');">${display}</td>`;
+                    return `<td id="s2${field}-${gid}" style="${cell} min-width:120px; cursor:${hasRef?'grab':'default'}; color:${isCleared?'#bbb':'inherit'};" ${drag}
+                        ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
+                        ondragleave="this.style.outline='';"
+                        ondrop="sheet2AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}</td>`;
                 };
                 const staged   = sheet2StagedRefs[gid] || [null,null,null,null,null,null];
                 const optCells = [0,1,2,3,4,5].map(n => {
@@ -1718,16 +1719,42 @@
             td.removeAttribute('ondragstart');
         }
 
-        function sheet2AssignedSwap(e, toGid, toField, toRawName) {
+        function sheet2AssignedDrop(e, toGid, toField) {
             e.preventDefault();
-            if (!sheet2DragData || sheet2DragData.type !== 'assigned') return;
-            const { name: fromName, fromGid, fromField } = sheet2DragData;
+            if (!sheet2DragData) return;
+            const { type, name, fromGid, fromSlot, fromField } = sheet2DragData;
             sheet2DragData = null;
-            // Swap the two assigned cells visually
-            const fromTd = document.getElementById(`s2${fromField}-${fromGid}`);
-            const toTd   = document.getElementById(`s2${toField}-${toGid}`);
-            if (fromTd) { fromTd.textContent = toRawName !== '—' ? toRawName : '—'; fromTd.style.color = toRawName !== '—' ? 'inherit' : '#bbb'; }
-            if (toTd)   { toTd.textContent   = fromName; toTd.style.color = 'inherit'; }
+            if (type === 'ref') {
+                // Drag from bottom pane → fill this assigned cell
+                sheet2RestoreAssignedCell(toGid, toField, name);
+            } else if (type === 'opt') {
+                // Drag from an Opt cell → fill this assigned cell, clear Opt source
+                sheet2RestoreAssignedCell(toGid, toField, name);
+                if (sheet2StagedRefs[fromGid]) sheet2StagedRefs[fromGid][fromSlot] = null;
+                sheet2UpdateCell(fromGid, fromSlot, null);
+            } else if (type === 'assigned') {
+                // Swap two assigned cells
+                const toTd = document.getElementById(`s2${toField}-${toGid}`);
+                const currentToName = toTd ? toTd.textContent.trim() : '—';
+                sheet2RestoreAssignedCell(toGid, toField, name);
+                if (currentToName && currentToName !== '—') {
+                    sheet2RestoreAssignedCell(fromGid, fromField, currentToName);
+                } else {
+                    sheet2ClearAssignedCell(fromGid, fromField);
+                }
+            }
+        }
+
+        function sheet2RestoreAssignedCell(gid, field, name) {
+            if (!sheet2ClearedAssigned[gid]) sheet2ClearedAssigned[gid] = {};
+            sheet2ClearedAssigned[gid][field] = false;
+            const td = document.getElementById(`s2${field}-${gid}`);
+            if (!td) return;
+            td.textContent  = name;
+            td.style.color  = 'inherit';
+            td.style.cursor = 'grab';
+            td.setAttribute('draggable', 'true');
+            td.setAttribute('ondragstart', `sheet2AssignedDragStart(event,'${gid}','${field}','${(name||'').replace(/'/g,"\\'")}');`);
         }
 
         function sheet2RefPaneDrop(e) {
