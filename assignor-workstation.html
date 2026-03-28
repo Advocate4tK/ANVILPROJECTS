@@ -1509,6 +1509,7 @@
         // ── Sheet 2 View — drag-to-stage interactive template ────────────────
         let sheet2StagedRefs      = {};   // { gameId: ['name'|null, ...6] }
         let sheet2ClearedAssigned = {};   // { gameId: { center:true, ar1:true, ar2:true } }
+        let sheet2OptColors       = {};   // { 'gid-slot': '#hexcolor' }
         let sheet2DragData        = null; // { type:'ref'|'opt'|'assigned', name, fromGid, fromSlot, fromField }
 
         function renderSheet2View(filtered) {
@@ -1542,7 +1543,7 @@
                 const staged   = sheet2StagedRefs[gid] || [null,null,null,null,null,null];
                 const optCells = [0,1,2,3,4,5].map(n => {
                     const name = staged[n] || '';
-                    const bg   = rowBg;
+                    const bg   = sheet2OptColors[`${gid}-${n}`] || rowBg;
                     const col  = name ? '#1f2328' : '#bbb';
                     const drag = name ? `draggable="true" ondragstart="sheet2OptDragStart(event,'${gid}',${n},'${name.replace(/'/g,"\\'")}')"` : '';
                     const ctxMenu = name ? `oncontextmenu="sheet2ShowOptMenu(event,'${gid}',${n}); return false;"` : '';
@@ -1691,7 +1692,7 @@
             if (!td) return;
             const filled = !!name;
             td.textContent    = name || '';
-            td.style.background = '';
+            td.style.background = sheet2OptColors[`${gid}-${slot}`] || '';
             td.style.color      = filled ? '#1f2328' : '#bbb';
             td.style.cursor     = filled ? 'grab' : 'default';
             if (filled) {
@@ -1778,12 +1779,28 @@
                 menu.style.cssText = 'position:fixed; background:#fff; border:1px solid #d0d7de; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); font-family:sans-serif; font-size:0.82rem; z-index:9999; min-width:140px; overflow:hidden;';
                 document.body.appendChild(menu);
             }
+            const swatches = [
+                { color:'#fff9c4', label:'Yellow' },
+                { color:'#c8e6c9', label:'Green'  },
+                { color:'#bbdefb', label:'Blue'   },
+                { color:'#ffe0b2', label:'Orange' },
+                { color:'#f8bbd0', label:'Pink'   },
+                { color:'',        label:'Clear'  },
+            ];
+            const swatchHtml = swatches.map(s => `
+                <span title="${s.label}" onclick="sheet2SetOptColor('${gid}',${slot},'${s.color}'); sheet2HideOptMenu();"
+                    style="display:inline-block; width:20px; height:20px; border-radius:4px; border:1px solid #ccc; cursor:pointer; background:${s.color||'#fff'}; margin:2px;"
+                    onmouseover="this.style.outline='2px solid #1a3a6b';" onmouseout="this.style.outline='';"></span>`).join('');
             menu.innerHTML = `
                 <div style="padding:6px 0;">
                     <div onclick="sheet2OptClear(null,'${gid}',${slot}); sheet2HideOptMenu();"
                          style="padding:7px 16px; cursor:pointer; color:#cf222e;"
                          onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
                         Remove ref
+                    </div>
+                    <div style="padding:4px 16px 8px; border-top:1px solid #eee;">
+                        <div style="font-size:0.72rem; color:#888; margin-bottom:4px;">Color</div>
+                        ${swatchHtml}
                     </div>
                 </div>`;
             menu.style.left    = e.clientX + 'px';
@@ -1795,6 +1812,14 @@
         function sheet2HideOptMenu() {
             const menu = document.getElementById('s2ContextMenu');
             if (menu) menu.style.display = 'none';
+        }
+
+        function sheet2SetOptColor(gid, slot, color) {
+            const key = `${gid}-${slot}`;
+            if (color) sheet2OptColors[key] = color;
+            else delete sheet2OptColors[key];
+            const td = document.getElementById(`s2opt-${gid}-${slot}`);
+            if (td) td.style.background = color || '';
         }
 
         // ── Command 2 View — Command + experience colors + years badge ──────
