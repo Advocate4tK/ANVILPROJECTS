@@ -1656,9 +1656,17 @@
             sheet2CachedRefRows = refRows;
 
             const fmtExp = v => {
-                if (!v) return '';
+                if (v === '' || v === null || v === undefined) return '';
                 const n = parseInt(v);
-                if (!isNaN(n) && n <= 2) return `Seas ${n}`;
+                if (!isNaN(n)) {
+                    if (n === 0) return 'Seas 1';
+                    if (n === 1) return 'Seas 2';
+                    return `${n} yrs`;
+                }
+                // Legacy Airtable string values
+                const lv = String(v).toLowerCase();
+                if (lv.includes('season 1') || lv === 'seas 1') return 'Seas 1';
+                if (lv.includes('season 2') || lv === 'seas 2') return 'Seas 2';
                 return v;
             };
 
@@ -1707,11 +1715,26 @@
                 sheet2RefSort.col = col;
                 sheet2RefSort.dir = 1;
             }
-            const expVal = r => { const n = parseInt(r.exp); return isNaN(n) ? 9999 : n; };
+            const expVal = r => {
+                const n = parseInt(r.exp);
+                if (!isNaN(n)) return n;
+                const lv = String(r.exp || '').toLowerCase();
+                if (lv.includes('season 1') || lv === 'seas 1') return 0;
+                if (lv.includes('season 2') || lv === 'seas 2') return 1;
+                return 9999;
+            };
             sheet2CachedRefRows.sort((a, b) => expVal(a) === expVal(b) ? 0 : (expVal(a) - expVal(b)) * sheet2RefSort.dir);
             const cell2 = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
             const fmtT  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
-            const fmtE  = v => { if (!v) return ''; const n = parseInt(v); return (!isNaN(n) && n <= 2) ? `Seas ${n}` : v; };
+            const fmtE  = v => {
+                if (v === '' || v === null || v === undefined) return '';
+                const n = parseInt(v);
+                if (!isNaN(n)) { if (n===0) return 'Seas 1'; if (n===1) return 'Seas 2'; return `${n} yrs`; }
+                const lv = String(v).toLowerCase();
+                if (lv.includes('season 1') || lv==='seas 1') return 'Seas 1';
+                if (lv.includes('season 2') || lv==='seas 2') return 'Seas 2';
+                return v;
+            };
             const tbody = document.getElementById('s2refTbody');
             if (!tbody) return;
             tbody.innerHTML = sheet2CachedRefRows.length ? sheet2CachedRefRows.map((r, i) => {
