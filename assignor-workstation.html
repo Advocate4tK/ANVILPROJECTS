@@ -1533,7 +1533,7 @@
                     const bg   = name ? '#e8f5e9' : rowBg;
                     const col  = name ? '#2e7d32' : '#bbb';
                     const drag = name ? `draggable="true" ondragstart="sheet2OptDragStart(event,'${gid}',${n},'${name.replace(/'/g,"\\'")}')"` : '';
-                    return `<td style="border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:140px; white-space:nowrap; background:${bg}; color:${col}; cursor:${name?'grab':'default'};"
+                    return `<td id="s2opt-${gid}-${n}" style="border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:140px; white-space:nowrap; background:${bg}; color:${col}; cursor:${name?'grab':'default'};"
                         ${drag}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
@@ -1637,24 +1637,42 @@
             if (!sheet2StagedRefs[toGid]) sheet2StagedRefs[toGid] = [null,null,null,null,null,null];
             if (type === 'ref') {
                 sheet2StagedRefs[toGid][toSlot] = name;
+                sheet2UpdateCell(toGid, toSlot, name);
             } else if (type === 'opt') {
-                // Swap slots if same game, or move across games
-                const fromArr = sheet2StagedRefs[fromGid] || [null,null,null,null,null,null];
-                const toArr   = sheet2StagedRefs[toGid];
+                const fromArr   = sheet2StagedRefs[fromGid] || [null,null,null,null,null,null];
+                const toArr     = sheet2StagedRefs[toGid];
                 const displaced = toArr[toSlot];
                 toArr[toSlot]     = name;
                 fromArr[fromSlot] = displaced;
                 sheet2StagedRefs[fromGid] = fromArr;
                 sheet2StagedRefs[toGid]   = toArr;
+                sheet2UpdateCell(toGid, toSlot, name);
+                sheet2UpdateCell(fromGid, fromSlot, displaced);
             }
-            applyGameFilters();
         }
 
         function sheet2OptClear(e, gid, slot) {
             e.stopPropagation();
-            if (!sheet2StagedRefs[gid]) return;
+            if (!sheet2StagedRefs[gid] || !sheet2StagedRefs[gid][slot]) return;
             sheet2StagedRefs[gid][slot] = null;
-            applyGameFilters();
+            sheet2UpdateCell(gid, slot, null);
+        }
+
+        function sheet2UpdateCell(gid, slot, name) {
+            const td = document.getElementById(`s2opt-${gid}-${slot}`);
+            if (!td) return;
+            const filled = !!name;
+            td.textContent    = name || '';
+            td.style.background = filled ? '#e8f5e9' : '';
+            td.style.color      = filled ? '#2e7d32' : '#bbb';
+            td.style.cursor     = filled ? 'grab' : 'default';
+            if (filled) {
+                td.setAttribute('draggable', 'true');
+                td.setAttribute('ondragstart', `sheet2OptDragStart(event,'${gid}',${slot},'${(name||'').replace(/'/g,"\\'")}');`);
+            } else {
+                td.removeAttribute('draggable');
+                td.removeAttribute('ondragstart');
+            }
         }
 
         // ── Command 2 View — Command + experience colors + years badge ──────
