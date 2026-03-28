@@ -1507,8 +1507,9 @@
         }
 
         // ── Sheet 2 View — drag-to-stage interactive template ────────────────
-        let sheet2StagedRefs = {};   // { gameId: ['name'|null, ...6] }
-        let sheet2DragData   = null; // { type:'ref'|'opt', name, fromGid, fromSlot }
+        let sheet2StagedRefs      = {};   // { gameId: ['name'|null, ...6] }
+        let sheet2ClearedAssigned = {};   // { gameId: { center:true, ar1:true, ar2:true } }
+        let sheet2DragData        = null; // { type:'ref'|'opt'|'assigned', name, fromGid, fromSlot, fromField }
 
         function renderSheet2View(filtered) {
             const wrap = document.getElementById('gamesListWrap');
@@ -1524,9 +1525,19 @@
                 const rowBg    = i % 2 === 0 ? '#ffffff' : '#f6f8fa';
                 const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                 const fieldObj = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
-                const cRef     = resolveRefName(f['Center Referee']) || '—';
-                const ar1      = resolveRefName(f['AR 1']) || '—';
-                const ar2      = resolveRefName(f['AR 2']) || '—';
+                const cRefRaw  = resolveRefName(f['Center Referee']) || '—';
+                const ar1Raw   = resolveRefName(f['AR 1']) || '—';
+                const ar2Raw   = resolveRefName(f['AR 2']) || '—';
+                const cleared  = sheet2ClearedAssigned[gid] || {};
+                const assignedTd = (field, rawName) => {
+                    const isCleared = !!cleared[field];
+                    const hasRef    = rawName !== '—' && !isCleared;
+                    const display   = isCleared ? '—' : rawName;
+                    const drag      = hasRef ? `draggable="true" ondragstart="sheet2AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
+                    return `<td id="s2${field}-${gid}" style="${cell} cursor:${hasRef?'grab':'default'}; color:${isCleared?'#bbb':'inherit'};" ${drag}
+                        ondragover="if(window.sheet2DragData&&window.sheet2DragData.type==='assigned')event.preventDefault();"
+                        ondrop="sheet2AssignedSwap(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}');">${display}</td>`;
+                };
                 const staged   = sheet2StagedRefs[gid] || [null,null,null,null,null,null];
                 const optCells = [0,1,2,3,4,5].map(n => {
                     const name = staged[n] || '';
@@ -1549,9 +1560,9 @@
                     <td style="${cell}">${f['Away Team'] || '—'}</td>
                     <td style="${cell}">${venueObj ? venueObj.name : (f['Venue ID'] || '—')}</td>
                     <td style="${cell}">${fieldObj ? fieldObj.name : (f['Field ID'] || '—')}</td>
-                    <td style="${cell}">${cRef}</td>
-                    <td style="${cell}">${ar1}</td>
-                    <td style="${cell}">${ar2}</td>
+                    ${assignedTd('center', cRefRaw)}
+                    ${assignedTd('ar1', ar1Raw)}
+                    ${assignedTd('ar2', ar2Raw)}
                     ${optCells}
                 </tr>`;
             }).join('') : `<tr><td colspan="17" style="${cell} color:#888;">No games in current date range.</td></tr>`;
@@ -1615,7 +1626,9 @@
                 <div style="overflow-x:auto; padding:12px;"><div style="display:inline-block; min-width:100%;">${gamesTable}</div></div>
                 ${refsDivider}
                 <div style="overflow-x:auto; padding:0 12px 12px;"><div style="display:inline-block; min-width:100%;">
-                <div style="max-height:400px; overflow-y:auto; border:2px solid #d0d7de; direction:rtl;">
+                <div style="max-height:400px; overflow-y:auto; border:2px solid #d0d7de; direction:rtl;"
+                    ondragover="if(window.sheet2DragData&&window.sheet2DragData.type==='assigned')event.preventDefault();"
+                    ondrop="sheet2RefPaneDrop(event);">
                     <table style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; width:100%; direction:ltr;">
                         <thead style="position:sticky; top:0; z-index:2;"><tr>
                             <th style="${hdr}">Date</th><th style="${hdr}">Name</th>
@@ -1641,7 +1654,7 @@
         function sheet2OptDrop(e, toGid, toSlot) {
             e.preventDefault();
             if (!sheet2DragData) return;
-            const { type, name, fromGid, fromSlot } = sheet2DragData;
+            const { type, name, fromGid, fromSlot, fromField } = sheet2DragData;
             sheet2DragData = null;
             if (!sheet2StagedRefs[toGid]) sheet2StagedRefs[toGid] = [null,null,null,null,null,null];
             if (type === 'ref') {
@@ -1657,6 +1670,10 @@
                 sheet2StagedRefs[toGid]   = toArr;
                 sheet2UpdateCell(toGid, toSlot, name);
                 sheet2UpdateCell(fromGid, fromSlot, displaced);
+            } else if (type === 'assigned') {
+                sheet2StagedRefs[toGid][toSlot] = name;
+                sheet2UpdateCell(toGid, toSlot, name);
+                sheet2ClearAssignedCell(fromGid, fromField);
             }
         }
 
@@ -1682,6 +1699,43 @@
                 td.removeAttribute('draggable');
                 td.removeAttribute('ondragstart');
             }
+        }
+
+        function sheet2AssignedDragStart(e, gid, field, name) {
+            sheet2DragData = { type: 'assigned', name, fromGid: gid, fromField: field };
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function sheet2ClearAssignedCell(gid, field) {
+            if (!sheet2ClearedAssigned[gid]) sheet2ClearedAssigned[gid] = {};
+            sheet2ClearedAssigned[gid][field] = true;
+            const td = document.getElementById(`s2${field}-${gid}`);
+            if (!td) return;
+            td.textContent = '—';
+            td.style.color  = '#bbb';
+            td.style.cursor = 'default';
+            td.removeAttribute('draggable');
+            td.removeAttribute('ondragstart');
+        }
+
+        function sheet2AssignedSwap(e, toGid, toField, toRawName) {
+            e.preventDefault();
+            if (!sheet2DragData || sheet2DragData.type !== 'assigned') return;
+            const { name: fromName, fromGid, fromField } = sheet2DragData;
+            sheet2DragData = null;
+            // Swap the two assigned cells visually
+            const fromTd = document.getElementById(`s2${fromField}-${fromGid}`);
+            const toTd   = document.getElementById(`s2${toField}-${toGid}`);
+            if (fromTd) { fromTd.textContent = toRawName !== '—' ? toRawName : '—'; fromTd.style.color = toRawName !== '—' ? 'inherit' : '#bbb'; }
+            if (toTd)   { toTd.textContent   = fromName; toTd.style.color = 'inherit'; }
+        }
+
+        function sheet2RefPaneDrop(e) {
+            e.preventDefault();
+            if (!sheet2DragData || sheet2DragData.type !== 'assigned') return;
+            const { fromGid, fromField } = sheet2DragData;
+            sheet2DragData = null;
+            sheet2ClearAssignedCell(fromGid, fromField);
         }
 
         // ── Command 2 View — Command + experience colors + years badge ──────
