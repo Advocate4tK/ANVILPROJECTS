@@ -1512,29 +1512,54 @@
         let sheet2OptColors       = {};   // { 'gid-slot': '#hexcolor' }
         let sheet2DragData        = null; // { type:'ref'|'opt'|'assigned', name, fromGid, fromSlot, fromField }
 
-        function sheet2SaveState() {
+        function sheet2SaveLocalState() {
             try {
-                localStorage.setItem('sheet2State', JSON.stringify({
-                    staged:  sheet2StagedRefs,
+                localStorage.setItem('sheet2LocalState', JSON.stringify({
                     cleared: sheet2ClearedAssigned,
                     colors:  sheet2OptColors
                 }));
             } catch(e) {}
         }
 
-        function sheet2LoadState() {
+        function sheet2LoadLocalState() {
             try {
-                const saved = localStorage.getItem('sheet2State');
+                const saved = localStorage.getItem('sheet2LocalState');
                 if (!saved) return;
-                const { staged, cleared, colors } = JSON.parse(saved);
-                if (staged)  sheet2StagedRefs      = staged;
+                const { cleared, colors } = JSON.parse(saved);
                 if (cleared) sheet2ClearedAssigned = cleared;
                 if (colors)  sheet2OptColors       = colors;
             } catch(e) {}
         }
 
+        async function sheet2FetchStaging() {
+            try {
+                const { data, error } = await supabase.from('staging').select('*');
+                if (error) { console.error('staging fetch:', error); return; }
+                sheet2StagedRefs = {};
+                (data || []).forEach(row => {
+                    const gid = String(row.game_id);
+                    if (!sheet2StagedRefs[gid]) sheet2StagedRefs[gid] = [null,null,null,null,null,null];
+                    sheet2StagedRefs[gid][row.slot] = row.ref_name || null;
+                });
+            } catch(e) { console.error('sheet2FetchStaging:', e); }
+        }
+
+        async function sheet2UpsertSlot(gid, slot, name) {
+            try {
+                if (name) {
+                    await supabase.from('staging').upsert(
+                        { game_id: parseInt(gid), slot: slot, ref_name: name },
+                        { onConflict: 'game_id,slot' }
+                    );
+                } else {
+                    await supabase.from('staging').delete()
+                        .eq('game_id', parseInt(gid)).eq('slot', slot);
+                }
+            } catch(e) { console.error('sheet2UpsertSlot:', e); }
+        }
+
         function renderSheet2View(filtered) {
-            sheet2LoadState();
+            sheet2LoadLocalState();
             const wrap = document.getElementById('gamesListWrap');
             const fmt  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
             const cell = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
@@ -1688,6 +1713,7 @@
             if (type === 'ref') {
                 sheet2StagedRefs[toGid][toSlot] = name;
                 sheet2UpdateCell(toGid, toSlot, name);
+                sheet2UpsertSlot(toGid, toSlot, name);
             } else if (type === 'opt') {
                 const fromArr   = sheet2StagedRefs[fromGid] || [null,null,null,null,null,null];
                 const toArr     = sheet2StagedRefs[toGid];
@@ -1698,12 +1724,14 @@
                 sheet2StagedRefs[toGid]   = toArr;
                 sheet2UpdateCell(toGid, toSlot, name);
                 sheet2UpdateCell(fromGid, fromSlot, displaced);
+                sheet2UpsertSlot(toGid, toSlot, name);
+                sheet2UpsertSlot(fromGid, fromSlot, displaced);
             } else if (type === 'assigned') {
                 sheet2StagedRefs[toGid][toSlot] = name;
                 sheet2UpdateCell(toGid, toSlot, name);
                 sheet2ClearAssignedCell(fromGid, fromField);
+                sheet2UpsertSlot(toGid, toSlot, name);
             }
-            sheet2SaveState();
         }
 
         function sheet2OptClear(e, gid, slot) {
@@ -1711,7 +1739,7 @@
             if (!sheet2StagedRefs[gid] || !sheet2StagedRefs[gid][slot]) return;
             sheet2StagedRefs[gid][slot] = null;
             sheet2UpdateCell(gid, slot, null);
-            sheet2SaveState();
+            sheet2UpsertSlot(gid, slot, null);
         }
 
         function sheet2UpdateCell(gid, slot, name) {
@@ -1750,7 +1778,7 @@
             td.removeAttribute('draggable');
             td.removeAttribute('ondragstart');
             td.removeAttribute('oncontextmenu');
-            sheet2SaveState();
+            sheet2SaveLocalState();
         }
 
         function sheet2AssignedDrop(e, toGid, toField) {
@@ -1766,7 +1794,7 @@
                 sheet2RestoreAssignedCell(toGid, toField, name);
                 if (sheet2StagedRefs[fromGid]) sheet2StagedRefs[fromGid][fromSlot] = null;
                 sheet2UpdateCell(fromGid, fromSlot, null);
-                sheet2SaveState();
+                sheet2UpsertSlot(fromGid, fromSlot, null);
             } else if (type === 'assigned') {
                 // Swap two assigned cells
                 const toTd = document.getElementById(`s2${toField}-${toGid}`);
@@ -1792,7 +1820,7 @@
             td.setAttribute('draggable', 'true');
             td.setAttribute('ondragstart', `sheet2AssignedDragStart(event,'${gid}','${field}','${(name||'').replace(/'/g,"\\'")}');`);
             td.setAttribute('oncontextmenu', `sheet2ShowAssignedMenu(event,'${gid}','${field}'); return false;`);
-            sheet2SaveState();
+            sheet2SaveLocalState();
         }
 
         function sheet2RefPaneDrop(e) {
@@ -1892,7 +1920,7 @@
             else delete sheet2OptColors[key];
             const td = document.getElementById(`s2${field}-${gid}`);
             if (td) td.style.background = color || '#e8f5e9';
-            sheet2SaveState();
+            sheet2SaveLocalState();
         }
 
         function sheet2SetOptColor(gid, slot, color) {
@@ -1901,7 +1929,7 @@
             else delete sheet2OptColors[key];
             const td = document.getElementById(`s2opt-${gid}-${slot}`);
             if (td) td.style.background = color || '';
-            sheet2SaveState();
+            sheet2SaveLocalState();
         }
 
         // ── Command 2 View — Command + experience colors + years badge ──────
@@ -3253,7 +3281,7 @@
                 return;
             }
             if (viewMode === 'sheet2') {
-                renderSheet2View(filtered);
+                sheet2FetchStaging().then(() => renderSheet2View(filtered));
                 return;
             }
 
