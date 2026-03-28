@@ -1534,8 +1534,11 @@
                     const isCleared = !!cleared[field];
                     const hasRef    = rawName !== '—' && !isCleared;
                     const display   = isCleared ? '—' : rawName;
+                    const storedBg  = sheet2OptColors[`assigned-${gid}-${field}`] || '';
+                    const bg        = hasRef ? (storedBg || '#e8f5e9') : 'inherit';
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet2AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
-                    return `<td id="s2${field}-${gid}" style="${cell} min-width:120px; cursor:${hasRef?'grab':'default'}; background:${hasRef?'#e8f5e9':'inherit'}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag}
+                    const ctx       = hasRef ? `oncontextmenu="sheet2ShowAssignedMenu(event,'${gid}','${field}'); return false;"` : '';
+                    return `<td id="s2${field}-${gid}" style="${cell} min-width:120px; cursor:${hasRef?'grab':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
                         ondrop="sheet2AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}</td>`;
@@ -1722,6 +1725,7 @@
             td.style.cursor     = 'default';
             td.removeAttribute('draggable');
             td.removeAttribute('ondragstart');
+            td.removeAttribute('oncontextmenu');
         }
 
         function sheet2AssignedDrop(e, toGid, toField) {
@@ -1756,11 +1760,12 @@
             const td = document.getElementById(`s2${field}-${gid}`);
             if (!td) return;
             td.textContent       = name;
-            td.style.background  = '#e8f5e9';
+            td.style.background  = sheet2OptColors[`assigned-${gid}-${field}`] || '#e8f5e9';
             td.style.color       = '#2e7d32';
             td.style.cursor      = 'grab';
             td.setAttribute('draggable', 'true');
             td.setAttribute('ondragstart', `sheet2AssignedDragStart(event,'${gid}','${field}','${(name||'').replace(/'/g,"\\'")}');`);
+            td.setAttribute('oncontextmenu', `sheet2ShowAssignedMenu(event,'${gid}','${field}'); return false;`);
         }
 
         function sheet2RefPaneDrop(e) {
@@ -1813,6 +1818,53 @@
         function sheet2HideOptMenu() {
             const menu = document.getElementById('s2ContextMenu');
             if (menu) menu.style.display = 'none';
+        }
+
+        function sheet2ShowAssignedMenu(e, gid, field) {
+            e.preventDefault();
+            let menu = document.getElementById('s2ContextMenu');
+            if (!menu) {
+                menu = document.createElement('div');
+                menu.id = 's2ContextMenu';
+                menu.style.cssText = 'position:fixed; background:#fff; border:1px solid #d0d7de; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); font-family:sans-serif; font-size:0.82rem; z-index:9999; min-width:140px; overflow:hidden;';
+                document.body.appendChild(menu);
+            }
+            const swatches = [
+                { color:'#fff9c4', label:'Yellow' },
+                { color:'#c8e6c9', label:'Green'  },
+                { color:'#bbdefb', label:'Blue'   },
+                { color:'#ffe0b2', label:'Orange' },
+                { color:'#f8bbd0', label:'Pink'   },
+                { color:'',        label:'Clear'  },
+            ];
+            const swatchHtml = swatches.map(s => `
+                <span title="${s.label}" onclick="sheet2SetAssignedColor('${gid}','${field}','${s.color}'); sheet2HideOptMenu();"
+                    style="display:inline-block; width:20px; height:20px; border-radius:4px; border:1px solid #ccc; cursor:pointer; background:${s.color||'#fff'}; margin:2px;"
+                    onmouseover="this.style.outline='2px solid #1a3a6b';" onmouseout="this.style.outline='';"></span>`).join('');
+            menu.innerHTML = `
+                <div style="padding:6px 0;">
+                    <div onclick="sheet2ClearAssignedCell('${gid}','${field}'); sheet2HideOptMenu();"
+                         style="padding:7px 16px; cursor:pointer; color:#cf222e;"
+                         onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
+                        Remove ref
+                    </div>
+                    <div style="padding:4px 16px 8px; border-top:1px solid #eee;">
+                        <div style="font-size:0.72rem; color:#888; margin-bottom:4px;">Color</div>
+                        ${swatchHtml}
+                    </div>
+                </div>`;
+            menu.style.left    = e.clientX + 'px';
+            menu.style.top     = e.clientY + 'px';
+            menu.style.display = 'block';
+            setTimeout(() => document.addEventListener('click', sheet2HideOptMenu, { once: true }), 0);
+        }
+
+        function sheet2SetAssignedColor(gid, field, color) {
+            const key = `assigned-${gid}-${field}`;
+            if (color) sheet2OptColors[key] = color;
+            else delete sheet2OptColors[key];
+            const td = document.getElementById(`s2${field}-${gid}`);
+            if (td) td.style.background = color || '#e8f5e9';
         }
 
         function sheet2SetOptColor(gid, slot, color) {
