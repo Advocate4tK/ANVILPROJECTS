@@ -1507,8 +1507,152 @@
         }
 
         // ── Sheet 2 View — interactive staging (click-to-assign Opt cells) ────
+        let sheet2SelectedGameId = null;   // currently selected game row
+        let sheet2StagedRefs = {};         // { gameId: [name, name, ...] } up to 6
+
         function renderSheet2View(filtered) {
-            renderSheetView(filtered); // placeholder — exact copy of Sheet for now
+            const wrap = document.getElementById('gamesListWrap');
+            const fmt  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+
+            const cell    = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
+            const cellSel = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap; background:#fff8e1 !important;';
+            const hdr     = 'border:1px solid #d0d7de; padding:5px 8px; font-size:0.73rem; font-weight:700; color:#1f2328; background:#f0f3f6; text-align:left; white-space:nowrap;';
+            const optCell = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:140px; cursor:pointer; white-space:nowrap;';
+
+            // ── Games table ──────────────────────────────────────────────────
+            const allFilteredGames = filtered || allGames;
+            const gameRowsHtml = allFilteredGames.length ? allFilteredGames.map((g, i) => {
+                const f        = g.fields;
+                const gid      = String(g.id);
+                const isSelected = gid === sheet2SelectedGameId;
+                const rowBg    = isSelected ? '#fff8e1' : (i % 2 === 0 ? '#ffffff' : '#f6f8fa');
+                const rowStyle = `background:${rowBg}; cursor:pointer; ${isSelected ? 'outline:2px solid #e6a800;' : ''}`;
+                const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
+                const fieldObj = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
+                const cRef     = resolveRefName(f['Center Referee']) || '—';
+                const ar1      = resolveRefName(f['AR 1']) || '—';
+                const ar2      = resolveRefName(f['AR 2']) || '—';
+                const staged   = sheet2StagedRefs[gid] || [];
+                const optCells = [0,1,2,3,4,5].map(n => {
+                    const name = staged[n] || '';
+                    return `<td style="${optCell} background:${name ? '#e8f5e9' : (isSelected ? '#fff8e1' : (i%2===0?'#ffffff':'#f6f8fa'))}; color:${name?'#2e7d32':'#bbb'};"
+                        onclick="sheet2OptClick(event,'${gid}',${n})">${name || (isSelected ? '+ add' : '')}</td>`;
+                }).join('');
+                return `<tr style="${rowStyle}" onclick="sheet2SelectGame('${gid}')" id="sheet2row-${gid}">
+                    <td style="${cell} background:${rowBg};">${f['Date'] || '—'}</td>
+                    <td style="${cell} background:${rowBg};">${f['Source Club'] || '—'}</td>
+                    <td style="${cell} background:${rowBg};">${f['Age Group'] || '—'}</td>
+                    <td style="${cell} background:${rowBg};">${f['Gender'] || '—'}</td>
+                    <td style="${cell} background:${rowBg};">${f['Home Team'] || '—'}</td>
+                    <td style="${cell} background:${rowBg};">${f['Away Team'] || '—'}</td>
+                    <td style="${cell} background:${rowBg};">${venueObj ? venueObj.name : (f['Venue ID'] || '—')}</td>
+                    <td style="${cell} background:${rowBg};">${fieldObj ? fieldObj.name : (f['Field ID'] || '—')}</td>
+                    <td style="${cell} background:${rowBg};">${cRef}</td>
+                    <td style="${cell} background:${rowBg};">${ar1}</td>
+                    <td style="${cell} background:${rowBg};">${ar2}</td>
+                    ${optCells}
+                </tr>`;
+            }).join('') : `<tr><td colspan="17" style="${cell} color:#888;">No games in current date range.</td></tr>`;
+
+            const gamesTable = `
+                <div style="max-height:400px; overflow:auto; border:2px solid #d0d7de;">
+                    <table style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; min-width:100%;">
+                        <thead style="position:sticky; top:0; z-index:2;">
+                            <tr>
+                                <th style="${hdr}">Date</th>
+                                <th style="${hdr}">Club</th>
+                                <th style="${hdr}">Age Group</th>
+                                <th style="${hdr}">Gender</th>
+                                <th style="${hdr}">Home Team</th>
+                                <th style="${hdr}">Away Team</th>
+                                <th style="${hdr}">Venue</th>
+                                <th style="${hdr}">Field</th>
+                                <th style="${hdr}">Center</th>
+                                <th style="${hdr}">AR1</th>
+                                <th style="${hdr}">AR2</th>
+                                <th style="${hdr} min-width:140px;">Opt1</th>
+                                <th style="${hdr} min-width:140px;">Opt2</th>
+                                <th style="${hdr} min-width:140px;">Opt3</th>
+                                <th style="${hdr} min-width:140px;">Opt4</th>
+                                <th style="${hdr} min-width:140px;">Opt5</th>
+                                <th style="${hdr} min-width:140px;">Opt6</th>
+                            </tr>
+                        </thead>
+                        <tbody>${gameRowsHtml}</tbody>
+                    </table>
+                </div>
+                <div style="margin-top:6px; font-size:0.7rem; color:#888;">${allFilteredGames.length} games</div>`;
+
+            // ── Refs table ───────────────────────────────────────────────────
+            const refRows = [];
+            allAvail.forEach(a => {
+                const name  = (a.fields['Referee Name'] || '').trim();
+                const date  = a.fields['Date'] || '';
+                const start = a.fields['Start Time'] || '';
+                const end   = a.fields['End Time']   || '';
+                if (!name || !date) return;
+                const ref  = allRefs.find(r => (r.fields['Name'] || '').trim().toLowerCase() === name.toLowerCase());
+                const club = ref ? (ref.fields['Club Preference'] || '') : '';
+                refRows.push({ name, date, club, start, end });
+            });
+            refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+
+            const refRowsHtml = refRows.length ? refRows.map((r, i) => `
+                <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f6f8fa'}; cursor:pointer;" onclick="sheet2AddRef('${r.name.replace(/'/g,"\\'")}')">
+                    <td style="${cell}">${r.date}</td>
+                    <td style="${cell}">${r.name}</td>
+                    <td style="${cell}">${r.club}</td>
+                    <td style="${cell}">${fmt(r.start)}</td>
+                    <td style="${cell}">${fmt(r.end)}</td>
+                </tr>`).join('') : `<tr><td colspan="5" style="${cell} color:#888;">No availability submitted.</td></tr>`;
+
+            const refsDivider = `<div style="background:#1a3a6b; color:#fff; padding:4px 14px; margin:12px -20px 8px -20px; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;">Referee Availability — click a row to stage</div>`;
+
+            wrap.innerHTML = `
+                <div style="overflow-x:auto; padding:12px;"><div style="display:inline-block; min-width:100%;">${gamesTable}</div></div>
+                ${refsDivider}
+                <div style="overflow-x:auto; padding:0 12px 12px;"><div style="display:inline-block; min-width:100%;">
+                <div style="max-height:400px; overflow-y:auto; border:2px solid #d0d7de; direction:rtl;">
+                    <table style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; width:100%; direction:ltr;">
+                        <thead style="position:sticky; top:0; z-index:2;">
+                            <tr>
+                                <th style="${hdr}">Date</th>
+                                <th style="${hdr}">Name</th>
+                                <th style="${hdr}">Club Preference</th>
+                                <th style="${hdr}">Start</th>
+                                <th style="${hdr}">End</th>
+                            </tr>
+                        </thead>
+                        <tbody>${refRowsHtml}</tbody>
+                    </table>
+                </div>
+                <div style="margin-top:6px; font-size:0.7rem; color:#888;">${refRows.length} records</div>
+                </div></div>`;
+        }
+
+        function sheet2SelectGame(gid) {
+            sheet2SelectedGameId = (sheet2SelectedGameId === gid) ? null : gid;
+            applyGameFilters();
+        }
+
+        function sheet2AddRef(name) {
+            if (!sheet2SelectedGameId) return;
+            const staged = sheet2StagedRefs[sheet2SelectedGameId] || [];
+            if (staged.length >= 6) return;
+            if (staged.includes(name)) return;
+            staged.push(name);
+            sheet2StagedRefs[sheet2SelectedGameId] = staged;
+            applyGameFilters();
+        }
+
+        function sheet2OptClick(e, gid, slotIndex) {
+            e.stopPropagation();
+            const staged = sheet2StagedRefs[gid] || [];
+            if (staged[slotIndex]) {
+                staged.splice(slotIndex, 1);
+                sheet2StagedRefs[gid] = staged;
+                applyGameFilters();
+            }
         }
 
         // ── Command 2 View — Command + experience colors + years badge ──────
