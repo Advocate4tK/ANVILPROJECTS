@@ -1514,13 +1514,17 @@
         let sheet2RefSort         = { col: null, dir: 1 }; // col: 'exp', dir: 1=asc -1=desc
         let sheet2CachedRefRows   = [];   // holds built refRows for re-sort without full re-render
         let sheet2SplitGamesH     = 400; // px height of games scroll pane (user-draggable)
+        let sheet2ZoomGames       = 1.0; // zoom level for games table (0.6–1.5)
+        let sheet2ZoomRefs        = 1.0; // zoom level for refs table (0.6–1.5)
 
         function sheet2SaveLocalState() {
             try {
                 localStorage.setItem('sheet2LocalState', JSON.stringify({
-                    cleared:  sheet2ClearedAssigned,
-                    colors:   sheet2OptColors,
-                    splitH:   sheet2SplitGamesH
+                    cleared:    sheet2ClearedAssigned,
+                    colors:     sheet2OptColors,
+                    splitH:     sheet2SplitGamesH,
+                    zoomGames:  sheet2ZoomGames,
+                    zoomRefs:   sheet2ZoomRefs
                 }));
             } catch(e) {}
         }
@@ -1529,11 +1533,31 @@
             try {
                 const saved = localStorage.getItem('sheet2LocalState');
                 if (!saved) return;
-                const { cleared, colors, splitH } = JSON.parse(saved);
-                if (cleared) sheet2ClearedAssigned = cleared;
-                if (colors)  sheet2OptColors       = colors;
+                const { cleared, colors, splitH, zoomGames, zoomRefs } = JSON.parse(saved);
+                if (cleared)   sheet2ClearedAssigned = cleared;
+                if (colors)    sheet2OptColors       = colors;
                 if (splitH && splitH >= 80 && splitH <= 1200) sheet2SplitGamesH = splitH;
+                if (zoomGames && zoomGames >= 0.6 && zoomGames <= 1.5) sheet2ZoomGames = zoomGames;
+                if (zoomRefs  && zoomRefs  >= 0.6 && zoomRefs  <= 1.5) sheet2ZoomRefs  = zoomRefs;
             } catch(e) {}
+        }
+
+        function sheet2SetZoomGames(delta) {
+            sheet2ZoomGames = Math.round(Math.max(0.6, Math.min(1.5, sheet2ZoomGames + delta)) * 10) / 10;
+            const tbl = document.getElementById('s2gamesTable');
+            if (tbl) tbl.style.zoom = sheet2ZoomGames;
+            const lbl = document.getElementById('s2gamesZoomLbl');
+            if (lbl) lbl.textContent = Math.round(sheet2ZoomGames * 100) + '%';
+            sheet2SaveLocalState();
+        }
+
+        function sheet2SetZoomRefs(delta) {
+            sheet2ZoomRefs = Math.round(Math.max(0.6, Math.min(1.5, sheet2ZoomRefs + delta)) * 10) / 10;
+            const tbl = document.getElementById('s2refsTable');
+            if (tbl) tbl.style.zoom = sheet2ZoomRefs;
+            const lbl = document.getElementById('s2refsZoomLbl');
+            if (lbl) lbl.textContent = Math.round(sheet2ZoomRefs * 100) + '%';
+            sheet2SaveLocalState();
         }
 
         function sheet2SplitterMousedown(e) {
@@ -1647,9 +1671,17 @@
                 </tr>`;
             }).join('') : `<tr><td colspan="17" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
+            const zoomBtn = 'border:1px solid #ccc; background:#f6f8fa; border-radius:3px; padding:1px 7px; font-size:0.8rem; cursor:pointer; line-height:1.4;';
+            const zoomLbl = 'font-size:0.72rem; color:#444; min-width:36px; text-align:center; display:inline-block;';
             const gamesTable = `
+                <div style="display:flex; align-items:center; gap:5px; padding:4px 2px 2px 2px;">
+                    <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em;">GAMES ZOOM</span>
+                    <button onclick="sheet2SetZoomGames(-0.1)" style="${zoomBtn}">−</button>
+                    <span id="s2gamesZoomLbl" style="${zoomLbl}">${Math.round(sheet2ZoomGames*100)}%</span>
+                    <button onclick="sheet2SetZoomGames(0.1)" style="${zoomBtn}">+</button>
+                </div>
                 <div id="s2gamesPane" style="max-height:${sheet2SplitGamesH}px; overflow:auto; border:2px solid #d0d7de;">
-                    <table style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; min-width:100%;">
+                    <table id="s2gamesTable" style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; min-width:100%; zoom:${sheet2ZoomGames};">
                         <thead style="position:sticky; top:0; z-index:2;"><tr>
                             <th style="${hdr}">Date</th><th style="${hdr}">Club</th><th style="${hdr}">Age Group</th>
                             <th style="${hdr}">Gender</th><th style="${hdr}">Home Team</th><th style="${hdr}">Away Team</th>
@@ -1716,10 +1748,16 @@
                 <div style="overflow-x:auto; padding:12px;"><div style="display:inline-block; min-width:100%;">${gamesTable}</div></div>
                 ${refsDivider}
                 <div style="overflow-x:auto; padding:0 12px 12px;"><div style="display:inline-block; min-width:100%;">
+                <div style="display:flex; align-items:center; gap:5px; padding:4px 2px 2px 2px;">
+                    <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em;">REFS ZOOM</span>
+                    <button onclick="sheet2SetZoomRefs(-0.1)" style="${zoomBtn}">−</button>
+                    <span id="s2refsZoomLbl" style="${zoomLbl}">${Math.round(sheet2ZoomRefs*100)}%</span>
+                    <button onclick="sheet2SetZoomRefs(0.1)" style="${zoomBtn}">+</button>
+                </div>
                 <div id="s2refsPane" style="max-height:${sheet2SplitGamesH}px; overflow-y:auto; border:2px solid #d0d7de; direction:rtl;"
                     ondragover="if(window.sheet2DragData&&window.sheet2DragData.type==='assigned')event.preventDefault();"
                     ondrop="sheet2RefPaneDrop(event);">
-                    <table style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; width:100%; direction:ltr;">
+                    <table id="s2refsTable" style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; width:100%; direction:ltr; zoom:${sheet2ZoomRefs};">
                         <thead style="position:sticky; top:0; z-index:2;"><tr>
                             <th style="${hdr}">Date</th><th style="${hdr}">Name</th>
                             <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet2SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet2RefSort.col==='exp'?(sheet2RefSort.dir===1?'▲':'▼'):''}</th>
