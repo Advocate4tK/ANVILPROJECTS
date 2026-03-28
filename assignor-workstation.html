@@ -1512,7 +1512,29 @@
         let sheet2OptColors       = {};   // { 'gid-slot': '#hexcolor' }
         let sheet2DragData        = null; // { type:'ref'|'opt'|'assigned', name, fromGid, fromSlot, fromField }
 
+        function sheet2SaveState() {
+            try {
+                localStorage.setItem('sheet2State', JSON.stringify({
+                    staged:  sheet2StagedRefs,
+                    cleared: sheet2ClearedAssigned,
+                    colors:  sheet2OptColors
+                }));
+            } catch(e) {}
+        }
+
+        function sheet2LoadState() {
+            try {
+                const saved = localStorage.getItem('sheet2State');
+                if (!saved) return;
+                const { staged, cleared, colors } = JSON.parse(saved);
+                if (staged)  sheet2StagedRefs      = staged;
+                if (cleared) sheet2ClearedAssigned = cleared;
+                if (colors)  sheet2OptColors       = colors;
+            } catch(e) {}
+        }
+
         function renderSheet2View(filtered) {
+            sheet2LoadState();
             const wrap = document.getElementById('gamesListWrap');
             const fmt  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
             const cell = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
@@ -1681,6 +1703,7 @@
                 sheet2UpdateCell(toGid, toSlot, name);
                 sheet2ClearAssignedCell(fromGid, fromField);
             }
+            sheet2SaveState();
         }
 
         function sheet2OptClear(e, gid, slot) {
@@ -1688,6 +1711,7 @@
             if (!sheet2StagedRefs[gid] || !sheet2StagedRefs[gid][slot]) return;
             sheet2StagedRefs[gid][slot] = null;
             sheet2UpdateCell(gid, slot, null);
+            sheet2SaveState();
         }
 
         function sheet2UpdateCell(gid, slot, name) {
@@ -1726,6 +1750,7 @@
             td.removeAttribute('draggable');
             td.removeAttribute('ondragstart');
             td.removeAttribute('oncontextmenu');
+            sheet2SaveState();
         }
 
         function sheet2AssignedDrop(e, toGid, toField) {
@@ -1741,6 +1766,7 @@
                 sheet2RestoreAssignedCell(toGid, toField, name);
                 if (sheet2StagedRefs[fromGid]) sheet2StagedRefs[fromGid][fromSlot] = null;
                 sheet2UpdateCell(fromGid, fromSlot, null);
+                sheet2SaveState();
             } else if (type === 'assigned') {
                 // Swap two assigned cells
                 const toTd = document.getElementById(`s2${toField}-${toGid}`);
@@ -1766,6 +1792,7 @@
             td.setAttribute('draggable', 'true');
             td.setAttribute('ondragstart', `sheet2AssignedDragStart(event,'${gid}','${field}','${(name||'').replace(/'/g,"\\'")}');`);
             td.setAttribute('oncontextmenu', `sheet2ShowAssignedMenu(event,'${gid}','${field}'); return false;`);
+            sheet2SaveState();
         }
 
         function sheet2RefPaneDrop(e) {
@@ -1865,6 +1892,7 @@
             else delete sheet2OptColors[key];
             const td = document.getElementById(`s2${field}-${gid}`);
             if (td) td.style.background = color || '#e8f5e9';
+            sheet2SaveState();
         }
 
         function sheet2SetOptColor(gid, slot, color) {
@@ -1873,6 +1901,7 @@
             else delete sheet2OptColors[key];
             const td = document.getElementById(`s2opt-${gid}-${slot}`);
             if (td) td.style.background = color || '';
+            sheet2SaveState();
         }
 
         // ── Command 2 View — Command + experience colors + years badge ──────
