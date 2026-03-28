@@ -1516,6 +1516,13 @@
         let sheet2SplitGamesH     = 400; // px height of games scroll pane (user-draggable)
         let sheet2ZoomGames       = 1.0; // zoom level for games table (0.6–1.5)
         let sheet2ZoomRefs        = 1.0; // zoom level for refs table (0.6–1.5)
+        let sheet2LastFiltered    = null; // last filtered games array — used for col-reorder re-render
+
+        const SHEET2_DEFAULT_COLS = ['date','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2','opt0','opt1','opt2','opt3','opt4','opt5'];
+        const SHEET2_COL_LABELS   = { date:'Date', club:'Club', ageGroup:'Age Group', gender:'Gender', homeTeam:'Home Team', awayTeam:'Away Team', venue:'Venue', field:'Field', center:'Center', ar1:'AR1', ar2:'AR2', opt0:'Opt1', opt1:'Opt2', opt2:'Opt3', opt3:'Opt4', opt4:'Opt5', opt5:'Opt6' };
+        const SHEET2_COL_MINW     = { center:'120px', ar1:'120px', ar2:'120px', opt0:'140px', opt1:'140px', opt2:'140px', opt3:'140px', opt4:'140px', opt5:'140px' };
+        let sheet2ColOrder        = [...SHEET2_DEFAULT_COLS];
+        let sheet2ColDragKey      = null; // column key being dragged (header reorder)
 
         function sheet2SaveLocalState() {
             try {
@@ -1524,7 +1531,8 @@
                     colors:     sheet2OptColors,
                     splitH:     sheet2SplitGamesH,
                     zoomGames:  sheet2ZoomGames,
-                    zoomRefs:   sheet2ZoomRefs
+                    zoomRefs:   sheet2ZoomRefs,
+                    colOrder:   sheet2ColOrder
                 }));
             } catch(e) {}
         }
@@ -1533,12 +1541,13 @@
             try {
                 const saved = localStorage.getItem('sheet2LocalState');
                 if (!saved) return;
-                const { cleared, colors, splitH, zoomGames, zoomRefs } = JSON.parse(saved);
+                const { cleared, colors, splitH, zoomGames, zoomRefs, colOrder } = JSON.parse(saved);
                 if (cleared)   sheet2ClearedAssigned = cleared;
                 if (colors)    sheet2OptColors       = colors;
                 if (splitH && splitH >= 80 && splitH <= 1200) sheet2SplitGamesH = splitH;
                 if (zoomGames && zoomGames >= 0.6 && zoomGames <= 1.5) sheet2ZoomGames = zoomGames;
                 if (zoomRefs  && zoomRefs  >= 0.6 && zoomRefs  <= 1.5) sheet2ZoomRefs  = zoomRefs;
+                if (colOrder && Array.isArray(colOrder) && colOrder.length === SHEET2_DEFAULT_COLS.length) sheet2ColOrder = colOrder;
             } catch(e) {}
         }
 
@@ -1558,6 +1567,21 @@
             const lbl = document.getElementById('s2refsZoomLbl');
             if (lbl) lbl.textContent = Math.round(sheet2ZoomRefs * 100) + '%';
             sheet2SaveLocalState();
+        }
+
+        function sheet2ColDragStart(key) {
+            sheet2ColDragKey = key;
+        }
+        function sheet2ColDrop(targetKey) {
+            if (!sheet2ColDragKey || sheet2ColDragKey === targetKey) { sheet2ColDragKey = null; return; }
+            const from = sheet2ColOrder.indexOf(sheet2ColDragKey);
+            const to   = sheet2ColOrder.indexOf(targetKey);
+            if (from === -1 || to === -1) { sheet2ColDragKey = null; return; }
+            sheet2ColOrder.splice(from, 1);
+            sheet2ColOrder.splice(to, 0, sheet2ColDragKey);
+            sheet2ColDragKey = null;
+            sheet2SaveLocalState();
+            renderSheet2View(sheet2LastFiltered);
         }
 
         function sheet2SplitterMousedown(e) {
@@ -1618,6 +1642,7 @@
 
             // ── Games table ──────────────────────────────────────────────────
             const allFilteredGames = filtered || allGames;
+            sheet2LastFiltered = allFilteredGames;
             const gameRowsHtml = allFilteredGames.length ? allFilteredGames.map((g, i) => {
                 const f        = g.fields;
                 const gid      = String(g.id);
@@ -1628,6 +1653,7 @@
                 const ar1Raw   = resolveRefName(f['AR 1']) || '—';
                 const ar2Raw   = resolveRefName(f['AR 2']) || '—';
                 const cleared  = sheet2ClearedAssigned[gid] || {};
+                const staged   = sheet2StagedRefs[gid] || [null,null,null,null,null,null];
                 const assignedTd = (field, rawName) => {
                     const isCleared = !!cleared[field];
                     const hasRef    = rawName !== '—' && !isCleared;
@@ -1641,35 +1667,47 @@
                         ondragleave="this.style.outline='';"
                         ondrop="sheet2AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}</td>`;
                 };
-                const staged   = sheet2StagedRefs[gid] || [null,null,null,null,null,null];
-                const optCells = [0,1,2,3,4,5].map(n => {
+                const optTd = n => {
                     const name = staged[n] || '';
                     const bg   = sheet2OptColors[`${gid}-${n}`] || rowBg;
                     const col  = name ? '#1f2328' : '#bbb';
                     const drag = name ? `draggable="true" ondragstart="sheet2OptDragStart(event,'${gid}',${n},'${name.replace(/'/g,"\\'")}')"` : '';
-                    const ctxMenu = name ? `oncontextmenu="sheet2ShowOptMenu(event,'${gid}',${n}); return false;"` : '';
+                    const ctx  = name ? `oncontextmenu="sheet2ShowOptMenu(event,'${gid}',${n}); return false;"` : '';
                     return `<td id="s2opt-${gid}-${n}" style="border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:140px; white-space:nowrap; background:${bg}; color:${col}; cursor:${name?'grab':'default'};"
-                        ${drag}
-                        ${ctxMenu}
+                        ${drag} ${ctx}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
                         ondrop="sheet2OptDrop(event,'${gid}',${n}); this.style.outline='';">${name || ''}</td>`;
-                }).join('');
-                return `<tr style="background:${rowBg};">
-                    <td style="${cell}">${f['Date'] || '—'}</td>
-                    <td style="${cell}">${f['Source Club'] || '—'}</td>
-                    <td style="${cell}">${f['Age Group'] || '—'}</td>
-                    <td style="${cell}">${f['Gender'] || '—'}</td>
-                    <td style="${cell}">${f['Home Team'] || '—'}</td>
-                    <td style="${cell}">${f['Away Team'] || '—'}</td>
-                    <td style="${cell}">${venueObj ? venueObj.name : (f['Venue ID'] || '—')}</td>
-                    <td style="${cell}">${fieldObj ? fieldObj.name : (f['Field ID'] || '—')}</td>
-                    ${assignedTd('center', cRefRaw)}
-                    ${assignedTd('ar1', ar1Raw)}
-                    ${assignedTd('ar2', ar2Raw)}
-                    ${optCells}
-                </tr>`;
-            }).join('') : `<tr><td colspan="17" style="${cell} color:#888;">No games in current date range.</td></tr>`;
+                };
+                const colRenderers = {
+                    date:     () => `<td style="${cell}">${f['Date'] || '—'}</td>`,
+                    club:     () => `<td style="${cell}">${f['Source Club'] || '—'}</td>`,
+                    ageGroup: () => `<td style="${cell}">${f['Age Group'] || '—'}</td>`,
+                    gender:   () => `<td style="${cell}">${f['Gender'] || '—'}</td>`,
+                    homeTeam: () => `<td style="${cell}">${f['Home Team'] || '—'}</td>`,
+                    awayTeam: () => `<td style="${cell}">${f['Away Team'] || '—'}</td>`,
+                    venue:    () => `<td style="${cell}">${venueObj ? venueObj.name : (f['Venue ID'] || '—')}</td>`,
+                    field:    () => `<td style="${cell}">${fieldObj ? fieldObj.name : (f['Field ID'] || '—')}</td>`,
+                    center:   () => assignedTd('center', cRefRaw),
+                    ar1:      () => assignedTd('ar1', ar1Raw),
+                    ar2:      () => assignedTd('ar2', ar2Raw),
+                    opt0: () => optTd(0), opt1: () => optTd(1), opt2: () => optTd(2),
+                    opt3: () => optTd(3), opt4: () => optTd(4), opt5: () => optTd(5),
+                };
+                return `<tr style="background:${rowBg};">${sheet2ColOrder.map(k => colRenderers[k]()).join('')}</tr>`;
+            }).join('') : `<tr><td colspan="${sheet2ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
+
+            const thDrag = 'cursor:grab; user-select:none;';
+            const headerCells = sheet2ColOrder.map(key => {
+                const label = SHEET2_COL_LABELS[key] || key;
+                const minW  = SHEET2_COL_MINW[key] ? ` min-width:${SHEET2_COL_MINW[key]};` : '';
+                return `<th style="${hdr}${minW} ${thDrag}" draggable="true"
+                    ondragstart="sheet2ColDragStart('${key}')"
+                    ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
+                    ondragleave="this.style.background='';"
+                    ondrop="sheet2ColDrop('${key}'); this.style.background='';"
+                    title="Drag to reorder">${label}</th>`;
+            }).join('');
 
             const zoomBtn = 'border:1px solid #ccc; background:#f6f8fa; border-radius:3px; padding:1px 7px; font-size:0.8rem; cursor:pointer; line-height:1.4;';
             const zoomLbl = 'font-size:0.72rem; color:#444; min-width:36px; text-align:center; display:inline-block;';
@@ -1682,15 +1720,7 @@
                 </div>
                 <div id="s2gamesPane" style="max-height:${sheet2SplitGamesH}px; overflow:auto; border:2px solid #d0d7de;">
                     <table id="s2gamesTable" style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; min-width:100%; zoom:${sheet2ZoomGames};">
-                        <thead style="position:sticky; top:0; z-index:2;"><tr>
-                            <th style="${hdr}">Date</th><th style="${hdr}">Club</th><th style="${hdr}">Age Group</th>
-                            <th style="${hdr}">Gender</th><th style="${hdr}">Home Team</th><th style="${hdr}">Away Team</th>
-                            <th style="${hdr}">Venue</th><th style="${hdr}">Field</th>
-                            <th style="${hdr}">Center</th><th style="${hdr}">AR1</th><th style="${hdr}">AR2</th>
-                            <th style="${hdr} min-width:140px;">Opt1</th><th style="${hdr} min-width:140px;">Opt2</th>
-                            <th style="${hdr} min-width:140px;">Opt3</th><th style="${hdr} min-width:140px;">Opt4</th>
-                            <th style="${hdr} min-width:140px;">Opt5</th><th style="${hdr} min-width:140px;">Opt6</th>
-                        </tr></thead>
+                        <thead style="position:sticky; top:0; z-index:2;"><tr>${headerCells}</tr></thead>
                         <tbody>${gameRowsHtml}</tbody>
                     </table>
                 </div>
