@@ -2369,7 +2369,7 @@
 
         // ── Commit staged refs to assignment slots ────────────────────────────
         async function commitGame(gameId, btnEl) {
-            const game = allGames.find(g => g.id === gameId);
+            const game = allGames.find(g => String(g.id) === String(gameId));
             if (!game) return;
             const f       = game.fields;
             const age     = f['Age Group'] || '';
@@ -2482,7 +2482,7 @@
 
         // Assign chip click in command view — explicit position
         function cmdAssign(gameId, position, refName) {
-            const game = allGames.find(g => g.id === gameId);
+            const game = allGames.find(g => String(g.id) === String(gameId));
             if (!game) return;
             const f = game.fields;
             // Guard: already in this slot
@@ -2496,7 +2496,7 @@
 
         // ── Staging helpers: build canonical ordered names from state ─────────
         function stageOrderedNames(gameId) {
-            const gameDate = (allGames.find(g => g.id === gameId)?.fields['Date']) || '';
+            const gameDate = (allGames.find(g => String(g.id) === String(gameId))?.fields['Date']) || '';
             const availNames = allRefs
                 .filter(r => {
                     const name = r.fields['Name'] || '';
@@ -3208,12 +3208,14 @@
                     const dt = `${g.fields['Date']}|${g.fields['Time'] || ''}`;
                     ['Center Referee', 'AR 1', 'AR 2'].forEach(pos => {
                         const linked = g.fields[pos];
-                        if (!Array.isArray(linked)) return;
-                        linked.forEach(refId => {
-                            if (!assignedAt[refId]) assignedAt[refId] = new Map();
-                            if (!assignedAt[refId].has(dt)) assignedAt[refId].set(dt, new Set());
-                            assignedAt[refId].get(dt).add(g.id);
-                        });
+                        const name = resolveRefName(linked);
+                        if (!name) return;
+                        const ref = refLookupByName[name.trim().toLowerCase()];
+                        if (!ref) return;
+                        const refId = ref.id;
+                        if (!assignedAt[refId]) assignedAt[refId] = new Map();
+                        if (!assignedAt[refId].has(dt)) assignedAt[refId].set(dt, new Set());
+                        assignedAt[refId].get(dt).add(g.id);
                     });
                 });
 
@@ -3611,26 +3613,26 @@
 
                     if (dragSourceGameId && dragSourcePosition &&
                         (dragSourceGameId !== targetGameId || dragSourcePosition !== targetPosition)) {
-                        const targetGame   = allGames.find(g => g.id === targetGameId);
-                        const targetLinked = targetGame ? targetGame.fields[targetPosition] : null;
-                        const targetRefId   = Array.isArray(targetLinked) && targetLinked.length > 0 ? targetLinked[0] : null;
-                        const targetRefName = targetRefId ? resolveRefName(targetLinked) : null;
-                        if (targetRefId) {
-                            if (dragSourceGameId === targetGameId && dragRefId === targetRefId) {
+                        const targetGame    = allGames.find(g => String(g.id) === String(targetGameId));
+                        const targetLinked  = targetGame ? targetGame.fields[targetPosition] : null;
+                        const targetRefName = resolveRefName(targetLinked) || null;
+                        const targetRefObj  = targetRefName ? refLookupByName[targetRefName.trim().toLowerCase()] : null;
+                        const targetRefId   = targetRefObj ? targetRefObj.id : null;
+                        if (targetRefName) {
+                            if (dragSourceGameId === targetGameId && dragRefName === targetRefName) {
                                 alert(`${dragRefName} is already assigned to this game in another position.`);
                             } else {
                                 assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
-                                assignRef(dragSourceGameId, dragSourcePosition, targetRefId, targetRefName);
+                                assignRef(dragSourceGameId, dragSourcePosition, targetRefId || '', targetRefName);
                             }
                         } else {
                             assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
                             unassignRef(dragSourceGameId, dragSourcePosition);
                         }
                     } else if (!dragSourceGameId) {
-                        const targetGame    = allGames.find(g => g.id === targetGameId);
+                        const targetGame    = allGames.find(g => String(g.id) === String(targetGameId));
                         const alreadyOnGame = targetGame && ['Center Referee','AR 1','AR 2'].some(pos => {
-                            const linked = targetGame.fields[pos];
-                            return Array.isArray(linked) && linked.includes(dragRefId);
+                            return resolveRefName(targetGame.fields[pos]) === dragRefName;
                         });
                         if (alreadyOnGame) {
                             alert(`${dragRefName} is already assigned to this game in another position.`);
@@ -3659,7 +3661,7 @@
                 // Three-point availability check for change request games
                 let availWarn = '', availOverride = '';
                 if (requestedChangeDate) {
-                    const thisGame = allGames.find(g => g.id === gameId);
+                    const thisGame = allGames.find(g => String(g.id) === String(gameId));
                     const isChangeReqGame = thisGame && (thisGame.fields['Game Status'] || '') === 'Change Requested';
                     if (isChangeReqGame) {
                         const refKey   = refName.trim().toLowerCase();
@@ -3792,7 +3794,7 @@
 
         // ── Select a game → update ref colors ─────────────────────────────────
         function selectGame(gameId) {
-            selectedGame = allGames.find(g => g.id === gameId) || null;
+            selectedGame = allGames.find(g => String(g.id) === String(gameId)) || null;
             // Clear change request context if switching to a non-change game
             if (!selectedGame || (selectedGame.fields['Game Status'] || '') !== 'Change Requested') {
                 requestedChangeDate = null;
@@ -4159,7 +4161,7 @@
 
         // ── Assign ref to slot ────────────────────────────────────────────────
         async function assignRef(gameId, position, refId, refName) {
-            const targetGame = allGames.find(g => g.id === gameId);
+            const targetGame = allGames.find(g => String(g.id) === String(gameId));
             if (targetGame) {
                 const gameDate = targetGame.fields['Date'];
                 const dt = `${gameDate}|${targetGame.fields['Time'] || ''}`;
@@ -4196,13 +4198,13 @@
             }
             try {
                 const fields = {};
-                fields[position] = [refId]; // linked record
+                fields[position] = refName; // store name directly (Supabase text column)
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, fields);
 
                 // Update local state
-                const game = allGames.find(g => g.id === gameId);
+                const game = allGames.find(g => String(g.id) === String(gameId));
                 if (game) {
-                    game.fields[position] = [refId];
+                    game.fields[position] = refName;
                     // Update assignedAt
                     const dt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
                     if (!assignedAt[refId]) assignedAt[refId] = new Map();
@@ -4257,7 +4259,7 @@
         }
 
         async function saveVenueField(gameId, venueId, fieldId) {
-            const game = allGames.find(g => g.id === gameId);
+            const game = allGames.find(g => String(g.id) === String(gameId));
             const prevVenueId = game?.fields['Venue ID'] ?? null;
             const prevFieldId = game?.fields['Field ID'] ?? null;
             // Optimistic update so field conflict detection is current
@@ -4284,17 +4286,16 @@
         async function unassignRef(gameId, position) {
             try {
                 const fields = {};
-                fields[position] = [];
+                fields[position] = null; // clear name (Supabase text column)
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, fields);
 
-                const game = allGames.find(g => g.id === gameId);
+                const game = allGames.find(g => String(g.id) === String(gameId));
                 if (game) {
-                    const oldRefIds = game.fields[position] || [];
-                    game.fields[position] = [];
+                    const oldName = resolveRefName(game.fields[position]);
+                    const oldRef  = oldName ? refLookupByName[oldName.trim().toLowerCase()] : null;
+                    game.fields[position] = null;
                     const dt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
-                    oldRefIds.forEach(rid => {
-                        assignedAt[rid]?.get(dt)?.delete(gameId);
-                    });
+                    if (oldRef) assignedAt[oldRef.id]?.get(dt)?.delete(gameId);
                 }
 
                 renderGames();
@@ -4335,18 +4336,16 @@
                     const newDt = `${newDate}|${newTime}`;
                     // Re-key assignedAt for all refs on this game
                     ['Center Referee','AR 1','AR 2'].forEach(pos => {
-                        const raw = game.fields[pos];
-                        const linked = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-                        linked.forEach(rid => {
-                            if (assignedAt[rid]) {
-                                const gameSet = assignedAt[rid].get(oldDt);
-                                if (gameSet) {
-                                    gameSet.delete(gameId);
-                                    if (!assignedAt[rid].has(newDt)) assignedAt[rid].set(newDt, new Set());
-                                    assignedAt[rid].get(newDt).add(gameId);
-                                }
+                        const name = resolveRefName(game.fields[pos]);
+                        const ref  = name ? refLookupByName[name.trim().toLowerCase()] : null;
+                        if (ref && assignedAt[ref.id]) {
+                            const gameSet = assignedAt[ref.id].get(oldDt);
+                            if (gameSet) {
+                                gameSet.delete(gameId);
+                                if (!assignedAt[ref.id].has(newDt)) assignedAt[ref.id].set(newDt, new Set());
+                                assignedAt[ref.id].get(newDt).add(gameId);
                             }
-                        });
+                        }
                     });
                     game.fields['Date'] = newDate;
                     game.fields['Time'] = newTime || '';
@@ -4382,32 +4381,32 @@
 
         async function cancelGame(gameId, label) {
             if (!confirm(`Cancel "${label}"?\n\nThe game will remain visible with a CANCELLED stamp and all referee assignments will be cleared.`)) return;
-            const game = allGames.find(g => g.id === gameId);
+            const game = allGames.find(g => String(g.id) === String(gameId));
             // Cache current ref assignments for rollback
-            const prevCenter = game ? [...(game.fields['Center Referee'] || [])] : [];
-            const prevAR1    = game ? [...(game.fields['AR 1']            || [])] : [];
-            const prevAR2    = game ? [...(game.fields['AR 2']            || [])] : [];
+            const prevCenter = game ? (game.fields['Center Referee'] ?? null) : null;
+            const prevAR1    = game ? (game.fields['AR 1']            ?? null) : null;
+            const prevAR2    = game ? (game.fields['AR 2']            ?? null) : null;
             cancelledGameIds.add(gameId);
             if (game) {
                 // Remove from conflict detection BEFORE clearing fields
                 const dt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
                 ['Center Referee','AR 1','AR 2'].forEach(pos => {
-                    (game.fields[pos] || []).forEach(rid => {
-                        assignedAt[rid]?.get(dt)?.delete(gameId);
-                    });
+                    const name = resolveRefName(game.fields[pos]);
+                    const ref  = name ? refLookupByName[name.trim().toLowerCase()] : null;
+                    if (ref) assignedAt[ref.id]?.get(dt)?.delete(gameId);
                 });
                 game.fields['Game Status'] = 'Cancelled';
-                game.fields['Center Referee'] = [];
-                game.fields['AR 1'] = [];
-                game.fields['AR 2'] = [];
+                game.fields['Center Referee'] = null;
+                game.fields['AR 1'] = null;
+                game.fields['AR 2'] = null;
             }
             renderGames();
             try {
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
                     'Status': 'Cancelled',
-                    'Center Referee': [],
-                    'AR 1': [],
-                    'AR 2': []
+                    'Center Referee': null,
+                    'AR 1': null,
+                    'AR 2': null
                 });
             } catch(e) {
                 // Roll back on failure
@@ -4425,7 +4424,7 @@
 
         async function restoreGame(gameId) {
             cancelledGameIds.delete(gameId);
-            const game = allGames.find(g => g.id === gameId);
+            const game = allGames.find(g => String(g.id) === String(gameId));
             if (game) game.fields['Game Status'] = '';
             renderGames();
             renderRefs(document.getElementById('refSearch').value.toLowerCase());
@@ -4439,7 +4438,7 @@
         // ── Mark a change request as resolved (explicit assignor action) ──────
         async function markChangeResolved(gameId) {
             if (!confirm('Mark this change request as resolved?\n\nThis will clear the flag and return you to the Schedule Change Requests page.')) return;
-            const game = allGames.find(g => g.id === gameId);
+            const game = allGames.find(g => String(g.id) === String(gameId));
             try {
                 const now = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
                 const prevNotes = game?.fields['Notes'] || '';
