@@ -1088,6 +1088,18 @@
         // Global experience color scale (shared across all views)
         const expColor = yrs => yrs === 0 ? '#e74c3c' : yrs === 1 ? '#27ae60' : yrs <= 3 ? '#f1c40f' : yrs <= 10 ? '#2980b9' : '#8e44ad';
 
+        // parseYrs: converts 'Years Reffing' field value to a numeric index.
+        // "Seas 1" / "Seas 2" (strings) → 0 / 1.  Integer 2+ → that integer.  Missing → missing arg (default -1).
+        function parseYrs(v, missing) {
+            if (missing === undefined) missing = -1;
+            if (v === null || v === undefined || v === '') return missing;
+            const lv = String(v).toLowerCase().trim();
+            if (lv === 'seas 1' || lv === 'season 1') return 0;
+            if (lv === 'seas 2' || lv === 'season 2') return 1;
+            const n = parseInt(v);
+            return isNaN(n) ? missing : n;
+        }
+
         function setViewMode(mode, save = true) {
             viewMode = mode;
             const sel = document.getElementById('viewModeSelect');
@@ -1219,14 +1231,14 @@
                 let sortedNames = [...orderedNames];
                 if (wideSort === 'exp-desc') {
                     sortedNames.sort((a, b) => {
-                        const yA = parseInt(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'] ?? -1);
-                        const yB = parseInt(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'] ?? -1);
+                        const yA = parseYrs(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'], -1);
+                        const yB = parseYrs(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'], -1);
                         return yB - yA;
                     });
                 } else if (wideSort === 'exp-asc') {
                     sortedNames.sort((a, b) => {
-                        const yA = parseInt(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'] ?? 999);
-                        const yB = parseInt(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'] ?? 999);
+                        const yA = parseYrs(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'], 999);
+                        const yB = parseYrs(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'], 999);
                         return yA - yB;
                     });
                 }
@@ -1240,9 +1252,9 @@
                     ? sortedNames.map((name, idx) => {
                         const ref      = availRefs.find(r => r.fields['Name'] === name);
                         const refId    = ref ? ref.id : '';
-                        const yrs      = parseInt(ref?.fields['Years Reffing'] ?? -1);
+                        const yrs      = parseYrs(ref?.fields['Years Reffing'], -1);
                         const color    = yrs >= 0 ? expColor(yrs) : '#ccc';
-                        const yrsLabel = yrs === 0 ? '1st' : yrs === 1 ? '2nd' : yrs > 1 ? `${yrs}yr` : '';
+                        const yrsLabel = yrs === 0 ? 'S1' : yrs === 1 ? 'S2' : yrs > 1 ? `Y${yrs}` : '';
                         const gender   = ref?.fields['Gender'] || '';
                         const gColor   = gender === 'Male' ? '#2980b9' : gender === 'Female' ? '#e91e8c' : '#aaa';
                         const gLetter  = gender === 'Male' ? 'M' : gender === 'Female' ? 'F' : '';
@@ -2136,14 +2148,14 @@
                     let stripNames  = [...orderedNames];
                     if (sortMode === 'exp-desc') {
                         stripNames.sort((a, b) => {
-                            const yA = parseInt(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'] ?? -1);
-                            const yB = parseInt(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'] ?? -1);
+                            const yA = parseYrs(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'], -1);
+                            const yB = parseYrs(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'], -1);
                             return yB - yA;
                         });
                     } else if (sortMode === 'exp-asc') {
                         stripNames.sort((a, b) => {
-                            const yA = parseInt(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'] ?? 999);
-                            const yB = parseInt(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'] ?? 999);
+                            const yA = parseYrs(availRefs.find(r => r.fields['Name'] === a)?.fields['Years Reffing'], 999);
+                            const yB = parseYrs(availRefs.find(r => r.fields['Name'] === b)?.fields['Years Reffing'], 999);
                             return yA - yB;
                         });
                     } else if (sortMode === 'male-first') {
@@ -2164,9 +2176,9 @@
                         ? stripNames.map((name, idx) => {
                             const chipRef   = availRefs.find(r => r.fields['Name'] === name);
                             const chipRefId = chipRef ? chipRef.id : '';
-                            const yrs       = parseInt(chipRef?.fields['Years Reffing'] ?? -1);
+                            const yrs       = parseYrs(chipRef?.fields['Years Reffing'], -1);
                             const color     = yrs >= 0 ? expColor(yrs) : '#ccc';
-                            const yrsLabel  = yrs === 0 ? '1st' : yrs === 1 ? '2nd' : yrs > 1 ? `${yrs}yr` : '';
+                            const yrsLabel  = yrs === 0 ? 'S1' : yrs === 1 ? 'S2' : yrs > 1 ? `Y${yrs}` : '';
                             const gender    = chipRef?.fields['Gender'] || '';
                             const gColor    = gender === 'Male' ? '#2980b9' : gender === 'Female' ? '#e91e8c' : '#aaa';
                             const gLetter   = gender === 'Male' ? 'M' : gender === 'Female' ? 'F' : '';
@@ -2256,9 +2268,9 @@
             const f = ref.fields;
 
             const name   = f['Name'] || '—';
-            const yrsNum = parseInt(f['Years Reffing'] ?? -1);
+            const yrsNum = parseYrs(f['Years Reffing'], -1);
             const color  = yrsNum >= 0 ? expColor(yrsNum) : '#aaa';
-            const yrsText = yrsNum === 0 ? '1st Season' : yrsNum === 1 ? '2nd Season' : yrsNum > 1 ? `${yrsNum} yrs` : '—';
+            const yrsText = yrsNum === 0 ? 'Seas 1' : yrsNum === 1 ? 'Seas 2' : yrsNum > 1 ? `Yr ${yrsNum}` : '—';
             const gender  = f['Gender'] || '';
             const age     = f['Age'] ? `Age ${f['Age']}` : '';
             const cert    = f['Certification Level'] || '';
@@ -2400,9 +2412,9 @@
                 const sortMode  = stripSortState[stripKey] || 'staging';
                 let stripNames  = [...orderedNames];
                 if (sortMode === 'exp-desc') {
-                    stripNames.sort((a, b) => (parseInt(availRefs.find(r=>r.fields['Name']===b)?.fields['Years Reffing']??-1)) - (parseInt(availRefs.find(r=>r.fields['Name']===a)?.fields['Years Reffing']??-1)));
+                    stripNames.sort((a, b) => parseYrs(availRefs.find(r=>r.fields['Name']===b)?.fields['Years Reffing'], -1) - parseYrs(availRefs.find(r=>r.fields['Name']===a)?.fields['Years Reffing'], -1));
                 } else if (sortMode === 'exp-asc') {
-                    stripNames.sort((a, b) => (parseInt(availRefs.find(r=>r.fields['Name']===a)?.fields['Years Reffing']??999)) - (parseInt(availRefs.find(r=>r.fields['Name']===b)?.fields['Years Reffing']??999)));
+                    stripNames.sort((a, b) => parseYrs(availRefs.find(r=>r.fields['Name']===a)?.fields['Years Reffing'], 999) - parseYrs(availRefs.find(r=>r.fields['Name']===b)?.fields['Years Reffing'], 999));
                 }
                 // Pick first ref not already used on this game
                 const pick = stripNames.find(n => !usedNames.includes(n));
@@ -3640,7 +3652,7 @@
                 // Use the same experience color scale as the ref panel cards
                 // For Supabase games, ref name is stored as a string — look up by name if no ID
                 const ref = refLookup[refId] || refLookupByName[(refName || '').toLowerCase()];
-                const yrsNum = ref ? (parseInt(ref.fields['Years Reffing']) || 0) : 0;
+                const yrsNum = ref ? parseYrs(ref.fields['Years Reffing'], 0) : 0;
                 const expColor = yrsNum === 0 ? '#e74c3c' : yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad';
                 const borderStyle = expColor ? `border-color:${expColor};` : '';
                 const labelColor  = expColor ? `color:${expColor};` : '';
@@ -3851,7 +3863,7 @@
                     if (!prefs.some(p => focusClubs.includes(p.toLowerCase()))) return false;
                 }
                 if (yearsFilter !== 'any') {
-                    const yrs = parseInt(r.fields['Years Reffing'] ?? -1);
+                    const yrs = parseYrs(r.fields['Years Reffing'], -1);
                     if (yearsFilter === '0'    && yrs !== 0)             return false;
                     if (yearsFilter === '1'    && yrs !== 1)             return false;
                     if (yearsFilter === '2'    && yrs !== 2)             return false;
@@ -3946,9 +3958,9 @@
             } else if (sortMode === 'rating') {
                 filtered.sort((a, b) => (b.fields['Rating'] || 0) - (a.fields['Rating'] || 0));
             } else if (sortMode === 'exp-desc') {
-                filtered.sort((a, b) => (parseInt(b.fields['Years Reffing']) || 0) - (parseInt(a.fields['Years Reffing']) || 0));
+                filtered.sort((a, b) => parseYrs(b.fields['Years Reffing'], -1) - parseYrs(a.fields['Years Reffing'], -1));
             } else if (sortMode === 'exp-asc') {
-                filtered.sort((a, b) => (parseInt(a.fields['Years Reffing']) || 0) - (parseInt(b.fields['Years Reffing']) || 0));
+                filtered.sort((a, b) => parseYrs(a.fields['Years Reffing'], 999) - parseYrs(b.fields['Years Reffing'], 999));
             } else if (sortMode === 'name') {
                 filtered.sort((a, b) => (a.fields['Name'] || '').localeCompare(b.fields['Name'] || ''));
             } else if (sortMode === 'name-desc') {
@@ -4015,11 +4027,11 @@
                 const genderDot = gender === 'Male'   ? '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#2980b9;margin-left:6px;vertical-align:middle;flex-shrink:0;"></span>'
                                : gender === 'Female' ? '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#e91e8c;margin-left:6px;vertical-align:middle;flex-shrink:0;"></span>'
                                : '';
-                const yrsNum  = parseInt(r.fields['Years Reffing']) || 0;
-                const expColor = cls <= 1
+                const yrsNum  = parseYrs(r.fields['Years Reffing'], -1);
+                const expColor = (cls <= 1 && yrsNum >= 0)
                     ? (yrsNum === 0 ? '#e74c3c' : yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad')
                     : null; // conflicts/no-avail keep their grey class color
-                const years = yrsNum === 0 ? '1st Season' : yrsNum === 1 ? '2nd Season' : r.fields['Years Reffing'] ? `${r.fields['Years Reffing']} yrs` : '';
+                const years = yrsNum === 0 ? 'Seas 1' : yrsNum === 1 ? 'Seas 2' : yrsNum > 1 ? `Yr ${yrsNum}` : '';
                 const distMi = distMap[r.id];
                 const distBadge = (sortMode === 'proximity' && distMi !== null)
                     ? `<span style="font-size:0.68rem; font-weight:700; color:#fff; background:#e94560; border-radius:4px; padding:1px 6px; white-space:nowrap; flex-shrink:0;">~${distMi} mi</span>`
@@ -4062,7 +4074,7 @@
                     ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
                         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; min-width:0;">
-                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${cert ? `<span class="cert-pill ${certCls}">${cert}</span>` : ''}${genderDot}${distBadge}${posBadge}</div>
+                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${genderDot}${years ? `<span style="font-size:0.68rem;font-weight:700;color:${expColor||'#aaa'};flex-shrink:0;">${years}</span>` : ''}${distBadge}${posBadge}</div>
                         </div>
                         <span id="rtri-${rid}" onclick="event.stopPropagation(); toggleRefCardWS('${rid}')" style="cursor:pointer; font-size:0.7rem; color:${cls === 2 ? '#e74c3c' : '#aaa'}; padding:2px 4px; flex-shrink:0; font-weight:${cls === 2 ? '900' : 'normal'};">▶</span>
                     </div>
