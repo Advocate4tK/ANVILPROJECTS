@@ -2103,16 +2103,18 @@
         const SHEET3_COL_MINW     = { center:'120px', ar1:'120px', ar2:'120px', opt0:'140px', opt1:'140px', opt2:'140px', opt3:'140px', opt4:'140px', opt5:'140px' };
         let sheet3ColOrder        = [...SHEET3_DEFAULT_COLS];
         let sheet3ColDragKey      = null;
+        let sheet3HiddenCols      = []; // column keys hidden by user
 
         function sheet3SaveLocalState() {
             try {
                 localStorage.setItem('sheet3LocalState', JSON.stringify({
-                    cleared:    sheet3ClearedAssigned,
-                    colors:     sheet3OptColors,
-                    splitH:     sheet3SplitGamesH,
-                    zoomGames:  sheet3ZoomGames,
-                    zoomRefs:   sheet3ZoomRefs,
-                    colOrder:   sheet3ColOrder
+                    cleared:     sheet3ClearedAssigned,
+                    colors:      sheet3OptColors,
+                    splitH:      sheet3SplitGamesH,
+                    zoomGames:   sheet3ZoomGames,
+                    zoomRefs:    sheet3ZoomRefs,
+                    colOrder:    sheet3ColOrder,
+                    hiddenCols:  sheet3HiddenCols
                 }));
             } catch(e) {}
         }
@@ -2121,14 +2123,27 @@
             try {
                 const saved = localStorage.getItem('sheet3LocalState');
                 if (!saved) return;
-                const { cleared, colors, splitH, zoomGames, zoomRefs, colOrder } = JSON.parse(saved);
-                if (cleared)   sheet3ClearedAssigned = cleared;
-                if (colors)    sheet3OptColors       = colors;
+                const { cleared, colors, splitH, zoomGames, zoomRefs, colOrder, hiddenCols } = JSON.parse(saved);
+                if (cleared)    sheet3ClearedAssigned = cleared;
+                if (colors)     sheet3OptColors       = colors;
                 if (splitH && splitH >= 80 && splitH <= 1200) sheet3SplitGamesH = splitH;
                 if (zoomGames && zoomGames >= 0.6 && zoomGames <= 1.5) sheet3ZoomGames = zoomGames;
                 if (zoomRefs  && zoomRefs  >= 0.6 && zoomRefs  <= 1.5) sheet3ZoomRefs  = zoomRefs;
                 if (colOrder && Array.isArray(colOrder) && colOrder.length === SHEET3_DEFAULT_COLS.length) sheet3ColOrder = colOrder;
+                if (hiddenCols && Array.isArray(hiddenCols)) sheet3HiddenCols = hiddenCols;
             } catch(e) {}
+        }
+
+        function sheet3HideCol(key) {
+            if (!sheet3HiddenCols.includes(key)) sheet3HiddenCols.push(key);
+            sheet3SaveLocalState();
+            renderSheet3View(sheet3LastFiltered);
+        }
+
+        function sheet3ShowAllCols() {
+            sheet3HiddenCols = [];
+            sheet3SaveLocalState();
+            renderSheet3View(sheet3LastFiltered);
         }
 
         function sheet3SetZoomGames(delta) {
@@ -2273,11 +2288,13 @@
                     opt0: () => optTd(0), opt1: () => optTd(1), opt2: () => optTd(2),
                     opt3: () => optTd(3), opt4: () => optTd(4), opt5: () => optTd(5),
                 };
-                return `<tr style="background:${rowBg};">${sheet3ColOrder.map(k => colRenderers[k]()).join('')}</tr>`;
-            }).join('') : `<tr><td colspan="${sheet3ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
+                const activeCols = sheet3ColOrder.filter(k => !sheet3HiddenCols.includes(k));
+                return `<tr style="background:${rowBg};">${activeCols.map(k => colRenderers[k]()).join('')}</tr>`;
+            }).join('') : `<tr><td colspan="${sheet3ColOrder.filter(k=>!sheet3HiddenCols.includes(k)).length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
+            const activeCols  = sheet3ColOrder.filter(k => !sheet3HiddenCols.includes(k));
             const thDrag = 'cursor:grab; user-select:none;';
-            const headerCells = sheet3ColOrder.map(key => {
+            const headerCells = activeCols.map(key => {
                 const label = SHEET3_COL_LABELS[key] || key;
                 const minW  = SHEET3_COL_MINW[key] ? ` min-width:${SHEET3_COL_MINW[key]};` : '';
                 return `<th style="${hdr}${minW} ${thDrag}" draggable="true"
@@ -2285,18 +2302,26 @@
                     ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
                     ondragleave="this.style.background='';"
                     ondrop="sheet3ColDrop('${key}'); this.style.background='';"
-                    title="Drag to reorder">${label}</th>`;
+                    title="Drag to reorder">
+                    <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
+                        <span>${label}</span>
+                        <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#999;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
+                    </span></th>`;
             }).join('');
 
             const zoomBtn = 'border:1px solid #ccc; background:#f6f8fa; border-radius:3px; padding:1px 7px; font-size:0.8rem; cursor:pointer; line-height:1.4;';
             const zoomLbl = 'font-size:0.72rem; color:#444; min-width:36px; text-align:center; display:inline-block;';
+            const showAllBtn = sheet3HiddenCols.length
+                ? `<button onclick="sheet3ShowAllCols()" style="${zoomBtn} background:#fff3cd; border-color:#ffc107;" title="Show all hidden columns">Show all cols (${sheet3HiddenCols.length} hidden)</button>`
+                : '';
             const gamesTable = `
-                <div style="display:flex; align-items:center; gap:5px; padding:4px 2px 2px 2px;">
+                <div style="display:flex; align-items:center; gap:5px; padding:4px 2px 2px 2px; flex-wrap:wrap;">
                     <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em;">GAMES ZOOM</span>
                     <button onclick="sheet3SetZoomGames(-0.05)" style="${zoomBtn}">−</button>
                     <span id="s3gamesZoomLbl" style="${zoomLbl}">${Math.round(sheet3ZoomGames*100)}%</span>
                     <button onclick="sheet3SetZoomGames(0.05)" style="${zoomBtn}">+</button>
                     <span style="font-size:0.7rem; color:#aaa; margin-left:6px;">${allFilteredGames.length} games</span>
+                    ${showAllBtn}
                 </div>
                 <div id="s3gamesPane" style="max-height:${sheet3SplitGamesH}px; overflow:auto; border:2px solid #d0d7de;">
                     <table id="s3gamesTable" style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; min-width:100%; zoom:${sheet3ZoomGames};">
@@ -2330,13 +2355,27 @@
                 return v;
             };
 
+            // Build assigned count per ref scoped to all loaded games
+            const loadedGameIds = new Set(allGames.map(g => String(g.id)));
             const buildRefRowsHtml = rows => rows.length ? rows.map((r, i) => {
-                const safeName = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+                const safeName  = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+                const refObj    = refLookupByName[r.name.trim().toLowerCase()];
+                let assignedCount = 0;
+                if (refObj && assignedAt[refObj.id]) {
+                    for (const gameSet of assignedAt[refObj.id].values()) {
+                        for (const gid of gameSet) {
+                            if (loadedGameIds.has(String(gid))) assignedCount++;
+                        }
+                    }
+                }
+                const countBadge = assignedCount
+                    ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;margin-left:5px;vertical-align:middle;">${assignedCount}</span>`
+                    : '';
                 return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
                     draggable="true"
                     ondragstart="sheet3RefDragStart(event,'${safeName}')">
                     <td style="${cell}">${r.date}</td>
-                    <td style="${cell}">${r.name}</td>
+                    <td style="${cell}">${r.name}${countBadge}</td>
                     <td style="${cell}">${fmtExp(r.exp)}</td>
                     <td style="${cell}">${r.club}</td>
                     <td style="${cell}">${fmt(r.start)}</td>
