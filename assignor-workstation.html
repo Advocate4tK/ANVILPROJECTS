@@ -2146,6 +2146,12 @@
             renderSheet3View(sheet3LastFiltered);
         }
 
+        function sheet3ShowCol(key) {
+            sheet3HiddenCols = sheet3HiddenCols.filter(k => k !== key);
+            sheet3SaveLocalState();
+            renderSheet3View(sheet3LastFiltered);
+        }
+
         function sheet3SetZoomGames(delta) {
             sheet3ZoomGames = Math.round(Math.max(0.6, Math.min(1.5, sheet3ZoomGames + delta)) * 20) / 20;
             const tbl = document.getElementById('s3gamesTable');
@@ -2288,13 +2294,18 @@
                     opt0: () => optTd(0), opt1: () => optTd(1), opt2: () => optTd(2),
                     opt3: () => optTd(3), opt4: () => optTd(4), opt5: () => optTd(5),
                 };
-                const activeCols = sheet3ColOrder.filter(k => !sheet3HiddenCols.includes(k));
-                return `<tr style="background:${rowBg};">${activeCols.map(k => colRenderers[k]()).join('')}</tr>`;
-            }).join('') : `<tr><td colspan="${sheet3ColOrder.filter(k=>!sheet3HiddenCols.includes(k)).length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
+                const stubTd = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:0; background:#eef0f3;';
+                return `<tr style="background:${rowBg};">${sheet3ColOrder.map(k =>
+                    sheet3HiddenCols.includes(k) ? `<td style="${stubTd}"></td>` : colRenderers[k]()
+                ).join('')}</tr>`;
+            }).join('') : `<tr><td colspan="${sheet3ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
-            const activeCols  = sheet3ColOrder.filter(k => !sheet3HiddenCols.includes(k));
-            const thDrag = 'cursor:grab; user-select:none;';
-            const headerCells = activeCols.map(key => {
+            const thDrag  = 'cursor:grab; user-select:none;';
+            const stubTh  = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:4px 2px; background:#e8eaed; cursor:pointer; text-align:center; font-size:0.65rem; color:#888;';
+            const headerCells = sheet3ColOrder.map(key => {
+                if (sheet3HiddenCols.includes(key)) {
+                    return `<th style="${stubTh}" onclick="sheet3ShowCol('${key}')" title="Show ${SHEET3_COL_LABELS[key]||key}">▶</th>`;
+                }
                 const label = SHEET3_COL_LABELS[key] || key;
                 const minW  = SHEET3_COL_MINW[key] ? ` min-width:${SHEET3_COL_MINW[key]};` : '';
                 return `<th style="${hdr}${minW} ${thDrag}" draggable="true"
@@ -2305,14 +2316,14 @@
                     title="Drag to reorder">
                     <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
                         <span>${label}</span>
-                        <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#999;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
+                        <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
                     </span></th>`;
             }).join('');
 
             const zoomBtn = 'border:1px solid #ccc; background:#f6f8fa; border-radius:3px; padding:1px 7px; font-size:0.8rem; cursor:pointer; line-height:1.4;';
             const zoomLbl = 'font-size:0.72rem; color:#444; min-width:36px; text-align:center; display:inline-block;';
             const showAllBtn = sheet3HiddenCols.length
-                ? `<button onclick="sheet3ShowAllCols()" style="${zoomBtn} background:#fff3cd; border-color:#ffc107;" title="Show all hidden columns">Show all cols (${sheet3HiddenCols.length} hidden)</button>`
+                ? `<button onclick="sheet3ShowAllCols()" style="${zoomBtn}" title="Show all hidden columns">Show all cols</button>`
                 : '';
             const gamesTable = `
                 <div style="display:flex; align-items:center; gap:5px; padding:4px 2px 2px 2px; flex-wrap:wrap;">
