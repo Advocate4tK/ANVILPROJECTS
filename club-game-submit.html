@@ -1220,6 +1220,21 @@
         };
     }
 
+    function extractAssignorNote(notes) {
+        if (!notes) return null;
+        const matches = [...notes.matchAll(/\[ASSIGNOR NOTE\s*[–-]\s*([^\]]+)\]([\s\S]*?)(?=\[|$)/gi)];
+        if (!matches.length) return null;
+        const last = matches[matches.length - 1];
+        return { ts: last[1].trim(), message: last[2].trim() };
+    }
+
+    function markNotesSeen(pendingChanges) {
+        pendingChanges.forEach(r => {
+            const note = extractAssignorNote(r.fields['Notes'] || '');
+            if (note) localStorage.setItem(`assignor_note_seen_${r.id}`, note.ts);
+        });
+    }
+
     function buildGameCard(r, opts = {}) {
         const f          = r.fields;
         const dateStr    = f['Date'] || '—';
@@ -1275,15 +1290,22 @@
                 ${chg.reason  ? `<div><strong>Reason:</strong> ${chg.reason}</div>` : ''}
                 ${chg.reqBy   ? `<div><strong>Requested by:</strong> ${chg.reqBy}</div>` : ''}
             </div>` : '';
+            const note = extractAssignorNote(f['Notes'] || '');
+            const seenTs = note ? localStorage.getItem(`assignor_note_seen_${r.id}`) : null;
+            const hasNewNote = note && note.ts !== seenTs;
+            const noteBadge = hasNewNote ? `<span style="display:inline-block; background:#dbeafe; border:1px solid #93c5fd; color:#1d4ed8; font-size:0.7rem; font-weight:800; padding:2px 9px; border-radius:20px; letter-spacing:0.4px; white-space:nowrap; animation:urgency-pulse 2s ease-in-out infinite;">🔔 New Message</span>` : '';
+            const noteHtml = note ? `<div style="background:#eaf3ff; border-left:3px solid #1a3a6b; border-radius:6px; padding:10px 14px; margin-top:8px; font-size:0.82rem;"><div style="font-size:0.72rem; color:#1a3a6b; margin-bottom:4px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;">💬 Message from Assignor · ${note.ts}</div><div style="color:#333; line-height:1.5;">${note.message}</div></div>` : '';
             return `<div class="game-card change-req">
                 <div class="game-card-main">
                     <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
                     <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
                     <div class="game-refs">${refsHtml}</div>
                     ${chgDetail}
+                    ${noteHtml}
                 </div>
                 <div class="game-card-side">
                     <span class="status-badge status-change-req">⚠ Pending</span>
+                    ${noteBadge}
                     <span class="submitted-by-lbl" style="color:#935116; font-size:0.75rem;">Awaiting assignor</span>
                 </div>
             </div>`;
@@ -1582,6 +1604,9 @@
             }
 
             content.innerHTML = html;
+
+            // Mark any assignor notes as seen now that the club has viewed them
+            markNotesSeen(pendingChanges);
 
             // Populate collapsible resolved section after DOM is ready
             if (window._renderResolvedCards) window._renderResolvedCards();
