@@ -660,8 +660,17 @@
             <!-- Main workstation content (hidden until profile selected) -->
             <div id="workstationContent" style="display:none;">
 
+            <!-- Filters toggle bar -->
+            <div id="filterToggleBar" onclick="toggleFiltersPanel()" style="display:none; align-items:center; justify-content:space-between; background:#0f3460; color:white; padding:7px 16px; border-radius:8px; margin-bottom:6px; cursor:pointer; user-select:none; font-family:inherit;">
+                <div style="display:flex; align-items:center; gap:10px; font-size:0.8rem;">
+                    <span style="opacity:0.6; font-size:0.7rem; letter-spacing:0.05em; font-weight:600; text-transform:uppercase;">Filters</span>
+                    <span id="filtersSummary" style="color:rgba(255,255,255,0.9); font-weight:600;"></span>
+                </div>
+                <span id="filterToggleArrow" style="font-size:0.75rem; opacity:0.7;">▼ expand</span>
+            </div>
+
             <!-- Filters -->
-            <div class="filters-bar">
+            <div id="filtersPanelWrap" class="filters-bar">
                 <div class="filters-row" style="margin-bottom:10px;">
                     <!-- Quick-pick buttons -->
                     <div>
@@ -3669,6 +3678,54 @@
             arrow.textContent = open ? '▸' : '▾';
         }
 
+        let _filtersPanelOpen = true;
+
+        function toggleFiltersPanel() {
+            _filtersPanelOpen = !_filtersPanelOpen;
+            const panel = document.getElementById('filtersPanelWrap');
+            const arrow = document.getElementById('filterToggleArrow');
+            if (panel) panel.style.display = _filtersPanelOpen ? '' : 'none';
+            if (arrow) arrow.textContent = _filtersPanelOpen ? '▲ collapse' : '▼ expand';
+        }
+
+        function collapseFiltersPanel() {
+            _filtersPanelOpen = false;
+            const panel = document.getElementById('filtersPanelWrap');
+            const arrow = document.getElementById('filterToggleArrow');
+            if (panel) panel.style.display = 'none';
+            if (arrow) arrow.textContent = '▼ expand';
+        }
+
+        function updateFiltersSummary() {
+            const bar = document.getElementById('filterToggleBar');
+            const summary = document.getElementById('filtersSummary');
+            if (!bar || !summary) return;
+
+            const from  = document.getElementById('dateFrom')?.value || '';
+            const to    = document.getElementById('dateTo')?.value   || '';
+            const count = allGames ? allGames.length : 0;
+
+            // date label
+            const fmtD = s => {
+                if (!s) return '';
+                const [y, m, d] = s.split('-');
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                return `${months[+m-1]} ${+d}`;
+            };
+            const dateStr = from === to ? fmtD(from) : `${fmtD(from)} – ${fmtD(to)}`;
+
+            // active club pills
+            const activePills = [...document.querySelectorAll('.club-pill.active')].map(p => p.textContent.trim());
+            const clubStr = activePills.length === 0 || activePills.includes('All Clubs')
+                ? 'All Clubs'
+                : activePills.length <= 2
+                    ? activePills.join(', ')
+                    : `${activePills.slice(0,2).join(', ')} +${activePills.length - 2}`;
+
+            summary.textContent = `📅 ${dateStr}  ·  ${clubStr}  ·  ${count} game${count !== 1 ? 's' : ''}`;
+            bar.style.display = 'flex';
+        }
+
         function applyGameFilters() {
             document.getElementById('gameFilterBody').style.display = 'none';
             document.getElementById('gameFilterArrow').textContent = '▸';
@@ -3753,6 +3810,7 @@
                     document.querySelectorAll('.club-pill').forEach(p => p.classList.add('active'));
                 }
                 renderGames();
+                updateFiltersSummary();
             });
             wrap.appendChild(all);
 
@@ -3788,6 +3846,7 @@
                     if (allPill) allPill.className = isAll ? 'club-pill-all' : 'club-pill-all inactive';
                     if (isAll) userHasFilteredClubs = false;
                     renderGames();
+                    updateFiltersSummary();
                 });
                 wrap.appendChild(pill);
             });
@@ -3974,6 +4033,8 @@
                 const now = new Date();
                 document.getElementById('lastLoadedLabel').textContent =
                     `Last loaded: ${now.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}`;
+                updateFiltersSummary();
+                collapseFiltersPanel();
             }
         }
 
