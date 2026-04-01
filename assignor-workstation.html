@@ -2117,6 +2117,7 @@
         let sheet3LastFiltered    = null;
         let sheet3SeedOrder       = 'exp-asc'; // 'exp-asc' | 'exp-desc'
         let sheet3MaxQueueLen     = 6;
+        let sheet3OptRoles        = {}; // { 'gid-slot': 'CR' | 'AR' }
 
         const SHEET3_BASE_COLS  = ['date','time','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
         const SHEET3_COL_LABELS = { date:'Date', time:'Time', club:'Club', ageGroup:'Age', gender:'Gender', homeTeam:'Home Team', awayTeam:'Away Team', venue:'Venue', field:'Field', center:'Center', ar1:'AR1', ar2:'AR2' };
@@ -2132,6 +2133,7 @@
                 localStorage.setItem('sheet3LocalState', JSON.stringify({
                     cleared:      sheet3ClearedAssigned,
                     colors:       sheet3OptColors,
+                    roles:        sheet3OptRoles,
                     splitH:       sheet3SplitGamesH,
                     zoomGames:    sheet3ZoomGames,
                     zoomRefs:     sheet3ZoomRefs,
@@ -2146,9 +2148,10 @@
             try {
                 const saved = localStorage.getItem('sheet3LocalState');
                 if (!saved) return;
-                const { cleared, colors, splitH, zoomGames, zoomRefs, baseColOrder, colOrder, hiddenCols, seedOrder } = JSON.parse(saved);
+                const { cleared, colors, roles, splitH, zoomGames, zoomRefs, baseColOrder, colOrder, hiddenCols, seedOrder } = JSON.parse(saved);
                 if (cleared)    sheet3ClearedAssigned = cleared;
                 if (colors)     sheet3OptColors       = colors;
+                if (roles)      sheet3OptRoles        = roles;
                 if (splitH && splitH >= 80 && splitH <= 1200) sheet3SplitGamesH = splitH;
                 if (zoomGames && zoomGames >= 0.6 && zoomGames <= 1.5) sheet3ZoomGames = zoomGames;
                 if (zoomRefs  && zoomRefs  >= 0.6 && zoomRefs  <= 1.5) sheet3ZoomRefs  = zoomRefs;
@@ -2295,6 +2298,17 @@
             const oldLen = queue.length;
             queue.splice(removedSlot, 1);
             sheet3StagedRefs[gid] = queue;
+            // Slide roles left too
+            const newRoles = {};
+            Object.keys(sheet3OptRoles).forEach(key => {
+                const lastDash = key.lastIndexOf('-');
+                const keyGid = key.slice(0, lastDash);
+                const slotNum = parseInt(key.slice(lastDash + 1));
+                if (keyGid !== gid) { newRoles[key] = sheet3OptRoles[key]; return; }
+                if (slotNum < removedSlot) newRoles[key] = sheet3OptRoles[key];
+                else if (slotNum > removedSlot) newRoles[`${gid}-${slotNum - 1}`] = sheet3OptRoles[key];
+            });
+            sheet3OptRoles = newRoles;
             // Rewrite shifted slots
             queue.forEach((name, slot) => {
                 if (slot >= removedSlot) sheet3UpsertSlot(gid, slot, name);
@@ -2305,6 +2319,25 @@
                     .delete().eq('game_id', parseInt(gid)).eq('slot', oldLen - 1)
                     .catch(e => console.error('slide delete:', e));
             }
+        }
+
+        function sheet3OptRoleBadge(gid, slot) {
+            const role = sheet3OptRoles[`${gid}-${slot}`];
+            if (!role) return '';
+            const bg = role === 'CR' ? '#0f3460' : '#1a7a4a';
+            return `<span style="background:${bg};color:#fff;border-radius:3px;padding:0 4px;font-size:0.6rem;font-weight:700;margin-right:4px;vertical-align:middle;">${role}</span>`;
+        }
+
+        function sheet3SetOptRole(gid, slot, role) {
+            const key = `${gid}-${slot}`;
+            if (role) sheet3OptRoles[key] = role;
+            else delete sheet3OptRoles[key];
+            const td = document.getElementById(`s3opt-${gid}-${slot}`);
+            if (td) {
+                const name = (sheet3StagedRefs[gid] && sheet3StagedRefs[gid][slot]) || '';
+                td.innerHTML = sheet3OptRoleBadge(gid, slot) + name;
+            }
+            sheet3SaveLocalState();
         }
 
         function sheet3SetSeedOrder(order) {
@@ -2402,12 +2435,13 @@
                     const col  = name ? '#1f2328' : '#bbb';
                     const drag = name ? `draggable="true" ondragstart="sheet3OptDragStart(event,'${gid}',${n},'${name.replace(/'/g,"\\'")}')"` : '';
                     const ctx  = name ? `oncontextmenu="sheet3ShowOptMenu(event,'${gid}',${n}); return false;"` : '';
-                    const badge = refCountBadge(name);
-                    return `<td id="s3opt-${gid}-${n}" style="border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:140px; white-space:nowrap; background:${bg}; color:${col}; cursor:${name?'grab':'default'};"
+                    const countBadge = refCountBadge(name);
+                    const roleBadge  = sheet3OptRoleBadge(gid, n);
+                    return `<td id="s3opt-${gid}-${n}" style="border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:120px; white-space:nowrap; background:${bg}; color:${col}; cursor:${name?'grab':'default'};"
                         ${drag} ${ctx}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
-                        ondrop="sheet3OptDrop(event,'${gid}',${n}); this.style.outline='';">${name || ''}${badge}</td>`;
+                        ondrop="sheet3OptDrop(event,'${gid}',${n}); this.style.outline='';">${roleBadge}${name || ''}${countBadge}</td>`;
                 };
                 const fmtGameTime = t => { if (!t) return '—'; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
                 const colRenderers = {
@@ -2774,12 +2808,25 @@
                 <span title="${s.label}" onclick="sheet3SetOptColor('${gid}',${slot},'${s.color}'); sheet3HideOptMenu();"
                     style="display:inline-block; width:20px; height:20px; border-radius:4px; border:1px solid #ccc; cursor:pointer; background:${s.color||'#fff'}; margin:2px;"
                     onmouseover="this.style.outline='2px solid #1a3a6b';" onmouseout="this.style.outline='';"></span>`).join('');
+            const currentRole = sheet3OptRoles[`${gid}-${slot}`] || null;
+            const roleBtn = r => {
+                const active = currentRole === r;
+                const bg = r === 'CR' ? '#0f3460' : r === 'AR' ? '#1a7a4a' : '#eee';
+                const col = (r === 'CR' || r === 'AR') ? '#fff' : '#555';
+                return `<span onclick="sheet3SetOptRole('${gid}',${slot},${r ? `'${r}'` : 'null'}); sheet3HideOptMenu();"
+                    style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:24px;border-radius:4px;border:2px solid ${active?bg:'#ccc'};background:${active?bg:'#fff'};color:${active?col:'#555'};font-size:0.72rem;font-weight:700;cursor:pointer;margin:2px;"
+                    onmouseover="this.style.background='${bg}';this.style.color='${col}';" onmouseout="this.style.background='${active?bg:'#fff'}';this.style.color='${active?col:'#555'}';">${r || '—'}</span>`;
+            };
             menu.innerHTML = `
                 <div style="padding:6px 0;">
                     <div onclick="sheet3OptClear(null,'${gid}',${slot}); sheet3HideOptMenu();"
                          style="padding:7px 16px; cursor:pointer; color:#cf222e;"
                          onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
                         Remove ref
+                    </div>
+                    <div style="padding:4px 16px 8px; border-top:1px solid #eee;">
+                        <div style="font-size:0.72rem; color:#888; margin-bottom:4px;">Role Note</div>
+                        <div>${roleBtn('CR')}${roleBtn('AR')}${roleBtn(null)}</div>
                     </div>
                     <div style="padding:4px 16px 8px; border-top:1px solid #eee;">
                         <div style="font-size:0.72rem; color:#888; margin-bottom:4px;">Color</div>
