@@ -4398,6 +4398,7 @@
 
             // Change request details for edit panel
             let changeReqNote = '';
+            let assignorNoteSection = '';
             if (isChangeReq) {
                 const notes  = f['Notes'] || '';
                 const blocks = notes.split(/\[CHANGE REQUEST/i);
@@ -4411,6 +4412,16 @@
                     if (reason) parts.push(`💬 "${reason}"`);
                     if (parts.length) changeReqNote = `<div style="background:#fff3cd;border:1px solid #f0a500;border-radius:6px;padding:7px 12px;margin-bottom:10px;font-size:0.78rem;color:#7d4e00;line-height:1.6;"><strong>Club requested:</strong> ${parts.join(' &nbsp;·&nbsp; ')}</div>`;
                 }
+                const existingNote = extractAssignorNoteWS(notes);
+                const noteDisplayStyle = existingNote ? '' : 'display:none;';
+                const noteDisplayInner = existingNote ? `<div style="font-size:0.7rem;color:#888;margin-bottom:3px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;">💬 Assignor Note · ${existingNote.ts}</div><div style="color:#333;line-height:1.5;">${existingNote.message}</div>` : '';
+                const notePlaceholder = existingNote ? 'Update note for club…' : 'Add a note for the club…';
+                const noteBtnLabel = existingNote ? '💬 Update Note' : '💬 Add Note for Club';
+                assignorNoteSection = `<div style="margin-bottom:10px;">
+                    <div id="wsNoteDisplay_${gid}" style="background:#eaf3ff;border-left:3px solid #1a3a6b;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:0.78rem;${noteDisplayStyle}">${noteDisplayInner}</div>
+                    <textarea id="wsNote_${gid}" placeholder="${notePlaceholder}" style="width:100%;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:0.82rem;padding:7px 10px;border:1px solid #ccc;border-radius:6px;resize:vertical;min-height:48px;color:#333;background:#fafafa;" onclick="event.stopPropagation()"></textarea>
+                    <button id="wsNoteBtn_${gid}" onclick="event.stopPropagation(); saveAssignorNoteWorkstation('${gid}')" style="margin-top:5px;background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:5px 13px;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">${noteBtnLabel}</button>
+                </div>`;
             }
 
             return `
@@ -4445,6 +4456,7 @@
                 </div>
                 <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
                     ${changeReqNote}
+                    ${assignorNoteSection}
                     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
                         <div><label>Date</label><input type="date" id="editDate-${gid}" value="${f['Date'] || ''}"></div>
                         <div><label>Time</label><input type="time" id="editTime-${gid}" value="${f['Time'] || ''}"></div>
@@ -5325,6 +5337,44 @@
                 alert('Could not mark resolved: ' + e.message);
             }
         }
+        function extractAssignorNoteWS(notes) {
+            if (!notes) return null;
+            const matches = [...notes.matchAll(/\[ASSIGNOR NOTE\s*[–-]\s*([^\]]+)\]([\s\S]*?)(?=\[|$)/gi)];
+            if (!matches.length) return null;
+            const last = matches[matches.length - 1];
+            return { ts: last[1].trim(), message: last[2].trim() };
+        }
+
+        async function saveAssignorNoteWorkstation(gameId) {
+            const textarea = document.getElementById('wsNote_' + gameId);
+            const msg = textarea.value.trim();
+            if (!msg) return;
+            const btn = document.getElementById('wsNoteBtn_' + gameId);
+            btn.textContent = 'Saving…'; btn.disabled = true;
+            try {
+                const game = allGames.find(g => String(g.id) === String(gameId));
+                const prevNotes = game?.fields['Notes'] || '';
+                const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+                const updatedNotes = prevNotes + `\n[ASSIGNOR NOTE – ${now}] ${msg}`;
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Notes': updatedNotes });
+                if (game) game.fields['Notes'] = updatedNotes;
+                textarea.value = '';
+                btn.textContent = '✅ Sent';
+                btn.style.background = '#27ae60';
+                // Update the display box in-place
+                const displayEl = document.getElementById('wsNoteDisplay_' + gameId);
+                if (displayEl) {
+                    displayEl.innerHTML = `<div style="font-size:0.7rem;color:#888;margin-bottom:3px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;">💬 Assignor Note · ${now}</div><div style="color:#333;line-height:1.5;">${msg}</div>`;
+                    displayEl.style.display = 'block';
+                }
+                const labelEl = document.getElementById('wsNoteLabel_' + gameId);
+                if (labelEl) labelEl.textContent = 'Update note for club…';
+                setTimeout(() => { btn.textContent = '💬 Update Note'; btn.style.background = '#1a3a6b'; btn.disabled = false; }, 1500);
+            } catch(e) {
+                btn.textContent = '❌ Error'; btn.disabled = false;
+            }
+        }
+
         function showChangeCompleteModal(matchup, newDate, newTime) {
             const fmtDate = new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
             const fmtTime = newTime ? (' @ ' + formatTime(newTime)) : '';
