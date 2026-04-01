@@ -2261,6 +2261,17 @@
 
             const allFilteredGames = filtered || allGames;
             sheet3LastFiltered = allFilteredGames;
+            const loadedGameIds = new Set(allGames.map(g => String(g.id)));
+            const refCountBadge = name => {
+                if (!name || name === '—') return '';
+                const refObj = refLookupByName[name.trim().toLowerCase()];
+                if (!refObj || !assignedAt[refObj.id]) return '';
+                let count = 0;
+                for (const gameSet of assignedAt[refObj.id].values())
+                    for (const gid of gameSet)
+                        if (loadedGameIds.has(String(gid))) count++;
+                return count ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 5px;font-size:0.62rem;font-weight:700;margin-left:4px;vertical-align:middle;">${count}</span>` : '';
+            };
             const gameRowsHtml = allFilteredGames.length ? allFilteredGames.map((g, i) => {
                 const f        = g.fields;
                 const gid      = String(g.id);
@@ -2280,10 +2291,11 @@
                     const bg        = hasRef ? (storedBg || '#e8f5e9') : '#fffde7';
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet3AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
                     const ctx       = hasRef ? `oncontextmenu="sheet3ShowAssignedMenu(event,'${gid}','${field}'); return false;"` : '';
+                    const badge     = hasRef ? refCountBadge(rawName) : '';
                     return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${hasRef?'grab':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
-                        ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}</td>`;
+                        ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}</td>`;
                 };
                 const optTd = n => {
                     const name = staged[n] || '';
@@ -2291,11 +2303,12 @@
                     const col  = name ? '#1f2328' : '#bbb';
                     const drag = name ? `draggable="true" ondragstart="sheet3OptDragStart(event,'${gid}',${n},'${name.replace(/'/g,"\\'")}')"` : '';
                     const ctx  = name ? `oncontextmenu="sheet3ShowOptMenu(event,'${gid}',${n}); return false;"` : '';
+                    const badge = refCountBadge(name);
                     return `<td id="s3opt-${gid}-${n}" style="border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:140px; white-space:nowrap; background:${bg}; color:${col}; cursor:${name?'grab':'default'};"
                         ${drag} ${ctx}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
-                        ondrop="sheet3OptDrop(event,'${gid}',${n}); this.style.outline='';">${name || ''}</td>`;
+                        ondrop="sheet3OptDrop(event,'${gid}',${n}); this.style.outline='';">${name || ''}${badge}</td>`;
                 };
                 const fmtGameTime = t => { if (!t) return '—'; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
                 const colRenderers = {
@@ -2396,8 +2409,6 @@
                 return v;
             };
 
-            // Build assigned count per ref scoped to all loaded games
-            const loadedGameIds = new Set(allGames.map(g => String(g.id)));
             const buildRefRowsHtml = rows => rows.length ? rows.map((r, i) => {
                 const safeName  = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
                 const refObj    = refLookupByName[r.name.trim().toLowerCase()];
