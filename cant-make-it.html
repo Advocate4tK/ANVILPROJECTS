@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Can't Make It — Referee Tool</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'DM Sans', sans-serif; background: #f4f6f9; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .card { background: #fff; border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.10); padding: 36px 32px; max-width: 480px; width: 100%; }
+        .logo { font-family: 'Barlow Condensed', sans-serif; font-size: 1.1rem; font-weight: 800; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 24px; }
+        .matchup { font-family: 'Barlow Condensed', sans-serif; font-size: 1.7rem; font-weight: 800; color: #09142a; line-height: 1.15; margin-bottom: 6px; }
+        .meta { font-size: 0.88rem; color: #666; margin-bottom: 6px; }
+        .position-badge { display: inline-block; background: #eaf3ff; color: #1a3a6b; font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 8px; margin-bottom: 20px; }
+        .ref-name { font-size: 1rem; font-weight: 700; color: #09142a; margin-bottom: 4px; }
+        .divider { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
+        .warning-box { background: #fff3f3; border: 1.5px solid #fca5a5; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 0.88rem; color: #7f1d1d; line-height: 1.6; }
+        .btn-confirm { display: block; width: 100%; background: #dc2626; color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 1rem; font-weight: 800; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; margin-bottom: 10px; }
+        .btn-confirm:hover { background: #b91c1c; }
+        .btn-confirm:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-cancel { display: block; width: 100%; background: none; color: #888; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+        .status { text-align: center; padding: 20px 0; }
+        .status .icon { font-size: 3rem; margin-bottom: 12px; }
+        .status .msg { font-size: 1rem; font-weight: 700; color: #09142a; margin-bottom: 6px; }
+        .status .sub { font-size: 0.85rem; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="card" id="mainCard">
+        <div class="logo">⚽ Referee Scheduling</div>
+        <div id="content"><p style="color:#888; text-align:center; padding:30px 0;">Loading…</p></div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script>
+    const params  = new URLSearchParams(window.location.search);
+    const token   = params.get('t');
+    let gameData  = null;
+    let parsedTok = null;
+
+    function fmtDate(d) {
+        if (!d) return '—';
+        return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+    }
+    function fmtTime(t) {
+        if (!t) return '';
+        const [h, m] = t.substring(0,5).split(':').map(Number);
+        return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
+    }
+    function posLabel(p) {
+        if (p === 'Center Referee') return 'Center Referee';
+        if (p === 'AR 1') return 'Assistant Referee 1';
+        if (p === 'AR 2') return 'Assistant Referee 2';
+        return p;
+    }
+
+    function showError(msg) {
+        document.getElementById('content').innerHTML = `<div class="status"><div class="icon">⚠️</div><div class="msg">${msg}</div><div class="sub">If you think this is a mistake, contact your assignor directly.</div></div>`;
+    }
+
+    async function init() {
+        if (!token) { showError('Invalid link — no token found.'); return; }
+        try {
+            parsedTok = JSON.parse(decodeURIComponent(escape(atob(token))));
+        } catch(e) { showError('Invalid link — could not read token.'); return; }
+
+        const { gameId, position, refName } = parsedTok;
+        if (!gameId || !position || !refName) { showError('Invalid link — missing required fields.'); return; }
+
+        try {
+            const records = await supabaseClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { filterByFormula: `RECORD_ID()='${gameId}'`, maxRecords: 1 });
+            if (!records.length) { showError('Game not found — it may have been removed.'); return; }
+            gameData = records[0];
+            const f = gameData.fields;
+
+            // Verify ref is still assigned to this position
+            const assigned = f[position] || '';
+            if (assigned.toLowerCase().trim() !== refName.toLowerCase().trim()) {
+                document.getElementById('content').innerHTML = `<div class="status"><div class="icon">✅</div><div class="msg">You're already off this game.</div><div class="sub">It looks like you were removed from this assignment. Nothing to do — your assignor has been notified.</div></div>`;
+                return;
+            }
+
+            document.getElementById('content').innerHTML = `
+                <div class="ref-name">👤 ${refName}</div>
+                <div class="matchup">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</div>
+                <div class="meta">${fmtDate(f['Date'])}${f['Time'] ? ' · ' + fmtTime(f['Time']) : ''}</div>
+                <div class="meta">${f['Age Group']||''} ${f['Gender']||''}</div>
+                <span class="position-badge">${posLabel(position)}</span>
+                <hr class="divider">
+                <div class="warning-box">
+                    ⚠️ Tapping the button below will remove you from this game and notify your assignor that you can't make it. They will need to find a replacement.
+                </div>
+                <button class="btn-confirm" id="confirmBtn" onclick="confirmCantMakeIt()">I Can't Make This Game</button>
+                <button class="btn-cancel" onclick="window.close()">Never mind — I'll be there</button>
+            `;
+        } catch(e) {
+            showError('Could not load game: ' + e.message);
+        }
+    }
+
+    async function confirmCantMakeIt() {
+        const btn = document.getElementById('confirmBtn');
+        btn.disabled = true;
+        btn.textContent = 'Processing…';
+        try {
+            const { gameId, position, refName } = parsedTok;
+            const prevNotes = gameData.fields['Notes'] || '';
+            const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+            const updatedNotes = prevNotes + `\n[CANT MAKE IT – ${now} – ${refName} – ${position}]`;
+            await supabaseClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                [position]: null,
+                'Notes': updatedNotes
+            });
+            document.getElementById('content').innerHTML = `
+                <div class="status">
+                    <div class="icon">✅</div>
+                    <div class="msg">Got it — you've been removed from this game.</div>
+                    <div class="sub" style="margin-top:8px;">Your assignor has been notified and will work to find a replacement. Thank you for letting them know.</div>
+                </div>
+            `;
+        } catch(e) {
+            btn.disabled = false;
+            btn.textContent = 'I Can\'t Make This Game';
+            alert('Something went wrong: ' + e.message);
+        }
+    }
+
+    window.addEventListener('load', init);
+    </script>
+</body>
+</html>

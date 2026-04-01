@@ -154,6 +154,8 @@
         .note-form-wrap textarea { width:100%; box-sizing:border-box; font-family:'DM Sans',sans-serif; font-size:0.82rem; padding:8px 10px; border:1px solid var(--border); border-radius:6px; resize:vertical; min-height:52px; color:var(--text); background:#fafafa; }
         .btn-note { background:#1a3a6b; color:#fff; border:none; border-radius:6px; padding:6px 14px; font-size:0.79rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; margin-top:5px; transition:background 0.15s; }
         .btn-note:hover { background:#0f2a52; }
+        .btn-preset-note { background:#f0f4ff; border:1px solid #c7d4f0; color:#1a3a6b; border-radius:6px; padding:4px 10px; font-size:0.74rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:background 0.15s; white-space:nowrap; }
+        .btn-preset-note:hover { background:#dce6ff; }
     </style>
 </head>
 <body>
@@ -565,7 +567,7 @@
                     const requestHtml = formatRequestHtml(requests);
                     const note        = extractAssignorNote(f['Notes'] || '');
                     const noteDisplayHtml = note ? `<div class="assignor-note-box"><div class="note-lbl">💬 Assignor Note · ${note.ts}</div><div class="note-body">${note.message}</div></div>` : '';
-                    const noteFormHtml = `<div class="note-form-wrap"><textarea id="note_${r.id}" placeholder="${note ? 'Update note for club…' : 'Add a note for the club…'}"></textarea><div><button class="btn-note" onclick="saveAssignorNote('${r.id}')">💬 ${note ? 'Update Note' : 'Add Note for Club'}</button></div></div>`;
+                    const noteFormHtml = `<div class="note-form-wrap"><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px;"><button class="btn-preset-note" onclick="document.getElementById('note_${r.id}').value='No referees available yet for this date — we are working on it and will update you as soon as possible.'">No refs yet</button><button class="btn-preset-note" onclick="document.getElementById('note_${r.id}').value='A referee has been confirmed for your game. Please check back for any further updates.'">Ref confirmed</button><button class="btn-preset-note" onclick="document.getElementById('note_${r.id}').value='Please resubmit your change request with as much advance notice as possible — it helps us find coverage.'">Resubmit w/ notice</button></div><textarea id="note_${r.id}" placeholder="${note ? 'Update note for club…' : 'Add a note for the club…'}"></textarea><div><button class="btn-note" onclick="saveAssignorNote('${r.id}')">💬 ${note ? 'Update Note' : 'Add Note for Club'}</button></div></div>`;
 
                     const adminEmail = f['Club Admin Email'] || '';
                     const contactBtn = adminEmail
@@ -582,6 +584,11 @@
                     const firstReqTs = requests[0]?.ts ? new Date(requests[0].ts) : null;
                     const timeSinceStr = firstReqTs ? getTimeSince(firstReqTs) : null;
                     const timeSinceHtml = timeSinceStr ? `<div class="time-since">submitted ${timeSinceStr}</div>` : '';
+
+                    const lastActivityTs = note ? new Date(note.ts) : firstReqTs;
+                    const hoursSinceActivity = lastActivityTs ? (Date.now() - lastActivityTs.getTime()) / 3600000 : null;
+                    const isStale = hoursSinceActivity !== null && hoursSinceActivity >= 48;
+                    const staleBadge = isStale ? `<span style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;font-size:0.7rem;font-weight:700;padding:2px 9px;border-radius:20px;letter-spacing:0.3px;white-space:nowrap;">⏱ ${Math.floor(hoursSinceActivity/24)}d no update</span>` : '';
 
                     if (isResolved) {
                         const gameNum = buildGameNum(f);
@@ -617,6 +624,7 @@
                             </div>
                             <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
                                 ${urgentBadge}
+                                ${staleBadge}
                                 <span class="status-pill pill-open">⚠ Open</span>
                             </div>
                         </div>

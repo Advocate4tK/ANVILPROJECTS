@@ -712,6 +712,7 @@
                     </div>
                     <div class="club-pills" id="clubPills"></div>
                 </div>
+                <div id="availHeatmap" style="display:none; margin-top:16px; padding-top:14px; border-top:1px solid #e5e7eb;"></div>
             </div>
 
             <!-- Change Request Focus Banner -->
@@ -4199,6 +4200,7 @@
                     `Last loaded: ${now.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}`;
                 updateFiltersSummary();
                 collapseFiltersPanel();
+                renderAvailHeatmap();
             }
         }
 
@@ -4419,6 +4421,7 @@
                 const noteBtnLabel = existingNote ? '💬 Update Note' : '💬 Add Note for Club';
                 assignorNoteSection = `<div style="margin-bottom:10px;">
                     <div id="wsNoteDisplay_${gid}" style="background:#eaf3ff;border-left:3px solid #1a3a6b;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:0.78rem;${noteDisplayStyle}">${noteDisplayInner}</div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px;" onclick="event.stopPropagation()"><button onclick="event.stopPropagation();document.getElementById('wsNote_${gid}').value='No referees available yet for this date — we are working on it and will update you as soon as possible.'" style="background:#f0f4ff;border:1px solid #c7d4f0;color:#1a3a6b;border-radius:6px;padding:3px 9px;font-size:0.73rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;">No refs yet</button><button onclick="event.stopPropagation();document.getElementById('wsNote_${gid}').value='A referee has been confirmed for your game. Please check back for any further updates.'" style="background:#f0f4ff;border:1px solid #c7d4f0;color:#1a3a6b;border-radius:6px;padding:3px 9px;font-size:0.73rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;">Ref confirmed</button><button onclick="event.stopPropagation();document.getElementById('wsNote_${gid}').value='Please resubmit your change request with as much advance notice as possible — it helps us find coverage.'" style="background:#f0f4ff;border:1px solid #c7d4f0;color:#1a3a6b;border-radius:6px;padding:3px 9px;font-size:0.73rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;">Resubmit w/ notice</button></div>
                     <textarea id="wsNote_${gid}" placeholder="${notePlaceholder}" style="width:100%;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:0.82rem;padding:7px 10px;border:1px solid #ccc;border-radius:6px;resize:vertical;min-height:48px;color:#333;background:#fafafa;" onclick="event.stopPropagation()"></textarea>
                     <button id="wsNoteBtn_${gid}" onclick="event.stopPropagation(); saveAssignorNoteWorkstation('${gid}')" style="margin-top:5px;background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:5px 13px;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">${noteBtnLabel}</button>
                 </div>`;
@@ -4584,6 +4587,7 @@
                     <span style="display:flex;align-items:center;gap:5px;font-size:0.8rem;">${assignedCountBadge(refId)}${refName}</span>
                     ${availWarn}
                     <button class="unassign-btn" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
+                    <button id="cmi_${gameId}_${position}" onclick="event.stopPropagation(); copyCantMakeItLink('${gameId}','${position}','${safeName}')" title="Copy can't-make-it link for ref" style="position:absolute;bottom:4px;right:28px;background:none;border:none;font-size:0.75rem;cursor:pointer;opacity:0.45;padding:0;line-height:1;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.45'">🔗</button>
                 </div>`;
             }
             return `<div class="slot" data-game-id="${gameId}" data-position="${position}">
@@ -5373,6 +5377,39 @@
             } catch(e) {
                 btn.textContent = '❌ Error'; btn.disabled = false;
             }
+        }
+
+        function renderAvailHeatmap() {
+            const el = document.getElementById('availHeatmap');
+            if (!el) return;
+            if (!allAvail.length) { el.style.display = 'none'; return; }
+            const dateCounts = {};
+            allAvail.forEach(a => { const d = a.fields['Date']; if (d) dateCounts[d] = (dateCounts[d] || 0) + 1; });
+            const dates = Object.keys(dateCounts).sort();
+            if (!dates.length) { el.style.display = 'none'; return; }
+            const pills = dates.map(d => {
+                const count = dateCounts[d];
+                const color = count >= 10 ? '#16a34a' : count >= 5 ? '#d97706' : '#dc2626';
+                const bg    = count >= 10 ? '#dcfce7' : count >= 5 ? '#fef3c7' : '#fee2e2';
+                const dow   = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short' });
+                const day   = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'numeric', day:'numeric' });
+                return `<div style="display:flex;flex-direction:column;align-items:center;background:${bg};border:1px solid ${color};border-radius:6px;padding:5px 9px;min-width:46px;gap:1px;" title="${count} refs available on ${d}"><span style="font-size:0.64rem;font-weight:800;color:${color};text-transform:uppercase;letter-spacing:0.3px;">${dow}</span><span style="font-size:0.67rem;color:#666;">${day}</span><span style="font-size:1rem;font-weight:800;color:${color};line-height:1.2;">${count}</span></div>`;
+            }).join('');
+            el.style.display = 'block';
+            el.innerHTML = `<div style="font-size:0.74rem;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:7px;">Refs Available by Day</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${pills}</div>`;
+        }
+
+        function copyCantMakeItLink(gameId, position, refName) {
+            try {
+                const token = btoa(unescape(encodeURIComponent(JSON.stringify({ gameId: String(gameId), position, refName }))));
+                const base = window.location.href.replace(/[^/]*$/, '');
+                const url = base + 'cant-make-it.html?t=' + token;
+                navigator.clipboard.writeText(url).then(() => {
+                    const key = gameId + '_' + position;
+                    const btn = document.getElementById('cmi_' + key);
+                    if (btn) { btn.textContent = '✅'; setTimeout(() => { btn.textContent = '🔗'; }, 1500); }
+                });
+            } catch(e) { alert('Could not copy link: ' + e.message); }
         }
 
         function showChangeCompleteModal(matchup, newDate, newTime) {
