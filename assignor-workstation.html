@@ -2115,24 +2115,29 @@
         let sheet3ZoomGames       = 1.0;
         let sheet3ZoomRefs        = 1.0;
         let sheet3LastFiltered    = null;
+        let sheet3SeedOrder       = 'exp-asc'; // 'exp-asc' | 'exp-desc'
+        let sheet3MaxQueueLen     = 6;
 
-        const SHEET3_DEFAULT_COLS = ['date','time','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2','opt0','opt1','opt2','opt3','opt4','opt5'];
-        const SHEET3_COL_LABELS   = { date:'Date', time:'Time', club:'Club', ageGroup:'Age', gender:'Gender', homeTeam:'Home Team', awayTeam:'Away Team', venue:'Venue', field:'Field', center:'Center', ar1:'AR1', ar2:'AR2', opt0:'Opt1', opt1:'Opt2', opt2:'Opt3', opt3:'Opt4', opt4:'Opt5', opt5:'Opt6' };
-        const SHEET3_COL_MINW     = { center:'120px', ar1:'120px', ar2:'120px', opt0:'140px', opt1:'140px', opt2:'140px', opt3:'140px', opt4:'140px', opt5:'140px' };
-        let sheet3ColOrder        = [...SHEET3_DEFAULT_COLS];
+        const SHEET3_BASE_COLS  = ['date','time','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
+        const SHEET3_COL_LABELS = { date:'Date', time:'Time', club:'Club', ageGroup:'Age', gender:'Gender', homeTeam:'Home Team', awayTeam:'Away Team', venue:'Venue', field:'Field', center:'Center', ar1:'AR1', ar2:'AR2' };
+        const SHEET3_COL_MINW   = { center:'120px', ar1:'120px', ar2:'120px' };
+        let sheet3ColOrder      = [...SHEET3_BASE_COLS];
         let sheet3ColDragKey      = null;
         let sheet3HiddenCols      = []; // column keys hidden by user
 
         function sheet3SaveLocalState() {
             try {
+                // Save only base col order — opt cols are always rebuilt dynamically
+                const baseColOrder = sheet3ColOrder.filter(k => SHEET3_BASE_COLS.includes(k));
                 localStorage.setItem('sheet3LocalState', JSON.stringify({
-                    cleared:     sheet3ClearedAssigned,
-                    colors:      sheet3OptColors,
-                    splitH:      sheet3SplitGamesH,
-                    zoomGames:   sheet3ZoomGames,
-                    zoomRefs:    sheet3ZoomRefs,
-                    colOrder:    sheet3ColOrder,
-                    hiddenCols:  sheet3HiddenCols
+                    cleared:      sheet3ClearedAssigned,
+                    colors:       sheet3OptColors,
+                    splitH:       sheet3SplitGamesH,
+                    zoomGames:    sheet3ZoomGames,
+                    zoomRefs:     sheet3ZoomRefs,
+                    baseColOrder: baseColOrder,
+                    hiddenCols:   sheet3HiddenCols,
+                    seedOrder:    sheet3SeedOrder
                 }));
             } catch(e) {}
         }
@@ -2141,14 +2146,19 @@
             try {
                 const saved = localStorage.getItem('sheet3LocalState');
                 if (!saved) return;
-                const { cleared, colors, splitH, zoomGames, zoomRefs, colOrder, hiddenCols } = JSON.parse(saved);
+                const { cleared, colors, splitH, zoomGames, zoomRefs, baseColOrder, colOrder, hiddenCols, seedOrder } = JSON.parse(saved);
                 if (cleared)    sheet3ClearedAssigned = cleared;
                 if (colors)     sheet3OptColors       = colors;
                 if (splitH && splitH >= 80 && splitH <= 1200) sheet3SplitGamesH = splitH;
                 if (zoomGames && zoomGames >= 0.6 && zoomGames <= 1.5) sheet3ZoomGames = zoomGames;
                 if (zoomRefs  && zoomRefs  >= 0.6 && zoomRefs  <= 1.5) sheet3ZoomRefs  = zoomRefs;
-                if (colOrder && Array.isArray(colOrder) && colOrder.length === SHEET3_DEFAULT_COLS.length) sheet3ColOrder = colOrder;
                 if (hiddenCols && Array.isArray(hiddenCols)) sheet3HiddenCols = hiddenCols;
+                if (seedOrder === 'exp-asc' || seedOrder === 'exp-desc') sheet3SeedOrder = seedOrder;
+                // Restore base col order (ignore legacy colOrder key)
+                const savedBase = baseColOrder || (colOrder ? colOrder.filter(k => SHEET3_BASE_COLS.includes(k)) : null);
+                if (savedBase && Array.isArray(savedBase) && SHEET3_BASE_COLS.every(k => savedBase.includes(k))) {
+                    sheet3ColOrder = savedBase; // opt cols appended dynamically in renderSheet3View
+                }
             } catch(e) {}
         }
 
@@ -2232,10 +2242,84 @@
                 sheet3StagedRefs = {};
                 (data || []).forEach(row => {
                     const gid = String(row.game_id);
-                    if (!sheet3StagedRefs[gid]) sheet3StagedRefs[gid] = [null,null,null,null,null,null];
+                    if (!sheet3StagedRefs[gid]) sheet3StagedRefs[gid] = [];
+                    // Ensure array is long enough
+                    while (sheet3StagedRefs[gid].length <= row.slot) sheet3StagedRefs[gid].push(null);
                     sheet3StagedRefs[gid][row.slot] = row.ref_name || null;
                 });
+                // Auto-seed any games that have no staging rows yet
+                sheet3AutoSeed();
+                // Compute max queue length
+                sheet3MaxQueueLen = Math.max(6, ...Object.values(sheet3StagedRefs).map(q => (q || []).filter(Boolean).length));
             } catch(e) { console.error('sheet3FetchStaging:', e); }
+        }
+
+        function sheet3AutoSeed() {
+            const getExp = name => {
+                const ref = refLookupByName[(name || '').trim().toLowerCase()];
+                if (!ref) return 9999;
+                const v = String(ref.fields['Years Reffing'] || '').toLowerCase().trim();
+                if (v === 'season 1' || v === 'seas 1') return -2;
+                if (v === 'season 2' || v === 'seas 2') return -1;
+                const n = parseInt(v);
+                return isNaN(n) ? 9999 : n;
+            };
+            allGames.forEach(g => {
+                const gid = String(g.id);
+                // Skip if already has staging rows
+                if (sheet3StagedRefs[gid] && sheet3StagedRefs[gid].some(Boolean)) return;
+                const gameDate = g.fields['Date'];
+                // Collect unique available ref names for this date
+                const seen = new Set();
+                const names = [];
+                allAvail.forEach(a => {
+                    if (a.fields['Date'] !== gameDate) return;
+                    const name = (a.fields['Referee Name'] || '').trim();
+                    if (!name || seen.has(name.toLowerCase())) return;
+                    seen.add(name.toLowerCase());
+                    names.push(name);
+                });
+                // Sort by experience per seed order
+                names.sort((a, b) => {
+                    const diff = getExp(a) - getExp(b);
+                    return sheet3SeedOrder === 'exp-asc' ? diff : -diff;
+                });
+                sheet3StagedRefs[gid] = names;
+                // Fire background writes — don't block render
+                names.forEach((name, slot) => sheet3UpsertSlot(gid, slot, name));
+            });
+        }
+
+        function sheet3SlideQueue(gid, removedSlot) {
+            const queue = [...(sheet3StagedRefs[gid] || [])];
+            const oldLen = queue.length;
+            queue.splice(removedSlot, 1);
+            sheet3StagedRefs[gid] = queue;
+            // Rewrite shifted slots
+            queue.forEach((name, slot) => {
+                if (slot >= removedSlot) sheet3UpsertSlot(gid, slot, name);
+            });
+            // Delete the now-vacated last slot
+            if (oldLen > 0) {
+                supabaseClient.client.from('staging')
+                    .delete().eq('game_id', parseInt(gid)).eq('slot', oldLen - 1)
+                    .catch(e => console.error('slide delete:', e));
+            }
+        }
+
+        function sheet3SetSeedOrder(order) {
+            sheet3SeedOrder = order;
+            // Re-seed only games that haven't been touched (no staging rows)
+            // Clear untouched games so autoSeed re-runs for them
+            allGames.forEach(g => {
+                const gid = String(g.id);
+                if (sheet3StagedRefs[gid] && sheet3StagedRefs[gid].some(Boolean)) return;
+                sheet3StagedRefs[gid] = [];
+            });
+            sheet3AutoSeed();
+            sheet3MaxQueueLen = Math.max(6, ...Object.values(sheet3StagedRefs).map(q => (q || []).filter(Boolean).length));
+            sheet3SaveLocalState();
+            renderSheet3View(sheet3LastFiltered);
         }
 
         async function sheet3UpsertSlot(gid, slot, name) {
@@ -2258,6 +2342,21 @@
             const fmt  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
             const cell = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
             const hdr  = 'border:1px solid #d0d7de; padding:5px 8px; font-size:0.73rem; font-weight:700; color:#1f2328; background:#f0f3f6; text-align:left; white-space:nowrap;';
+
+            // Build dynamic opt columns based on current max queue length
+            const optKeys = Array.from({ length: sheet3MaxQueueLen }, (_, i) => `opt${i}`);
+            const optLabels = {};
+            const optMinW = {};
+            optKeys.forEach((k, i) => { optLabels[k] = `Opt${i + 1}`; optMinW[k] = '120px'; });
+            const colLabels = { ...SHEET3_COL_LABELS, ...optLabels };
+            const colMinW   = { ...SHEET3_COL_MINW,   ...optMinW   };
+            // Rebuild col order: keep saved base col order + append current opt keys
+            const basePart = sheet3ColOrder.filter(k => SHEET3_BASE_COLS.includes(k));
+            if (SHEET3_BASE_COLS.every(k => basePart.includes(k))) {
+                sheet3ColOrder = [...basePart, ...optKeys];
+            } else {
+                sheet3ColOrder = [...SHEET3_BASE_COLS, ...optKeys];
+            }
 
             const allFilteredGames = filtered || allGames;
             sheet3LastFiltered = allFilteredGames;
@@ -2324,12 +2423,12 @@
                     center:   () => assignedTd('center', cRefRaw),
                     ar1:      () => assignedTd('ar1', ar1Raw),
                     ar2:      () => assignedTd('ar2', ar2Raw),
-                    opt0: () => optTd(0), opt1: () => optTd(1), opt2: () => optTd(2),
-                    opt3: () => optTd(3), opt4: () => optTd(4), opt5: () => optTd(5),
                 };
+                // Add dynamic opt renderers
+                optKeys.forEach((k, i) => { colRenderers[k] = () => optTd(i); });
                 const stubTd = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:0; background:#eef0f3;';
                 return `<tr style="background:${rowBg};">${sheet3ColOrder.map(k =>
-                    sheet3HiddenCols.includes(k) ? `<td style="${stubTd}"></td>` : colRenderers[k]()
+                    sheet3HiddenCols.includes(k) ? `<td style="${stubTd}"></td>` : (colRenderers[k] ? colRenderers[k]() : '<td></td>')
                 ).join('')}</tr>`;
             }).join('') : `<tr><td colspan="${sheet3ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
@@ -2337,10 +2436,10 @@
             const stubTh  = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:4px 2px; background:#e8eaed; cursor:pointer; text-align:center; font-size:0.65rem; color:#888;';
             const headerCells = sheet3ColOrder.map(key => {
                 if (sheet3HiddenCols.includes(key)) {
-                    return `<th style="${stubTh}" onclick="sheet3ShowCol('${key}')" title="Show ${SHEET3_COL_LABELS[key]||key}">▶</th>`;
+                    return `<th style="${stubTh}" onclick="sheet3ShowCol('${key}')" title="Show ${colLabels[key]||key}">▶</th>`;
                 }
-                const label = SHEET3_COL_LABELS[key] || key;
-                const minW  = SHEET3_COL_MINW[key] ? ` min-width:${SHEET3_COL_MINW[key]};` : '';
+                const label = colLabels[key] || key;
+                const minW  = colMinW[key] ? ` min-width:${colMinW[key]};` : '';
                 return `<th style="${hdr}${minW} ${thDrag}" draggable="true"
                     ondragstart="sheet3ColDragStart('${key}')"
                     ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
@@ -2358,6 +2457,8 @@
             const showAllBtn = sheet3HiddenCols.length
                 ? `<button onclick="sheet3ShowAllCols()" style="${zoomBtn}" title="Show all hidden columns">Show all cols</button>`
                 : '';
+            const seedAscStyle  = `${zoomBtn} ${sheet3SeedOrder === 'exp-asc'  ? 'background:#0f3460;color:#fff;border-color:#0f3460;' : ''}`;
+            const seedDescStyle = `${zoomBtn} ${sheet3SeedOrder === 'exp-desc' ? 'background:#0f3460;color:#fff;border-color:#0f3460;' : ''}`;
             const gamesTable = `
                 <div style="display:flex; align-items:center; gap:5px; padding:4px 2px 2px 2px; flex-wrap:wrap;">
                     <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em;">GAMES ZOOM</span>
@@ -2366,6 +2467,9 @@
                     <button onclick="sheet3SetZoomGames(0.05)" style="${zoomBtn}">+</button>
                     <span style="font-size:0.7rem; color:#aaa; margin-left:6px;">${allFilteredGames.length} games</span>
                     ${showAllBtn}
+                    <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em; margin-left:10px;">SEED ORDER</span>
+                    <button onclick="sheet3SetSeedOrder('exp-asc')"  style="${seedAscStyle}"  title="Seed queue: least experienced first">Exp ▲</button>
+                    <button onclick="sheet3SetSeedOrder('exp-desc')" style="${seedDescStyle}" title="Seed queue: most experienced first">Exp ▼</button>
                 </div>
                 <div id="s3gamesPane" style="max-height:${sheet3SplitGamesH}px; overflow:auto; border:2px solid #d0d7de;">
                     <table id="s3gamesTable" style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; min-width:100%; zoom:${sheet3ZoomGames};">
@@ -2519,7 +2623,7 @@
             if (!sheet3DragData) return;
             const { type, name, fromGid, fromSlot, fromField } = sheet3DragData;
             sheet3DragData = null;
-            if (!sheet3StagedRefs[toGid]) sheet3StagedRefs[toGid] = [null,null,null,null,null,null];
+            if (!sheet3StagedRefs[toGid]) sheet3StagedRefs[toGid] = [];
             if (type === 'ref') {
                 sheet3StagedRefs[toGid][toSlot] = name;
                 sheet3UpdateCell(toGid, toSlot, name);
@@ -2547,9 +2651,8 @@
         function sheet3OptClear(e, gid, slot) {
             if (e) e.stopPropagation();
             if (!sheet3StagedRefs[gid] || !sheet3StagedRefs[gid][slot]) return;
-            sheet3StagedRefs[gid][slot] = null;
-            sheet3UpdateCell(gid, slot, null);
-            sheet3UpsertSlot(gid, slot, null);
+            sheet3SlideQueue(gid, slot);
+            renderGames();
         }
 
         function sheet3UpdateCell(gid, slot, name) {
@@ -2607,10 +2710,8 @@
                 if (toPos) assignRef(toGid, toPos, refId, name);
             } else if (type === 'opt') {
                 sheet3RestoreAssignedCell(toGid, toField, name);
-                if (toPos) assignRef(toGid, toPos, refId, name);
-                if (sheet3StagedRefs[fromGid]) sheet3StagedRefs[fromGid][fromSlot] = null;
-                sheet3UpdateCell(fromGid, fromSlot, null);
-                sheet3UpsertSlot(fromGid, fromSlot, null);
+                if (toPos) assignRef(toGid, toPos, refId, name); // assignRef calls renderGames on complete
+                sheet3SlideQueue(fromGid, fromSlot); // slide remaining queue left
             } else if (type === 'assigned') {
                 const toTd = document.getElementById(`s3${toField}-${toGid}`);
                 const currentToName = toTd ? toTd.textContent.trim() : '—';
