@@ -2535,7 +2535,9 @@
             e.dataTransfer.effectAllowed = 'move';
         }
 
-        function sheet3ClearAssignedCell(gid, field) {
+        const SHEET3_POS = { center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' };
+
+        function sheet3ClearAssignedCell(gid, field, persist = true) {
             if (!sheet3ClearedAssigned[gid]) sheet3ClearedAssigned[gid] = {};
             sheet3ClearedAssigned[gid][field] = true;
             const td = document.getElementById(`s3${field}-${gid}`);
@@ -2547,6 +2549,7 @@
             td.removeAttribute('draggable');
             td.removeAttribute('ondragstart');
             td.removeAttribute('oncontextmenu');
+            if (persist && SHEET3_POS[field]) unassignRef(gid, SHEET3_POS[field]);
             sheet3SaveLocalState();
         }
 
@@ -2555,10 +2558,15 @@
             if (!sheet3DragData) return;
             const { type, name, fromGid, fromSlot, fromField } = sheet3DragData;
             sheet3DragData = null;
+            const toPos = SHEET3_POS[toField];
+            const refObj = refLookupByName[name.trim().toLowerCase()];
+            const refId = refObj ? refObj.id : '';
             if (type === 'ref') {
                 sheet3RestoreAssignedCell(toGid, toField, name);
+                if (toPos) assignRef(toGid, toPos, refId, name);
             } else if (type === 'opt') {
                 sheet3RestoreAssignedCell(toGid, toField, name);
+                if (toPos) assignRef(toGid, toPos, refId, name);
                 if (sheet3StagedRefs[fromGid]) sheet3StagedRefs[fromGid][fromSlot] = null;
                 sheet3UpdateCell(fromGid, fromSlot, null);
                 sheet3UpsertSlot(fromGid, fromSlot, null);
@@ -2566,10 +2574,16 @@
                 const toTd = document.getElementById(`s3${toField}-${toGid}`);
                 const currentToName = toTd ? toTd.textContent.trim() : '—';
                 sheet3RestoreAssignedCell(toGid, toField, name);
+                if (toPos) assignRef(toGid, toPos, refId, name);
                 if (currentToName && currentToName !== '—') {
                     sheet3RestoreAssignedCell(fromGid, fromField, currentToName);
+                    const fromPos = SHEET3_POS[fromField];
+                    const swapRefObj = refLookupByName[currentToName.trim().toLowerCase()];
+                    if (fromPos) assignRef(fromGid, fromPos, swapRefObj ? swapRefObj.id : '', currentToName);
                 } else {
-                    sheet3ClearAssignedCell(fromGid, fromField);
+                    sheet3ClearAssignedCell(fromGid, fromField, false);
+                    const fromPos = SHEET3_POS[fromField];
+                    if (fromPos) unassignRef(fromGid, fromPos);
                 }
             }
         }
