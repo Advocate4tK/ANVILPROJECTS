@@ -1497,24 +1497,47 @@
 
                 const sortBtnBase = 'cursor:pointer; font-size:0.72rem; font-weight:700; font-family:\'DM Sans\',sans-serif; padding:3px 10px; border-radius:8px; border:1px solid #09142a; transition:background 0.15s,color 0.15s;';
 
-                window._pendingCollapsed = false;
+                window._pendingCollapsed = localStorage.getItem('pendingChangesCollapsed') === 'true';
+                window._pendingChangesData = pendingChanges;
+
+                const hasAnyNewNote = pendingChanges.some(r => {
+                    const note = extractAssignorNote(r.fields['Notes'] || '');
+                    return note && note.ts !== localStorage.getItem(`assignor_note_seen_${r.id}`);
+                });
+                const showBadgeOnLoad = window._pendingCollapsed && hasAnyNewNote;
+
                 window._togglePending = function() {
                     window._pendingCollapsed = !window._pendingCollapsed;
+                    localStorage.setItem('pendingChangesCollapsed', window._pendingCollapsed);
                     const container = document.getElementById('pendingCardsContainer');
-                    const arrow = document.getElementById('pendingArrow');
+                    const arrow     = document.getElementById('pendingArrow');
+                    const badge     = document.getElementById('pendingNewBadge');
                     if (container) container.style.display = window._pendingCollapsed ? 'none' : 'block';
                     if (arrow) arrow.textContent = window._pendingCollapsed ? '▶' : '▼';
+                    if (!window._pendingCollapsed) {
+                        // Expanding — they can see the cards now, mark notes seen + hide badge
+                        markNotesSeen(window._pendingChangesData);
+                        if (badge) badge.style.display = 'none';
+                    } else {
+                        // Collapsing — show badge if any note is still unread
+                        const stillNew = window._pendingChangesData.some(r => {
+                            const note = extractAssignorNote(r.fields['Notes'] || '');
+                            return note && note.ts !== localStorage.getItem(`assignor_note_seen_${r.id}`);
+                        });
+                        if (badge) badge.style.display = stillNew ? 'inline-block' : 'none';
+                    }
                 };
 
                 html += `<div style="margin-bottom:32px;">
                     <div class="chg-section-hdr pending" style="justify-content:space-between; cursor:pointer; user-select:none;" onclick="window._togglePending()">
                         <span style="display:flex; align-items:center; gap:7px;">
-                            <span id="pendingArrow" style="font-size:0.8rem; transition:transform 0.2s;">▼</span>
+                            <span id="pendingArrow" style="font-size:0.8rem; transition:transform 0.2s;">${window._pendingCollapsed ? '▶' : '▼'}</span>
                             <span>⚠️ Open Change Requests</span>
+                            <span id="pendingNewBadge" style="display:${showBadgeOnLoad ? 'inline-block' : 'none'}; background:#dbeafe; border:1px solid #93c5fd; color:#1d4ed8; font-size:0.7rem; font-weight:800; padding:2px 9px; border-radius:20px; letter-spacing:0.4px; white-space:nowrap; animation:urgency-pulse 2s ease-in-out infinite;">🔔 New Message</span>
                         </span>
                         <span style="background:#fef3c7; color:#78350f; font-size:0.78rem; padding:2px 10px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif;">${pendingChanges.length}</span>
                     </div>
-                    <div id="pendingCardsContainer">${pendingHtml}</div>
+                    <div id="pendingCardsContainer" style="display:${window._pendingCollapsed ? 'none' : 'block'};">${pendingHtml}</div>
                     ${resolvedChanges.length > 0 ? `
                     <div class="chg-section-hdr resolved" style="margin-top:16px; justify-content:space-between; flex-wrap:wrap; gap:6px; align-items:center;">
                         <span style="display:flex; align-items:center; gap:7px; cursor:pointer; user-select:none;" onclick="window._toggleResolved()">
@@ -1617,8 +1640,8 @@
 
             content.innerHTML = html;
 
-            // Mark any assignor notes as seen now that the club has viewed them
-            markNotesSeen(pendingChanges);
+            // Mark notes seen only if pending section is visible — if collapsed, wait until they expand
+            if (!window._pendingCollapsed) markNotesSeen(pendingChanges);
 
             // Populate collapsible resolved section after DOM is ready
             if (window._renderResolvedCards) window._renderResolvedCards();
