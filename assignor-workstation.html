@@ -2356,6 +2356,41 @@
             renderSheet3View(sheet3LastFiltered);
         }
 
+        // ── Sheet 3 ref hover tooltip ─────────────────────────────────────────
+        function showRefTooltip(name, el) {
+            if (!name || name === '—') return;
+            const ref = refLookupByName[name.trim().toLowerCase()];
+            if (!ref) return;
+            const f = ref.fields;
+            const yrs     = parseYrs(f['Years Reffing'], -1);
+            const expLabel = yrs < 0 ? 'Unknown' : yrs === 0 ? 'New' : yrs === 1 ? '1 yr' : `${yrs} yrs`;
+            const expColor = yrs < 0 ? '#888' : yrs === 0 ? '#e74c3c' : yrs === 1 ? '#27ae60' : yrs <= 3 ? '#c9a200' : yrs <= 10 ? '#2980b9' : '#8e44ad';
+            const gender   = f['Gender'] || '';
+            const posPref  = (f['Position Preference'] || '').trim();
+            const clubPref = (f['Club Preference'] || '').trim();
+            const email    = (f['Email'] || '').trim();
+            const rows = [
+                `<div style="font-weight:700; font-size:0.85rem; color:#0f3460; margin-bottom:6px;">${name}</div>`,
+                `<div><span style="color:${expColor}; font-weight:700;">${expLabel}</span> experience${gender ? ` &nbsp;·&nbsp; ${gender}` : ''}</div>`,
+                posPref ? `<div style="color:#555;">Pos: ${posPref}</div>` : '',
+                clubPref ? `<div style="color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Clubs: ${clubPref}</div>` : '',
+                email ? `<div style="color:#888; font-size:0.75rem; margin-top:4px;">${email}</div>` : '',
+            ].filter(Boolean).join('');
+            const tip = document.getElementById('s3RefTooltip');
+            tip.innerHTML = rows;
+            tip.style.display = 'block';
+            const rect = el.getBoundingClientRect();
+            const tipW = 260;
+            let left = rect.right + 8;
+            if (left + tipW > window.innerWidth - 10) left = rect.left - tipW - 8;
+            tip.style.left = `${left}px`;
+            tip.style.top  = `${Math.min(rect.top, window.innerHeight - tip.offsetHeight - 10)}px`;
+        }
+        function hideRefTooltip() {
+            const tip = document.getElementById('s3RefTooltip');
+            if (tip) tip.style.display = 'none';
+        }
+
         async function sheet3UpsertSlot(gid, slot, name) {
             try {
                 if (name) {
@@ -2425,7 +2460,9 @@
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet3AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
                     const ctx       = hasRef ? `oncontextmenu="sheet3ShowAssignedMenu(event,'${gid}','${field}'); return false;"` : '';
                     const badge     = hasRef ? refCountBadge(rawName) : '';
-                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${hasRef?'grab':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx}
+                    const hoverIn  = hasRef ? `onmouseenter="showRefTooltip('${display.replace(/'/g,"\\'")}', this)"` : '';
+                    const hoverOut = hasRef ? `onmouseleave="hideRefTooltip()"` : '';
+                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${hasRef?'grab':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
                         ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}</td>`;
@@ -2436,10 +2473,12 @@
                     const col  = name ? '#1f2328' : '#bbb';
                     const drag = name ? `draggable="true" ondragstart="sheet3OptDragStart(event,'${gid}',${n},'${name.replace(/'/g,"\\'")}')"` : '';
                     const ctx  = name ? `oncontextmenu="sheet3ShowOptMenu(event,'${gid}',${n}); return false;"` : '';
+                    const hoverIn  = name ? `onmouseenter="showRefTooltip('${name.replace(/'/g,"\\'")}', this)"` : '';
+                    const hoverOut = name ? `onmouseleave="hideRefTooltip()"` : '';
                     const countBadge = refCountBadge(name);
                     const roleBadge  = sheet3OptRoleBadge(gid, n);
                     return `<td id="s3opt-${gid}-${n}" style="border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:120px; white-space:nowrap; background:${bg}; color:${col}; cursor:${name?'grab':'default'};"
-                        ${drag} ${ctx}
+                        ${drag} ${ctx} ${hoverIn} ${hoverOut}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
                         ondrop="sheet3OptDrop(event,'${gid}',${n}); this.style.outline='';">${roleBadge}${name || ''}${countBadge}</td>`;
@@ -5441,6 +5480,11 @@
 
     <!-- Speech bubble for Command 2 ref profile -->
     <div id="ref-bubble"></div>
+
+    <!-- Sheet 3 ref hover tooltip -->
+    <div id="s3RefTooltip" style="display:none; position:fixed; z-index:9999; pointer-events:none;
+        background:#fff; border:1px solid #d0d7de; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.15);
+        padding:10px 14px; min-width:200px; max-width:280px; font-size:0.8rem; line-height:1.6;"></div>
 
 </body>
 </html>
