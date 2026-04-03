@@ -2121,6 +2121,7 @@
         let sheet3AgeFilter       = null; // null = all, or an age group string
         let sheet3ClubFilter      = null; // null = all, or a club name string
         let sheet3DateFilter      = null; // null = all, or a date string
+        let sheet3MissingFilter   = false; // true = show only games with at least one empty assigned slot
         let sheet3OptRoles        = {}; // { 'gid-slot': 'CR' | 'AR' }
 
         const SHEET3_BASE_COLS  = ['date','time','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
@@ -2344,6 +2345,11 @@
             sheet3SaveLocalState();
         }
 
+        function sheet3ToggleMissingFilter() {
+            sheet3MissingFilter = !sheet3MissingFilter;
+            renderSheet3View(sheet3LastFiltered);
+        }
+
         function sheet3CycleDateFilter() {
             const games = sheet3LastFiltered || allGames;
             const vals  = [...new Set(games.map(g => g.fields['Date']).filter(Boolean))].sort();
@@ -2470,9 +2476,10 @@
             if (sheet3ClubFilter && !s3UniqueClubs.includes(sheet3ClubFilter)) sheet3ClubFilter = null;
             if (sheet3DateFilter && !s3UniqueDates.includes(sheet3DateFilter)) sheet3DateFilter = null;
             const displayGames = allFilteredGames.filter(g =>
-                (!sheet3AgeFilter  || g.fields['Age Group']   === sheet3AgeFilter)  &&
-                (!sheet3ClubFilter || g.fields['Source Club'] === sheet3ClubFilter) &&
-                (!sheet3DateFilter || g.fields['Date']        === sheet3DateFilter)
+                (!sheet3AgeFilter    || g.fields['Age Group']   === sheet3AgeFilter)  &&
+                (!sheet3ClubFilter   || g.fields['Source Club'] === sheet3ClubFilter) &&
+                (!sheet3DateFilter   || g.fields['Date']        === sheet3DateFilter) &&
+                (!sheet3MissingFilter || ['Center Referee','AR 1','AR 2'].some(p => !resolveRefName(g.fields[p])))
             );
             const loadedGameIds = new Set(allGames.map(g => String(g.id)));
             const refCountBadge = name => {
@@ -2635,6 +2642,7 @@
                     <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em; margin-left:10px;">SEED ORDER</span>
                     <button onclick="sheet3SetSeedOrder('exp-asc')"  style="${seedAscStyle}"  title="Seed queue: least experienced first">Exp ▲</button>
                     <button onclick="sheet3SetSeedOrder('exp-desc')" style="${seedDescStyle}" title="Seed queue: most experienced first">Exp ▼</button>
+                    <button onclick="sheet3ToggleMissingFilter()" style="${zoomBtn} margin-left:10px; ${sheet3MissingFilter ? 'background:#c0392b;color:#fff;border-color:#c0392b;' : ''}" title="Show only games missing at least one referee">⚠ Missing Refs${sheet3MissingFilter ? ' ✕' : ''}</button>
                 </div>
                 <div id="s3gamesPane" style="max-height:${sheet3SplitGamesH}px; overflow:auto; border:2px solid #d0d7de;">
                     <table id="s3gamesTable" style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; min-width:100%; zoom:${sheet3ZoomGames};">
