@@ -62,10 +62,24 @@
                         <div class="summary-tile"><div class="num">3</div><div class="lbl">Clubs</div></div>
                     </div>
                     <p style="font-size:14px; color:#555; margin:0;">
-                        One weekend: <strong>Apr 10 (Fri eve) / Apr 11 (Sat) / Apr 12 (Sun) 2026.</strong><br>
+                        One weekend: <strong id="seedWeekendLabel">pick a Friday below</strong><br>
                         Glastonbury: 40 games across all 3 days (realistic volume). East Haddam: 10 games Sat. Griswold: 10 games Sun.<br>
                         35 Glastonbury refs, 15 per EH and Griswold. U8 games are single-ref; U10+ get full crews.
                     </p>
+                </div>
+
+                <!-- Weekend date picker -->
+                <div style="background:#fff; border:2px solid #2980b9; border-radius:10px; padding:18px 22px; margin-bottom:20px;">
+                    <label style="font-weight:700; color:#1a5276; display:block; margin-bottom:10px;">📅 Pick the Friday of the weekend to seed:</label>
+                    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                        <input type="date" id="seedFriday"
+                            style="font-size:1rem; padding:8px 12px; border:2px solid #d6e4f7; border-radius:8px; outline:none; cursor:pointer;"
+                            onfocus="this.style.borderColor='#2980b9'" onblur="this.style.borderColor='#d6e4f7'"
+                            onchange="onSeedDateChange()">
+                        <div id="seedDatePreview" style="display:none; font-size:0.9rem; color:#555; background:#eaf4fd; border-radius:8px; padding:7px 14px;">
+                            Fri <strong id="prevFri"></strong> &nbsp;·&nbsp; Sat <strong id="prevSat"></strong> &nbsp;·&nbsp; Sun <strong id="prevSun"></strong>
+                        </div>
+                    </div>
                 </div>
 
                 <fieldset>
@@ -81,9 +95,10 @@
                             <input type="checkbox" id="chkAvail" checked style="width:18px;height:18px;"> Availability Records (~80)
                         </label>
                     </div>
-                    <button class="btn" id="seedBtn" style="background:#2980b9; color:white; padding:10px 28px; font-size:1rem; font-weight:700; border:none; border-radius:8px; cursor:pointer;">
+                    <button class="btn" id="seedBtn" disabled style="background:#2980b9; color:white; padding:10px 28px; font-size:1rem; font-weight:700; border:none; border-radius:8px; cursor:pointer; opacity:0.5;">
                         🌱 Seed Selected Data
                     </button>
+                    <span id="seedBtnHint" style="font-size:0.82rem; color:#888; margin-left:12px;">Pick a Friday date first</span>
                 </fieldset>
 
                 <div class="progress-bar-wrap" id="progressWrap">
@@ -347,10 +362,49 @@
         { date:'2026-04-12', 'Referee Name':'Jack Carabella',     'Start Time':'07:30', 'End Time':'17:00', 'Max Games':4 },
     ];
 
+    // ── Date picker ────────────────────────────────────────────────────────────
+    function onSeedDateChange() {
+        const val = document.getElementById('seedFriday').value;
+        const btn  = document.getElementById('seedBtn');
+        const hint = document.getElementById('seedBtnHint');
+        if (!val) {
+            document.getElementById('seedDatePreview').style.display = 'none';
+            document.getElementById('seedWeekendLabel').textContent = 'pick a Friday below';
+            btn.disabled = true; btn.style.opacity = '0.5'; hint.style.display = 'inline';
+            return;
+        }
+        const fri = new Date(val + 'T12:00:00');
+        const sat = new Date(fri); sat.setDate(fri.getDate() + 1);
+        const sun = new Date(fri); sun.setDate(fri.getDate() + 2);
+        const fmt = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        document.getElementById('prevFri').textContent = fmt(fri);
+        document.getElementById('prevSat').textContent = fmt(sat);
+        document.getElementById('prevSun').textContent = fmt(sun);
+        document.getElementById('seedDatePreview').style.display = 'flex';
+        document.getElementById('seedWeekendLabel').textContent =
+            `${fmt(fri)} (Fri eve) / ${fmt(sat)} (Sat) / ${fmt(sun)} (Sun) ${fri.getFullYear()}`;
+        btn.disabled = false; btn.style.opacity = '1'; hint.style.display = 'none';
+    }
+
     // ── Seed runner ────────────────────────────────────────────────────────────
     document.getElementById('seedBtn').addEventListener('click', async () => {
         const db = supabaseClient ? supabaseClient.client : null;
         if (!db) { alert('Database not connected.'); return; }
+
+        const fridayVal = document.getElementById('seedFriday').value;
+        if (!fridayVal) { alert('Pick a Friday date first.'); return; }
+
+        // Compute date mapping: hardcoded template dates → chosen weekend
+        const fri = new Date(fridayVal + 'T12:00:00');
+        const sat = new Date(fri); sat.setDate(fri.getDate() + 1);
+        const sun = new Date(fri); sun.setDate(fri.getDate() + 2);
+        const toISO = d => d.toISOString().slice(0, 10);
+        const dateMap = {
+            '2026-04-10': toISO(fri),
+            '2026-04-11': toISO(sat),
+            '2026-04-12': toISO(sun)
+        };
+        const remapDate = row => row.date ? { ...row, date: dateMap[row.date] || row.date } : row;
 
         const doRefs  = document.getElementById('chkRefs').checked;
         const doGames = document.getElementById('chkGames').checked;
@@ -365,9 +419,9 @@
         document.getElementById('resultsList').innerHTML = '';
 
         const tasks = [];
-        if (doRefs)  tasks.push({ label:'Referees',    data: SEED_REFS,  table:'referees',     count: SEED_REFS.length });
-        if (doGames) tasks.push({ label:'Games',       data: SEED_GAMES, table:'games',        count: SEED_GAMES.length });
-        if (doAvail) tasks.push({ label:'Availability',data: SEED_AVAIL, table:'availability', count: SEED_AVAIL.length });
+        if (doRefs)  tasks.push({ label:'Referees',    data: SEED_REFS.map(remapDate),  table:'referees',     count: SEED_REFS.length });
+        if (doGames) tasks.push({ label:'Games',       data: SEED_GAMES.map(remapDate), table:'games',        count: SEED_GAMES.length });
+        if (doAvail) tasks.push({ label:'Availability',data: SEED_AVAIL.map(remapDate), table:'availability', count: SEED_AVAIL.length });
 
         let totalDone = 0;
         const totalOps = tasks.reduce((s, t) => s + t.count, 0);
