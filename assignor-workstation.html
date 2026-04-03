@@ -2122,6 +2122,7 @@
         let sheet3ClubFilter      = null; // null = all, or a club name string
         let sheet3DateFilter      = null; // null = all, or a date string
         let sheet3MissingFilter   = false; // true = show only games with at least one empty assigned slot
+        let sheet3RefClubFilter   = null;  // null = all, or a club name string (filters ref availability pane)
         let sheet3OptRoles        = {}; // { 'gid-slot': 'CR' | 'AR' }
 
         const SHEET3_BASE_COLS  = ['date','time','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
@@ -2374,6 +2375,14 @@
             if (!vals.length) return;
             const idx = vals.indexOf(sheet3ClubFilter);
             sheet3ClubFilter = idx < vals.length - 1 ? vals[idx + 1] : null;
+            renderSheet3View(sheet3LastFiltered);
+        }
+
+        function sheet3CycleRefClubFilter() {
+            const vals = [...new Set((sheet3CachedRefRows || []).map(r => r.club).filter(Boolean))].sort();
+            if (!vals.length) return;
+            const idx = vals.indexOf(sheet3RefClubFilter);
+            sheet3RefClubFilter = idx < vals.length - 1 ? vals[idx + 1] : null;
             renderSheet3View(sheet3LastFiltered);
         }
 
@@ -2714,7 +2723,10 @@
                 </tr>`;
             }).join('') : `<tr><td colspan="6" style="${cell} color:#888;">No availability submitted.</td></tr>`;
 
-            const refRowsHtml = buildRefRowsHtml(refRows);
+            const displayRefRows = sheet3RefClubFilter
+                ? refRows.filter(r => r.club === sheet3RefClubFilter)
+                : refRows;
+            const refRowsHtml = buildRefRowsHtml(displayRefRows);
 
             const refsDivider = `<div onmousedown="sheet3SplitterMousedown(event)" style="background:#1a3a6b; color:#fff; padding:2px 14px; margin:3px -20px 4px -20px; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:ns-resize; user-select:none;" title="Drag to resize panes">Referee Availability — drag a row into an Opt cell &#8597;</div>`;
 
@@ -2735,12 +2747,12 @@
                         <thead style="position:sticky; top:0; z-index:2;"><tr>
                             <th style="${hdr}">Date</th><th style="${hdr}">Name</th>
                             <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}</th>
-                            <th style="${hdr}">Club Preference</th><th style="${hdr}">Start</th><th style="${hdr}">End</th>
+                            <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3CycleRefClubFilter()" title="Click to filter by club preference">Club Preference <span style="background:${sheet3RefClubFilter?'#e3f0ff':'#f0ece6'};color:${sheet3RefClubFilter?'#0f3460':'#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${sheet3RefClubFilter||'All'}</span></th><th style="${hdr}">Start</th><th style="${hdr}">End</th>
                         </tr></thead>
                         <tbody id="s3refTbody">${refRowsHtml}</tbody>
                     </table>
                 </div>
-                <div style="margin-top:6px; font-size:0.7rem; color:#888;">${refRows.length} records</div>
+                <div style="margin-top:6px; font-size:0.7rem; color:#888;">${displayRefRows.length}${displayRefRows.length !== refRows.length ? ` of ${refRows.length}` : ''} records</div>
                 </div></div>`;
         }
 
