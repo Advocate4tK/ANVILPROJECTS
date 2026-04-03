@@ -2120,6 +2120,7 @@
         let sheet3MaxQueueLen     = 6;
         let sheet3AgeFilter       = null; // null = all, or an age group string
         let sheet3ClubFilter      = null; // null = all, or a club name string
+        let sheet3DateFilter      = null; // null = all, or a date string
         let sheet3OptRoles        = {}; // { 'gid-slot': 'CR' | 'AR' }
 
         const SHEET3_BASE_COLS  = ['date','time','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
@@ -2343,6 +2344,15 @@
             sheet3SaveLocalState();
         }
 
+        function sheet3CycleDateFilter() {
+            const games = sheet3LastFiltered || allGames;
+            const vals  = [...new Set(games.map(g => g.fields['Date']).filter(Boolean))].sort();
+            if (!vals.length) return;
+            const idx = vals.indexOf(sheet3DateFilter);
+            sheet3DateFilter = idx < vals.length - 1 ? vals[idx + 1] : null;
+            renderSheet3View(sheet3LastFiltered);
+        }
+
         function sheet3CycleAgeFilter() {
             const games = sheet3LastFiltered || allGames;
             const vals  = [...new Set(games.map(g => g.fields['Age Group']).filter(Boolean))].sort();
@@ -2455,11 +2465,14 @@
             sheet3LastFiltered = allFilteredGames;
             const s3UniqueAges  = [...new Set(allFilteredGames.map(g => g.fields['Age Group']).filter(Boolean))].sort();
             const s3UniqueClubs = [...new Set(allFilteredGames.map(g => g.fields['Source Club']).filter(Boolean))].sort();
-            if (sheet3AgeFilter  && !s3UniqueAges.includes(sheet3AgeFilter))  sheet3AgeFilter  = null;
+            const s3UniqueDates = [...new Set(allFilteredGames.map(g => g.fields['Date']).filter(Boolean))].sort();
+            if (sheet3AgeFilter  && !s3UniqueAges.includes(sheet3AgeFilter))   sheet3AgeFilter  = null;
             if (sheet3ClubFilter && !s3UniqueClubs.includes(sheet3ClubFilter)) sheet3ClubFilter = null;
+            if (sheet3DateFilter && !s3UniqueDates.includes(sheet3DateFilter)) sheet3DateFilter = null;
             const displayGames = allFilteredGames.filter(g =>
-                (!sheet3AgeFilter  || g.fields['Age Group']   === sheet3AgeFilter) &&
-                (!sheet3ClubFilter || g.fields['Source Club'] === sheet3ClubFilter)
+                (!sheet3AgeFilter  || g.fields['Age Group']   === sheet3AgeFilter)  &&
+                (!sheet3ClubFilter || g.fields['Source Club'] === sheet3ClubFilter) &&
+                (!sheet3DateFilter || g.fields['Date']        === sheet3DateFilter)
             );
             const loadedGameIds = new Set(allGames.map(g => String(g.id)));
             const refCountBadge = name => {
@@ -2546,7 +2559,22 @@
                 }
                 const label = colLabels[key] || key;
                 const minW  = colMinW[key] ? ` min-width:${colMinW[key]};` : '';
-                // Age and Club headers are filterable — click cycles through unique values
+                // Age, Club, and Date headers are filterable — click cycles through unique values
+                if (key === 'date') {
+                    const active = sheet3DateFilter;
+                    const badge  = active ? ` <span style="background:#e3f0ff;color:#0f3460;border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${active}</span>` : '';
+                    const tip    = active ? `Click to cycle date filter (${active})` : 'Click to filter by date';
+                    return `<th style="${hdr}${minW} cursor:pointer; user-select:none;" draggable="true"
+                        ondragstart="sheet3ColDragStart('${key}')"
+                        ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
+                        ondragleave="this.style.background='';"
+                        ondrop="sheet3ColDrop('${key}'); this.style.background='';"
+                        onclick="sheet3CycleDateFilter()" title="${tip}">
+                        <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
+                            <span>${label}${badge}</span>
+                            <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
+                        </span></th>`;
+                }
                 if (key === 'ageGroup') {
                     const active = sheet3AgeFilter;
                     const badge  = active ? ` <span style="background:#e3f0ff;color:#0f3460;border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${active}</span>` : '';
