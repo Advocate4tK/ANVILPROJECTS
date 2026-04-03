@@ -2357,7 +2357,7 @@
         }
 
         // ── Sheet 3 ref hover tooltip ─────────────────────────────────────────
-        function showRefTooltip(name, el) {
+        function showRefTooltip(name, el, evt) {
             if (!name || name === '—') return;
             const ref = refLookupByName[name.trim().toLowerCase()];
             if (!ref) return;
@@ -2382,12 +2382,13 @@
             const tip = document.getElementById('s3RefTooltip');
             tip.innerHTML = rows;
             tip.style.display = 'block';
-            const rect = el.getBoundingClientRect();
             const tipW = 260;
-            let left = rect.right + 8;
-            if (left + tipW > window.innerWidth - 10) left = rect.left - tipW - 8;
+            const mx = evt ? evt.clientX : (el.getBoundingClientRect().right);
+            const my = evt ? evt.clientY : (el.getBoundingClientRect().top);
+            let left = mx + 14;
+            if (left + tipW > window.innerWidth - 10) left = mx - tipW - 14;
             tip.style.left = `${left}px`;
-            tip.style.top  = `${Math.min(rect.top, window.innerHeight - tip.offsetHeight - 10)}px`;
+            tip.style.top  = `${Math.min(my - 10, window.innerHeight - 160)}px`;
         }
         function hideRefTooltip() {
             const tip = document.getElementById('s3RefTooltip');
@@ -2463,7 +2464,7 @@
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet3AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
                     const ctx       = hasRef ? `oncontextmenu="sheet3ShowAssignedMenu(event,'${gid}','${field}'); return false;"` : '';
                     const badge     = hasRef ? refCountBadge(rawName) : '';
-                    const hoverIn  = hasRef ? `onmouseenter="showRefTooltip('${display.replace(/'/g,"\\'")}', this)"` : '';
+                    const hoverIn  = hasRef ? `onmouseenter="showRefTooltip('${display.replace(/'/g,"\\'")}', this, event)"` : '';
                     const hoverOut = hasRef ? `onmouseleave="hideRefTooltip()"` : '';
                     return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${hasRef?'grab':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
@@ -2476,7 +2477,7 @@
                     const col  = name ? '#1f2328' : '#bbb';
                     const drag = name ? `draggable="true" ondragstart="sheet3OptDragStart(event,'${gid}',${n},'${name.replace(/'/g,"\\'")}')"` : '';
                     const ctx  = name ? `oncontextmenu="sheet3ShowOptMenu(event,'${gid}',${n}); return false;"` : '';
-                    const hoverIn  = name ? `onmouseenter="showRefTooltip('${name.replace(/'/g,"\\'")}', this)"` : '';
+                    const hoverIn  = name ? `onmouseenter="showRefTooltip('${name.replace(/'/g,"\\'")}', this, event)"` : '';
                     const hoverOut = name ? `onmouseleave="hideRefTooltip()"` : '';
                     const countBadge = refCountBadge(name);
                     const roleBadge  = sheet3OptRoleBadge(gid, n);
@@ -2607,7 +2608,7 @@
                 return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
                     draggable="true"
                     ondragstart="sheet3RefDragStart(event,'${safeName}')"
-                    onmouseenter="showRefTooltip('${safeName}', this)"
+                    onmouseenter="showRefTooltip('${safeName}', this, event)"
                     onmouseleave="hideRefTooltip()">
                     <td style="${cell}">${r.date}</td>
                     <td style="${cell}">${r.name}${countBadge}</td>
