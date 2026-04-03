@@ -264,14 +264,12 @@ class SupabaseClientWrapper {
     async updateRecord(tableName, recordId, fields) {
         try {
             const tbl = this._tableName(tableName);
-            const { data, error } = await this.client
+            const { error } = await this.client
                 .from(tbl)
                 .update(this._normalizeFields(fields))
-                .eq('id', recordId)
-                .select()
-                .single();
+                .eq('id', recordId);
             if (error) throw new Error(error.message);
-            return this._wrap(data);
+            return { id: recordId };
         } catch (error) {
             console.error('SupabaseClient updateRecord error:', error);
             throw error;
