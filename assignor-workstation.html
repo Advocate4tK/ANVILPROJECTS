@@ -2315,7 +2315,7 @@
             const oldLen = queue.length;
             queue.splice(removedSlot, 1);
             sheet3StagedRefs[gid] = queue;
-            // Slide roles left too
+            // Slide roles left
             const newRoles = {};
             Object.keys(sheet3OptRoles).forEach(key => {
                 const lastDash = key.lastIndexOf('-');
@@ -2326,16 +2326,32 @@
                 else if (slotNum > removedSlot) newRoles[`${gid}-${slotNum - 1}`] = sheet3OptRoles[key];
             });
             sheet3OptRoles = newRoles;
-            // Rewrite shifted slots
+            // Slide colors left
+            const newColors = {};
+            Object.keys(sheet3OptColors).forEach(key => {
+                if (key.startsWith('assigned-')) { newColors[key] = sheet3OptColors[key]; return; }
+                const lastDash = key.lastIndexOf('-');
+                const keyGid = key.slice(0, lastDash);
+                const slotNum = parseInt(key.slice(lastDash + 1));
+                if (keyGid !== gid) { newColors[key] = sheet3OptColors[key]; return; }
+                if (slotNum < removedSlot) newColors[key] = sheet3OptColors[key];
+                else if (slotNum > removedSlot) newColors[`${gid}-${slotNum - 1}`] = sheet3OptColors[key];
+            });
+            sheet3OptColors = newColors;
+            // Rewrite shifted slots and collect promises for callers that need to await
+            const promises = [];
             queue.forEach((name, slot) => {
-                if (slot >= removedSlot) sheet3UpsertSlot(gid, slot, name);
+                if (slot >= removedSlot) promises.push(sheet3UpsertSlot(gid, slot, name));
             });
             // Delete the now-vacated last slot
             if (oldLen > 0) {
-                supabaseClient.client.from('staging')
-                    .delete().eq('game_id', parseInt(gid)).eq('slot', oldLen - 1)
-                    .catch(e => console.error('slide delete:', e));
+                promises.push(
+                    supabaseClient.client.from('staging')
+                        .delete().eq('game_id', parseInt(gid)).eq('slot', oldLen - 1)
+                        .then(() => {}).catch(e => console.error('slide delete:', e))
+                );
             }
+            return promises;
         }
 
         function sheet3OptRoleBadge(gid, slot) {
@@ -5390,7 +5406,7 @@
                     // Do NOT auto-clear Change Requested here — assignor must explicitly mark resolved
 
                     // Remove ref from Opt cells of ALL games that overlap this game's time window
-                    // Must await all deletes before renderGames() re-fetches staging from DB
+                    // Use slideQueue (not just null) so order compacts cleanly and persists on next login
                     const assignedNameLc = refName.trim().toLowerCase();
                     const removePromises = [];
                     allGames.forEach(g => {
@@ -5398,13 +5414,12 @@
                         const gid = String(g.id);
                         const opts = sheet3StagedRefs[gid];
                         if (!opts) return;
-                        opts.forEach((name, slot) => {
-                            if (!name || name.trim().toLowerCase() !== assignedNameLc) return;
-                            opts[slot] = null;
-                            delete sheet3OptRoles[`${gid}-${slot}`];  // role belongs to the ref, not the slot
-                            delete sheet3OptColors[`${gid}-${slot}`]; // color belongs to the ref, not the slot
-                            removePromises.push(sheet3UpsertSlot(gid, slot, null));
-                        });
+                        // Iterate in reverse so splices don't shift unprocessed indices
+                        for (let slot = opts.length - 1; slot >= 0; slot--) {
+                            const name = opts[slot];
+                            if (!name || name.trim().toLowerCase() !== assignedNameLc) continue;
+                            removePromises.push(...sheet3SlideQueue(gid, slot));
+                        }
                     });
                     await Promise.all(removePromises);
                 }
