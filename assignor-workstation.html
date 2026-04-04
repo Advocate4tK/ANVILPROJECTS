@@ -5212,9 +5212,11 @@
         }
 
         // ── Auto-scroll page during drag ─────────────────────────────────────
-        let _autoScrollRaf = null;
+        let _autoScrollRaf  = null;
+        let _autoScrollHRaf = null;
         document.addEventListener('dragover', function(e) {
-            const ZONE  = 100; // px from edge to start scrolling
+            // Vertical page scroll
+            const ZONE  = 100;
             const SPEED = 14;
             const y = e.clientY;
             const h = window.innerHeight;
@@ -5228,9 +5230,27 @@
                 const step  = () => { window.scrollBy(0,  SPEED * power); _autoScrollRaf = requestAnimationFrame(step); };
                 _autoScrollRaf = requestAnimationFrame(step);
             }
+
+            // Horizontal scroll for Sheet 3 games pane
+            const pane = document.getElementById('s3gamesPane');
+            if (!pane) return;
+            cancelAnimationFrame(_autoScrollHRaf);
+            const rect  = pane.getBoundingClientRect();
+            const HZONE = 80;
+            const HSPEED = 16;
+            const x = e.clientX;
+            if (x < rect.left + HZONE && x > rect.left) {
+                const power = (HZONE - (x - rect.left)) / HZONE;
+                const step  = () => { pane.scrollLeft -= HSPEED * power; _autoScrollHRaf = requestAnimationFrame(step); };
+                _autoScrollHRaf = requestAnimationFrame(step);
+            } else if (x > rect.right - HZONE && x < rect.right) {
+                const power = (HZONE - (rect.right - x)) / HZONE;
+                const step  = () => { pane.scrollLeft += HSPEED * power; _autoScrollHRaf = requestAnimationFrame(step); };
+                _autoScrollHRaf = requestAnimationFrame(step);
+            }
         });
-        document.addEventListener('dragend', () => cancelAnimationFrame(_autoScrollRaf));
-        document.addEventListener('drop',    () => cancelAnimationFrame(_autoScrollRaf));
+        document.addEventListener('dragend', () => { cancelAnimationFrame(_autoScrollRaf); cancelAnimationFrame(_autoScrollHRaf); });
+        document.addEventListener('drop',    () => { cancelAnimationFrame(_autoScrollRaf); cancelAnimationFrame(_autoScrollHRaf); });
 
         // ── Assign ref to slot ────────────────────────────────────────────────
         async function assignRef(gameId, position, refId, refName) {
