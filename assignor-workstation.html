@@ -5306,9 +5306,11 @@
                     // Do NOT auto-clear Change Requested here — assignor must explicitly mark resolved
 
                     // Remove ref from Opt cells of ALL games at the same date + time
+                    // Must await all deletes before renderGames() re-fetches staging from DB
                     const assignedNameLc = refName.trim().toLowerCase();
                     const gameDate = game.fields['Date'];
                     const gameTime = game.fields['Time'] || '';
+                    const removePromises = [];
                     allGames.forEach(g => {
                         if (g.fields['Date'] !== gameDate || (g.fields['Time'] || '') !== gameTime) return;
                         const gid = String(g.id);
@@ -5317,9 +5319,10 @@
                         opts.forEach((name, slot) => {
                             if (!name || name.trim().toLowerCase() !== assignedNameLc) return;
                             opts[slot] = null;
-                            sheet3UpsertSlot(gid, slot, null); // remove from staging DB
+                            removePromises.push(sheet3UpsertSlot(gid, slot, null));
                         });
                     });
+                    await Promise.all(removePromises);
                 }
 
                 renderGames();
