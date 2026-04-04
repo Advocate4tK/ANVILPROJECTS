@@ -2461,6 +2461,18 @@
             } catch(e) { console.error('sheet3UpsertSlot:', e); }
         }
 
+        function refCountBadge(name) {
+            if (!name || name === '—') return '';
+            const refObj = refLookupByName[name.trim().toLowerCase()];
+            if (!refObj || !assignedAt[refObj.id]) return '';
+            const loadedIds = new Set(allGames.map(g => String(g.id)));
+            let count = 0;
+            for (const gameSet of assignedAt[refObj.id].values())
+                for (const gid of gameSet)
+                    if (loadedIds.has(String(gid))) count++;
+            return count ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 5px;font-size:0.62rem;font-weight:700;margin-left:4px;vertical-align:middle;">${count}</span>` : '';
+        }
+
         function renderSheet3View(filtered) {
             sheet3LoadLocalState();
             const wrap = document.getElementById('gamesListWrap');
@@ -2501,16 +2513,7 @@
                 (!sheet3MissingFilter || ['Center Referee','AR 1','AR 2'].some(p => !resolveRefName(g.fields[p])))
             );
             const loadedGameIds = new Set(allGames.map(g => String(g.id)));
-            const refCountBadge = name => {
-                if (!name || name === '—') return '';
-                const refObj = refLookupByName[name.trim().toLowerCase()];
-                if (!refObj || !assignedAt[refObj.id]) return '';
-                let count = 0;
-                for (const gameSet of assignedAt[refObj.id].values())
-                    for (const gid of gameSet)
-                        if (loadedGameIds.has(String(gid))) count++;
-                return count ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 5px;font-size:0.62rem;font-weight:700;margin-left:4px;vertical-align:middle;">${count}</span>` : '';
-            };
+            // refCountBadge is defined as a top-level function below renderSheet3View
             const gameRowsHtml = displayGames.length ? displayGames.map((g, i) => {
                 const f        = g.fields;
                 const gid      = String(g.id);
