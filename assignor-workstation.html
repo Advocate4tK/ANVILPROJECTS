@@ -2279,11 +2279,10 @@
                 // Skip if already has staging rows
                 if (sheet3StagedRefs[gid] && sheet3StagedRefs[gid].some(Boolean)) return;
                 const gameDate = g.fields['Date'];
-                const gameTime = g.fields['Time'] || '';
-                // Build set of refs already assigned to ANY game at this date+time
+                // Build set of refs already assigned to ANY game overlapping this game's time window
                 const assignedAtSlot = new Set();
                 allGames.forEach(og => {
-                    if (og.fields['Date'] !== gameDate || (og.fields['Time'] || '') !== gameTime) return;
+                    if (!gamesOverlap(g, og)) return;
                     ['Center Referee', 'AR 1', 'AR 2'].forEach(pos => {
                         const n = resolveRefName(og.fields[pos]);
                         if (n && n !== '—') assignedAtSlot.add(n.trim().toLowerCase());
@@ -5321,14 +5320,12 @@
 
                     // Do NOT auto-clear Change Requested here — assignor must explicitly mark resolved
 
-                    // Remove ref from Opt cells of ALL games at the same date + time
+                    // Remove ref from Opt cells of ALL games that overlap this game's time window
                     // Must await all deletes before renderGames() re-fetches staging from DB
                     const assignedNameLc = refName.trim().toLowerCase();
-                    const gameDate = game.fields['Date'];
-                    const gameTime = game.fields['Time'] || '';
                     const removePromises = [];
                     allGames.forEach(g => {
-                        if (g.fields['Date'] !== gameDate || (g.fields['Time'] || '') !== gameTime) return;
+                        if (!gamesOverlap(game, g)) return;
                         const gid = String(g.id);
                         const opts = sheet3StagedRefs[gid];
                         if (!opts) return;
