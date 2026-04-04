@@ -2121,6 +2121,7 @@
         let sheet3AgeFilter       = null; // null = all, or an age group string
         let sheet3ClubFilter      = null; // null = all, or a club name string
         let sheet3DateFilter      = null; // null = all, or a date string
+        let sheet3TimeFilter      = null; // null = all, or a time string (HH:MM)
         let sheet3MissingFilter   = false; // true = show only games with at least one empty assigned slot
         let sheet3RefClubFilter   = null;  // null = all, or a club name string (filters ref availability pane)
         let sheet3OptRoles        = {}; // { 'gid-slot': 'CR' | 'AR' }
@@ -2378,6 +2379,15 @@
             renderSheet3View(sheet3LastFiltered);
         }
 
+        function sheet3CycleTimeFilter() {
+            const games = sheet3LastFiltered || allGames;
+            const vals  = [...new Set(games.map(g => g.fields['Time']).filter(Boolean))].sort();
+            if (!vals.length) return;
+            const idx = vals.indexOf(sheet3TimeFilter);
+            sheet3TimeFilter = idx < vals.length - 1 ? vals[idx + 1] : null;
+            renderSheet3View(sheet3LastFiltered);
+        }
+
         function sheet3CycleRefClubFilter() {
             const vals = [...new Set((sheet3CachedRefRows || []).map(r => r.club).filter(Boolean))].sort();
             if (!vals.length) return;
@@ -2481,13 +2491,16 @@
             const s3UniqueAges  = [...new Set(allFilteredGames.map(g => g.fields['Age Group']).filter(Boolean))].sort();
             const s3UniqueClubs = [...new Set(allFilteredGames.map(g => g.fields['Source Club']).filter(Boolean))].sort();
             const s3UniqueDates = [...new Set(allFilteredGames.map(g => g.fields['Date']).filter(Boolean))].sort();
+            const s3UniqueTimes = [...new Set(allFilteredGames.map(g => g.fields['Time']).filter(Boolean))].sort();
             if (sheet3AgeFilter  && !s3UniqueAges.includes(sheet3AgeFilter))   sheet3AgeFilter  = null;
             if (sheet3ClubFilter && !s3UniqueClubs.includes(sheet3ClubFilter)) sheet3ClubFilter = null;
             if (sheet3DateFilter && !s3UniqueDates.includes(sheet3DateFilter)) sheet3DateFilter = null;
+            if (sheet3TimeFilter && !s3UniqueTimes.includes(sheet3TimeFilter)) sheet3TimeFilter = null;
             const displayGames = allFilteredGames.filter(g =>
                 (!sheet3AgeFilter    || g.fields['Age Group']   === sheet3AgeFilter)  &&
                 (!sheet3ClubFilter   || g.fields['Source Club'] === sheet3ClubFilter) &&
                 (!sheet3DateFilter   || g.fields['Date']        === sheet3DateFilter) &&
+                (!sheet3TimeFilter   || g.fields['Time']        === sheet3TimeFilter) &&
                 (!sheet3MissingFilter || ['Center Referee','AR 1','AR 2'].some(p => !resolveRefName(g.fields[p])))
             );
             const loadedGameIds = new Set(allGames.map(g => String(g.id)));
@@ -2616,6 +2629,22 @@
                         ondragleave="this.style.background='';"
                         ondrop="sheet3ColDrop('${key}'); this.style.background='';"
                         onclick="sheet3CycleClubFilter()" title="${tip}">
+                        <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
+                            <span>${label}${badge}</span>
+                            <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
+                        </span></th>`;
+                }
+                if (key === 'time') {
+                    const active    = sheet3TimeFilter;
+                    const fmtActive = active ? (t => { const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; })(active) : null;
+                    const badge  = ` <span style="background:${active ? '#e3f0ff' : '#f0ece6'};color:${active ? '#0f3460' : '#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${fmtActive || 'All'}</span>`;
+                    const tip    = active ? `Click to cycle time filter (${fmtActive})` : 'Click to filter by time';
+                    return `<th style="${hdr}${minW} cursor:pointer; user-select:none;" draggable="true"
+                        ondragstart="sheet3ColDragStart('${key}')"
+                        ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
+                        ondragleave="this.style.background='';"
+                        ondrop="sheet3ColDrop('${key}'); this.style.background='';"
+                        onclick="sheet3CycleTimeFilter()" title="${tip}">
                         <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
                             <span>${label}${badge}</span>
                             <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
