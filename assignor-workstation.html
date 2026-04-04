@@ -2879,6 +2879,13 @@
                 fromArr[fromSlot] = displaced;
                 sheet3StagedRefs[fromGid] = fromArr;
                 sheet3StagedRefs[toGid]   = toArr;
+                // Roles travel with the ref — swap them across slots
+                const fromRoleKey = `${fromGid}-${fromSlot}`;
+                const toRoleKey   = `${toGid}-${toSlot}`;
+                const fromRole = sheet3OptRoles[fromRoleKey];
+                const toRole   = sheet3OptRoles[toRoleKey];
+                if (fromRole) sheet3OptRoles[toRoleKey]   = fromRole; else delete sheet3OptRoles[toRoleKey];
+                if (toRole)   sheet3OptRoles[fromRoleKey] = toRole;   else delete sheet3OptRoles[fromRoleKey];
                 sheet3UpdateCell(toGid, toSlot, name);
                 sheet3UpdateCell(fromGid, fromSlot, displaced);
                 sheet3UpsertSlot(toGid, toSlot, name);
@@ -5349,6 +5356,7 @@
                         opts.forEach((name, slot) => {
                             if (!name || name.trim().toLowerCase() !== assignedNameLc) return;
                             opts[slot] = null;
+                            delete sheet3OptRoles[`${gid}-${slot}`]; // role belongs to the ref, not the slot
                             removePromises.push(sheet3UpsertSlot(gid, slot, null));
                         });
                     });
