@@ -5285,6 +5285,22 @@
                     assignedAt[refId].get(dt).add(gameId);
 
                     // Do NOT auto-clear Change Requested here — assignor must explicitly mark resolved
+
+                    // Remove ref from Opt cells of ALL games at the same date + time
+                    const assignedNameLc = refName.trim().toLowerCase();
+                    const gameDate = game.fields['Date'];
+                    const gameTime = game.fields['Time'] || '';
+                    allGames.forEach(g => {
+                        if (g.fields['Date'] !== gameDate || (g.fields['Time'] || '') !== gameTime) return;
+                        const gid = String(g.id);
+                        const opts = sheet3StagedRefs[gid];
+                        if (!opts) return;
+                        opts.forEach((name, slot) => {
+                            if (!name || name.trim().toLowerCase() !== assignedNameLc) return;
+                            opts[slot] = null;
+                            sheet3UpsertSlot(gid, slot, null); // remove from staging DB
+                        });
+                    });
                 }
 
                 renderGames();
