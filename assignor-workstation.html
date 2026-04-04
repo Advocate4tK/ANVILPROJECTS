@@ -2476,6 +2476,14 @@
             } catch(e) { console.error('sheet3UpsertSlot:', e); }
         }
 
+        function refNotesBadge(name) {
+            if (!name || name === '—') return '';
+            const refObj = refLookupByName[name.trim().toLowerCase()];
+            if (!refObj) return '';
+            const notes = (refObj.fields['Assignor Notes'] || '').trim();
+            return notes ? `<span style="background:#c0392b;color:#fff;border-radius:10px;padding:1px 5px;font-size:0.62rem;font-weight:700;margin-left:3px;vertical-align:middle;" title="${notes.replace(/"/g,'&quot;')}">!</span>` : '';
+        }
+
         function refCountBadge(name) {
             if (!name || name === '—') return '';
             const refObj = refLookupByName[name.trim().toLowerCase()];
@@ -2565,12 +2573,13 @@
                     const hoverIn  = name ? `onmouseenter="showRefTooltip('${name.replace(/'/g,"\\'")}', this, event)"` : '';
                     const hoverOut = name ? `onmouseleave="hideRefTooltip()"` : '';
                     const countBadge = refCountBadge(name);
+                    const notesBadge = refNotesBadge(name);
                     const roleBadge  = sheet3OptRoleBadge(gid, n);
                     return `<td id="s3opt-${gid}-${n}" style="border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:120px; white-space:nowrap; background:${bg}; color:${col}; cursor:${name?'grab':'default'};"
                         ${drag} ${ctx} ${hoverIn} ${hoverOut}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
-                        ondrop="sheet3OptDrop(event,'${gid}',${n}); this.style.outline='';">${roleBadge}${name || ''}${countBadge}</td>`;
+                        ondrop="sheet3OptDrop(event,'${gid}',${n}); this.style.outline='';">${roleBadge}${name || ''}${notesBadge}${countBadge}</td>`;
                 };
                 const fmtGameTime = t => { if (!t) return '—'; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
                 const colRenderers = {
@@ -2913,7 +2922,7 @@
             const td = document.getElementById(`s3opt-${gid}-${slot}`);
             if (!td) return;
             const filled = !!name;
-            td.innerHTML = sheet3OptRoleBadge(gid, slot) + (name || '') + (name ? refCountBadge(name) : '');
+            td.innerHTML = sheet3OptRoleBadge(gid, slot) + (name || '') + (name ? refNotesBadge(name) : '') + (name ? refCountBadge(name) : '');
             td.style.background = sheet3OptColors[`${gid}-${slot}`] || '';
             td.style.color      = filled ? '#1f2328' : '#bbb';
             td.style.cursor     = filled ? 'grab' : 'default';
