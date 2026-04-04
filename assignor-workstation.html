@@ -2398,6 +2398,11 @@
             renderSheet3View(sheet3LastFiltered);
         }
 
+        function sheet3SetTimeFilter(val) {
+            sheet3TimeFilter = val || null;
+            renderSheet3View(sheet3LastFiltered);
+        }
+
         function sheet3CycleRefClubFilter() {
             const vals = [...new Set((sheet3CachedRefRows || []).map(r => r.club).filter(Boolean))].sort();
             if (!vals.length) return;
@@ -2645,18 +2650,21 @@
                         </span></th>`;
                 }
                 if (key === 'time') {
-                    const active    = sheet3TimeFilter;
-                    const fmtActive = active ? (t => { const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; })(active) : null;
-                    const badge  = ` <span style="background:${active ? '#e3f0ff' : '#f0ece6'};color:${active ? '#0f3460' : '#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${fmtActive || 'All'}</span>`;
-                    const tip    = active ? `Click to cycle time filter (${fmtActive})` : 'Click to filter by time';
-                    return `<th style="${hdr}${minW} cursor:pointer; user-select:none;" draggable="true"
+                    const fmtT = t => { const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+                    const timeOpts = `<option value="">All</option>` + s3UniqueTimes.map(t => `<option value="${t}" ${t === sheet3TimeFilter ? 'selected' : ''}>${fmtT(t)}</option>`).join('');
+                    return `<th style="${hdr}${minW} white-space:nowrap;" draggable="true"
                         ondragstart="sheet3ColDragStart('${key}')"
                         ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
                         ondragleave="this.style.background='';"
-                        ondrop="sheet3ColDrop('${key}'); this.style.background='';"
-                        onclick="sheet3CycleTimeFilter()" title="${tip}">
+                        ondrop="sheet3ColDrop('${key}'); this.style.background='';">
                         <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
-                            <span>${label}${badge}</span>
+                            <span style="display:flex;align-items:center;gap:4px;">
+                                <span>${label}</span>
+                                <select onchange="sheet3SetTimeFilter(this.value); event.stopPropagation();" onclick="event.stopPropagation();"
+                                    style="font-size:0.65rem;padding:1px 3px;border-radius:4px;border:1px solid #c8d0da;background:${sheet3TimeFilter ? '#e3f0ff' : '#f6f8fa'};color:${sheet3TimeFilter ? '#0f3460' : '#555'};font-weight:700;cursor:pointer;max-width:90px;">
+                                    ${timeOpts}
+                                </select>
+                            </span>
                             <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
                         </span></th>`;
                 }
