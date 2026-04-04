@@ -2451,14 +2451,12 @@
 
         async function sheet3UpsertSlot(gid, slot, name) {
             try {
+                // Delete first (avoids upsert conflict/RLS UPDATE issues), then insert if name provided
+                await supabaseClient.client.from('staging')
+                    .delete().eq('game_id', parseInt(gid)).eq('slot', slot);
                 if (name) {
-                    await supabaseClient.client.from('staging').upsert(
-                        { game_id: parseInt(gid), slot: slot, ref_name: name },
-                        { onConflict: 'game_id,slot' }
-                    );
-                } else {
-                    await supabaseClient.client.from('staging').delete()
-                        .eq('game_id', parseInt(gid)).eq('slot', slot);
+                    await supabaseClient.client.from('staging')
+                        .insert({ game_id: parseInt(gid), slot: slot, ref_name: name });
                 }
             } catch(e) { console.error('sheet3UpsertSlot:', e); }
         }
@@ -2874,7 +2872,7 @@
             const td = document.getElementById(`s3opt-${gid}-${slot}`);
             if (!td) return;
             const filled = !!name;
-            td.textContent    = name || '';
+            td.innerHTML = sheet3OptRoleBadge(gid, slot) + (name || '') + (name ? refCountBadge(name) : '');
             td.style.background = sheet3OptColors[`${gid}-${slot}`] || '';
             td.style.color      = filled ? '#1f2328' : '#bbb';
             td.style.cursor     = filled ? 'grab' : 'default';
@@ -2882,10 +2880,14 @@
                 td.setAttribute('draggable', 'true');
                 td.setAttribute('ondragstart', `sheet3OptDragStart(event,'${gid}',${slot},'${(name||'').replace(/'/g,"\\'")}');`);
                 td.setAttribute('oncontextmenu', `sheet3ShowOptMenu(event,'${gid}',${slot}); return false;`);
+                td.setAttribute('onmouseenter', `showRefTooltip('${name.replace(/'/g,"\\'")}', this, event)`);
+                td.setAttribute('onmouseleave', `hideRefTooltip()`);
             } else {
                 td.removeAttribute('draggable');
                 td.removeAttribute('ondragstart');
                 td.removeAttribute('oncontextmenu');
+                td.removeAttribute('onmouseenter');
+                td.removeAttribute('onmouseleave');
             }
         }
 
