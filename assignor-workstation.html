@@ -2279,13 +2279,24 @@
                 // Skip if already has staging rows
                 if (sheet3StagedRefs[gid] && sheet3StagedRefs[gid].some(Boolean)) return;
                 const gameDate = g.fields['Date'];
-                // Collect unique available ref names for this date
+                const gameTime = g.fields['Time'] || '';
+                // Build set of refs already assigned to ANY game at this date+time
+                const assignedAtSlot = new Set();
+                allGames.forEach(og => {
+                    if (og.fields['Date'] !== gameDate || (og.fields['Time'] || '') !== gameTime) return;
+                    ['Center Referee', 'AR 1', 'AR 2'].forEach(pos => {
+                        const n = resolveRefName(og.fields[pos]);
+                        if (n && n !== '—') assignedAtSlot.add(n.trim().toLowerCase());
+                    });
+                });
+                // Collect unique available ref names for this date — skip already-assigned refs
                 const seen = new Set();
                 const names = [];
                 allAvail.forEach(a => {
                     if (a.fields['Date'] !== gameDate) return;
                     const name = (a.fields['Referee Name'] || '').trim();
                     if (!name || seen.has(name.toLowerCase())) return;
+                    if (assignedAtSlot.has(name.toLowerCase())) return;
                     seen.add(name.toLowerCase());
                     names.push(name);
                 });
