@@ -41,6 +41,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (currentAge !== null) refUpdates['Age'] = currentAge;
                 }
 
+                // Save profile fields that live in availabilitySection (visible to all refs)
+                const years = document.getElementById('yearsReffing')?.value;
+                const cert  = document.getElementById('certificationLevel')?.value;
+                const gender = document.getElementById('refereeGender')?.value;
+                if (years)  refUpdates['Years Reffing']       = years;
+                if (cert)   refUpdates['Certification Level'] = cert;
+                if (gender) refUpdates['Gender']              = gender;
+
                 // Save Club Preference from location checkboxes
                 // Send as array (works for Airtable multi-select); fall back to
                 // comma string if the field is a plain text type.
@@ -151,6 +159,25 @@ document.addEventListener('DOMContentLoaded', function() {
      * Validate form data
      */
     function validateForm() {
+        const years  = document.getElementById('yearsReffing')?.value;
+        const cert   = document.getElementById('certificationLevel')?.value;
+        const gender = document.getElementById('refereeGender')?.value;
+        if (!years) {
+            showMessage('error', 'Please select your years reffing.');
+            document.getElementById('yearsReffing')?.focus();
+            return false;
+        }
+        if (!cert) {
+            showMessage('error', 'Please select your certification level.');
+            document.getElementById('certificationLevel')?.focus();
+            return false;
+        }
+        if (!gender) {
+            showMessage('error', 'Please select your gender.');
+            document.getElementById('refereeGender')?.focus();
+            return false;
+        }
+
         const locations = getCheckboxValues('locations');
         if (locations.length === 0) {
             showMessage('error', 'Please select at least one preferred location.');
