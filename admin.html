@@ -1280,10 +1280,12 @@
                 </div>
 
                 <div style="margin-bottom:24px; padding-bottom:20px; border-bottom:1px solid #e0e0e0;">
-                    <p style="font-weight:600; margin-bottom:10px; font-size:0.95rem;">⚽ Clubs Being Served</p>
+                    <p style="font-weight:600; margin-bottom:10px; font-size:0.95rem;">⚽ Clubs / Events Being Served</p>
                     <select id="clubDropdown" style="padding:8px 14px; border-radius:8px; border:1px solid #ccc; font-size:0.9rem; color:#0f3460; min-width:220px;">
-                        <option value="">— Select a Club —</option>
+                        <option value="">— Select a Club or Event —</option>
                         ${clubNames.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        <option disabled>──────────────</option>
+                        <option value="__tourney_glastonbury">🏆 Glastonbury Spring Warmup Tournament</option>
                     </select>
                     <div id="clubStatDisplay" style="margin-top:12px;"></div>
                 </div>
@@ -1362,6 +1364,43 @@
                     dd.addEventListener('change', function() {
                         const clubName = this.value;
                         if (!clubName) { stat.innerHTML = ''; return; }
+
+                        // ── Tournament entry ──────────────────────────────────
+                        if (clubName === '__tourney_glastonbury') {
+                            const glastRec = clubRecordByName['Glastonbury'];
+                            const gf = glastRec?.fields || {};
+                            const director      = gf['PRESIDENT'] || gf['President'] || gf['President Name'] || gf['Contact Name'] || gf['Contact'] || '—';
+                            const dirEmail      = gf['President Email'] || gf['Email'] || gf['Contact Email'] || '';
+                            const dirPhone      = gf['President Phone'] || gf['Phone'] || gf['Contact Phone'] || '';
+                            const tourneyGames  = allGames.filter(g => (g.fields['game_type'] || g.fields['Game Type'] || '').toLowerCase() === 'tournament').length;
+                            const tourneyDates  = [...new Set(allGames.filter(g => (g.fields['game_type'] || g.fields['Game Type'] || '').toLowerCase() === 'tournament').map(g => g.fields['Date']).filter(Boolean))].sort();
+                            const dateRange     = tourneyDates.length
+                                ? (() => {
+                                    const fmt = d => { const [y,m,day] = d.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]} ${parseInt(day)}`; };
+                                    return tourneyDates.length > 1 ? `${fmt(tourneyDates[0])} – ${fmt(tourneyDates[tourneyDates.length-1])}` : fmt(tourneyDates[0]);
+                                })()
+                                : 'No dates on file';
+                            stat.innerHTML = `
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-bottom:12px;">
+                                <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
+                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Tournament Director</div>
+                                    <div style="font-weight:700; color:#0f3460; font-size:0.95rem;">${director}</div>
+                                    ${dirPhone ? `<div style="font-size:0.8rem; color:#666; margin-top:3px;">📞 ${dirPhone}</div>` : ''}
+                                    ${dirEmail ? `<div style="font-size:0.8rem; margin-top:2px;"><a href="mailto:${dirEmail}" style="color:#3498db; text-decoration:none;">✉️ ${dirEmail}</a></div>` : ''}
+                                </div>
+                                <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
+                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Total Tournament Games</div>
+                                    <div style="font-size:1.6rem; font-weight:800; color:#0f3460; line-height:1;">${tourneyGames}</div>
+                                    <div style="font-size:0.8rem; color:#666; margin-top:4px;">${dateRange}</div>
+                                </div>
+                                <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
+                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Schedule</div>
+                                    <a href="tournament.html" target="_blank"
+                                        style="display:inline-block; background:#eafaf1; border:1px solid #27ae60; color:#27ae60; border-radius:6px; padding:6px 14px; font-size:0.82rem; font-weight:700; text-decoration:none; margin-top:4px;">🏆 Open Tournament Workstation →</a>
+                                </div>
+                            </div>`;
+                            return;
+                        }
 
                         const rec  = clubRecordByName[clubName];
                         const f    = rec?.fields || {};
