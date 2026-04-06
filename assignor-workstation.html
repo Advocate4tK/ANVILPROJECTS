@@ -2547,6 +2547,7 @@
             const optMinW = {};
             optKeys.forEach((k, i) => { optLabels[k] = `Opt${i + 1}`; optMinW[k] = '120px'; });
             const colLabels = { ...SHEET3_COL_LABELS, ...optLabels };
+            if (window.tournamentMode) colLabels.venue = 'Site';
             const colMinW   = { ...SHEET3_COL_MINW,   ...optMinW   };
             // Rebuild col order: keep saved base col order + append current opt keys
             const basePart = sheet3ColOrder.filter(k => SHEET3_BASE_COLS.includes(k));
@@ -2634,7 +2635,14 @@
                     gender:   () => `<td style="${cell}">${f['Gender'] || '—'}</td>`,
                     homeTeam: () => `<td style="${cell}">${f['Home Team'] || '—'}</td>`,
                     awayTeam: () => `<td style="${cell}">${f['Away Team'] || '—'}</td>`,
-                    venue:    () => `<td style="${cell}">${venueObj ? venueObj.name : (f['Venue ID'] || '—')}</td>`,
+                    venue:    () => {
+                        const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
+                        if (window.tournamentMode && venueObj && window.tournamentSiteLookup) {
+                            const sn = window.tournamentSiteLookup[venueObj.name];
+                            return `<td style="${cell} min-width:160px;">${sn ? `<span style="font-weight:800;color:#6c3483;">Site ${sn}</span> — ${venueObj.name}` : vName}</td>`;
+                        }
+                        return `<td style="${cell}">${vName}</td>`;
+                    },
                     field:    () => `<td style="${cell}">${fieldObj ? fieldObj.name : (f['Field ID'] || '—')}</td>`,
                     center:   () => assignedTd('center', cRefRaw),
                     ar1:      () => assignedTd('ar1', ar1Raw),
@@ -4634,6 +4642,23 @@
                             allFields.push({ fieldId: Number(id), name, venueId: null });
                         }
                     });
+
+                    // Site number lookup by resolved venue name — used in game row renderer
+                    window.tournamentSiteLookup = {
+                        'Addison Park': 1,
+                        'Buckingham Park': 2,
+                        'GEHMS': 3,
+                        'GHS': 4,
+                        'Gideon Welles': 5,
+                        'Hebron Ave School': 6,
+                        'Abraham Avenue School': 6,
+                        'Irish American Home': 7,
+                        'Knox Lane': 8,
+                        'Nayaug School': 9,
+                        'Riverfront Park': 10,
+                        'Rotary': 11,
+                        'Smith Middle School': 12,
+                    };
 
                     // Hide the top-left back button — banner already has ← Tournaments
                     const dashLink = document.getElementById('backToDashboardLink');
