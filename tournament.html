@@ -115,15 +115,15 @@
 
             <!-- Entry Point Cards -->
             <div class="entry-panel">
-                <div class="entry-card" onclick="toggleHistory()">
-                    <div class="icon">📁</div>
-                    <h3>Tournaments</h3>
-                    <p>View all tournaments — upcoming, active, and completed</p>
-                </div>
                 <div class="entry-card" onclick="showNewTournament()">
                     <div class="icon">➕</div>
                     <h3>New Tournament</h3>
                     <p>Create a new tournament or clone from a prior year</p>
+                </div>
+                <div class="entry-card" onclick="toggleArchive()">
+                    <div class="icon">📦</div>
+                    <h3>Archive</h3>
+                    <p>View past completed tournaments</p>
                 </div>
             </div>
 
@@ -158,14 +158,25 @@
                 </div>
             </div>
 
-            <!-- Past Tournaments (collapsed by default) -->
-            <div id="historySection" style="display:none;">
-                <div class="section-header" onclick="toggleHistory()">
-                    <h2>📁 Tournaments</h2>
+            <!-- Current / Upcoming — always visible, loads on page load -->
+            <div id="currentSection">
+                <div class="section-header">
+                    <h2>🏆 Current &amp; Upcoming</h2>
                     <div class="section-divider"></div>
-                    <span class="section-toggle" id="historyToggleArrow">▲ hide</span>
                 </div>
-                <div id="tourneyList">
+                <div id="currentList">
+                    <div class="loading-msg">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Archive — collapsed by default -->
+            <div id="archiveSection" style="display:none; margin-top:24px;">
+                <div class="section-header" onclick="toggleArchive()">
+                    <h2>📦 Past Tournaments</h2>
+                    <div class="section-divider"></div>
+                    <span class="section-toggle" id="archiveToggleArrow">▲ hide</span>
+                </div>
+                <div id="archiveList">
                     <div class="loading-msg">Loading...</div>
                 </div>
             </div>
@@ -184,21 +195,20 @@
     <script src="js/supabase-client.js?v=9"></script>
     <script>
 
-    let historyLoaded = false;
-    let historyOpen   = false;
+    let tourneysLoaded = false;
+    let archiveOpen    = false;
 
     function showNewTournament() {
         document.getElementById('newTournamentPanel').style.display = 'block';
         document.getElementById('newTournamentPanel').scrollIntoView({ behavior:'smooth' });
     }
 
-    function toggleHistory() {
-        historyOpen = !historyOpen;
-        const section = document.getElementById('historySection');
-        const arrow   = document.getElementById('historyToggleArrow');
-        section.style.display = historyOpen ? 'block' : 'none';
-        if (arrow) arrow.textContent = historyOpen ? '▲ hide' : '▼ show';
-        if (historyOpen && !historyLoaded) loadTournaments();
+    function toggleArchive() {
+        archiveOpen = !archiveOpen;
+        const section = document.getElementById('archiveSection');
+        const arrow   = document.getElementById('archiveToggleArrow');
+        section.style.display = archiveOpen ? 'block' : 'none';
+        if (arrow) arrow.textContent = archiveOpen ? '▲ hide' : '▼ show';
     }
 
     async function launchNewTournament() {
@@ -237,7 +247,7 @@
     }
 
     async function loadTournaments() {
-        historyLoaded = true;
+        tourneysLoaded = true;
         const db = supabaseClient ? supabaseClient.client : null;
         if (!db) {
             document.getElementById('tourneyList').innerHTML =
@@ -290,20 +300,19 @@
             return db2.localeCompare(da);
         });
 
-        if (!entries.length) {
-            document.getElementById('tourneyList').innerHTML =
-                '<div class="loading-msg">No tournaments found.</div>';
-            return;
-        }
-
-        const list = document.getElementById('tourneyList');
-        list.innerHTML = '';
         const today   = new Date().toISOString().slice(0, 10);
         const fmtDate = d => {
             if (!d) return '?';
             const [y, m, day] = d.split('-');
             return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]} ${parseInt(day)}, ${y}`;
         };
+
+        const currentList = document.getElementById('currentList');
+        const archiveList = document.getElementById('archiveList');
+        currentList.innerHTML = '';
+        archiveList.innerHTML = '';
+        const currentCards = [];
+        const archiveCards = [];
 
         entries.forEach(t => {
             const gData     = gamesByKey[t.key] || { games: [], dates: [] };
@@ -342,9 +351,20 @@
                 <span class="badge-status badge-${status}">${statusLabel}</span>
                 <button onclick="spawnFromPrior(${spawnArgs})" class="action-btn outline" style="white-space:nowrap;" title="Pre-fill New Tournament from this one, bumped to ${nextYear}">+ ${nextYear}</button>
                 <a href="assignor-workstation.html?tournament=${encodeURIComponent(t.key)}" class="action-btn primary" style="white-space:nowrap;">Open →</a>`;
-            list.appendChild(card);
+
+            if (status === 'completed') archiveCards.push(card);
+            else currentCards.push(card);
         });
+
+        if (currentCards.length) currentCards.forEach(c => currentList.appendChild(c));
+        else currentList.innerHTML = '<div class="loading-msg">No active or upcoming tournaments.</div>';
+
+        if (archiveCards.length) archiveCards.forEach(c => archiveList.appendChild(c));
+        else archiveList.innerHTML = '<div class="loading-msg">No past tournaments.</div>';
     }
+
+    // Auto-load current/upcoming on page open
+    window.addEventListener('load', () => { loadTournaments(); });
 
     </script>
 </body>
