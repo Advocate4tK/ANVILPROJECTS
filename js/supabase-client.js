@@ -214,6 +214,13 @@ class SupabaseClientWrapper {
                 }
             }
 
+            // Exclude equality filters: { col: 'game_type', val: 'Tournament' }
+            if (options.excludeEq) {
+                for (const { col, val } of options.excludeEq) {
+                    query = query.neq(col, val);
+                }
+            }
+
             if (options.maxRecords) {
                 query = query.limit(options.maxRecords);
             }
