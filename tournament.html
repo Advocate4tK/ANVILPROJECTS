@@ -217,6 +217,19 @@
         window.location.href = `assignor-workstation.html?tournament=${encodeURIComponent(key)}`;
     }
 
+    function spawnFromPrior(club, priorYear, firstName, lastName, tourneyName) {
+        const nextYear = String(parseInt(priorYear) + 1);
+        // Bump dates +1 year
+        const bumpYear = d => d ? d.replace(/^\d{4}/, nextYear) : '';
+        document.getElementById('newTName').value  = tourneyName.replace(priorYear, nextYear);
+        document.getElementById('newTClub').value  = club;
+        document.getElementById('newTFrom').value  = bumpYear(firstName);
+        document.getElementById('newTTo').value    = bumpYear(lastName);
+        const panel = document.getElementById('newTournamentPanel');
+        panel.style.display = 'block';
+        panel.scrollIntoView({ behavior: 'smooth' });
+    }
+
     async function loadTournaments() {
         historyLoaded = true;
         const db = supabaseClient ? supabaseClient.client : null;
@@ -277,7 +290,10 @@
                 ? `${fmtDate(firstDate)} – ${fmtDate(lastDate)}`
                 : fmtDate(firstDate);
 
-            const tKey  = `${t.club.toLowerCase()}-${t.year}`;
+            const tKey       = `${t.club.toLowerCase()}-${t.year}`;
+            const nextYear   = String(parseInt(t.year) + 1);
+            const tName      = `${t.club} Spring Warmup ${t.year}`;
+            const spawnArgs  = `'${t.club}','${t.year}','${firstDate}','${lastDate}','${tName}'`;
             const card  = document.createElement('div');
             card.className = 'tourney-card';
             card.innerHTML = `
@@ -291,6 +307,7 @@
                     </div>
                 </div>
                 <span class="badge-status badge-${status}">${statusLabel}</span>
+                <button onclick="spawnFromPrior(${spawnArgs})" class="action-btn outline" style="white-space:nowrap;" title="Pre-fill New Tournament from this one, bumped to ${nextYear}">+ ${nextYear}</button>
                 <a href="assignor-workstation.html?tournament=${encodeURIComponent(tKey)}" class="action-btn primary" style="white-space:nowrap;">Open →</a>`;
             list.appendChild(card);
         });
