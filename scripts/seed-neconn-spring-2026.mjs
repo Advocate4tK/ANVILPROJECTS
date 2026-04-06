@@ -114,6 +114,17 @@ const TEAM_MAP = {
     },
 };
 
+// ── Venue name → Venue ID ────────────────────────────────────────────────
+const VENUE_ID_MAP = {
+    'old khs':        9001,
+    'oldkhs':         9001,
+    'prince hill':    9002,
+    'riverside park': 9003,
+    'riversidepark':  9003,
+    'pomfret rec':    9004,
+    'rawson':         9005,
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 // Excel serial → ISO date string (YYYY-MM-DD)
@@ -192,6 +203,8 @@ for (let i = 1; i < rows.length; i++) {
     const timeParsed = parseTime(timeRaw);
     const fieldName = fieldNum ? `Field ${fieldNum}` : null;
 
+    const venueId = VENUE_ID_MAP[venue.toLowerCase()] || null;
+
     games.push({
         'Age Group':    divKey,
         'Home Team':    homeTeam,
@@ -204,8 +217,7 @@ for (let i = 1; i < rows.length; i++) {
         'game_type':    'Rec',
         'Game Status':  'Unassigned',
         'Uploaded By':  'seed-neconn-spring-2026',
-        // Venue: stored as text in `field` col isn't ideal — add notes for now
-        'notes':        venue ? `Venue: ${venue}` : null,
+        'Venue ID':     venueId,
     });
 }
 
