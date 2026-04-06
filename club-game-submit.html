@@ -296,9 +296,12 @@
                         <option value="">— Loading clubs… —</option>
                     </select>
                 </div>
-                <div id="clubLockedWrap" style="display:none; margin-bottom:24px;">
-                    <div style="font-size:clamp(18px, 3.5vw, 42px); font-weight:900; color:#e94560; text-transform:uppercase; letter-spacing:2px; line-height:1.15;" id="clubLockedName"></div>
-                    <div style="font-size:13px; color:#888; margin-top:4px;">Submitting games for this club</div>
+                <div id="clubLockedWrap" style="display:none; margin-bottom:24px; display:none; align-items:center; gap:18px; flex-wrap:wrap;">
+                    <img id="clubLockedLogo" src="" alt="" style="display:none; height:64px; width:auto; object-fit:contain;">
+                    <div>
+                        <div style="font-size:clamp(18px, 3.5vw, 42px); font-weight:900; color:#e94560; text-transform:uppercase; letter-spacing:2px; line-height:1.15;" id="clubLockedName"></div>
+                        <div style="font-size:13px; color:#888; margin-top:4px;" id="clubLockedSub">Submitting games for this club</div>
+                    </div>
                 </div>
                 <div id="clubNotFoundMsg" style="display:none; background:#fadbd8; color:#922b21; padding:16px; border-radius:8px; margin-bottom:20px;">
                     Club not found. Please check your link or contact your assignor.
@@ -776,6 +779,26 @@
     window.addEventListener('load', async () => {
         if (!airtableClient) { alert('Airtable client not initialized.'); return; }
 
+        // Club slug → logo path map (add entries as new clubs go live)
+        const CLUB_LOGO_MAP = {
+            'glastonbury':    'PICS/Glast.png',
+            'east-haddam':    'PICS/east-haddam.png',
+            'griswold':       'PICS/griswold.png',
+            'neconn':         'PICS/neconn.png',
+        };
+
+        // Tournament config map — keyed by ?club= slug
+        // URL pattern: club-game-submit.html?club=glastonbury-tournament
+        const TOURNAMENT_CONFIG = {
+            'glastonbury-tournament': {
+                label:     'Glastonbury Spring Warmup Tournament',
+                logo:      'PICS/Glast.png',
+                clubSlug:  'glastonbury',   // backing club record for venue/field lookup
+            },
+        };
+
+        let currentTournament = null; // set below if slug maps to a tournament
+
         // Set club-specific localStorage keys so history doesn't bleed across clubs
         const urlParam = new URLSearchParams(window.location.search).get('club');
         if (urlParam) {
@@ -799,18 +822,47 @@
         // Banner loads after login — see loadAssignorBanner()
 
         if (urlParam) {
-            // Match club by slug (lowercase, spaces/dashes normalized)
+            const slug      = urlParam.toLowerCase().replace(/[^a-z0-9]/g, '-');
             const normalize = s => s.toLowerCase().replace(/[\s-]+/g, '');
-            const match = allClubs.find(c => normalize(c.name) === normalize(urlParam));
+
+            // Check if slug maps to a tournament (e.g. ?club=glastonbury-tournament)
+            const tConf = TOURNAMENT_CONFIG[slug];
+            if (tConf) currentTournament = tConf;
+
+            // Match against actual club records (direct for clubs; backing club for tournaments)
+            const lookupSlug = tConf ? tConf.clubSlug : slug;
+            const match = allClubs.find(c => normalize(c.name) === normalize(lookupSlug));
+
             if (match) {
-                currentClubRecord = match.record || null; // store full Airtable record
-                // Lock the club — hide dropdown, show name
+                currentClubRecord = match.record || null;
+
+                // Display name: tournament label or club name
+                const displayName = tConf ? tConf.label : (match.displayName || match.name);
+                const logoSrc     = tConf ? tConf.logo : CLUB_LOGO_MAP[slug];
+
                 document.getElementById('clubSelectWrap').style.display = 'none';
-                document.getElementById('clubLockedWrap').style.display = 'block';
-                document.getElementById('clubLockedName').textContent = match.displayName || match.name;
+                const lockedWrap = document.getElementById('clubLockedWrap');
+                lockedWrap.style.display = 'flex';
+                document.getElementById('clubLockedName').textContent = displayName;
+
+                if (logoSrc) {
+                    const logoEl = document.getElementById('clubLockedLogo');
+                    logoEl.src   = logoSrc;
+                    logoEl.alt   = displayName;
+                    logoEl.style.display = 'block';
+                }
+
                 const subEl = document.getElementById('pageSubtitle');
-                subEl.textContent = 'Home Game Submission';
+                subEl.textContent = tConf ? `${tConf.label} — Game Submission` : 'Home Game Submission';
                 subEl.style.cssText = '';
+
+                // In tournament mode: lock Game Type to Tournament, hide the select
+                if (tConf) {
+                    const gtWrap = document.getElementById('gGameType').closest('.field-group');
+                    if (gtWrap) gtWrap.style.display = 'none';
+                    document.getElementById('gGameType').innerHTML = '<option value="Tournament" selected>Tournament</option>';
+                }
+
                 // Set the hidden select so existing logic still works
                 const sel = document.getElementById('clubSelect');
                 sel.innerHTML = `<option value="${match.id}" selected>${match.name}</option>`;
@@ -1129,7 +1181,13 @@
                 }
                 if (g.notes)           fields['Notes']        = g.notes;
                 if (currentSubmitter)  fields['Uploaded By']  = currentSubmitter;
-                if (currentClubRecord) fields['Source Club']  = currentClubRecord.fields['Club Name'] || '';
+                // Tournament mode: override game_type and use tournament label as Source Club
+                if (currentTournament) {
+                    fields['game_type']   = 'Tournament';
+                    fields['Source Club'] = currentTournament.label;
+                } else if (currentClubRecord) {
+                    fields['Source Club'] = currentClubRecord.fields['Club Name'] || '';
+                }
 
                 await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
                 existingKeys.add(dupKey);
