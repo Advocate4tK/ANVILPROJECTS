@@ -660,6 +660,16 @@
             <!-- Main workstation content (hidden until profile selected) -->
             <div id="workstationContent" style="display:none;">
 
+            <!-- Tournament Mode Banner (shown only when ?tournament= param is present) -->
+            <div id="tournamentBanner" style="display:none; align-items:center; gap:16px; background:linear-gradient(135deg,#0f3460 0%,#1a1a2e 100%); border-radius:12px; padding:14px 20px; margin-bottom:14px; color:white;">
+                <img id="tournamentLogo" src="" alt="" style="height:56px; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5));">
+                <div style="flex:1;">
+                    <div id="tournamentTitle" style="font-weight:700; font-size:1.1rem; color:white; margin-bottom:4px;"></div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;" id="tournamentDayTabs"></div>
+                </div>
+                <a href="tournament.html" style="color:#a0b4cc; font-size:0.78rem; text-decoration:none; white-space:nowrap;">← Tournaments</a>
+            </div>
+
             <!-- Filters toggle bar -->
             <div id="filterToggleBar" onclick="toggleFiltersPanel()" style="display:none; align-items:center; justify-content:space-between; background:#0f3460; color:white; padding:7px 16px; border-radius:8px; margin-bottom:6px; cursor:pointer; user-select:none; font-family:inherit;">
                 <div style="display:flex; align-items:center; gap:10px; font-size:0.8rem;">
@@ -4047,6 +4057,21 @@
                 document.getElementById('dateTo').value   = to.toISOString().split('T')[0];
                 // Auto-load so the assignor goes straight to work
                 loadAll();
+            } else if (new URLSearchParams(window.location.search).get('tournament')) {
+                // Tournament mode — pre-set dates to tournament range, auto-load
+                const tKey = new URLSearchParams(window.location.search).get('tournament');
+                const TOURNAMENTS = {
+                    'glastonbury-2025': { label:'Glastonbury Spring Warmup 2025', logo:'PICS/Glast.png', from:'2025-04-25', to:'2025-04-27',
+                        days:[{label:'Fri Apr 25',date:'2025-04-25'},{label:'Sat Apr 26',date:'2025-04-26'},{label:'Sun Apr 27',date:'2025-04-27'}] },
+                    'glastonbury-2026': { label:'Glastonbury Spring Warmup 2026', logo:'PICS/Glast.png', from:'2026-04-24', to:'2026-04-26',
+                        days:[{label:'Fri Apr 24',date:'2026-04-24'},{label:'Sat Apr 25',date:'2026-04-25'},{label:'Sun Apr 26',date:'2026-04-26'}] },
+                };
+                window.tournamentMode = TOURNAMENTS[tKey] || null;
+                if (window.tournamentMode) {
+                    document.getElementById('dateFrom').value = window.tournamentMode.from;
+                    document.getElementById('dateTo').value   = window.tournamentMode.to;
+                }
+                loadAll();
             } else if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
                 // Set this weekend and auto-load for unassigned filter link
                 setDateRange('this-weekend', null);
@@ -4482,6 +4507,36 @@
                 // If opened with ?game=, select and scroll to that game
                 const focusGameId = new URLSearchParams(window.location.search).get('game');
                 if (focusGameId) applyGameFocus(focusGameId);
+
+                // Tournament mode — switch to Sheet 3, show banner, build day tabs
+                if (window.tournamentMode) {
+                    const tm = window.tournamentMode;
+                    setViewMode('sheet3', false);
+                    const banner = document.getElementById('tournamentBanner');
+                    if (banner) {
+                        document.getElementById('tournamentLogo').src   = tm.logo;
+                        document.getElementById('tournamentTitle').textContent = tm.label;
+                        // Build day tab buttons
+                        const tabsWrap = document.getElementById('tournamentDayTabs');
+                        tabsWrap.innerHTML = '';
+                        tm.days.forEach((d, i) => {
+                            const btn = document.createElement('button');
+                            btn.textContent = d.label;
+                            btn.style.cssText = `padding:4px 14px; border-radius:20px; border:2px solid rgba(255,255,255,0.3); background:${i===0?'rgba(255,255,255,0.2)':'transparent'}; color:white; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:inherit; transition:all 0.15s;`;
+                            btn.onclick = () => {
+                                sheet3DateFilter = d.date;
+                                tabsWrap.querySelectorAll('button').forEach(b => b.style.background = 'transparent');
+                                btn.style.background = 'rgba(255,255,255,0.2)';
+                                renderSheet3View();
+                            };
+                            tabsWrap.appendChild(btn);
+                        });
+                        // Default to first day
+                        sheet3DateFilter = tm.days[0].date;
+                        renderSheet3View();
+                        banner.style.display = 'flex';
+                    }
+                }
 
             } catch(e) {
                 alert('Failed to load: ' + e.message);
