@@ -2147,6 +2147,7 @@
         let sheet3TimeFilter      = null; // null = all, or a time string (HH:MM)
         let sheet3MissingFilter   = false; // true = show only games with at least one empty assigned slot
         let sheet3RefClubFilter   = null;  // null = all, or a club name string (filters ref availability pane)
+        let sheet3RefDetailName   = null;  // null = full ref list; string = showing that ref's game schedule
         let sheet3OptRoles        = {}; // { 'gid-slot': 'CR' | 'AR' }
 
         const SHEET3_BASE_COLS  = ['date','time','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
@@ -2447,6 +2448,88 @@
             if (!vals.length) return;
             const idx = vals.indexOf(sheet3RefClubFilter);
             sheet3RefClubFilter = idx < vals.length - 1 ? vals[idx + 1] : null;
+            renderSheet3View(sheet3LastFiltered);
+        }
+
+        function sheet3ShowRefDetail(name) {
+            sheet3RefDetailName = name;
+            const pane = document.getElementById('s3refsPane');
+            const foot = pane ? pane.closest('div')?.querySelector('div[style*="margin-top:6px"]') : null;
+            if (!pane) return;
+
+            // Find all games this ref is assigned to (confirmed assignments)
+            const refName = name.toLowerCase();
+            const positions = ['Center Referee', 'AR 1', 'AR 2'];
+            const posLabels = { 'Center Referee': 'Center', 'AR 1': 'AR 1', 'AR 2': 'AR 2' };
+            const assignments = [];
+            allGames.forEach(g => {
+                const f = g.fields;
+                positions.forEach(pos => {
+                    const assigned = resolveRefName(f[pos]);
+                    if (assigned && assigned.toLowerCase() === refName) {
+                        assignments.push({ g, pos });
+                    }
+                });
+                // Also check staged (opt cell) assignments
+                const staged = sheet3StagedRefs[String(g.id)] || [];
+                staged.forEach((n, slot) => {
+                    if (n && n.toLowerCase() === refName) {
+                        assignments.push({ g, pos: `Opt ${slot + 1}` });
+                    }
+                });
+            });
+            assignments.sort((a, b) => {
+                const da = `${a.g.fields['Date']}|${a.g.fields['Time'] || ''}`;
+                const db = `${b.g.fields['Date']}|${b.g.fields['Time'] || ''}`;
+                return da.localeCompare(db);
+            });
+
+            const hdr  = 'border:1px solid #d0d7de; padding:5px 8px; font-size:0.73rem; font-weight:700; color:#1f2328; background:#f0f3f6; text-align:left; white-space:nowrap;';
+            const cell = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
+            const fmt  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+            const fmtDate = d => { if (!d) return ''; const [,m,day] = d.split('-'); return `${['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m]} ${+day}`; };
+
+            const refObj = refLookupByName[refName];
+            const cert   = refObj ? (refObj.fields['Certification Level'] || '') : '';
+            const exp    = refObj ? (refObj.fields['Years Reffing'] || '') : '';
+
+            const rows = assignments.length ? assignments.map((a, i) => {
+                const f = a.g.fields;
+                const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
+                let vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
+                if (window.tournamentMode && venueObj && window.tournamentSiteLookup) {
+                    const sn = window.tournamentSiteLookup[venueObj.name];
+                    if (sn) vName = `Site ${sn} — ${venueObj.name}`;
+                }
+                const posBg = a.pos === 'Center Referee' ? '#e8f4fd' : a.pos.startsWith('Opt') ? '#fff8e1' : '#f0f8f0';
+                return `<tr style="background:${i%2===0?'#fff':'#f6f8fa'};">
+                    <td style="${cell}">${fmtDate(f['Date'])}</td>
+                    <td style="${cell}">${fmt(f['Time'])}</td>
+                    <td style="${cell}">${vName}</td>
+                    <td style="${cell}">${f['Age Group'] || '—'}</td>
+                    <td style="${cell} background:${posBg}; font-weight:700; font-size:0.72rem;">${posLabels[a.pos] || a.pos}</td>
+                </tr>`;
+            }).join('') : `<tr><td colspan="5" style="${cell} color:#888; text-align:center;">No assignments yet.</td></tr>`;
+
+            pane.innerHTML = `
+                <table style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; width:100%;">
+                    <thead style="position:sticky; top:0; z-index:2;">
+                        <tr><th colspan="5" style="${hdr} background:#0f3460; color:#fff; font-size:0.8rem; padding:8px 10px;">
+                            <button onclick="sheet3ClearRefDetail()" style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.4); border-radius:6px; color:#fff; font-size:0.72rem; font-weight:700; padding:2px 10px; cursor:pointer; font-family:inherit; margin-right:10px;">← Back</button>
+                            ${name} ${cert ? `<span style="font-size:0.68rem; opacity:0.8; font-weight:400;">${cert}</span>` : ''} ${exp ? `<span style="font-size:0.68rem; opacity:0.8; font-weight:400;">· ${exp} yr${exp!=='1'?'s':''}</span>` : ''}
+                        </th></tr>
+                        <tr>
+                            <th style="${hdr}">Date</th><th style="${hdr}">Time</th>
+                            <th style="${hdr}">Venue</th><th style="${hdr}">Age</th><th style="${hdr}">Position</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+            if (foot) foot.textContent = `${assignments.length} assignment${assignments.length !== 1 ? 's' : ''}`;
+        }
+
+        function sheet3ClearRefDetail() {
+            sheet3RefDetailName = null;
             renderSheet3View(sheet3LastFiltered);
         }
 
@@ -2851,7 +2934,7 @@
                         onmouseenter="showRefTooltip('${safeName}', this, event)"
                         onmouseleave="hideRefTooltip()">
                         <td style="${cell}">${r.date}</td>
-                        <td style="${cell}">${r.name}${countBadge}</td>
+                        <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's assignments">${r.name}${countBadge}</td>
                         <td style="${cell}">${fmtExp(r.exp)}</td>
                         <td style="${cell}">${r.club}</td>
                         <td style="${cell}">${fmt(r.start)}</td>
