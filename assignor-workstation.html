@@ -2798,64 +2798,8 @@
 
             let refRowsHtml, refsHeader, refsFooter;
 
-            if (window.tournamentMode) {
-                // ── Tournament ref pane: one row per ref, AM/PM columns per day ──────
-                const tm = window.tournamentMode;
-                const refAvailMap = {}; // name → { [date]: { start, end } }
-                allAvail.forEach(a => {
-                    const name  = (a.fields['Referee Name'] || '').trim();
-                    const date  = a.fields['Date'] || '';
-                    const start = a.fields['Start Time'] || '';
-                    const end   = a.fields['End Time']   || '';
-                    if (!name || !date) return;
-                    if (!refAvailMap[name]) refAvailMap[name] = {};
-                    refAvailMap[name][date] = { start, end };
-                });
-                const isAM = (s, e) => s < '12:00' && e > '06:00';
-                const isPM = (s, e) => e > '12:00' && s < '23:00';
-                const avCell = ok => ok
-                    ? `<td style="${cell} background:#d5f5e3; color:#1e8449; text-align:center; font-weight:800; min-width:46px;">✓</td>`
-                    : `<td style="${cell} background:#f5f5f5; color:#ccc; text-align:center; min-width:46px;">—</td>`;
-                const dayHdrs    = tm.days.map(d => `<th style="${hdr} text-align:center;" colspan="2">${d.label.split(' ')[0]}</th>`).join('');
-                const sessionHdrs = tm.days.map(() => `<th style="${hdr} text-align:center; font-size:0.65rem;">AM</th><th style="${hdr} text-align:center; font-size:0.65rem;">PM</th>`).join('');
-                refsHeader = `<tr><th style="${hdr}">Name</th><th style="${hdr}">Cert</th>${dayHdrs}</tr>
-                              <tr><th style="${hdr}"></th><th style="${hdr}"></th>${sessionHdrs}</tr>`;
-                const colCount = 2 + tm.days.length * 2;
-                const tourneyRefList = Object.entries(refAvailMap).sort(([a],[b]) => a.localeCompare(b));
-                sheet3CachedRefRows = tourneyRefList.map(([name, dayMap]) => {
-                    const ref = refLookupByName[name.trim().toLowerCase()];
-                    return { name, date: '', club: '', start: '', end: '', exp: ref ? (ref.fields['Years Reffing'] || '') : '' };
-                });
-                refRowsHtml = tourneyRefList.length ? tourneyRefList.map(([name, dayMap], i) => {
-                    const safeName = name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-                    const ref  = refLookupByName[name.trim().toLowerCase()];
-                    const cert = ref ? (ref.fields['Certification Level'] || '') : '';
-                    let assignedCount = 0;
-                    if (ref && assignedAt[ref.id]) {
-                        for (const gameSet of assignedAt[ref.id].values()) {
-                            for (const gid of gameSet) { if (loadedGameIds.has(String(gid))) assignedCount++; }
-                        }
-                    }
-                    const countBadge = assignedCount ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;margin-left:5px;">${assignedCount}</span>` : '';
-                    const dayCells = tm.days.map(d => {
-                        const av = dayMap[d.date];
-                        if (!av) return avCell(false) + avCell(false);
-                        return avCell(isAM(av.start, av.end)) + avCell(isPM(av.start, av.end));
-                    }).join('');
-                    return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
-                        draggable="true"
-                        ondragstart="sheet3RefDragStart(event,'${safeName}')"
-                        onmouseenter="showRefTooltip('${safeName}', this, event)"
-                        onmouseleave="hideRefTooltip()">
-                        <td style="${cell}">${name}${countBadge}</td>
-                        <td style="${cell} font-size:0.7rem; color:#555;">${cert}</td>
-                        ${dayCells}
-                    </tr>`;
-                }).join('') : `<tr><td colspan="${colCount}" style="${cell} color:#888;">No availability submitted.</td></tr>`;
-                refsFooter = `${tourneyRefList.length} refs`;
-
-            } else {
-                // ── Standard club ref pane ────────────────────────────────────────────
+            {
+                // ── Ref pane: Date / Name / Exp / Club Preference / Start / End ────────
                 const refRows = [];
                 allAvail.forEach(a => {
                     const name  = (a.fields['Referee Name'] || '').trim();
@@ -2923,7 +2867,7 @@
                     <th style="${hdr}">Start</th><th style="${hdr}">End</th>
                 </tr>`;
                 refsFooter = `${displayRefRows.length}${displayRefRows.length !== refRows.length ? ` of ${refRows.length}` : ''} records`;
-            }
+            }  // end ref pane block
 
             const refsDivider = `<div onmousedown="sheet3SplitterMousedown(event)" style="background:#1a3a6b; color:#fff; padding:2px 14px; margin:3px -20px 4px -20px; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:ns-resize; user-select:none;" title="Drag to resize panes">Referee Availability — drag a row into an Opt cell &#8597;</div>`;
 
