@@ -2547,7 +2547,7 @@
             const optMinW = {};
             optKeys.forEach((k, i) => { optLabels[k] = `Opt${i + 1}`; optMinW[k] = '120px'; });
             const colLabels = { ...SHEET3_COL_LABELS, ...optLabels };
-            if (window.tournamentMode) colLabels.venue = 'Site';
+            if (window.tournamentMode) colLabels.venue = window.tournamentVenueLabel || 'Venue';
             const colMinW   = { ...SHEET3_COL_MINW,   ...optMinW   };
             // Rebuild col order: keep saved base col order + append current opt keys
             const basePart = sheet3ColOrder.filter(k => SHEET3_BASE_COLS.includes(k));
@@ -4142,11 +4142,32 @@
             } else if (new URLSearchParams(window.location.search).get('tournament')) {
                 // Tournament mode — pre-set dates to tournament range, auto-load
                 const tKey = new URLSearchParams(window.location.search).get('tournament');
+                // Tournament config registry.
+                // venueLabel: how this tournament refers to venues in the UI (default 'Venue').
+                // siteLookup: display-only map of resolved venue name → label prefix shown to the assignor.
+                //   These are purely cosmetic — the DB and CA always use the numeric Venue ID.
+                //   Glastonbury uses 'Site N' numbering; other tournaments may use 'Field N' or plain venue name.
+                const GLASTONBURY_SITE_LOOKUP = {
+                    'Addison Park': 1, 'Buckingham Park': 2, 'GEHMS': 3, 'GHS': 4,
+                    'Gideon Welles': 5, 'Hebron Ave School': 6, 'Abraham Avenue School': 6,
+                    'Irish American Home': 7, 'Knox Lane': 8, 'Nayaug School': 9,
+                    'Riverfront Park': 10, 'Rotary': 11, 'Smith Middle School': 12,
+                };
                 const TOURNAMENTS = {
-                    'glastonbury-2025': { label:'Glastonbury Spring Warmup 2025', logo:'PICS/Glast.png', from:'2025-04-25', to:'2025-04-27',
-                        days:[{label:'Fri Apr 25',date:'2025-04-25'},{label:'Sat Apr 26',date:'2025-04-26'},{label:'Sun Apr 27',date:'2025-04-27'}] },
-                    'glastonbury-2026': { label:'Glastonbury Spring Warmup 2026', logo:'PICS/Glast.png', from:'2026-04-24', to:'2026-04-26',
-                        days:[{label:'Fri Apr 24',date:'2026-04-24'},{label:'Sat Apr 25',date:'2026-04-25'},{label:'Sun Apr 26',date:'2026-04-26'}] },
+                    'glastonbury-2025': {
+                        label: 'Glastonbury Spring Warmup 2025', logo: 'PICS/Glast.png',
+                        from: '2025-04-25', to: '2025-04-27',
+                        venueLabel: 'Site',           // display term; DB/CA always use 'Venue ID'
+                        siteLookup: GLASTONBURY_SITE_LOOKUP,
+                        days: [{label:'Fri Apr 25',date:'2025-04-25'},{label:'Sat Apr 26',date:'2025-04-26'},{label:'Sun Apr 27',date:'2025-04-27'}],
+                    },
+                    'glastonbury-2026': {
+                        label: 'Glastonbury Spring Warmup 2026', logo: 'PICS/Glast.png',
+                        from: '2026-04-24', to: '2026-04-26',
+                        venueLabel: 'Site',
+                        siteLookup: GLASTONBURY_SITE_LOOKUP,
+                        days: [{label:'Fri Apr 24',date:'2026-04-24'},{label:'Sat Apr 25',date:'2026-04-25'},{label:'Sun Apr 26',date:'2026-04-26'}],
+                    },
                 };
                 window.tournamentMode = TOURNAMENTS[tKey] || null;
                 if (window.tournamentMode) {
@@ -4643,22 +4664,10 @@
                         }
                     });
 
-                    // Site number lookup by resolved venue name — used in game row renderer
-                    window.tournamentSiteLookup = {
-                        'Addison Park': 1,
-                        'Buckingham Park': 2,
-                        'GEHMS': 3,
-                        'GHS': 4,
-                        'Gideon Welles': 5,
-                        'Hebron Ave School': 6,
-                        'Abraham Avenue School': 6,
-                        'Irish American Home': 7,
-                        'Knox Lane': 8,
-                        'Nayaug School': 9,
-                        'Riverfront Park': 10,
-                        'Rotary': 11,
-                        'Smith Middle School': 12,
-                    };
+                    // Pull site/venue display config from tournament definition.
+                    // siteLookup is display-only — DB and CA always use numeric Venue ID.
+                    window.tournamentSiteLookup = tm.siteLookup || null;
+                    window.tournamentVenueLabel  = tm.venueLabel  || 'Venue';
 
                     // Hide the top-left back button — banner already has ← Tournaments
                     const dashLink = document.getElementById('backToDashboardLink');
