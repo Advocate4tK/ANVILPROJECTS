@@ -5879,20 +5879,62 @@
             const el = document.getElementById('availHeatmap');
             if (!el) return;
             if (!allAvail.length) { el.style.display = 'none'; return; }
-            const dateCounts = {};
-            allAvail.forEach(a => { const d = a.fields['Date']; if (d) dateCounts[d] = (dateCounts[d] || 0) + 1; });
-            const dates = Object.keys(dateCounts).sort();
-            if (!dates.length) { el.style.display = 'none'; return; }
-            const pills = dates.map(d => {
-                const count = dateCounts[d];
-                const color = count >= 10 ? '#16a34a' : count >= 5 ? '#d97706' : '#dc2626';
-                const bg    = count >= 10 ? '#dcfce7' : count >= 5 ? '#fef3c7' : '#fee2e2';
-                const dow   = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short' });
-                const day   = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'numeric', day:'numeric' });
-                return `<div style="display:flex;flex-direction:column;align-items:center;background:${bg};border:1px solid ${color};border-radius:6px;padding:5px 9px;min-width:46px;gap:1px;" title="${count} refs available on ${d}"><span style="font-size:0.64rem;font-weight:800;color:${color};text-transform:uppercase;letter-spacing:0.3px;">${dow}</span><span style="font-size:0.67rem;color:#666;">${day}</span><span style="font-size:1rem;font-weight:800;color:${color};line-height:1.2;">${count}</span></div>`;
-            }).join('');
-            el.style.display = 'block';
-            el.innerHTML = `<div style="font-size:0.74rem;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:7px;">Refs Available by Day</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${pills}</div>`;
+
+            if (window.tournamentMode) {
+                // ── Tournament mode: 6 session blocks (Fri/Sat/Sun × AM/PM) ──────────
+                const tm = window.tournamentMode;
+                const isAM = (s, e) => s < '12:00' && e > '06:00';
+                const isPM = (s, e) => e > '12:00' && s < '23:00';
+                // Count refs per session
+                const sessions = [];
+                tm.days.forEach(d => {
+                    let amCount = 0, pmCount = 0;
+                    allAvail.forEach(a => {
+                        if ((a.fields['Date'] || '') !== d.date) return;
+                        const s = a.fields['Start Time'] || '';
+                        const e = a.fields['End Time']   || '';
+                        if (isAM(s, e)) amCount++;
+                        if (isPM(s, e)) pmCount++;
+                    });
+                    const dayShort = d.label.split(' ')[0]; // 'Fri', 'Sat', 'Sun'
+                    sessions.push({ label: `${dayShort} AM`, count: amCount, session: 'am' });
+                    sessions.push({ label: `${dayShort} PM`, count: pmCount, session: 'pm' });
+                });
+                const pill = ({ label, count, session }) => {
+                    const color = count >= 10 ? '#16a34a' : count >= 5 ? '#d97706' : '#dc2626';
+                    const bg    = count >= 10 ? '#dcfce7' : count >= 5 ? '#fef3c7' : '#fee2e2';
+                    const border = session === 'am' ? `border-top:3px solid #1a5276;` : `border-top:3px solid #7d5a00;`;
+                    return `<div style="display:flex;flex-direction:column;align-items:center;background:${bg};border:1px solid ${color};${border}border-radius:6px;padding:5px 10px;min-width:52px;gap:1px;" title="${count} refs available ${label}">
+                        <span style="font-size:0.64rem;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:0.3px;">${label}</span>
+                        <span style="font-size:1.1rem;font-weight:800;color:${color};line-height:1.2;">${count}</span>
+                    </div>`;
+                };
+                // Group into day pairs with a small gap between days
+                const dayGroups = tm.days.map((d, i) => {
+                    const am = sessions[i * 2];
+                    const pm = sessions[i * 2 + 1];
+                    return `<div style="display:flex;gap:3px;">${pill(am)}${pill(pm)}</div>`;
+                }).join('<div style="width:8px;"></div>');
+                el.style.display = 'block';
+                el.innerHTML = `<div style="font-size:0.74rem;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:7px;">Refs Available by Session</div><div style="display:flex;gap:0;flex-wrap:wrap;align-items:flex-start;">${dayGroups}</div>`;
+
+            } else {
+                // ── Standard mode: one pill per date ─────────────────────────────────
+                const dateCounts = {};
+                allAvail.forEach(a => { const d = a.fields['Date']; if (d) dateCounts[d] = (dateCounts[d] || 0) + 1; });
+                const dates = Object.keys(dateCounts).sort();
+                if (!dates.length) { el.style.display = 'none'; return; }
+                const pills = dates.map(d => {
+                    const count = dateCounts[d];
+                    const color = count >= 10 ? '#16a34a' : count >= 5 ? '#d97706' : '#dc2626';
+                    const bg    = count >= 10 ? '#dcfce7' : count >= 5 ? '#fef3c7' : '#fee2e2';
+                    const dow   = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short' });
+                    const day   = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'numeric', day:'numeric' });
+                    return `<div style="display:flex;flex-direction:column;align-items:center;background:${bg};border:1px solid ${color};border-radius:6px;padding:5px 9px;min-width:46px;gap:1px;" title="${count} refs available on ${d}"><span style="font-size:0.64rem;font-weight:800;color:${color};text-transform:uppercase;letter-spacing:0.3px;">${dow}</span><span style="font-size:0.67rem;color:#666;">${day}</span><span style="font-size:1rem;font-weight:800;color:${color};line-height:1.2;">${count}</span></div>`;
+                }).join('');
+                el.style.display = 'block';
+                el.innerHTML = `<div style="font-size:0.74rem;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:7px;">Refs Available by Day</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${pills}</div>`;
+            }
         }
 
         function copyCantMakeItLink(gameId, position, refName) {
