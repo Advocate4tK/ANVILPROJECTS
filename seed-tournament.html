@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Import Tournament Games</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .info-box {
+            background: #f3eaff;
+            border: 2px solid #8e44ad;
+            border-radius: 10px;
+            padding: 20px 26px;
+            margin-bottom: 22px;
+        }
+        .info-box h2 { color: #6c3483; margin-top: 0; font-size: 1.2rem; }
+        .summary-grid {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .summary-tile {
+            background: white;
+            border: 1px solid #d9b3f0;
+            border-radius: 8px;
+            padding: 12px 18px;
+            text-align: center;
+            min-width: 110px;
+        }
+        .summary-tile .num { font-size: 1.6rem; font-weight: 700; color: #6c3483; }
+        .summary-tile .lbl { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .day-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+        .day-card {
+            flex: 1;
+            min-width: 200px;
+            background: white;
+            border: 2px dashed #c8a0e8;
+            border-radius: 10px;
+            padding: 18px 20px;
+            transition: border-color 0.2s;
+        }
+        .day-card.loaded {
+            border-color: #8e44ad;
+            border-style: solid;
+            background: #faf5ff;
+        }
+        .day-card h3 { margin: 0 0 10px 0; color: #6c3483; font-size: 1rem; }
+        .day-card .day-count { font-size: 0.82rem; color: #888; margin-top: 6px; }
+        .day-card.loaded .day-count { color: #27ae60; font-weight: 600; }
+        .day-card input[type=file] { width: 100%; font-size: 0.85rem; cursor: pointer; }
+        .progress-bar-wrap { background: #ecf0f1; border-radius: 8px; height: 20px; margin-top: 15px; overflow: hidden; display: none; }
+        .progress-bar { height: 100%; background: #8e44ad; width: 0%; transition: width 0.2s; }
+        .result-item { padding: 8px 14px; border-radius: 5px; margin-bottom: 6px; font-size: 13px; }
+        .result-item.success { background: #d5f5e3; color: #1e8449; }
+        .result-item.error   { background: #fadbd8; color: #922b21; }
+        .result-item.section { background: #e8daef; color: #6c3483; font-weight: 700; margin-top: 10px; }
+        .result-item.warn    { background: #fef9e7; color: #7d6608; }
+        .preview-wrap {
+            overflow-x: auto;
+            margin-top: 14px;
+            max-height: 340px;
+            overflow-y: auto;
+            border: 1px solid #d9b3f0;
+            border-radius: 8px;
+        }
+        .preview-wrap table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+        .preview-wrap th { background: #6c3483; color: white; padding: 6px 10px; text-align: left; position: sticky; top: 0; white-space: nowrap; }
+        .preview-wrap td { padding: 5px 10px; border-bottom: 1px solid #f0e8fb; white-space: nowrap; }
+        .preview-wrap tr:hover td { background: #faf5ff; }
+        .badge-day { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-right: 4px; }
+        .badge-fri { background: #e8f4fd; color: #1a5276; }
+        .badge-sat { background: #eafaf1; color: #1e8449; }
+        .badge-sun { background: #fef9e7; color: #7d6608; }
+        #importBtn {
+            background: #8e44ad;
+            color: white;
+            padding: 12px 32px;
+            font-size: 1rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        #importBtn:disabled { opacity: 0.5; cursor: default; }
+        #importBtn:not(:disabled):hover { background: #7d3c98; }
+        #previewBtn {
+            background: #5d6d7e;
+            color: white;
+            padding: 10px 24px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-right: 12px;
+        }
+        #previewBtn:disabled { opacity: 0.5; cursor: default; }
+        #previewBtn:not(:disabled):hover { background: #4a5568; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏆 Import Tournament Games</h1>
+            <p class="subtitle">Glastonbury Spring Warmup 2025 — Hartwell CSV Import</p>
+        </header>
+
+        <main>
+            <div style="margin-bottom:20px;">
+                <a href="tournament.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">← Tournament Manager</a>
+                <a href="superadmin.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px; margin-left:8px;">Super Admin</a>
+            </div>
+
+            <div class="form-container">
+
+                <div class="info-box">
+                    <h2>📋 2025 Glastonbury Spring Warmup</h2>
+                    <div class="summary-grid">
+                        <div class="summary-tile"><div class="num">491</div><div class="lbl">Total Games</div></div>
+                        <div class="summary-tile"><div class="num">18</div><div class="lbl">Friday Apr 25</div></div>
+                        <div class="summary-tile"><div class="num">235</div><div class="lbl">Saturday Apr 26</div></div>
+                        <div class="summary-tile"><div class="num">238</div><div class="lbl">Sunday Apr 27</div></div>
+                        <div class="summary-tile"><div class="num">3</div><div class="lbl">Days</div></div>
+                    </div>
+                    <p style="font-size:13px; color:#666; margin:0;">
+                        Upload the three Hartwell CSV files below. Each file is validated and parsed separately.
+                        Games import with <strong>game_type = Tournament</strong>, <strong>Source Club = Glastonbury</strong>.
+                        Friday uses simplified schema (age group from team name). Saturday &amp; Sunday use full HART schema.
+                    </p>
+                </div>
+
+                <!-- Day file uploads -->
+                <fieldset>
+                    <legend>Upload CSV Files</legend>
+                    <div class="day-row">
+                        <div class="day-card" id="card-fri">
+                            <h3>📅 Friday — Apr 25, 2025</h3>
+                            <p style="font-size:0.8rem; color:#888; margin:0 0 10px 0;">18 evening games · simplified schema</p>
+                            <input type="file" id="file-fri" accept=".csv" onchange="handleFileLoad('fri', this)">
+                            <div class="day-count" id="count-fri">No file loaded</div>
+                        </div>
+                        <div class="day-card" id="card-sat">
+                            <h3>📅 Saturday — Apr 26, 2025</h3>
+                            <p style="font-size:0.8rem; color:#888; margin:0 0 10px 0;">235 games · full HART schema</p>
+                            <input type="file" id="file-sat" accept=".csv" onchange="handleFileLoad('sat', this)">
+                            <div class="day-count" id="count-sat">No file loaded</div>
+                        </div>
+                        <div class="day-card" id="card-sun">
+                            <h3>📅 Sunday — Apr 27, 2025</h3>
+                            <p style="font-size:0.8rem; color:#888; margin:0 0 10px 0;">238 games · full HART schema</p>
+                            <input type="file" id="file-sun" accept=".csv" onchange="handleFileLoad('sun', this)">
+                            <div class="day-count" id="count-sun">No file loaded</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:10px;">
+                        <button id="previewBtn" disabled onclick="buildPreview()">🔍 Preview Parsed Data</button>
+                        <button id="importBtn" disabled onclick="runImport()">⬆️ Import to Database</button>
+                        <span id="importHint" style="font-size:0.82rem; color:#888; margin-left:10px;">Load at least one CSV to begin</span>
+                    </div>
+                </fieldset>
+
+                <!-- Preview table -->
+                <div id="previewSection" style="display:none; margin-top:18px;">
+                    <h3 style="color:#6c3483; margin-bottom:8px;">Preview — <span id="previewCount">0</span> games parsed</h3>
+                    <div class="preview-wrap" id="previewWrap"></div>
+                </div>
+
+                <!-- Progress -->
+                <div class="progress-bar-wrap" id="progressWrap">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <p id="progressText" style="display:none; text-align:center; font-size:14px; color:#555; margin-top:8px;"></p>
+
+                <!-- Results -->
+                <div id="resultsSection" style="display:none; margin-top:20px;">
+                    <h3 style="color:#6c3483;">Import Results</h3>
+                    <div id="resultsList"></div>
+                </div>
+
+            </div>
+        </main>
+
+        <footer>
+            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"></p>
+        </footer>
+    </div>
+
+    <script src="js/admin-auth.js"></script>
+    <script>checkAdminAccess();</script>
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/supabase-client.js?v=9"></script>
+    <script>
+
+    // ── Parsed game rows per day ───────────────────────────────────────────
+    const parsedDays = { fri: [], sat: [], sun: [] };
+
+    // ── CSV helpers ───────────────────────────────────────────────────────
+    function parseCSV(text) {
+        const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+        if (!lines.length) return [];
+        const headers = lines[0].split(',').map(h => h.trim());
+        return lines.slice(1).map(line => {
+            const vals = line.split(',');
+            const obj = {};
+            headers.forEach((h, i) => { obj[h] = (vals[i] || '').trim(); });
+            return obj;
+        });
+    }
+
+    function parseDateToISO(dateStr) {
+        // M/D/YYYY → YYYY-MM-DD
+        const parts = dateStr.split('/');
+        if (parts.length !== 3) return dateStr;
+        const [m, d, y] = parts;
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+
+    function parseTimeTo24h(timeStr) {
+        // "8:00 AM" → "08:00:00", "5:30 PM" → "17:30:00"
+        const match = (timeStr || '').match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (!match) return timeStr;
+        let [, h, m, ampm] = match;
+        h = parseInt(h, 10);
+        if (ampm.toUpperCase() === 'PM' && h !== 12) h += 12;
+        if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+        return `${String(h).padStart(2, '0')}:${m}:00`;
+    }
+
+    function normalizeGender(g) {
+        const v = (g || '').toLowerCase().trim();
+        if (v === 'm' || v === 'b') return 'M';
+        if (v === 'f' || v === 'g') return 'F';
+        return (g || '').toUpperCase();
+    }
+
+    function birthYearToAgeGroup(yearStr) {
+        // "2014" → "U11" (2025 - 2014 = 11)
+        const y = parseInt(yearStr, 10);
+        if (isNaN(y)) return yearStr;
+        return `U${2025 - y}`;
+    }
+
+    function extractAgeGroupFromTeam(teamName) {
+        // "HOME-U9" → "U9"
+        const match = (teamName || '').match(/[Uu](\d+)/);
+        return match ? `U${match[1]}` : '';
+    }
+
+    // ── Convert a raw CSV row → games table record ────────────────────────
+    function csvRowToGame(row, dayLabel) {
+        const hasGameId = 'game_id' in row;   // HART schema = Sat/Sun
+
+        const date        = parseDateToISO(row['Date'] || '');
+        const time        = parseTimeTo24h(row['Time'] || '');
+        const homeTeam    = row['Home Team'] || '';
+        const awayTeam    = row['Away Team'] || '';
+        const venueId     = parseFloat(row['Venue'] || '0') || null;
+        const fieldId     = parseFloat(row['Field'] || '0') || null;
+        const rawGender   = row['Gender'] || '';
+        const gender      = normalizeGender(rawGender);
+
+        let ageGroup, gameId, division;
+
+        if (hasGameId) {
+            // Saturday / Sunday — full HART schema
+            ageGroup  = birthYearToAgeGroup(row['Age Group'] || '');
+            gameId    = row['game_id'] ? String(row['game_id']) : '';
+        } else {
+            // Friday — simplified schema, age group from team name
+            ageGroup  = extractAgeGroupFromTeam(homeTeam);
+            gameId    = '';
+        }
+
+        // division = age group + gender initial, e.g. "U11B" or "U13G"
+        division = ageGroup + (gender === 'M' ? 'B' : gender === 'F' ? 'G' : '');
+
+        return {
+            date,
+            time,
+            'Home Team':   homeTeam,
+            'Away Team':   awayTeam,
+            'Age Group':   ageGroup,
+            'Venue ID':    venueId,
+            'Field ID':    fieldId,
+            'GAME ID':     gameId,
+            game_type:     'Tournament',
+            'Source Club': 'Glastonbury',
+            division,
+            _day:          dayLabel  // internal label for preview, stripped before insert
+        };
+    }
+
+    // ── File load handler ─────────────────────────────────────────────────
+    function handleFileLoad(day, input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            const rows = parseCSV(e.target.result).filter(r => r['Home Team'] && r['Date']);
+            const games = rows.map(r => csvRowToGame(r, day));
+            parsedDays[day] = games;
+            document.getElementById(`count-${day}`).textContent = `✓ ${games.length} games parsed`;
+            document.getElementById(`card-${day}`).classList.add('loaded');
+            updateButtons();
+        };
+        reader.readAsText(file);
+    }
+
+    function updateButtons() {
+        const total = parsedDays.fri.length + parsedDays.sat.length + parsedDays.sun.length;
+        const hasData = total > 0;
+        document.getElementById('previewBtn').disabled = !hasData;
+        document.getElementById('importBtn').disabled = !hasData;
+        document.getElementById('importHint').textContent = hasData
+            ? `${total} games ready to import`
+            : 'Load at least one CSV to begin';
+    }
+
+    // ── Preview ───────────────────────────────────────────────────────────
+    function buildPreview() {
+        const all = [
+            ...parsedDays.fri.map(g => ({ ...g, _day: 'fri' })),
+            ...parsedDays.sat.map(g => ({ ...g, _day: 'sat' })),
+            ...parsedDays.sun.map(g => ({ ...g, _day: 'sun' }))
+        ];
+        if (!all.length) return;
+
+        document.getElementById('previewCount').textContent = all.length;
+
+        const cols = ['_day', 'date', 'time', 'Age Group', 'division', 'Home Team', 'Away Team', 'Venue ID', 'Field ID', 'GAME ID'];
+        const dayBadge = d => {
+            const map = { fri: 'badge-fri', sat: 'badge-sat', sun: 'badge-sun' };
+            const labels = { fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+            return `<span class="badge-day ${map[d]}">${labels[d]}</span>`;
+        };
+
+        let html = '<table><thead><tr>';
+        cols.forEach(c => { html += `<th>${c === '_day' ? 'Day' : c}</th>`; });
+        html += '</tr></thead><tbody>';
+
+        all.slice(0, 50).forEach(g => {
+            html += '<tr>';
+            cols.forEach(c => {
+                const val = c === '_day' ? dayBadge(g._day) : (g[c] ?? '');
+                html += `<td>${val}</td>`;
+            });
+            html += '</tr>';
+        });
+
+        if (all.length > 50) {
+            html += `<tr><td colspan="${cols.length}" style="text-align:center; color:#888; padding:10px; font-style:italic;">... and ${all.length - 50} more games</td></tr>`;
+        }
+
+        html += '</tbody></table>';
+        document.getElementById('previewWrap').innerHTML = html;
+        document.getElementById('previewSection').style.display = 'block';
+        document.getElementById('previewSection').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ── Import ────────────────────────────────────────────────────────────
+    async function runImport() {
+        const db = supabaseClient ? supabaseClient.client : null;
+        if (!db) { alert('Database not connected.'); return; }
+
+        const allGames = [
+            ...parsedDays.fri,
+            ...parsedDays.sat,
+            ...parsedDays.sun
+        ];
+        if (!allGames.length) { alert('No games to import. Load CSV files first.'); return; }
+
+        document.getElementById('importBtn').disabled = true;
+        document.getElementById('previewBtn').disabled = true;
+        document.getElementById('progressWrap').style.display = 'block';
+        document.getElementById('progressText').style.display = 'block';
+        document.getElementById('resultsSection').style.display = 'none';
+        document.getElementById('resultsList').innerHTML = '';
+
+        const total = allGames.length;
+        let ok = 0, fail = 0;
+
+        const dayLabels = { fri: 'Friday Apr 25', sat: 'Saturday Apr 26', sun: 'Sunday Apr 27' };
+        let currentDay = null;
+
+        for (let i = 0; i < allGames.length; i++) {
+            const game = allGames[i];
+            const { _day, ...insertRow } = game;   // strip internal _day label
+
+            if (_day !== currentDay) {
+                currentDay = _day;
+                addResult('section', `── ${dayLabels[_day]} ──`);
+            }
+
+            document.getElementById('progressText').textContent =
+                `Importing game ${i + 1} of ${total}...`;
+            document.getElementById('progressBar').style.width =
+                Math.round(((i) / total) * 100) + '%';
+
+            try {
+                const { error } = await db.from('games').insert(insertRow);
+                if (error) throw new Error(error.message);
+                ok++;
+            } catch (err) {
+                fail++;
+                addResult('error', `❌ ${insertRow['Home Team']} vs ${insertRow['Away Team']} (${insertRow.date} ${insertRow.time}) — ${err.message}`);
+            }
+        }
+
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressText').textContent = 'Import complete!';
+        addResult('success', `✅ Done — ${ok} games imported${fail ? `, ${fail} failed` : ''} out of ${total} total.`);
+        document.getElementById('resultsSection').style.display = 'block';
+        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('importBtn').disabled = false;
+        document.getElementById('previewBtn').disabled = false;
+    }
+
+    function addResult(type, message) {
+        const div = document.createElement('div');
+        div.className = `result-item ${type}`;
+        if (type === 'section') {
+            div.textContent = message;
+        } else {
+            div.innerHTML = message;
+        }
+        document.getElementById('resultsList').appendChild(div);
+    }
+
+    </script>
+</body>
+</html>
