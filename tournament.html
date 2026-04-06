@@ -117,8 +117,8 @@
             <div class="entry-panel">
                 <div class="entry-card" onclick="toggleHistory()">
                     <div class="icon">📁</div>
-                    <h3>Past Tournaments</h3>
-                    <p>View archived tournaments and open historical workstations</p>
+                    <h3>Tournaments</h3>
+                    <p>View all tournaments — upcoming, active, and completed</p>
                 </div>
                 <div class="entry-card" onclick="showNewTournament()">
                     <div class="icon">➕</div>
@@ -161,7 +161,7 @@
             <!-- Past Tournaments (collapsed by default) -->
             <div id="historySection" style="display:none;">
                 <div class="section-header" onclick="toggleHistory()">
-                    <h2>📁 Past Tournaments</h2>
+                    <h2>📁 Tournaments</h2>
                     <div class="section-divider"></div>
                     <span class="section-toggle" id="historyToggleArrow">▲ hide</span>
                 </div>
@@ -201,7 +201,7 @@
         if (historyOpen && !historyLoaded) loadTournaments();
     }
 
-    function launchNewTournament() {
+    async function launchNewTournament() {
         const name  = document.getElementById('newTName').value.trim();
         const from  = document.getElementById('newTFrom').value;
         const to    = document.getElementById('newTTo').value;
@@ -209,6 +209,17 @@
         if (!from || !club) { alert('Club and start date are required.'); return; }
         const year  = from.slice(0, 4);
         const key   = `${club.toLowerCase()}-${year}`;
+        const tName = name || `${club} Spring Warmup ${year}`;
+
+        // Persist to tournaments table so hub shows it immediately
+        const db = supabaseClient ? supabaseClient.client : null;
+        if (db) {
+            await db.from('tournaments').upsert(
+                { key, name: tName, club, from_date: from || null, to_date: to || null, status: 'upcoming' },
+                { onConflict: 'key' }
+            );
+        }
+
         window.location.href = `assignor-workstation.html?tournament=${encodeURIComponent(key)}`;
     }
 
@@ -234,76 +245,103 @@
             return;
         }
 
-        const { data, error } = await db
-            .from('games')
-            .select('id, date, "Source Club", "Age Group", game_type')
-            .eq('game_type', 'Tournament')
-            .order('date', { ascending: false });
+        // Fetch tournaments table + game stats in parallel
+        const [{ data: tRows, error: tErr }, { data: gRows, error: gErr }] = await Promise.all([
+            db.from('tournaments').select('*').order('from_date', { ascending: false }),
+            db.from('games').select('id, date, "Source Club", "Age Group", game_type')
+                .eq('game_type', 'Tournament').order('date', { ascending: false })
+        ]);
 
-        if (error) {
+        if (tErr && gErr) {
             document.getElementById('tourneyList').innerHTML =
-                `<div class="loading-msg" style="color:#c0392b;">Error: ${error.message}</div>`;
+                `<div class="loading-msg" style="color:#c0392b;">Error loading tournaments.</div>`;
             return;
         }
 
-        if (!data || !data.length) {
-            document.getElementById('tourneyList').innerHTML =
-                '<div class="loading-msg">No past tournaments found.</div>';
-            return;
-        }
-
-        const grouped = {};
-        data.forEach(g => {
-            const club = g['Source Club'] || 'Unknown';
+        // Group games by derived key (club-year)
+        const gamesByKey = {};
+        (gRows || []).forEach(g => {
+            const club = (g['Source Club'] || 'Unknown').toLowerCase().replace(/\s+/g, '-');
             const year = (g.date || '').slice(0, 4);
-            const key  = `${club}_${year}`;
-            if (!grouped[key]) grouped[key] = { club, year, games: [], dates: [] };
-            grouped[key].games.push(g);
-            if (g.date) grouped[key].dates.push(g.date);
+            const key  = `${club}-${year}`;
+            if (!gamesByKey[key]) gamesByKey[key] = { games: [], dates: [] };
+            gamesByKey[key].games.push(g);
+            if (g.date) gamesByKey[key].dates.push(g.date);
         });
+
+        // Build unified list — tournaments table is authoritative; games fill in the rest
+        const tourneyMap = {};
+        (tRows || []).forEach(t => {
+            tourneyMap[t.key] = { key: t.key, name: t.name, club: t.club, fromDate: t.from_date, toDate: t.to_date };
+        });
+        // Add game-derived entries for any key not already in the table (legacy)
+        Object.keys(gamesByKey).forEach(key => {
+            if (!tourneyMap[key]) {
+                const firstGame = gamesByKey[key].games[0] || {};
+                const club = firstGame['Source Club'] || 'Unknown';
+                const year = (gamesByKey[key].dates[0] || '').slice(0, 4);
+                tourneyMap[key] = { key, name: `${club} Spring Warmup ${year}`, club, fromDate: null, toDate: null };
+            }
+        });
+
+        const entries = Object.values(tourneyMap).sort((a, b) => {
+            const da = a.fromDate || (gamesByKey[a.key]?.dates?.slice().sort().reverse()[0] || '');
+            const db2 = b.fromDate || (gamesByKey[b.key]?.dates?.slice().sort().reverse()[0] || '');
+            return db2.localeCompare(da);
+        });
+
+        if (!entries.length) {
+            document.getElementById('tourneyList').innerHTML =
+                '<div class="loading-msg">No tournaments found.</div>';
+            return;
+        }
 
         const list = document.getElementById('tourneyList');
         list.innerHTML = '';
+        const today   = new Date().toISOString().slice(0, 10);
+        const fmtDate = d => {
+            if (!d) return '?';
+            const [y, m, day] = d.split('-');
+            return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]} ${parseInt(day)}, ${y}`;
+        };
 
-        Object.values(grouped).sort((a, b) => b.year - a.year).forEach(t => {
-            const dates     = [...new Set(t.dates)].sort();
-            const firstDate = dates[0] || '';
-            const lastDate  = dates[dates.length - 1] || '';
-            const today     = new Date().toISOString().slice(0, 10);
+        entries.forEach(t => {
+            const gData     = gamesByKey[t.key] || { games: [], dates: [] };
+            const dates     = [...new Set(gData.dates)].sort();
+            const firstDate = t.fromDate || dates[0] || '';
+            const lastDate  = t.toDate   || dates[dates.length - 1] || '';
+
             let status, statusLabel;
-            if (lastDate < today)        { status = 'completed'; statusLabel = 'Completed'; }
+            if (!firstDate)              { status = 'pending';   statusLabel = 'Upcoming'; }
+            else if (lastDate < today)   { status = 'completed'; statusLabel = 'Completed'; }
             else if (firstDate <= today) { status = 'active';    statusLabel = 'In Progress'; }
             else                         { status = 'pending';   statusLabel = 'Upcoming'; }
 
-            const ageGroups = [...new Set(t.games.map(g => g['Age Group']).filter(Boolean))].sort();
-            const fmtDate = d => {
-                if (!d) return '?';
-                const [y, m, day] = d.split('-');
-                return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]} ${parseInt(day)}, ${y}`;
-            };
-            const dateRange = dates.length > 1
-                ? `${fmtDate(firstDate)} – ${fmtDate(lastDate)}`
-                : fmtDate(firstDate);
+            const ageGroups = [...new Set(gData.games.map(g => g['Age Group']).filter(Boolean))].sort();
+            const dateRange = firstDate
+                ? (lastDate && lastDate !== firstDate ? `${fmtDate(firstDate)} – ${fmtDate(lastDate)}` : fmtDate(firstDate))
+                : 'Dates TBD';
+            const dayCount  = dates.length || (firstDate && lastDate ? Math.round((new Date(lastDate)-new Date(firstDate))/(86400000))+1 : 0);
 
-            const tKey       = `${t.club.toLowerCase()}-${t.year}`;
-            const nextYear   = String(parseInt(t.year) + 1);
-            const tName      = `${t.club} Spring Warmup ${t.year}`;
-            const spawnArgs  = `'${t.club}','${t.year}','${firstDate}','${lastDate}','${tName}'`;
-            const card  = document.createElement('div');
+            const year      = (firstDate || t.key).slice(0, 4);
+            const nextYear  = String(parseInt(year) + 1);
+            const spawnArgs = `'${t.club}','${year}','${firstDate}','${lastDate}','${t.name}'`;
+
+            const card = document.createElement('div');
             card.className = 'tourney-card';
             card.innerHTML = `
                 <div class="tc-info">
-                    <h3>🏆 ${t.club} Spring Warmup ${t.year}</h3>
-                    <div class="tc-meta">${dateRange} &nbsp;·&nbsp; ${dates.length} day${dates.length !== 1 ? 's' : ''}</div>
+                    <h3>🏆 ${t.name}</h3>
+                    <div class="tc-meta">${dateRange}${dayCount ? ` &nbsp;·&nbsp; ${dayCount} day${dayCount !== 1 ? 's' : ''}` : ''}</div>
                     <div>
-                        <span class="stat-chip">${t.games.length} Games</span>
+                        ${gData.games.length ? `<span class="stat-chip">${gData.games.length} Games</span>` : '<span class="stat-chip" style="color:#aaa;">No games yet</span>'}
                         ${ageGroups.slice(0, 5).map(a => `<span class="stat-chip">${a}</span>`).join('')}
                         ${ageGroups.length > 5 ? `<span class="stat-chip">+${ageGroups.length - 5} more</span>` : ''}
                     </div>
                 </div>
                 <span class="badge-status badge-${status}">${statusLabel}</span>
                 <button onclick="spawnFromPrior(${spawnArgs})" class="action-btn outline" style="white-space:nowrap;" title="Pre-fill New Tournament from this one, bumped to ${nextYear}">+ ${nextYear}</button>
-                <a href="assignor-workstation.html?tournament=${encodeURIComponent(tKey)}" class="action-btn primary" style="white-space:nowrap;">Open →</a>`;
+                <a href="assignor-workstation.html?tournament=${encodeURIComponent(t.key)}" class="action-btn primary" style="white-space:nowrap;">Open →</a>`;
             list.appendChild(card);
         });
     }
