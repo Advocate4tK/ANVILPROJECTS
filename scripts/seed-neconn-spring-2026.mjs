@@ -125,6 +125,18 @@ const VENUE_ID_MAP = {
     'rawson':         9005,
 };
 
+// ── Venue ID + Field name → Field ID ─────────────────────────────────────
+const FIELD_ID_MAP = {
+    '9001|Field 1': 9001,
+    '9001|Field 2': 9002,
+    '9001|Field 3': 9003,
+    '9002|Field 1': 9004,
+    '9002|Field 2': 9005,
+    '9003|Field 1': 9006,
+    '9004|Field 1': 9007,
+    '9005|Field 1': 9008,
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 // Excel serial → ISO date string (YYYY-MM-DD)
@@ -203,7 +215,8 @@ for (let i = 1; i < rows.length; i++) {
     const timeParsed = parseTime(timeRaw);
     const fieldName = fieldNum ? `Field ${fieldNum}` : null;
 
-    const venueId = VENUE_ID_MAP[venue.toLowerCase()] || null;
+    const venueId  = VENUE_ID_MAP[venue.toLowerCase()] || null;
+    const fieldId  = venueId && fieldName ? (FIELD_ID_MAP[`${venueId}|${fieldName}`] || null) : null;
 
     games.push({
         'Age Group':    divKey,
@@ -218,6 +231,7 @@ for (let i = 1; i < rows.length; i++) {
         'Game Status':  'Unassigned',
         'Uploaded By':  'seed-neconn-spring-2026',
         'Venue ID':     venueId,
+        'Field ID':     fieldId,
     });
 }
 

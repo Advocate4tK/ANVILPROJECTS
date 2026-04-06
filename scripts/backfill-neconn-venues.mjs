@@ -1,7 +1,7 @@
 /**
  * backfill-neconn-venues.mjs
- * Sets Venue ID on the 133 NECONN Spring 2026 rec games based on
- * the venue name stored in the notes field during import.
+ * 1. Assigns Field ID to NECONN field records (9001–9008)
+ * 2. Backfills Field ID on the 133 NECONN Spring 2026 rec games
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -11,50 +11,47 @@ const db = createClient(
     'sb_publishable_pJX6Fsg4YrSNEhfNTHbkLA_tzFJmEUb'
 );
 
-// Normalize venue name → Venue ID (matches what we created in setup-neconn-club.mjs)
-const VENUE_MAP = {
-    'old khs':       9001,
-    'oldkhs':        9001,
-    'prince hill':   9002,
-    'riverside park':9003,
-    'riversidepark': 9003,
-    'pomfret rec':   9004,
-    'rawson':        9005,
+// Venue ID + field name → Field ID
+const FIELD_ID_MAP = {
+    '9001|Field 1': 9001,
+    '9001|Field 2': 9002,
+    '9001|Field 3': 9003,
+    '9002|Field 1': 9004,
+    '9002|Field 2': 9005,
+    '9003|Field 1': 9006,
+    '9004|Field 1': 9007,
+    '9005|Field 1': 9008,
 };
 
-// Fetch all NECONN rec games
-const { data: games, error } = await db
+// ── 1. Set Field ID on field records ─────────────────────────────────────
+console.log('Setting Field IDs on NECONN field records...');
+const { data: fieldRecs } = await db.from('fields').select('id, "Field Name", "Venue ID"').eq('club', 'NECONN');
+
+for (const f of fieldRecs) {
+    const key = `${f['Venue ID']}|${f['Field Name']}`;
+    const fid = FIELD_ID_MAP[key];
+    if (!fid) { console.warn(`  No Field ID for key "${key}"`); continue; }
+    const { error } = await db.from('fields').update({ 'Field ID': fid }).eq('id', f.id);
+    if (error) console.error(`  Error updating field ${f.id}:`, error.message);
+    else console.log(`  ✓ ${f['Field Name']} @ Venue ${f['Venue ID']} → Field ID ${fid}`);
+}
+
+// ── 2. Backfill Field ID on games ────────────────────────────────────────
+console.log('\nBackfilling Field ID on NECONN rec games...');
+const { data: games } = await db
     .from('games')
-    .select('id, notes, field')
+    .select('id, "Venue ID", field')
     .eq('"Source Club"', 'NECONN')
     .eq('game_type', 'Rec');
 
-if (error) { console.error('Fetch error:', error.message); process.exit(1); }
-console.log(`Found ${games.length} NECONN rec games`);
-
-let updated = 0, skipped = 0, unknown = 0;
-
+let updated = 0, skipped = 0;
 for (const g of games) {
-    // Parse "Venue: Old KHS" from notes
-    const match = (g.notes || '').match(/Venue:\s*(.+)/i);
-    if (!match) { skipped++; continue; }
-
-    const rawVenue = match[1].trim();
-    const venueId  = VENUE_MAP[rawVenue.toLowerCase()];
-
-    if (!venueId) {
-        console.warn(`  Unknown venue "${rawVenue}" on game id=${g.id}`);
-        unknown++;
-        continue;
-    }
-
-    const { error: uErr } = await db
-        .from('games')
-        .update({ 'Venue ID': venueId })
-        .eq('id', g.id);
-
-    if (uErr) { console.error(`  Update error id=${g.id}:`, uErr.message); }
+    const key = `${g['Venue ID']}|${g.field}`;
+    const fid = FIELD_ID_MAP[key];
+    if (!fid) { skipped++; continue; }
+    const { error } = await db.from('games').update({ 'Field ID': fid }).eq('id', g.id);
+    if (error) console.error(`  Error game ${g.id}:`, error.message);
     else updated++;
 }
 
-console.log(`Done. Updated: ${updated} | Skipped (no notes): ${skipped} | Unknown venue: ${unknown}`);
+console.log(`Done. Games updated: ${updated} | Skipped: ${skipped}`);
