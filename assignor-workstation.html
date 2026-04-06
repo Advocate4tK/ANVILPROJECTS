@@ -2574,6 +2574,11 @@
                 (!sheet3MissingFilter || ['Center Referee','AR 1','AR 2'].some(p => !resolveRefName(g.fields[p])))
             );
             const loadedGameIds = new Set(allGames.map(g => String(g.id)));
+            // Tournament mode: sort by time so AM/PM dividers split correctly
+            if (window.tournamentMode && sheet3DateFilter) {
+                displayGames.sort((a, b) => (a.fields['Time'] || '').localeCompare(b.fields['Time'] || ''));
+            }
+            let _s3Period = null; // tracks AM vs PM for section-divider injection
             // refCountBadge is defined as a top-level function below renderSheet3View
             const gameRowsHtml = displayGames.length ? displayGames.map((g, i) => {
                 const f        = g.fields;
@@ -2638,7 +2643,19 @@
                 // Add dynamic opt renderers
                 optKeys.forEach((k, i) => { colRenderers[k] = () => optTd(i); });
                 const stubTd = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:0; background:#eef0f3;';
-                return `<tr style="background:${rowBg};">${sheet3ColOrder.map(k =>
+                // Tournament mode: inject Morning / Afternoon section dividers
+                let periodDivider = '';
+                if (window.tournamentMode && sheet3DateFilter) {
+                    const period = (f['Time'] || '23:59') < '12:00:00' ? 'am' : 'pm';
+                    if (period !== _s3Period) {
+                        _s3Period = period;
+                        const lbl = period === 'am' ? 'Morning' : 'Afternoon';
+                        const bg  = period === 'am' ? '#e8f4fd' : '#fff8e1';
+                        const col = period === 'am' ? '#1a5276' : '#7d5a00';
+                        periodDivider = `<tr><td colspan="${sheet3ColOrder.length}" style="background:${bg};color:${col};font-size:0.72rem;font-weight:800;letter-spacing:1.2px;padding:5px 8px;text-transform:uppercase;border-top:2px solid ${col}40;">${lbl}</td></tr>`;
+                    }
+                }
+                return periodDivider + `<tr style="background:${rowBg};">${sheet3ColOrder.map(k =>
                     sheet3HiddenCols.includes(k) ? `<td style="${stubTd}"></td>` : (colRenderers[k] ? colRenderers[k]() : '<td></td>')
                 ).join('')}</tr>`;
             }).join('') : `<tr><td colspan="${sheet3ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
@@ -2755,73 +2772,134 @@
                     </table>
                 </div>`;
 
-            const refRows = [];
-            allAvail.forEach(a => {
-                const name  = (a.fields['Referee Name'] || '').trim();
-                const date  = a.fields['Date'] || '';
-                const start = a.fields['Start Time'] || '';
-                const end   = a.fields['End Time']   || '';
-                if (!name || !date) return;
-                const ref  = allRefs.find(r => (r.fields['Name'] || '').trim().toLowerCase() === name.toLowerCase());
-                const club = ref ? (ref.fields['Club Preference'] || '') : '';
-                const exp  = ref ? (ref.fields['Years Reffing'] || '') : '';
-                refRows.push({ name, date, club, start, end, exp });
-            });
-            refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
-            sheet3CachedRefRows = refRows;
-            if (sheet3RefSort.col === 'exp') {
-                const expVal = r => {
-                    const v = String(r.exp || '').toLowerCase().trim();
-                    if (v === 'season 1' || v === 'seas 1') return -2;
-                    if (v === 'season 2' || v === 'seas 2') return -1;
-                    const n = parseInt(v);
-                    return isNaN(n) ? 9999 : n;
-                };
-                sheet3CachedRefRows.sort((a, b) => (expVal(a) - expVal(b)) * sheet3RefSort.dir);
-            }
+            let refRowsHtml, refsHeader, refsFooter;
 
-            const fmtExp = v => {
-                if (v === '' || v === null || v === undefined) return '';
-                const lv = String(v).toLowerCase().trim();
-                if (lv === 'season 1' || lv === 'seas 1') return 'Seas 1';
-                if (lv === 'season 2' || lv === 'seas 2') return 'Seas 2';
-                const n = parseInt(v);
-                if (!isNaN(n)) return `Yr ${n}`;
-                return v;
-            };
-
-            const buildRefRowsHtml = rows => rows.length ? rows.map((r, i) => {
-                const safeName  = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-                const refObj    = refLookupByName[r.name.trim().toLowerCase()];
-                let assignedCount = 0;
-                if (refObj && assignedAt[refObj.id]) {
-                    for (const gameSet of assignedAt[refObj.id].values()) {
-                        for (const gid of gameSet) {
-                            if (loadedGameIds.has(String(gid))) assignedCount++;
+            if (window.tournamentMode) {
+                // ── Tournament ref pane: one row per ref, AM/PM columns per day ──────
+                const tm = window.tournamentMode;
+                const refAvailMap = {}; // name → { [date]: { start, end } }
+                allAvail.forEach(a => {
+                    const name  = (a.fields['Referee Name'] || '').trim();
+                    const date  = a.fields['Date'] || '';
+                    const start = a.fields['Start Time'] || '';
+                    const end   = a.fields['End Time']   || '';
+                    if (!name || !date) return;
+                    if (!refAvailMap[name]) refAvailMap[name] = {};
+                    refAvailMap[name][date] = { start, end };
+                });
+                const isAM = (s, e) => s < '12:00' && e > '06:00';
+                const isPM = (s, e) => e > '12:00' && s < '23:00';
+                const avCell = ok => ok
+                    ? `<td style="${cell} background:#d5f5e3; color:#1e8449; text-align:center; font-weight:800; min-width:46px;">✓</td>`
+                    : `<td style="${cell} background:#f5f5f5; color:#ccc; text-align:center; min-width:46px;">—</td>`;
+                const dayHdrs    = tm.days.map(d => `<th style="${hdr} text-align:center;" colspan="2">${d.label.split(' ')[0]}</th>`).join('');
+                const sessionHdrs = tm.days.map(() => `<th style="${hdr} text-align:center; font-size:0.65rem;">AM</th><th style="${hdr} text-align:center; font-size:0.65rem;">PM</th>`).join('');
+                refsHeader = `<tr><th style="${hdr}">Name</th><th style="${hdr}">Cert</th>${dayHdrs}</tr>
+                              <tr><th style="${hdr}"></th><th style="${hdr}"></th>${sessionHdrs}</tr>`;
+                const colCount = 2 + tm.days.length * 2;
+                const tourneyRefList = Object.entries(refAvailMap).sort(([a],[b]) => a.localeCompare(b));
+                sheet3CachedRefRows = tourneyRefList.map(([name, dayMap]) => {
+                    const ref = refLookupByName[name.trim().toLowerCase()];
+                    return { name, date: '', club: '', start: '', end: '', exp: ref ? (ref.fields['Years Reffing'] || '') : '' };
+                });
+                refRowsHtml = tourneyRefList.length ? tourneyRefList.map(([name, dayMap], i) => {
+                    const safeName = name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+                    const ref  = refLookupByName[name.trim().toLowerCase()];
+                    const cert = ref ? (ref.fields['Certification Level'] || '') : '';
+                    let assignedCount = 0;
+                    if (ref && assignedAt[ref.id]) {
+                        for (const gameSet of assignedAt[ref.id].values()) {
+                            for (const gid of gameSet) { if (loadedGameIds.has(String(gid))) assignedCount++; }
                         }
                     }
-                }
-                const countBadge = assignedCount
-                    ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;margin-left:5px;vertical-align:middle;">${assignedCount}</span>`
-                    : '';
-                return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
-                    draggable="true"
-                    ondragstart="sheet3RefDragStart(event,'${safeName}')"
-                    onmouseenter="showRefTooltip('${safeName}', this, event)"
-                    onmouseleave="hideRefTooltip()">
-                    <td style="${cell}">${r.date}</td>
-                    <td style="${cell}">${r.name}${countBadge}</td>
-                    <td style="${cell}">${fmtExp(r.exp)}</td>
-                    <td style="${cell}">${r.club}</td>
-                    <td style="${cell}">${fmt(r.start)}</td>
-                    <td style="${cell}">${fmt(r.end)}</td>
-                </tr>`;
-            }).join('') : `<tr><td colspan="6" style="${cell} color:#888;">No availability submitted.</td></tr>`;
+                    const countBadge = assignedCount ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;margin-left:5px;">${assignedCount}</span>` : '';
+                    const dayCells = tm.days.map(d => {
+                        const av = dayMap[d.date];
+                        if (!av) return avCell(false) + avCell(false);
+                        return avCell(isAM(av.start, av.end)) + avCell(isPM(av.start, av.end));
+                    }).join('');
+                    return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
+                        draggable="true"
+                        ondragstart="sheet3RefDragStart(event,'${safeName}')"
+                        onmouseenter="showRefTooltip('${safeName}', this, event)"
+                        onmouseleave="hideRefTooltip()">
+                        <td style="${cell}">${name}${countBadge}</td>
+                        <td style="${cell} font-size:0.7rem; color:#555;">${cert}</td>
+                        ${dayCells}
+                    </tr>`;
+                }).join('') : `<tr><td colspan="${colCount}" style="${cell} color:#888;">No availability submitted.</td></tr>`;
+                refsFooter = `${tourneyRefList.length} refs`;
 
-            const displayRefRows = sheet3RefClubFilter
-                ? refRows.filter(r => r.club === sheet3RefClubFilter)
-                : refRows;
-            const refRowsHtml = buildRefRowsHtml(displayRefRows);
+            } else {
+                // ── Standard club ref pane ────────────────────────────────────────────
+                const refRows = [];
+                allAvail.forEach(a => {
+                    const name  = (a.fields['Referee Name'] || '').trim();
+                    const date  = a.fields['Date'] || '';
+                    const start = a.fields['Start Time'] || '';
+                    const end   = a.fields['End Time']   || '';
+                    if (!name || !date) return;
+                    const ref  = allRefs.find(r => (r.fields['Name'] || '').trim().toLowerCase() === name.toLowerCase());
+                    const club = ref ? (ref.fields['Club Preference'] || '') : '';
+                    const exp  = ref ? (ref.fields['Years Reffing'] || '') : '';
+                    refRows.push({ name, date, club, start, end, exp });
+                });
+                refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+                sheet3CachedRefRows = refRows;
+                if (sheet3RefSort.col === 'exp') {
+                    const expVal = r => {
+                        const v = String(r.exp || '').toLowerCase().trim();
+                        if (v === 'season 1' || v === 'seas 1') return -2;
+                        if (v === 'season 2' || v === 'seas 2') return -1;
+                        const n = parseInt(v);
+                        return isNaN(n) ? 9999 : n;
+                    };
+                    sheet3CachedRefRows.sort((a, b) => (expVal(a) - expVal(b)) * sheet3RefSort.dir);
+                }
+                const fmtExp = v => {
+                    if (v === '' || v === null || v === undefined) return '';
+                    const lv = String(v).toLowerCase().trim();
+                    if (lv === 'season 1' || lv === 'seas 1') return 'Seas 1';
+                    if (lv === 'season 2' || lv === 'seas 2') return 'Seas 2';
+                    const n = parseInt(v);
+                    if (!isNaN(n)) return `Yr ${n}`;
+                    return v;
+                };
+                const buildRefRowsHtml = rows => rows.length ? rows.map((r, i) => {
+                    const safeName  = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+                    const refObj    = refLookupByName[r.name.trim().toLowerCase()];
+                    let assignedCount = 0;
+                    if (refObj && assignedAt[refObj.id]) {
+                        for (const gameSet of assignedAt[refObj.id].values()) {
+                            for (const gid of gameSet) { if (loadedGameIds.has(String(gid))) assignedCount++; }
+                        }
+                    }
+                    const countBadge = assignedCount
+                        ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;margin-left:5px;vertical-align:middle;">${assignedCount}</span>`
+                        : '';
+                    return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
+                        draggable="true"
+                        ondragstart="sheet3RefDragStart(event,'${safeName}')"
+                        onmouseenter="showRefTooltip('${safeName}', this, event)"
+                        onmouseleave="hideRefTooltip()">
+                        <td style="${cell}">${r.date}</td>
+                        <td style="${cell}">${r.name}${countBadge}</td>
+                        <td style="${cell}">${fmtExp(r.exp)}</td>
+                        <td style="${cell}">${r.club}</td>
+                        <td style="${cell}">${fmt(r.start)}</td>
+                        <td style="${cell}">${fmt(r.end)}</td>
+                    </tr>`;
+                }).join('') : `<tr><td colspan="6" style="${cell} color:#888;">No availability submitted.</td></tr>`;
+                const displayRefRows = sheet3RefClubFilter ? refRows.filter(r => r.club === sheet3RefClubFilter) : refRows;
+                refRowsHtml = buildRefRowsHtml(displayRefRows);
+                refsHeader = `<tr>
+                    <th style="${hdr}">Date</th><th style="${hdr}">Name</th>
+                    <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}</th>
+                    <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3CycleRefClubFilter()" title="Click to filter by club preference">Club Preference <span style="background:${sheet3RefClubFilter?'#e3f0ff':'#f0ece6'};color:${sheet3RefClubFilter?'#0f3460':'#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${sheet3RefClubFilter||'All'}</span></th>
+                    <th style="${hdr}">Start</th><th style="${hdr}">End</th>
+                </tr>`;
+                refsFooter = `${displayRefRows.length}${displayRefRows.length !== refRows.length ? ` of ${refRows.length}` : ''} records`;
+            }
 
             const refsDivider = `<div onmousedown="sheet3SplitterMousedown(event)" style="background:#1a3a6b; color:#fff; padding:2px 14px; margin:3px -20px 4px -20px; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:ns-resize; user-select:none;" title="Drag to resize panes">Referee Availability — drag a row into an Opt cell &#8597;</div>`;
 
@@ -2844,15 +2922,11 @@
                     ondragover="if(window.sheet3DragData&&window.sheet3DragData.type==='assigned')event.preventDefault();"
                     ondrop="sheet3RefPaneDrop(event);">
                     <table id="s3refsTable" style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; width:100%; direction:ltr; zoom:${sheet3ZoomRefs};">
-                        <thead style="position:sticky; top:0; z-index:2;"><tr>
-                            <th style="${hdr}">Date</th><th style="${hdr}">Name</th>
-                            <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}</th>
-                            <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3CycleRefClubFilter()" title="Click to filter by club preference">Club Preference <span style="background:${sheet3RefClubFilter?'#e3f0ff':'#f0ece6'};color:${sheet3RefClubFilter?'#0f3460':'#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${sheet3RefClubFilter||'All'}</span></th><th style="${hdr}">Start</th><th style="${hdr}">End</th>
-                        </tr></thead>
+                        <thead style="position:sticky; top:0; z-index:2;">${refsHeader}</thead>
                         <tbody id="s3refTbody">${refRowsHtml}</tbody>
                     </table>
                 </div>
-                <div style="margin-top:6px; font-size:0.7rem; color:#888;">${displayRefRows.length}${displayRefRows.length !== refRows.length ? ` of ${refRows.length}` : ''} records</div>
+                <div style="margin-top:6px; font-size:0.7rem; color:#888;">${refsFooter}</div>
                 </div></div>`;
 
             // Restore scroll position after DOM replacement
