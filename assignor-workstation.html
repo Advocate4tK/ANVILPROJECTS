@@ -3112,18 +3112,26 @@
                 } else {
                 // ── Club ref pane: Date / Name / Exp / Club Preference / Start / End ──
                 const refRows = [];
+                const _seenRefDate = new Set(); // deduplicate ref+date (multiple submissions)
+                const sessionLabel = /^(friday|saturday|sunday)\s+(morning|afternoon|night|evening)/i;
                 allAvail.forEach(a => {
                     const name  = (a.fields['Referee Name'] || '').trim();
                     const date  = a.fields['Date'] || '';
                     const start = a.fields['Start Time'] || '';
                     const end   = a.fields['End Time']   || '';
                     if (!name || !date) return;
+                    // Only show dates matching the current game filter
+                    if (visibleGameDates.size && !visibleGameDates.has(date)) return;
+                    // Deduplicate: one row per ref per date
+                    const dedupeKey = name.toLowerCase() + '|' + date;
+                    if (_seenRefDate.has(dedupeKey)) return;
+                    _seenRefDate.add(dedupeKey);
                     const ref  = allRefs.find(r => (r.fields['Name'] || '').trim().toLowerCase() === name.toLowerCase());
-                    const club = ref ? (ref.fields['Club Preference'] || '') : '';
+                    // Parse club preference — may be stored as JSON array string
+                    let club = ref ? (ref.fields['Club Preference'] || '') : '';
+                    try { const parsed = JSON.parse(club); if (Array.isArray(parsed)) club = parsed.join(', '); } catch {}
                     const exp  = ref ? (ref.fields['Years Reffing'] || '') : '';
                     const rawNote = (a.fields['Notes'] || '').trim();
-                    // Filter out seed-injected session labels — only keep real user-submitted notes
-                    const sessionLabel = /^(friday|saturday|sunday)\s+(morning|afternoon|night|evening)/i;
                     const notes = sessionLabel.test(rawNote) ? '' : rawNote;
                     refRows.push({ name, date, club, start, end, exp, notes });
                 });
