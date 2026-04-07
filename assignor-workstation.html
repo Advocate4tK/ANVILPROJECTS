@@ -666,6 +666,7 @@
                 <div style="flex:1;">
                     <div id="tournamentTitle" style="font-weight:700; font-size:1.1rem; color:white; margin-bottom:4px;"></div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;" id="tournamentDayTabs"></div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;" id="tournamentPeriodTabs"></div>
                 </div>
             </div>
 
@@ -2148,6 +2149,7 @@
         let sheet3ClubFilter      = null; // null = all, or a club name string
         let sheet3DateFilter      = null; // null = all, or a date string
         let sheet3TimeFilter      = null; // null = all, or a time string (HH:MM)
+        let sheet3PeriodFilter    = null; // null = all, 'AM' = before noon, 'PM' = noon and after
         let sheet3MissingFilter   = false; // true = show only games with at least one empty assigned slot
         let sheet3RefClubFilter   = null;  // null = all, or a club name string (filters ref availability pane)
         let sheet3RefDetailName   = null;  // null = full ref list; string = showing that ref's game schedule
@@ -2666,13 +2668,20 @@
             if (sheet3ClubFilter && !s3UniqueClubs.includes(sheet3ClubFilter)) sheet3ClubFilter = null;
             if (sheet3DateFilter && !s3UniqueDates.includes(sheet3DateFilter)) sheet3DateFilter = null;
             if (sheet3TimeFilter && !s3UniqueTimes.includes(sheet3TimeFilter)) sheet3TimeFilter = null;
-            const displayGames = allFilteredGames.filter(g =>
-                (!sheet3AgeFilter    || g.fields['Age Group']   === sheet3AgeFilter)  &&
-                (!sheet3ClubFilter   || g.fields['Source Club'] === sheet3ClubFilter) &&
-                (!sheet3DateFilter   || g.fields['Date']        === sheet3DateFilter) &&
-                (!sheet3TimeFilter   || g.fields['Time']        === sheet3TimeFilter) &&
-                (!sheet3MissingFilter || ['Center Referee','AR 1','AR 2'].some(p => !resolveRefName(g.fields[p])))
-            );
+            const displayGames = allFilteredGames.filter(g => {
+                if (sheet3AgeFilter    && g.fields['Age Group']   !== sheet3AgeFilter)  return false;
+                if (sheet3ClubFilter   && g.fields['Source Club'] !== sheet3ClubFilter) return false;
+                if (sheet3DateFilter   && g.fields['Date']        !== sheet3DateFilter) return false;
+                if (sheet3TimeFilter   && g.fields['Time']        !== sheet3TimeFilter) return false;
+                if (sheet3PeriodFilter) {
+                    const t = g.fields['Time'] || '';
+                    const hour = parseInt(t.split(':')[0] || '0', 10);
+                    if (sheet3PeriodFilter === 'AM' && hour >= 12) return false;
+                    if (sheet3PeriodFilter === 'PM' && hour < 12)  return false;
+                }
+                if (sheet3MissingFilter && !['Center Referee','AR 1','AR 2'].some(p => !resolveRefName(g.fields[p]))) return false;
+                return true;
+            });
             const loadedGameIds = new Set(allGames.map(g => String(g.id)));
             // Tournament mode: sort by time so AM/PM dividers split correctly
             if (window.tournamentMode && sheet3DateFilter) {
@@ -4936,8 +4945,22 @@
                             };
                             tabsWrap.appendChild(btn);
                         });
+                        // Build period tabs (All / Morning / Afternoon)
+                        const periodWrap = document.getElementById('tournamentPeriodTabs');
+                        periodWrap.innerHTML = '';
+                        const btnStyle = (active) => `padding:3px 12px; border-radius:20px; border:1px solid rgba(255,255,255,0.25); background:${active?'rgba(255,255,255,0.15)':'transparent'}; color:white; font-size:0.73rem; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s;`;
+                        const setActivePeriod = activeBtn => periodWrap.querySelectorAll('button').forEach(b => b.style.background = b === activeBtn ? 'rgba(255,255,255,0.15)' : 'transparent');
+                        [['All', null], ['Morning', 'AM'], ['Afternoon', 'PM']].forEach(([label, val], i) => {
+                            const btn = document.createElement('button');
+                            btn.textContent = label;
+                            btn.style.cssText = btnStyle(i === 0);
+                            btn.onclick = () => { sheet3PeriodFilter = val; setActivePeriod(btn); renderSheet3View(); };
+                            periodWrap.appendChild(btn);
+                        });
+
                         // Default to all days
                         sheet3DateFilter = null;
+                        sheet3PeriodFilter = null;
                         renderSheet3View();
                         banner.style.display = 'flex';
                     }
