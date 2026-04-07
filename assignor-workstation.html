@@ -1078,6 +1078,7 @@
                 _hide('filterByClubSection');
                 _hide('filterToggleBar');
                 setViewMode('sheet3', false);
+                loadAll();
             } else {
                 _filtersPanelOpen = true;
                 const panel = document.getElementById('filtersPanelWrap');
@@ -4388,8 +4389,7 @@
                     document.getElementById('dateFrom').value = window.tournamentMode.from;
                     document.getElementById('dateTo').value   = window.tournamentMode.to;
                 }
-                // Defer loadAll so the page and profile dropdown finish rendering first
-                setTimeout(loadAll, 50);
+                // loadAll fires from openWorkstation() after profile is selected
             } else if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
                 // Set this weekend and auto-load for unassigned filter link
                 setDateRange('this-weekend', null);
@@ -4406,13 +4406,14 @@
 
             buildClubPills();
 
-            // Fetch clubs from Airtable immediately so new clubs appear in pills
+            // Fetch clubs from Supabase immediately so new clubs appear in pills
             // without waiting for Load Games — runs in background, silent on error
             (async () => {
                 try {
-                    const clubRecs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
-                    const airtableClubs = clubRecs.map(c => c.fields['Club Name'] || c.fields['Name'] || '').filter(Boolean);
-                    clubsList = [...new Set([...KNOWN_CLUBS, ...airtableClubs])].sort();
+                    const { data: clubRecs, error } = await supabaseClient.client.from('clubs').select('"Club Name"').order('"Club Name"');
+                    if (error) throw error;
+                    const dbClubs = clubRecs.map(c => c['Club Name'] || '').filter(Boolean);
+                    clubsList = [...new Set([...KNOWN_CLUBS, ...dbClubs])].sort();
                     if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);
                     const pillsWrap = document.getElementById('clubPills');
                     if (pillsWrap) { pillsWrap.innerHTML = ''; buildClubPills(); }
