@@ -207,6 +207,7 @@ for (const r of allDataRows) {
         'Zip Code':             zip,
         'Age Groups Preferred': ageGrp,
         'Certification Level':  pos,
+        'Years Reffing':        certYear || null,
         'Central Assign ID':    regNum,
         'games':                totalGames,
         'notes':                noteParts.join(' | ') || null,
