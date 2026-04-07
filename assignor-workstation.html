@@ -1008,7 +1008,12 @@
                     id:          r.id,
                     name:        r.fields['Name'] || '',
                     role:        (r.fields['Role'] || 'Assignor').trim(),
-                    defaultView: localStorage.getItem('assignorView_' + r.id) || 'standard'
+                    defaultView: (() => {
+                        try {
+                            const freq = JSON.parse(localStorage.getItem('assignorViewFreq_' + r.id) || '{}');
+                            return Object.keys(freq).sort((a, b) => freq[b] - freq[a])[0] || 'standard';
+                        } catch { return 'standard'; }
+                    })()
                 })).filter(p => p.name);
 
                 const sel = document.getElementById('profileSelect');
@@ -1161,9 +1166,14 @@
             const gameFilterBtn = document.getElementById('gameFilterToggleBtn');
             if (gameFilterBtn) gameFilterBtn.style.display = (mode === 'sheet3' || mode === 'tournament') ? 'none' : '';
             renderGames();
-            // Persist template preference per assignor so next login opens in same view
+            // Track template usage frequency per assignor — most-used opens by default next session
             if (save && currentAssignor) {
-                localStorage.setItem('assignorView_' + currentAssignor.id, mode);
+                try {
+                    const key  = 'assignorViewFreq_' + currentAssignor.id;
+                    const freq = JSON.parse(localStorage.getItem(key) || '{}');
+                    freq[mode] = (freq[mode] || 0) + 1;
+                    localStorage.setItem(key, JSON.stringify(freq));
+                } catch {}
                 currentAssignor.defaultView = mode;
             }
         }
