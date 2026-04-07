@@ -4387,7 +4387,8 @@
                     document.getElementById('dateFrom').value = window.tournamentMode.from;
                     document.getElementById('dateTo').value   = window.tournamentMode.to;
                 }
-                loadAll();
+                // Defer loadAll so the page and profile dropdown finish rendering first
+                setTimeout(loadAll, 50);
             } else if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
                 // Set this weekend and auto-load for unassigned filter link
                 setDateRange('this-weekend', null);
@@ -6175,18 +6176,24 @@
             if (window.tournamentMode) {
                 // ── Tournament mode: 6 session blocks (Fri/Sat/Sun × AM/PM) ──────────
                 const tm = window.tournamentMode;
-                const isAM = (s, e) => s < '12:00' && e > '06:00';
-                const isPM = (s, e) => e > '12:00' && s < '23:00';
                 // Count refs per session
                 const sessions = [];
                 tm.days.forEach(d => {
                     let amCount = 0, pmCount = 0;
                     allAvail.forEach(a => {
                         if ((a.fields['Date'] || '') !== d.date) return;
+                        if (a.fields['available'] === false) return; // explicitly unavailable
                         const s = a.fields['Start Time'] || '';
                         const e = a.fields['End Time']   || '';
-                        if (isAM(s, e)) amCount++;
-                        if (isPM(s, e)) pmCount++;
+                        // No time constraint = all day available → counts for both AM and PM
+                        if (!s && !e) { amCount++; pmCount++; return; }
+                        // Has start time constraint: >1030 means PM only if start >= 12:00
+                        if (s && !e) { if (s < '12:00') { amCount++; pmCount++; } else { pmCount++; } return; }
+                        // Has end time constraint: <13:00 means AM only
+                        if (!s && e) { if (e <= '12:00') { amCount++; } else { amCount++; pmCount++; } return; }
+                        // Both set: use range
+                        if (s < '12:00') amCount++;
+                        if (e > '12:00') pmCount++;
                     });
                     const dayShort = d.label.split(' ')[0]; // 'Fri', 'Sat', 'Sun'
                     sessions.push({ label: `${dayShort} AM`, count: amCount, session: 'am' });
