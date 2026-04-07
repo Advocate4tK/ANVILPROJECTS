@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Import Cert Year — Glastonbury 2026</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .log { font-family:monospace; font-size:0.82rem; background:#1a1a2e; color:#e0e0e0; border-radius:8px; padding:16px; max-height:400px; overflow-y:auto; margin-top:16px; }
+        .ok   { color:#2ecc71; }
+        .warn { color:#f1c40f; }
+        .err  { color:#e74c3c; }
+        .info { color:#3498db; }
+        table { width:100%; border-collapse:collapse; font-size:0.83rem; margin-top:16px; }
+        th { background:#0f3460; color:white; padding:8px 10px; text-align:left; }
+        td { padding:6px 10px; border-bottom:1px solid #eee; }
+        tr:hover td { background:#f8f9ff; }
+        .match   { background:#d5f0ff; }
+        .nomatch { background:#fde8e8; }
+    </style>
+</head>
+<body>
+<div class="container" style="max-width:1000px;">
+    <header>
+        <h1>🔐 Admin Portal</h1>
+        <p class="subtitle">Import Cert Year — Glastonbury 2026</p>
+    </header>
+    <main>
+        <div style="margin-bottom:20px;">
+            <a href="system-tools.html" class="btn-back">← Back to System Tools</a>
+        </div>
+
+        <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #8e44ad; margin-bottom:24px;">
+            <h2 style="color:#0f3460; margin-bottom:6px;">📥 Glastonbury Cert Year Import</h2>
+            <p style="color:#666; font-size:0.9rem; margin-bottom:20px;">
+                Reads column S (Cert Year) from the Glastonbury master signup sheet and writes it to <code>Years Reffing</code> in the referees table.
+                Names are matched by converting "Last, First" → "First Last".
+            </p>
+
+            <div style="margin-bottom:16px;">
+                <label style="font-weight:700; color:#333; display:block; margin-bottom:6px;">Select spreadsheet:</label>
+                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="font-size:0.9rem;">
+            </div>
+
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button onclick="runPreview()" class="btn btn-secondary" id="previewBtn" disabled>Preview Matches</button>
+                <button onclick="runImport()" class="btn" style="background:#8e44ad; color:white; border:none;" id="importBtn" disabled>Run Import</button>
+            </div>
+
+            <div id="previewTable"></div>
+            <div id="logBox" class="log" style="display:none;"></div>
+        </div>
+    </main>
+</div>
+
+<script src="js/admin-auth.js"></script>
+<script>checkAdminAccess();</script>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-client.js?v=10"></script>
+<script src="node_modules/xlsx/xlsx.js"></script>
+<script>
+
+let previewRows = []; // { nameRaw, nameConverted, certYear, refId, matched }
+
+document.getElementById('fileInput').addEventListener('change', e => {
+    document.getElementById('previewBtn').disabled = !e.target.files.length;
+    document.getElementById('importBtn').disabled = true;
+    document.getElementById('previewTable').innerHTML = '';
+    previewRows = [];
+});
+
+// Convert "Last, First" → "First Last"
+function convertName(raw) {
+    if (!raw) return '';
+    raw = String(raw).trim();
+    if (raw.includes(',')) {
+        const parts = raw.split(',').map(p => p.trim());
+        return `${parts[1]} ${parts[0]}`;
+    }
+    return raw;
+}
+
+async function runPreview() {
+    const file = document.getElementById('fileInput').files[0];
+    if (!file) return;
+
+    const btn = document.getElementById('previewBtn');
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+
+    // Read xlsx
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type:'array' });
+    const ws  = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+
+    // Find cert year column (S = index 18, but search by header to be safe)
+    const headers = rows[0].map(h => String(h).trim().toLowerCase());
+    const nameCol = headers.indexOf('player name');
+    const certCol = headers.findIndex(h => h.includes('cert year') || h === 'cert year');
+
+    if (nameCol === -1 || certCol === -1) {
+        alert(`Could not find required columns.\nFound headers: ${rows[0].join(', ')}`);
+        btn.disabled = false; btn.textContent = 'Preview Matches';
+        return;
+    }
+
+    // Load all referees
+    const allRefs = await supabaseClient.getRecords('Referees', { maxRecords: 2000 });
+    const refByName = {};
+    allRefs.forEach(r => { refByName[(r.fields['Name'] || '').trim().toLowerCase()] = r; });
+
+    previewRows = [];
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const nameRaw  = String(row[nameCol] || '').trim();
+        const certYear = String(row[certCol] || '').trim();
+        if (!nameRaw || !certYear) continue;
+
+        const nameConverted = convertName(nameRaw);
+        const refObj = refByName[nameConverted.toLowerCase()];
+        previewRows.push({
+            nameRaw,
+            nameConverted,
+            certYear,
+            refId:   refObj ? refObj.id : null,
+            current: refObj ? (refObj.fields['Years Reffing'] || '—') : '—',
+            matched: !!refObj
+        });
+    }
+
+    // Render table
+    const matched   = previewRows.filter(r => r.matched).length;
+    const unmatched = previewRows.filter(r => !r.matched).length;
+
+    let html = `<div style="margin-top:16px; font-size:0.85rem; color:#333; margin-bottom:8px;">
+        <strong>${previewRows.length}</strong> rows found &nbsp;·&nbsp;
+        <span style="color:#27ae60; font-weight:700;">${matched} matched</span> &nbsp;·&nbsp;
+        <span style="color:#e74c3c; font-weight:700;">${unmatched} unmatched</span>
+    </div>`;
+
+    html += `<div style="overflow-x:auto; max-height:400px; overflow-y:auto; border:1px solid #ddd; border-radius:8px;">
+    <table>
+        <thead><tr>
+            <th>Spreadsheet Name</th>
+            <th>Converted Name</th>
+            <th>Cert Year</th>
+            <th>Current Years Reffing</th>
+            <th>Status</th>
+        </tr></thead>
+        <tbody>`;
+
+    previewRows.forEach(r => {
+        const cls = r.matched ? 'match' : 'nomatch';
+        const status = r.matched ? '✅ Matched' : '❌ No match';
+        html += `<tr class="${cls}">
+            <td>${r.nameRaw}</td>
+            <td>${r.nameConverted}</td>
+            <td>${r.certYear}</td>
+            <td>${r.current}</td>
+            <td>${status}</td>
+        </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    document.getElementById('previewTable').innerHTML = html;
+
+    btn.disabled = false;
+    btn.textContent = 'Preview Matches';
+    document.getElementById('importBtn').disabled = matched === 0;
+}
+
+async function runImport() {
+    const toUpdate = previewRows.filter(r => r.matched);
+    if (!toUpdate.length) { alert('No matched refs to update.'); return; }
+
+    const btn = document.getElementById('importBtn');
+    btn.disabled = true;
+    btn.textContent = 'Importing…';
+
+    const log = document.getElementById('logBox');
+    log.style.display = 'block';
+    log.innerHTML = '';
+
+    const addLog = (cls, msg) => { log.innerHTML += `<div class="${cls}">${msg}</div>`; log.scrollTop = log.scrollHeight; };
+
+    addLog('info', `Updating ${toUpdate.length} refs…`);
+
+    let ok = 0, fail = 0;
+    for (const r of toUpdate) {
+        try {
+            await supabaseClient.updateRecord('Referees', r.refId, { 'Years Reffing': r.certYear });
+            addLog('ok', `✅ ${r.nameConverted} → ${r.certYear}`);
+            ok++;
+        } catch(e) {
+            addLog('err', `❌ ${r.nameConverted} — ${e.message}`);
+            fail++;
+        }
+    }
+
+    addLog('info', `Done. ${ok} updated, ${fail} failed.`);
+    btn.textContent = 'Run Import';
+    btn.disabled = false;
+}
+
+</script>
+</body>
+</html>
