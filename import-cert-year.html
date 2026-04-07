@@ -119,24 +119,29 @@ async function runPreview() {
 
         const nameConverted = convertName(nameRaw);
         const refObj = refByName[nameConverted.toLowerCase()];
+        const currentVal = refObj ? (refObj.fields['Years Reffing'] || '') : '';
+        const hasData = currentVal !== '';
         previewRows.push({
             nameRaw,
             nameConverted,
             certYear,
             refId:   refObj ? refObj.id : null,
-            current: refObj ? (refObj.fields['Years Reffing'] || '—') : '—',
-            matched: !!refObj
+            current: currentVal || '—',
+            matched: !!refObj,
+            skip:    hasData   // already has a value — don't overwrite
         });
     }
 
     // Render table
-    const matched   = previewRows.filter(r => r.matched).length;
+    const toWrite   = previewRows.filter(r => r.matched && !r.skip).length;
+    const skipped   = previewRows.filter(r => r.matched && r.skip).length;
     const unmatched = previewRows.filter(r => !r.matched).length;
 
     let html = `<div style="margin-top:16px; font-size:0.85rem; color:#333; margin-bottom:8px;">
         <strong>${previewRows.length}</strong> rows found &nbsp;·&nbsp;
-        <span style="color:#27ae60; font-weight:700;">${matched} matched</span> &nbsp;·&nbsp;
-        <span style="color:#e74c3c; font-weight:700;">${unmatched} unmatched</span>
+        <span style="color:#27ae60; font-weight:700;">${toWrite} will update</span> &nbsp;·&nbsp;
+        <span style="color:#8e44ad; font-weight:700;">${skipped} skipped (already has data)</span> &nbsp;·&nbsp;
+        <span style="color:#e74c3c; font-weight:700;">${unmatched} no match</span>
     </div>`;
 
     html += `<div style="overflow-x:auto; max-height:400px; overflow-y:auto; border:1px solid #ddd; border-radius:8px;">
@@ -151,8 +156,10 @@ async function runPreview() {
         <tbody>`;
 
     previewRows.forEach(r => {
-        const cls = r.matched ? 'match' : 'nomatch';
-        const status = r.matched ? '✅ Matched' : '❌ No match';
+        let cls, status;
+        if (!r.matched)      { cls = 'nomatch'; status = '❌ No match'; }
+        else if (r.skip)     { cls = '';        status = '⏭️ Skipped (has data)'; }
+        else                 { cls = 'match';   status = '✅ Will update'; }
         html += `<tr class="${cls}">
             <td>${r.nameRaw}</td>
             <td>${r.nameConverted}</td>
@@ -167,12 +174,12 @@ async function runPreview() {
 
     btn.disabled = false;
     btn.textContent = 'Preview Matches';
-    document.getElementById('importBtn').disabled = matched === 0;
+    document.getElementById('importBtn').disabled = toWrite === 0;
 }
 
 async function runImport() {
-    const toUpdate = previewRows.filter(r => r.matched);
-    if (!toUpdate.length) { alert('No matched refs to update.'); return; }
+    const toUpdate = previewRows.filter(r => r.matched && !r.skip);
+    if (!toUpdate.length) { alert('No refs to update — all matched refs already have data.'); return; }
 
     const btn = document.getElementById('importBtn');
     btn.disabled = true;
