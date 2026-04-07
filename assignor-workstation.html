@@ -1138,6 +1138,21 @@
         // Global experience color scale (shared across all views)
         const expColor = yrs => yrs === 0 ? '#e74c3c' : yrs === 1 ? '#27ae60' : yrs <= 3 ? '#f1c40f' : yrs <= 10 ? '#2980b9' : '#8e44ad';
 
+        // Temporary: translate 4-digit cert year (from Eric's spreadsheet import) → experience label.
+        // Goes away once refs submit through our availability form and Years Reffing is populated properly.
+        function certYrToExp(v) {
+            if (!v || v === '—') return '—';
+            const lv = String(v).toLowerCase().trim();
+            if (lv === 'seas 1' || lv === 'season 1') return 'Seas 1';
+            if (lv === 'seas 2' || lv === 'season 2') return 'Seas 2';
+            const yr = parseInt(v);
+            if (isNaN(yr) || yr < 1990) return fmtExp(v); // not a year — try fmtExp
+            const currentYr = new Date().getFullYear();
+            const diff = currentYr - yr;
+            if (diff <= 0) return 'Yr 1'; // certified this year = first year
+            return fmtExp(String(diff + 1)); // e.g. certified 2024, now 2026 → diff=2 → Yr 3
+        }
+
         // ⚠️ GLOBAL fmtExp — ONE definition for ALL templates. NEVER redefine locally.
         // Display: Seas 1, Seas 2, Yr 2, Yr 3... "Yr 0" and "Yr 1" NEVER appear.
         // Colors match expColor() — Season 1 = red, Season 2 = green, Yr 2+ = yellow/blue/purple.
@@ -3088,7 +3103,7 @@
                             onmouseleave="hideRefTooltip()">
                             <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's schedule">${r.name}${countBadge}</td>
                             <td style="${cell} text-align:center;">${posLabel(r.position)}</td>
-                            <td style="${cell} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by cert year">${r.exp}</td>
+                            <td style="${cell} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">${certYrToExp(r.exp)}</td>
                             <td style="${cell} font-size:0.72rem;">${ageCapLabel(r.ageCap)}</td>
                             <td style="${cell} font-size:0.72rem;">${siteDisplay}</td>
                             ${tmDays.map(d => `<td style="${cell}">${fmtAvailSlots(r.avail[d.date])}</td>`).join('')}
@@ -3098,7 +3113,7 @@
                     refsHeader = `<tr>
                         <th style="${hdr}">Name</th>
                         <th style="${hdr}">Pref Assignment</th>
-                        <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by cert year">Cert Yr ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}</th>
+                        <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}</th>
                         <th style="${hdr}">Age Cap</th>
                         <th style="${hdr}">Site Pref</th>
                         ${tmDays.map(d => `<th style="${hdr}">${d.label.split(' ').slice(0,2).join(' ')}</th>`).join('')}
