@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Import Cert Year — Glastonbury 2026</title>
+    <title>Glastonbury Imports — Admin</title>
     <link rel="stylesheet" href="css/styles.css">
     <style>
         .log { font-family:monospace; font-size:0.82rem; background:#1a1a2e; color:#e0e0e0; border-radius:8px; padding:16px; max-height:400px; overflow-y:auto; margin-top:16px; }
@@ -16,39 +16,63 @@
         tr:hover td { background:#f8f9ff; }
         .match   { background:#d5f0ff; }
         .nomatch { background:#fde8e8; }
+        .section-card { background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); margin-bottom:24px; }
+        .done-badge { display:inline-block; background:#d5f5e3; color:#1e8449; border-radius:6px; padding:3px 10px; font-size:0.78rem; font-weight:700; margin-left:10px; vertical-align:middle; }
     </style>
 </head>
 <body>
 <div class="container" style="max-width:1000px;">
     <header>
         <h1>🔐 Admin Portal</h1>
-        <p class="subtitle">Import Cert Year — Glastonbury 2026</p>
+        <p class="subtitle">Glastonbury Imports — 2026</p>
     </header>
     <main>
         <div style="margin-bottom:20px;">
             <a href="system-tools.html" class="btn-back">← Back to System Tools</a>
         </div>
 
-        <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #8e44ad; margin-bottom:24px;">
-            <h2 style="color:#0f3460; margin-bottom:6px;">📥 Glastonbury Cert Year Import</h2>
+        <!-- ── SECTION 1: Cert Year (already done) ───────────────────────── -->
+        <div class="section-card" style="border-top:4px solid #8e44ad; opacity:0.7;">
+            <h2 style="color:#0f3460; margin-bottom:6px;">
+                📥 Cert Year Import
+                <span class="done-badge">✓ Already Run</span>
+            </h2>
             <p style="color:#666; font-size:0.9rem; margin-bottom:20px;">
-                Reads column S (Cert Year) from the Glastonbury master signup sheet and writes it to <code>Years Reffing</code> in the referees table.
-                Names are matched by converting "Last, First" → "First Last".
+                Reads column S (Cert Year) → writes to <code>Years Reffing</code> in referees table.
+                140 refs updated April 2026. <strong>Do not re-run</strong> — it will be skipped for refs that already have data, but no need.
             </p>
-
             <div style="margin-bottom:16px;">
                 <label style="font-weight:700; color:#333; display:block; margin-bottom:6px;">Select spreadsheet:</label>
-                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="font-size:0.9rem;">
+                <input type="file" id="fileInputCert" accept=".xlsx,.xls,.csv" style="font-size:0.9rem;">
             </div>
-
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button onclick="runPreview()" class="btn btn-secondary" id="previewBtn" disabled>Preview Matches</button>
-                <button onclick="runImport()" class="btn" style="background:#8e44ad; color:white; border:none;" id="importBtn" disabled>Run Import</button>
+                <button onclick="runCertPreview()" class="btn btn-secondary" id="certPreviewBtn" disabled>Preview Matches</button>
+                <button onclick="runCertImport()" class="btn" style="background:#8e44ad; color:white; border:none;" id="certImportBtn" disabled>Run Import</button>
             </div>
-
-            <div id="previewTable"></div>
-            <div id="logBox" class="log" style="display:none;"></div>
+            <div id="certPreviewTable"></div>
+            <div id="certLogBox" class="log" style="display:none;"></div>
         </div>
+
+        <!-- ── SECTION 2: Ref Notes (Game Conflicts + Special Requests) ──── -->
+        <div class="section-card" style="border-top:4px solid #2980b9;">
+            <h2 style="color:#0f3460; margin-bottom:6px;">📝 Ref Notes Import</h2>
+            <p style="color:#666; font-size:0.9rem; margin-bottom:20px;">
+                Reads column AC (Game Conflicts) and column AD (Special Requests) from the Glastonbury master signup sheet.
+                Merges them into a single notes string and writes to the <code>Notes</code> field in the referees table.
+                Always overwrites existing notes for matched refs.
+            </p>
+            <div style="margin-bottom:16px;">
+                <label style="font-weight:700; color:#333; display:block; margin-bottom:6px;">Select spreadsheet:</label>
+                <input type="file" id="fileInputNotes" accept=".xlsx,.xls,.csv" style="font-size:0.9rem;">
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button onclick="runNotesPreview()" class="btn btn-secondary" id="notesPreviewBtn" disabled>Preview Matches</button>
+                <button onclick="runNotesImport()" class="btn" style="background:#2980b9; color:white; border:none;" id="notesImportBtn" disabled>Run Import</button>
+            </div>
+            <div id="notesPreviewTable"></div>
+            <div id="notesLogBox" class="log" style="display:none;"></div>
+        </div>
+
     </main>
 </div>
 
@@ -60,16 +84,8 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script>
 
-let previewRows = []; // { nameRaw, nameConverted, certYear, refId, matched }
+// ── Shared ────────────────────────────────────────────────────────────────
 
-document.getElementById('fileInput').addEventListener('change', e => {
-    document.getElementById('previewBtn').disabled = !e.target.files.length;
-    document.getElementById('importBtn').disabled = true;
-    document.getElementById('previewTable').innerHTML = '';
-    previewRows = [];
-});
-
-// Convert "Last, First" → "First Last"
 function convertName(raw) {
     if (!raw) return '';
     raw = String(raw).trim();
@@ -80,142 +96,187 @@ function convertName(raw) {
     return raw;
 }
 
-async function runPreview() {
-    const file = document.getElementById('fileInput').files[0];
-    if (!file) return;
-
-    const btn = document.getElementById('previewBtn');
-    btn.disabled = true;
-    btn.textContent = 'Loading…';
-
-    try {
-    // Read xlsx
-    const buf = await file.arrayBuffer();
-    const wb  = XLSX.read(buf, { type:'array' });
-    const ws  = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
-
-    // Find cert year column (S = index 18, but search by header to be safe)
-    const headers = rows[0].map(h => String(h).trim().toLowerCase());
-    const nameCol = headers.indexOf('player name');
-    const certCol = headers.findIndex(h => h.includes('cert year') || h === 'cert year');
-
-    if (nameCol === -1 || certCol === -1) {
-        alert(`Could not find required columns.\nFound headers: ${rows[0].join(', ')}`);
-        btn.disabled = false; btn.textContent = 'Preview Matches';
-        return;
-    }
-
-    // Load all referees
+async function loadAllRefs() {
     const allRefs = await supabaseClient.getRecords('Referees', { maxRecords: 2000 });
-    const refByName = {};
-    allRefs.forEach(r => { refByName[(r.fields['Name'] || '').trim().toLowerCase()] = r; });
-
-    previewRows = [];
-    for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const nameRaw  = String(row[nameCol] || '').trim();
-        const certYear = String(row[certCol] || '').trim();
-        if (!nameRaw || !certYear) continue;
-
-        const nameConverted = convertName(nameRaw);
-        const refObj = refByName[nameConverted.toLowerCase()];
-        const currentVal = refObj ? (refObj.fields['Years Reffing'] || '') : '';
-        const hasData = currentVal !== '';
-        previewRows.push({
-            nameRaw,
-            nameConverted,
-            certYear,
-            refId:   refObj ? refObj.id : null,
-            current: currentVal || '—',
-            matched: !!refObj,
-            skip:    hasData   // already has a value — don't overwrite
-        });
-    }
-
-    // Render table
-    const toWrite   = previewRows.filter(r => r.matched && !r.skip).length;
-    const skipped   = previewRows.filter(r => r.matched && r.skip).length;
-    const unmatched = previewRows.filter(r => !r.matched).length;
-
-    let html = `<div style="margin-top:16px; font-size:0.85rem; color:#333; margin-bottom:8px;">
-        <strong>${previewRows.length}</strong> rows found &nbsp;·&nbsp;
-        <span style="color:#27ae60; font-weight:700;">${toWrite} will update</span> &nbsp;·&nbsp;
-        <span style="color:#8e44ad; font-weight:700;">${skipped} skipped (already has data)</span> &nbsp;·&nbsp;
-        <span style="color:#e74c3c; font-weight:700;">${unmatched} no match</span>
-    </div>`;
-
-    html += `<div style="overflow-x:auto; max-height:400px; overflow-y:auto; border:1px solid #ddd; border-radius:8px;">
-    <table>
-        <thead><tr>
-            <th>Spreadsheet Name</th>
-            <th>Converted Name</th>
-            <th>Cert Year</th>
-            <th>Current Years Reffing</th>
-            <th>Status</th>
-        </tr></thead>
-        <tbody>`;
-
-    previewRows.forEach(r => {
-        let cls, status;
-        if (!r.matched)      { cls = 'nomatch'; status = '❌ No match'; }
-        else if (r.skip)     { cls = '';        status = '⏭️ Skipped (has data)'; }
-        else                 { cls = 'match';   status = '✅ Will update'; }
-        html += `<tr class="${cls}">
-            <td>${r.nameRaw}</td>
-            <td>${r.nameConverted}</td>
-            <td>${r.certYear}</td>
-            <td>${r.current}</td>
-            <td>${status}</td>
-        </tr>`;
-    });
-
-    html += `</tbody></table></div>`;
-    document.getElementById('previewTable').innerHTML = html;
-
-    btn.disabled = false;
-    btn.textContent = 'Preview Matches';
-    document.getElementById('importBtn').disabled = toWrite === 0;
-
-    } catch(e) {
-        btn.disabled = false;
-        btn.textContent = 'Preview Matches';
-        alert('Error: ' + e.message);
-        console.error(e);
-    }
+    const byName = {};
+    allRefs.forEach(r => { byName[(r.fields['Name'] || '').trim().toLowerCase()] = r; });
+    return byName;
 }
 
-async function runImport() {
-    const toUpdate = previewRows.filter(r => r.matched && !r.skip);
-    if (!toUpdate.length) { alert('No refs to update — all matched refs already have data.'); return; }
+function readXlsx(file) {
+    return file.arrayBuffer().then(buf => {
+        const wb  = XLSX.read(buf, { type:'array' });
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        return XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+    });
+}
 
-    const btn = document.getElementById('importBtn');
-    btn.disabled = true;
-    btn.textContent = 'Importing…';
+// ── Section 1: Cert Year ─────────────────────────────────────────────────
 
-    const log = document.getElementById('logBox');
-    log.style.display = 'block';
-    log.innerHTML = '';
+let certPreviewRows = [];
 
+document.getElementById('fileInputCert').addEventListener('change', e => {
+    document.getElementById('certPreviewBtn').disabled = !e.target.files.length;
+    document.getElementById('certImportBtn').disabled = true;
+    document.getElementById('certPreviewTable').innerHTML = '';
+    certPreviewRows = [];
+});
+
+async function runCertPreview() {
+    const file = document.getElementById('fileInputCert').files[0];
+    if (!file) return;
+    const btn = document.getElementById('certPreviewBtn');
+    btn.disabled = true; btn.textContent = 'Loading…';
+    try {
+        const rows    = await readXlsx(file);
+        const headers = rows[0].map(h => String(h).trim().toLowerCase());
+        const nameCol = headers.indexOf('player name');
+        const certCol = headers.findIndex(h => h.includes('cert year') || h === 'cert year');
+        if (nameCol === -1 || certCol === -1) {
+            alert(`Could not find required columns.\nFound: ${rows[0].join(', ')}`);
+            btn.disabled = false; btn.textContent = 'Preview Matches'; return;
+        }
+        const refByName = await loadAllRefs();
+        certPreviewRows = [];
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const nameRaw  = String(row[nameCol] || '').trim();
+            const certYear = String(row[certCol] || '').trim();
+            if (!nameRaw || !certYear) continue;
+            const nameConverted = convertName(nameRaw);
+            const refObj = refByName[nameConverted.toLowerCase()];
+            const currentVal = refObj ? (refObj.fields['Years Reffing'] || '') : '';
+            certPreviewRows.push({ nameRaw, nameConverted, certYear, refId: refObj ? refObj.id : null,
+                current: currentVal || '—', matched: !!refObj, skip: currentVal !== '' });
+        }
+        const toWrite   = certPreviewRows.filter(r => r.matched && !r.skip).length;
+        const skipped   = certPreviewRows.filter(r => r.matched && r.skip).length;
+        const unmatched = certPreviewRows.filter(r => !r.matched).length;
+        let html = `<div style="margin-top:16px; font-size:0.85rem; color:#333; margin-bottom:8px;">
+            <strong>${certPreviewRows.length}</strong> rows &nbsp;·&nbsp;
+            <span style="color:#27ae60; font-weight:700;">${toWrite} will update</span> &nbsp;·&nbsp;
+            <span style="color:#8e44ad; font-weight:700;">${skipped} skipped (already has data)</span> &nbsp;·&nbsp;
+            <span style="color:#e74c3c; font-weight:700;">${unmatched} no match</span></div>`;
+        html += `<div style="overflow-x:auto; max-height:400px; overflow-y:auto; border:1px solid #ddd; border-radius:8px;">
+        <table><thead><tr><th>Spreadsheet Name</th><th>Converted Name</th><th>Cert Year</th><th>Current</th><th>Status</th></tr></thead><tbody>`;
+        certPreviewRows.forEach(r => {
+            const cls = !r.matched ? 'nomatch' : r.skip ? '' : 'match';
+            const status = !r.matched ? '❌ No match' : r.skip ? '⏭️ Skipped' : '✅ Will update';
+            html += `<tr class="${cls}"><td>${r.nameRaw}</td><td>${r.nameConverted}</td><td>${r.certYear}</td><td>${r.current}</td><td>${status}</td></tr>`;
+        });
+        html += `</tbody></table></div>`;
+        document.getElementById('certPreviewTable').innerHTML = html;
+        document.getElementById('certImportBtn').disabled = toWrite === 0;
+    } catch(e) { alert('Error: ' + e.message); console.error(e); }
+    btn.disabled = false; btn.textContent = 'Preview Matches';
+}
+
+async function runCertImport() {
+    const toUpdate = certPreviewRows.filter(r => r.matched && !r.skip);
+    if (!toUpdate.length) { alert('No refs to update.'); return; }
+    const btn = document.getElementById('certImportBtn');
+    btn.disabled = true; btn.textContent = 'Importing…';
+    const log = document.getElementById('certLogBox');
+    log.style.display = 'block'; log.innerHTML = '';
     const addLog = (cls, msg) => { log.innerHTML += `<div class="${cls}">${msg}</div>`; log.scrollTop = log.scrollHeight; };
-
     addLog('info', `Updating ${toUpdate.length} refs…`);
-
     let ok = 0, fail = 0;
     for (const r of toUpdate) {
         try {
             await supabaseClient.updateRecord('Referees', r.refId, { 'Years Reffing': r.certYear });
             addLog('ok', `✅ ${r.nameConverted} → ${r.certYear}`);
             ok++;
-        } catch(e) {
-            addLog('err', `❌ ${r.nameConverted} — ${e.message}`);
-            fail++;
-        }
+        } catch(e) { addLog('err', `❌ ${r.nameConverted} — ${e.message}`); fail++; }
     }
-
     addLog('info', `Done. ${ok} updated, ${fail} failed.`);
-    btn.textContent = 'Run Import';
-    btn.disabled = false;
+    btn.textContent = 'Run Import'; btn.disabled = false;
+}
+
+// ── Section 2: Ref Notes ─────────────────────────────────────────────────
+
+let notesPreviewRows = [];
+
+document.getElementById('fileInputNotes').addEventListener('change', e => {
+    document.getElementById('notesPreviewBtn').disabled = !e.target.files.length;
+    document.getElementById('notesImportBtn').disabled = true;
+    document.getElementById('notesPreviewTable').innerHTML = '';
+    notesPreviewRows = [];
+});
+
+async function runNotesPreview() {
+    const file = document.getElementById('fileInputNotes').files[0];
+    if (!file) return;
+    const btn = document.getElementById('notesPreviewBtn');
+    btn.disabled = true; btn.textContent = 'Loading…';
+    try {
+        const rows    = await readXlsx(file);
+        const headers = rows[0].map(h => String(h).trim().toLowerCase());
+        const nameCol      = headers.indexOf('player name');
+        const conflictsCol = headers.findIndex(h => h.includes('game conflict'));
+        const specialCol   = headers.findIndex(h => h.includes('special request'));
+
+        if (nameCol === -1) { alert('Could not find "Player Name" column.'); btn.disabled = false; btn.textContent = 'Preview Matches'; return; }
+        if (conflictsCol === -1 && specialCol === -1) { alert('Could not find Game Conflicts or Special Requests columns.'); btn.disabled = false; btn.textContent = 'Preview Matches'; return; }
+
+        const refByName = await loadAllRefs();
+        notesPreviewRows = [];
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const nameRaw  = String(row[nameCol] || '').trim();
+            if (!nameRaw) continue;
+            const conflicts = conflictsCol !== -1 ? String(row[conflictsCol] || '').trim() : '';
+            const special   = specialCol   !== -1 ? String(row[specialCol]   || '').trim() : '';
+            if (!conflicts && !special) continue; // nothing to write
+
+            const parts = [];
+            if (conflicts) parts.push(`Conflicts: ${conflicts}`);
+            if (special)   parts.push(`Special: ${special}`);
+            const merged = parts.join(' | ');
+
+            const nameConverted = convertName(nameRaw);
+            const refObj = refByName[nameConverted.toLowerCase()];
+            notesPreviewRows.push({ nameRaw, nameConverted, merged, refId: refObj ? refObj.id : null, matched: !!refObj });
+        }
+
+        const matched   = notesPreviewRows.filter(r => r.matched).length;
+        const unmatched = notesPreviewRows.filter(r => !r.matched).length;
+        let html = `<div style="margin-top:16px; font-size:0.85rem; color:#333; margin-bottom:8px;">
+            <strong>${notesPreviewRows.length}</strong> rows with notes &nbsp;·&nbsp;
+            <span style="color:#27ae60; font-weight:700;">${matched} will update</span> &nbsp;·&nbsp;
+            <span style="color:#e74c3c; font-weight:700;">${unmatched} no match</span></div>`;
+        html += `<div style="overflow-x:auto; max-height:400px; overflow-y:auto; border:1px solid #ddd; border-radius:8px;">
+        <table><thead><tr><th>Spreadsheet Name</th><th>Converted Name</th><th>Notes to Write</th><th>Status</th></tr></thead><tbody>`;
+        notesPreviewRows.forEach(r => {
+            const cls = r.matched ? 'match' : 'nomatch';
+            const status = r.matched ? '✅ Will update' : '❌ No match';
+            html += `<tr class="${cls}"><td>${r.nameRaw}</td><td>${r.nameConverted}</td><td>${r.merged}</td><td>${status}</td></tr>`;
+        });
+        html += `</tbody></table></div>`;
+        document.getElementById('notesPreviewTable').innerHTML = html;
+        document.getElementById('notesImportBtn').disabled = matched === 0;
+    } catch(e) { alert('Error: ' + e.message); console.error(e); }
+    btn.disabled = false; btn.textContent = 'Preview Matches';
+}
+
+async function runNotesImport() {
+    const toUpdate = notesPreviewRows.filter(r => r.matched);
+    if (!toUpdate.length) { alert('No matched refs to update.'); return; }
+    const btn = document.getElementById('notesImportBtn');
+    btn.disabled = true; btn.textContent = 'Importing…';
+    const log = document.getElementById('notesLogBox');
+    log.style.display = 'block'; log.innerHTML = '';
+    const addLog = (cls, msg) => { log.innerHTML += `<div class="${cls}">${msg}</div>`; log.scrollTop = log.scrollHeight; };
+    addLog('info', `Writing notes for ${toUpdate.length} refs…`);
+    let ok = 0, fail = 0;
+    for (const r of toUpdate) {
+        try {
+            await supabaseClient.updateRecord('Referees', r.refId, { 'Notes': r.merged });
+            addLog('ok', `✅ ${r.nameConverted} → ${r.merged}`);
+            ok++;
+        } catch(e) { addLog('err', `❌ ${r.nameConverted} — ${e.message}`); fail++; }
+    }
+    addLog('info', `Done. ${ok} updated, ${fail} failed.`);
+    btn.textContent = 'Run Import'; btn.disabled = false;
 }
 
 </script>
