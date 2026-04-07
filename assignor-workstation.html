@@ -2628,6 +2628,8 @@
 
         function renderSheet3View(filtered) {
             sheet3LoadLocalState();
+            // Tournament mode: default to 12 opt cells if still at the clubs default of 6
+            if (window.tournamentMode && sheet3MaxQueueLen === 6) sheet3MaxQueueLen = 12;
             const wrap = document.getElementById('gamesListWrap');
             const fmt  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
             const cell = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
@@ -2882,33 +2884,13 @@
             let refRowsHtml, refsHeader, refsFooter;
 
             {
-                // ── Ref pane: Date / Name / Exp / Club Preference / Start / End ────────
-                const refRows = [];
-                allAvail.forEach(a => {
-                    const name  = (a.fields['Referee Name'] || '').trim();
-                    const date  = a.fields['Date'] || '';
-                    const start = a.fields['Start Time'] || '';
-                    const end   = a.fields['End Time']   || '';
-                    if (!name || !date) return;
-                    const ref  = allRefs.find(r => (r.fields['Name'] || '').trim().toLowerCase() === name.toLowerCase());
-                    const club = window.tournamentMode
-                        ? 'Glast Tourny'
-                        : (ref ? (ref.fields['Club Preference'] || '') : '');
-                    const exp  = ref ? (ref.fields['Years Reffing'] || '') : '';
-                    refRows.push({ name, date, club, start, end, exp });
-                });
-                refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
-                sheet3CachedRefRows = refRows;
-                if (sheet3RefSort.col === 'exp') {
-                    const expVal = r => {
-                        const v = String(r.exp || '').toLowerCase().trim();
-                        if (v === 'season 1' || v === 'seas 1') return -2;
-                        if (v === 'season 2' || v === 'seas 2') return -1;
-                        const n = parseInt(v);
-                        return isNaN(n) ? 9999 : n;
-                    };
-                    sheet3CachedRefRows.sort((a, b) => (expVal(a) - expVal(b)) * sheet3RefSort.dir);
-                }
+                const expVal = r => {
+                    const v = String(r.exp || '').toLowerCase().trim();
+                    if (v === 'season 1' || v === 'seas 1') return -2;
+                    if (v === 'season 2' || v === 'seas 2') return -1;
+                    const n = parseInt(v);
+                    return isNaN(n) ? 9999 : n;
+                };
                 const fmtExp = v => {
                     if (v === '' || v === null || v === undefined) return '';
                     const lv = String(v).toLowerCase().trim();
@@ -2918,6 +2900,187 @@
                     if (!isNaN(n)) return `Yr ${n}`;
                     return v;
                 };
+
+                if (window.tournamentMode) {
+                    // ── Tournament ref pane: one row per ref, smart sort ──────────────
+                    // Build one record per ref, collapsing their 5 availability rows
+                    const refMap = {};
+                    allAvail.forEach(a => {
+                        const name = (a.fields['Referee Name'] || '').trim();
+                        if (!name) return;
+                        if (!refMap[name]) {
+                            const refObj = refLookupByName[name.trim().toLowerCase()];
+                            refMap[name] = {
+                                name,
+                                exp:       refObj ? (refObj.fields['Years Reffing'] || '') : '',
+                                position:  refObj ? (refObj.fields['Certification Level'] || '') : '',
+                                ageCap:    refObj ? (refObj.fields['Age Groups Preferred'] || '') : '',
+                                sitePref:  [],
+                                satAvail:  [], // { session, start, end, available }
+                                sunAvail:  [],
+                                refObj,
+                            };
+                        }
+                        const rec = refMap[name];
+                        const date      = a.fields['Date'] || '';
+                        const available = a.fields['available'] !== false;
+                        const start     = a.fields['Start Time'] || '';
+                        const end       = a.fields['End Time'] || '';
+                        const sitePref  = a.fields['Preferred Locations'] || '';
+                        const notes     = a.fields['notes'] || '';
+                        if (sitePref && !rec.sitePref.includes(sitePref)) rec.sitePref.push(sitePref);
+                        const session = notes.toLowerCase();
+                        const slot = { available, start, end, session };
+                        if (date === '2026-04-25') rec.satAvail.push(slot);
+                        if (date === '2026-04-26') rec.sunAvail.push(slot);
+                    });
+
+                    const tourneyRefs = Object.values(refMap);
+
+                    // Compute assigned count per ref
+                    const getAssignedCount = ref => {
+                        if (!ref.refObj || !assignedAt[ref.refObj.id]) return 0;
+                        let count = 0;
+                        for (const gameSet of assignedAt[ref.refObj.id].values()) {
+                            for (const gid of gameSet) { if (loadedGameIds.has(String(gid))) count++; }
+                        }
+                        return count;
+                    };
+
+                    // Context: what date/venue/age is currently filtered?
+                    const ctxDate    = sheet3DateFilter || '';
+                    const ctxAge     = sheet3AgeFilter || '';
+                    const ctxVenueName = (() => {
+                        if (!ctxDate) return '';
+                        // Get venue names from currently displayed games
+                        const venues = new Set();
+                        displayGames.forEach(g => {
+                            const v = allVenues.find(v => String(v.id) === String(g.fields['Venue ID']));
+                            if (v) venues.add(v.name);
+                        });
+                        return [...venues][0] || '';
+                    })();
+
+                    // Smart sort: unassigned → site match → age match → experience desc
+                    tourneyRefs.sort((a, b) => {
+                        const ac = getAssignedCount(a);
+                        const bc = getAssignedCount(b);
+                        if (ac !== bc) return ac - bc; // fewer assigned = higher priority
+
+                        // Site preference match
+                        const aSite = ctxVenueName ? a.sitePref.some(s => ctxVenueName.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(ctxVenueName.toLowerCase().split(' ')[0])) : false;
+                        const bSite = ctxVenueName ? b.sitePref.some(s => ctxVenueName.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(ctxVenueName.toLowerCase().split(' ')[0])) : false;
+                        if (aSite !== bSite) return aSite ? -1 : 1;
+
+                        // Age capability match
+                        const ageCapScore = r => {
+                            const cap = (r.ageCap || '').toLowerCase();
+                            if (!ctxAge) return 0;
+                            const age = parseInt(ctxAge);
+                            if (cap.includes('11v11') && age >= 13) return -1;
+                            if (cap.includes('9v9')   && age >= 11 && age <= 12) return -1;
+                            if (cap.includes('7v7')   && age <= 10) return -1;
+                            return 0;
+                        };
+                        const aCap = ageCapScore(a), bCap = ageCapScore(b);
+                        if (aCap !== bCap) return aCap - bCap;
+
+                        // Experience descending (most experienced first)
+                        const ae = expVal(a), be = expVal(b);
+                        if (ae !== be) return be - ae;
+
+                        return a.name.localeCompare(b.name);
+                    });
+
+                    sheet3CachedRefRows = tourneyRefs.map(r => ({ ...r, _assignedCount: getAssignedCount(r) }));
+
+                    // Override sort if user explicitly sorted by exp
+                    if (sheet3RefSort.col === 'exp') {
+                        sheet3CachedRefRows.sort((a, b) => (expVal(a) - expVal(b)) * sheet3RefSort.dir);
+                    }
+
+                    const fmtAvailSlots = slots => {
+                        if (!slots.length) return '<span style="color:#bbb;">—</span>';
+                        const available = slots.filter(s => s.available);
+                        if (!available.length) return '<span style="color:#e53935;font-size:0.72rem;">No</span>';
+                        const times = available.map(s => {
+                            if (s.start && s.end) return `${fmt(s.start)}–${fmt(s.end)}`;
+                            if (s.start) return `>${fmt(s.start)}`;
+                            if (s.end)   return `<${fmt(s.end)}`;
+                            return 'Yes';
+                        });
+                        return `<span style="color:#2e7d32;font-size:0.72rem;">${[...new Set(times)].join(', ')}</span>`;
+                    };
+
+                    const posLabel = pos => {
+                        if (!pos) return '—';
+                        if (pos.toLowerCase().includes('center')) return '<span style="background:#1a3a6b;color:#fff;border-radius:4px;padding:1px 5px;font-size:0.68rem;font-weight:700;">CR</span>';
+                        if (pos.toLowerCase().includes('assistant') || pos.toLowerCase().includes(' ar')) return '<span style="background:#5d6d7e;color:#fff;border-radius:4px;padding:1px 5px;font-size:0.68rem;font-weight:700;">AR</span>';
+                        return pos;
+                    };
+
+                    const ageCapLabel = cap => {
+                        if (!cap) return '—';
+                        if (cap.includes('11v11')) return '11v11';
+                        if (cap.includes('9v9'))   return '9v9';
+                        if (cap.includes('7v7'))   return '7v7';
+                        return cap;
+                    };
+
+                    refRowsHtml = sheet3CachedRefRows.length ? sheet3CachedRefRows.map((r, i) => {
+                        const safeName = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+                        const ac = r._assignedCount;
+                        const countBadge = ac
+                            ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;margin-left:5px;vertical-align:middle;">${ac}</span>`
+                            : '<span style="background:#e8f5e9;color:#2e7d32;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;margin-left:5px;vertical-align:middle;">0</span>';
+                        const siteDisplay = r.sitePref.length
+                            ? r.sitePref.join(', ')
+                            : '<span style="color:#bbb;">Any</span>';
+                        return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
+                            draggable="true"
+                            ondragstart="sheet3RefDragStart(event,'${safeName}')"
+                            onmouseenter="showRefTooltip('${safeName}', this, event)"
+                            onmouseleave="hideRefTooltip()">
+                            <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's schedule">${r.name}${countBadge}</td>
+                            <td style="${cell} text-align:center;">${posLabel(r.position)}</td>
+                            <td style="${cell} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">${fmtExp(r.exp)}</td>
+                            <td style="${cell} font-size:0.72rem;">${ageCapLabel(r.ageCap)}</td>
+                            <td style="${cell} font-size:0.72rem;">${siteDisplay}</td>
+                            <td style="${cell}">${fmtAvailSlots(r.satAvail)}</td>
+                            <td style="${cell}">${fmtAvailSlots(r.sunAvail)}</td>
+                        </tr>`;
+                    }).join('') : `<tr><td colspan="7" style="${cell} color:#888;">No refs loaded.</td></tr>`;
+
+                    refsHeader = `<tr>
+                        <th style="${hdr}">Name</th>
+                        <th style="${hdr}">Pos</th>
+                        <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}</th>
+                        <th style="${hdr}">Age Cap</th>
+                        <th style="${hdr}">Site Pref</th>
+                        <th style="${hdr}">Sat Avail</th>
+                        <th style="${hdr}">Sun Avail</th>
+                    </tr>`;
+                    refsFooter = `${sheet3CachedRefRows.length} refs`;
+
+                } else {
+                // ── Club ref pane: Date / Name / Exp / Club Preference / Start / End ──
+                const refRows = [];
+                allAvail.forEach(a => {
+                    const name  = (a.fields['Referee Name'] || '').trim();
+                    const date  = a.fields['Date'] || '';
+                    const start = a.fields['Start Time'] || '';
+                    const end   = a.fields['End Time']   || '';
+                    if (!name || !date) return;
+                    const ref  = allRefs.find(r => (r.fields['Name'] || '').trim().toLowerCase() === name.toLowerCase());
+                    const club = ref ? (ref.fields['Club Preference'] || '') : '';
+                    const exp  = ref ? (ref.fields['Years Reffing'] || '') : '';
+                    refRows.push({ name, date, club, start, end, exp });
+                });
+                refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+                sheet3CachedRefRows = refRows;
+                if (sheet3RefSort.col === 'exp') {
+                    sheet3CachedRefRows.sort((a, b) => (expVal(a) - expVal(b)) * sheet3RefSort.dir);
+                }
                 const buildRefRowsHtml = rows => rows.length ? rows.map((r, i) => {
                     const safeName  = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
                     const refObj    = refLookupByName[r.name.trim().toLowerCase()];
@@ -2945,9 +3108,7 @@
                 }).join('') : `<tr><td colspan="6" style="${cell} color:#888;">No availability submitted.</td></tr>`;
                 const displayRefRows = sheet3RefClubFilter ? refRows.filter(r => r.club === sheet3RefClubFilter) : refRows;
                 refRowsHtml = buildRefRowsHtml(displayRefRows);
-                const clubColHeader = window.tournamentMode
-                    ? `<th style="${hdr}">Tournament</th>`
-                    : `<th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3CycleRefClubFilter()" title="Click to filter by club preference">Club Preference <span style="background:${sheet3RefClubFilter?'#e3f0ff':'#f0ece6'};color:${sheet3RefClubFilter?'#0f3460':'#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${sheet3RefClubFilter||'All'}</span></th>`;
+                const clubColHeader = `<th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3CycleRefClubFilter()" title="Click to filter by club preference">Club Preference <span style="background:${sheet3RefClubFilter?'#e3f0ff':'#f0ece6'};color:${sheet3RefClubFilter?'#0f3460':'#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${sheet3RefClubFilter||'All'}</span></th>`;
                 refsHeader = `<tr>
                     <th style="${hdr}">Date</th><th style="${hdr}">Name</th>
                     <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}</th>
@@ -2955,6 +3116,7 @@
                     <th style="${hdr}">Start</th><th style="${hdr}">End</th>
                 </tr>`;
                 refsFooter = `${displayRefRows.length}${displayRefRows.length !== refRows.length ? ` of ${refRows.length}` : ''} records`;
+                } // end club ref pane
             }  // end ref pane block
 
             const refsDivider = `<div onmousedown="sheet3SplitterMousedown(event)" style="background:#1a3a6b; color:#fff; padding:2px 14px; margin:3px -20px 4px -20px; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:ns-resize; user-select:none;" title="Drag to resize panes">Referee Availability — drag a row into an Opt cell &#8597;</div>`;
