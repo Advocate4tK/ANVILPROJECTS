@@ -128,7 +128,7 @@ async function insertBatch(games, label) {
     for (let i = 0; i < games.length; i += BATCH) {
         const chunk = games.slice(i, i + BATCH);
         process.stdout.write(`\r  Inserting ${label}... ${Math.min(i + BATCH, games.length)}/${games.length}`);
-        const { error } = await db.from('games').insert(chunk);
+        const { error } = await db.from('tournament_games').insert(chunk);
         if (error) {
             console.error(`\n  ❌ Batch ${i}-${i + BATCH} error: ${error.message}`);
             fail += chunk.length;

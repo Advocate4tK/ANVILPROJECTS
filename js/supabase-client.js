@@ -18,10 +18,11 @@ class SupabaseClientWrapper {
     // Map Airtable table name strings to Supabase table names (lowercase)
     _tableName(name) {
         const map = {
-            'Referees':    'referees',
-            'Clubs':       'clubs',
-            'Fields':      'fields',
-            'Games':       'games',
+            'Referees':         'referees',
+            'Clubs':            'clubs',
+            'Fields':           'fields',
+            'Games':            'games',
+            'tournament_games': 'tournament_games',
             'Availability':'availability',
             'Venues':      'venues',
             'Settings':    'settings',

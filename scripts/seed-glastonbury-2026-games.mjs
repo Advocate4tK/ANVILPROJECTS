@@ -201,7 +201,7 @@ const BATCH = 50;
 let inserted = 0;
 for (let i = 0; i < insertGames.length; i += BATCH) {
     const batch = insertGames.slice(i, i + BATCH);
-    const { error } = await db.from('games').insert(batch);
+    const { error } = await db.from('tournament_games').insert(batch);
     if (error) {
         console.error(`Batch ${Math.floor(i/BATCH)+1} ERROR:`, error.message);
         process.exit(1);
