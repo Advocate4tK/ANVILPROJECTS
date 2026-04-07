@@ -4238,7 +4238,8 @@
         let selectedGame        = null; // currently focused game record
         let requestedChangeDate = null; // parsed from Notes when change request game is open
         let requestedChangeTime = null; // parsed from Notes when change request game is open
-        let visibleGameDates    = new Set(); // dates of games currently on screen
+        let visibleGameDates      = new Set(); // dates of games currently on screen
+        let visibleGameCountByDate = {};      // game count per date for heatmap ratio
         let showAllRefsMode     = false; // Show All Refs button state
         let hideU8Games         = true;
         let hideU10Games        = false;
@@ -5110,6 +5111,8 @@
 
             // Update visible game dates so the refs panel shows only refs available on those dates
             visibleGameDates = new Set(filtered.map(g => g.fields['Date']).filter(Boolean));
+            visibleGameCountByDate = {};
+            filtered.forEach(g => { const d = g.fields['Date']; if (d) visibleGameCountByDate[d] = (visibleGameCountByDate[d] || 0) + 1; });
             renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
 
             // Hand off to wide/command renderer
@@ -6310,12 +6313,14 @@
                 const dates = Object.keys(dateCounts).sort();
                 if (!dates.length) { el.style.display = 'none'; return; }
                 const pills = dates.map(d => {
-                    const count = dateCounts[d].size;
-                    const color = count >= 10 ? '#16a34a' : count >= 5 ? '#d97706' : '#dc2626';
-                    const bg    = count >= 10 ? '#dcfce7' : count >= 5 ? '#fef3c7' : '#fee2e2';
+                    const count    = dateCounts[d].size;
+                    const games    = visibleGameCountByDate[d] || 0;
+                    const ratio    = games > 0 ? count / games : 1;
+                    const color = ratio >= 1    ? '#16a34a' : ratio >= 0.75 ? '#d97706' : '#dc2626';
+                    const bg    = ratio >= 1    ? '#dcfce7' : ratio >= 0.75 ? '#fef3c7' : '#fee2e2';
                     const dow   = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short' });
                     const day   = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'numeric', day:'numeric' });
-                    return `<div style="display:flex;flex-direction:column;align-items:center;background:${bg};border:1px solid ${color};border-radius:6px;padding:5px 9px;min-width:46px;gap:1px;" title="${count} refs available on ${d}"><span style="font-size:0.64rem;font-weight:800;color:${color};text-transform:uppercase;letter-spacing:0.3px;">${dow}</span><span style="font-size:0.67rem;color:#666;">${day}</span><span style="font-size:1rem;font-weight:800;color:${color};line-height:1.2;">${count}</span></div>`;
+                    return `<div style="display:flex;flex-direction:column;align-items:center;background:${bg};border:1px solid ${color};border-radius:6px;padding:5px 9px;min-width:46px;gap:1px;" title="${count} refs available, ${games} games on ${d}"><span style="font-size:0.64rem;font-weight:800;color:${color};text-transform:uppercase;letter-spacing:0.3px;">${dow}</span><span style="font-size:0.67rem;color:#666;">${day}</span><span style="font-size:1rem;font-weight:800;color:${color};line-height:1.2;">${count}</span></div>`;
                 }).join('');
                 el.style.display = 'block';
                 el.innerHTML = `<div style="font-size:0.74rem;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:7px;">Refs Available by Day</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${pills}</div>`;
