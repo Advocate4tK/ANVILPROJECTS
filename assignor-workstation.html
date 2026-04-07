@@ -997,16 +997,17 @@
 
         // ── Assignor Profile ─────────────────────────────────────────────────
         let currentAssignor     = null; // { id, name, role } — set after profile selection
-        let allAssignorProfiles = [];   // loaded from Airtable
+        let allAssignorProfiles = [];   // loaded from Supabase assignors table
 
         async function loadProfiles() {
             try {
-                const recs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.ASSIGNORS, { maxRecords: 100 });
+                const { data: recs, error } = await supabaseClient.client.from('assignors').select('*').order('id');
+                if (error) throw error;
                 allAssignorProfiles = recs.map(r => ({
                     id:          r.id,
-                    name:        r.fields['Name'] || '',
-                    role:        (r.fields['Role'] || 'Assignor').trim(),
-                    defaultView: (r.fields['Default View'] || 'standard').toLowerCase()
+                    name:        r['Name'] || '',
+                    role:        (r['Role'] || 'Assignor').trim(),
+                    defaultView: 'standard'
                 })).filter(p => p.name);
 
                 const sel = document.getElementById('profileSelect');
@@ -1040,7 +1041,7 @@
                     }
                 });
             } catch(e) {
-                document.getElementById('profileLoading').textContent = 'Could not load profiles. Check Airtable connection.';
+                document.getElementById('profileLoading').textContent = 'Could not load profiles. Check Supabase connection.';
             }
         }
 
