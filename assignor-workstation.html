@@ -782,6 +782,7 @@
                                     <option value="sheet"    style="color:#1a1a1a; background:white;">Sheet</option>
                                     <option value="sheet2"   style="color:#1a1a1a; background:white;">Sheet 2</option>
                                     <option value="sheet3"   style="color:#1a1a1a; background:white;">Sheet 3</option>
+                                    <option value="sheet4"   style="color:#1a1a1a; background:white; display:none;">Sheet 4 (Tournament)</option>
                                 </select></div>
                             </div>
                         </div>
@@ -1077,7 +1078,12 @@
                 _hide('dateRangeRow');
                 _hide('filterByClubSection');
                 _hide('filterToggleBar');
-                setViewMode('sheet3', false);
+                // Show sheet4 option; hide sheet3 from view selector (tournament uses sheet4)
+                const s4opt = document.querySelector('#viewModeSelect option[value="sheet4"]');
+                const s3opt = document.querySelector('#viewModeSelect option[value="sheet3"]');
+                if (s4opt) s4opt.style.display = '';
+                if (s3opt) s3opt.style.display = 'none';
+                setViewMode('sheet4', false);
                 loadAll();
             } else {
                 _filtersPanelOpen = true;
@@ -1147,13 +1153,13 @@
             const refsPanel    = document.querySelector('.refs-panel');
             const gamesPanel   = document.querySelector('.games-panel');
             const sortControls = document.getElementById('sortControls');
-            const fullWidth    = mode === 'staging' || mode === 'command' || mode === 'wide2' || mode === 'command2' || mode === 'sheet' || mode === 'sheet2' || mode === 'sheet3';
+            const fullWidth    = mode === 'staging' || mode === 'command' || mode === 'wide2' || mode === 'command2' || mode === 'sheet' || mode === 'sheet2' || mode === 'sheet3' || mode === 'sheet4';
             if (refsPanel)    refsPanel.style.display    = fullWidth ? 'none' : '';
             if (gamesPanel)   gamesPanel.style.gridColumn = fullWidth ? '1 / -1' : '';
             if (sortControls) sortControls.style.display  = 'flex';
             // Sheet 3 has inline column filters — hide the top filter button to avoid duplication
             const gameFilterBtn = document.getElementById('gameFilterToggleBtn');
-            if (gameFilterBtn) gameFilterBtn.style.display = mode === 'sheet3' ? 'none' : '';
+            if (gameFilterBtn) gameFilterBtn.style.display = (mode === 'sheet3' || mode === 'sheet4') ? 'none' : '';
             renderGames();
             // Persist preference to Airtable so next login opens in this view
             if (save && currentAssignor) {
@@ -2683,11 +2689,14 @@
                 return true;
             });
             const loadedGameIds = new Set(allGames.map(g => String(g.id)));
-            // Tournament mode: sort by time so AM/PM dividers split correctly
-            if (window.tournamentMode && sheet3DateFilter) {
-                displayGames.sort((a, b) => (a.fields['Time'] || '').localeCompare(b.fields['Time'] || ''));
+            // Tournament mode: sort by date+time so all-days + single-day views both sort correctly
+            if (window.tournamentMode) {
+                displayGames.sort((a, b) =>
+                    ((a.fields['Date'] || '') + '|' + (a.fields['Time'] || '')).localeCompare(
+                    (b.fields['Date'] || '') + '|' + (b.fields['Time'] || '')));
             }
             let _s3Period = null; // tracks AM vs PM for section-divider injection
+            let _s3Date   = null; // tracks date changes for all-days date dividers
             // refCountBadge is defined as a top-level function below renderSheet3View
             const gameRowsHtml = displayGames.length ? displayGames.map((g, i) => {
                 const f        = g.fields;
@@ -2768,15 +2777,30 @@
                 const stubTd = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:0; background:#eef0f3;';
                 // Tournament mode: inject Morning / Afternoon section dividers
                 let periodDivider = '';
-                if (window.tournamentMode && sheet3DateFilter) {
-                    const period = (f['Time'] || '23:59') < '12:00:00' ? 'am' : 'pm';
+                if (window.tournamentMode) {
+                    const curDate = f['Date'] || '';
+                    const period  = (f['Time'] || '23:59') < '12:00:00' ? 'am' : 'pm';
+                    let dividers  = '';
+                    // Date divider: inject when showing all days and date changes
+                    if (!sheet3DateFilter && curDate !== _s3Date) {
+                        _s3Date   = curDate;
+                        _s3Period = null; // reset period tracking for new date
+                        if (curDate) {
+                            const [,m,d] = curDate.split('-');
+                            const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1];
+                            const dn = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(curDate + 'T12:00:00').getDay()];
+                            dividers += `<tr><td colspan="${sheet3ColOrder.length}" style="background:#1a3a6b;color:white;font-size:0.75rem;font-weight:800;letter-spacing:1.5px;padding:6px 10px;text-transform:uppercase;border-top:3px solid rgba(255,255,255,0.15);">${dn} &nbsp;·&nbsp; ${mo} ${parseInt(d)}</td></tr>`;
+                        }
+                    }
+                    // Period divider: Morning / Afternoon within each day
                     if (period !== _s3Period) {
                         _s3Period = period;
                         const lbl = period === 'am' ? 'Morning' : 'Afternoon';
                         const bg  = period === 'am' ? '#e8f4fd' : '#fff8e1';
                         const col = period === 'am' ? '#1a5276' : '#7d5a00';
-                        periodDivider = `<tr><td colspan="${sheet3ColOrder.length}" style="background:${bg};color:${col};font-size:0.72rem;font-weight:800;letter-spacing:1.2px;padding:5px 8px;text-transform:uppercase;border-top:2px solid ${col}40;">${lbl}</td></tr>`;
+                        dividers += `<tr><td colspan="${sheet3ColOrder.length}" style="background:${bg};color:${col};font-size:0.72rem;font-weight:800;letter-spacing:1.2px;padding:5px 8px;text-transform:uppercase;border-top:2px solid ${col}40;">${lbl}</td></tr>`;
                     }
+                    periodDivider = dividers;
                 }
                 return periodDivider + `<tr style="background:${rowBg};">${sheet3ColOrder.map(k =>
                     sheet3HiddenCols.includes(k) ? `<td style="${stubTd}"></td>` : (colRenderers[k] ? colRenderers[k]() : '<td></td>')
@@ -2917,7 +2941,8 @@
 
                 if (window.tournamentMode) {
                     // ── Tournament ref pane: one row per ref, smart sort ──────────────
-                    // Build one record per ref, collapsing their 5 availability rows
+                    // Build one record per ref, collapsing availability rows across all tournament days
+                    const tmDays = window.tournamentMode.days; // [{label, date}]
                     const refMap = {};
                     allAvail.forEach(a => {
                         const name = (a.fields['Referee Name'] || '').trim();
@@ -2930,8 +2955,7 @@
                                 position:  refObj ? (refObj.fields['Certification Level'] || '') : '',
                                 ageCap:    refObj ? (refObj.fields['Age Groups Preferred'] || '') : '',
                                 sitePref:  [],
-                                satAvail:  [], // { session, start, end, available }
-                                sunAvail:  [],
+                                avail:     Object.fromEntries(tmDays.map(d => [d.date, []])),
                                 refObj,
                             };
                         }
@@ -2945,8 +2969,7 @@
                         if (sitePref && !rec.sitePref.includes(sitePref)) rec.sitePref.push(sitePref);
                         const session = notes.toLowerCase();
                         const slot = { available, start, end, session };
-                        if (date === '2026-04-25') rec.satAvail.push(slot);
-                        if (date === '2026-04-26') rec.sunAvail.push(slot);
+                        if (rec.avail[date] !== undefined) rec.avail[date].push(slot);
                     });
 
                     const tourneyRefs = Object.values(refMap);
@@ -3060,10 +3083,9 @@
                             <td style="${cell} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">${fmtExp(r.exp)}</td>
                             <td style="${cell} font-size:0.72rem;">${ageCapLabel(r.ageCap)}</td>
                             <td style="${cell} font-size:0.72rem;">${siteDisplay}</td>
-                            <td style="${cell}">${fmtAvailSlots(r.satAvail)}</td>
-                            <td style="${cell}">${fmtAvailSlots(r.sunAvail)}</td>
+                            ${tmDays.map(d => `<td style="${cell}">${fmtAvailSlots(r.avail[d.date])}</td>`).join('')}
                         </tr>`;
-                    }).join('') : `<tr><td colspan="7" style="${cell} color:#888;">No refs loaded.</td></tr>`;
+                    }).join('') : `<tr><td colspan="${5 + tmDays.length}" style="${cell} color:#888;">No refs loaded.</td></tr>`;
 
                     refsHeader = `<tr>
                         <th style="${hdr}">Name</th>
@@ -3071,8 +3093,7 @@
                         <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}</th>
                         <th style="${hdr}">Age Cap</th>
                         <th style="${hdr}">Site Pref</th>
-                        <th style="${hdr}">Sat Avail</th>
-                        <th style="${hdr}">Sun Avail</th>
+                        ${tmDays.map(d => `<th style="${hdr}">${d.label.split(' ').slice(0,2).join(' ')}</th>`).join('')}
                     </tr>`;
                     refsFooter = `${sheet3CachedRefRows.length} refs`;
 
@@ -4919,7 +4940,7 @@
                     _hide('filterByClubSection');
                     _hide('filterToggleBar');
 
-                    setViewMode('sheet3', false);
+                    setViewMode('sheet4', false);
                     const banner = document.getElementById('tournamentBanner');
                     if (banner) {
                         document.getElementById('tournamentLogo').src   = tm.logo;
@@ -5098,6 +5119,11 @@
                 return;
             }
             if (viewMode === 'sheet3') {
+                sheet3FetchStaging().then(() => renderSheet3View(filtered));
+                return;
+            }
+            if (viewMode === 'sheet4') {
+                // Tournament view — uses sheet3 staging + render for now; will diverge
                 sheet3FetchStaging().then(() => renderSheet3View(filtered));
                 return;
             }
