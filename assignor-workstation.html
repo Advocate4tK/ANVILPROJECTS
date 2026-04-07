@@ -1138,8 +1138,30 @@
         // Global experience color scale (shared across all views)
         const expColor = yrs => yrs === 0 ? '#e74c3c' : yrs === 1 ? '#27ae60' : yrs <= 3 ? '#f1c40f' : yrs <= 10 ? '#2980b9' : '#8e44ad';
 
+        // ⚠️ GLOBAL fmtExp — ONE definition for ALL templates. NEVER redefine locally.
+        // Display: Seas 1, Seas 2, Yr 2, Yr 3... "Yr 0" and "Yr 1" NEVER appear.
+        // Colors match expColor() — Season 1 = red, Season 2 = green, Yr 2+ = yellow/blue/purple.
+        function fmtExp(v, colored = false) {
+            if (v === '' || v === null || v === undefined) return '';
+            const lv = String(v).toLowerCase().trim();
+            let label, yrs;
+            if (lv === 'season 1' || lv === 'seas 1') { label = 'Seas 1'; yrs = 0; }
+            else if (lv === 'season 2' || lv === 'seas 2') { label = 'Seas 2'; yrs = 1; }
+            else {
+                const n = parseInt(v);
+                if (isNaN(n)) return v;
+                if (n <= 0) { label = 'Seas 1'; yrs = 0; }
+                else if (n === 1) { label = 'Seas 2'; yrs = 1; } // integer 1 = Season 2 per parseYrs scale
+                else { label = `Yr ${n}`; yrs = n; }
+            }
+            if (!colored) return label;
+            const color = expColor(yrs);
+            return `<span style="color:${color}; font-weight:700;">${label}</span>`;
+        }
+
         // parseYrs: converts 'Years Reffing' field value to a numeric index.
         // "Seas 1" / "Seas 2" (strings) → 0 / 1.  Integer 2+ → that integer.  Missing → missing arg (default -1).
+        // Scale: 0 = Season 1, 1 = Season 2, 2 = Year 2, 3 = Year 3, ...
         function parseYrs(v, missing) {
             if (missing === undefined) missing = -1;
             if (v === null || v === undefined || v === '') return missing;
@@ -1815,15 +1837,6 @@
             refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
             sheet2CachedRefRows = refRows;
 
-            const fmtExp = v => {
-                if (v === '' || v === null || v === undefined) return '';
-                const lv = String(v).toLowerCase().trim();
-                if (lv === 'season 1' || lv === 'seas 1') return 'Seas 1';
-                if (lv === 'season 2' || lv === 'seas 2') return 'Seas 2';
-                const n = parseInt(v);
-                if (!isNaN(n)) return `Yr ${n}`;
-                return v;
-            };
 
             const buildRefRowsHtml = rows => rows.length ? rows.map((r, i) => {
                 const safeName = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
@@ -1887,22 +1900,13 @@
             sheet2CachedRefRows.sort((a, b) => expVal(a) === expVal(b) ? 0 : (expVal(a) - expVal(b)) * sheet2RefSort.dir);
             const cell2 = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
             const fmtT  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
-            const fmtE  = v => {
-                if (v === '' || v === null || v === undefined) return '';
-                const lv = String(v).toLowerCase().trim();
-                if (lv === 'season 1' || lv === 'seas 1') return 'Seas 1';
-                if (lv === 'season 2' || lv === 'seas 2') return 'Seas 2';
-                const n = parseInt(v);
-                if (!isNaN(n)) return `Yr ${n}`;
-                return v;
-            };
             const tbody = document.getElementById('s2refTbody');
             if (!tbody) return;
             tbody.innerHTML = sheet2CachedRefRows.length ? sheet2CachedRefRows.map((r, i) => {
                 const safeName = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
                 return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;" draggable="true" ondragstart="sheet2RefDragStart(event,'${safeName}')">
                     <td style="${cell2}">${r.date}</td><td style="${cell2}">${r.name}</td>
-                    <td style="${cell2}">${fmtE(r.exp)}</td><td style="${cell2}">${r.club}</td>
+                    <td style="${cell2}">${fmtExp(r.exp)}</td><td style="${cell2}">${r.club}</td>
                     <td style="${cell2}">${fmtT(r.start)}</td><td style="${cell2}">${fmtT(r.end)}</td>
                 </tr>`;
             }).join('') : `<tr><td colspan="6" style="${cell2} color:#888;">No availability submitted.</td></tr>`;
@@ -2939,15 +2943,7 @@
                     const n = parseInt(v);
                     return isNaN(n) ? 9999 : n;
                 };
-                const fmtExp = v => {
-                    if (v === '' || v === null || v === undefined) return '';
-                    const lv = String(v).toLowerCase().trim();
-                    if (lv === 'season 1' || lv === 'seas 1') return 'Seas 1';
-                    if (lv === 'season 2' || lv === 'seas 2') return 'Seas 2';
-                    const n = parseInt(v);
-                    if (!isNaN(n)) return `Yr ${n}`;
-                    return v;
-                };
+
 
                 if (window.tournamentMode) {
                     // ── Tournament ref pane: one row per ref, smart sort ──────────────
@@ -3160,7 +3156,7 @@
                         onmouseleave="hideRefTooltip()">
                         <td style="${cell}">${r.date}</td>
                         <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's assignments">${r.name}${countBadge}</td>
-                        <td style="${cell}">${fmtExp(r.exp)}</td>
+                        <td style="${cell}">${fmtExp(r.exp, true)}</td>
                         <td style="${cell}">${r.club}</td>
                         <td style="${cell}">${fmt(r.start)}</td>
                         <td style="${cell}">${fmt(r.end)}</td>
@@ -3235,15 +3231,6 @@
             sheet3CachedRefRows.sort((a, b) => expVal(a) === expVal(b) ? 0 : (expVal(a) - expVal(b)) * sheet3RefSort.dir);
             const cell2 = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
             const fmtT  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
-            const fmtE  = v => {
-                if (v === '' || v === null || v === undefined) return '';
-                const lv = String(v).toLowerCase().trim();
-                if (lv === 'season 1' || lv === 'seas 1') return 'Seas 1';
-                if (lv === 'season 2' || lv === 'seas 2') return 'Seas 2';
-                const n = parseInt(v);
-                if (!isNaN(n)) return `Yr ${n}`;
-                return v;
-            };
             const tbody = document.getElementById('s3refTbody');
             if (!tbody) return;
             const _shownNoteFor = new Set();
@@ -3255,7 +3242,7 @@
                     onmouseenter="showRefTooltip('${safeName}', this, event)"
                     onmouseleave="hideRefTooltip()">
                     <td style="${cell2}">${r.date}</td><td style="${cell2}">${r.name}</td>
-                    <td style="${cell2}">${fmtE(r.exp)}</td><td style="${cell2}">${r.club}</td>
+                    <td style="${cell2}">${fmtExp(r.exp, true)}</td><td style="${cell2}">${r.club}</td>
                     <td style="${cell2}">${fmtT(r.start)}</td><td style="${cell2}">${fmtT(r.end)}</td>
                     <td style="${cell2} font-size:0.72rem; color:#856404; width:220px; white-space:nowrap;">${noteCell}</td>
                 </tr>`;
