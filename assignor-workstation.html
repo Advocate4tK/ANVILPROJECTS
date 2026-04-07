@@ -2579,9 +2579,10 @@
             const notes    = (f['Assignor Notes'] || '').trim();
             // Collect unique availability notes this ref has submitted (visible date range)
             const nameLower = name.trim().toLowerCase();
+            const _sessionLabel = /^(friday|saturday|sunday)\s+(morning|afternoon|night|evening)/i;
             const availNotes = [...new Set(
                 (allAvail || [])
-                    .filter(a => (a.fields['Referee Name'] || '').trim().toLowerCase() === nameLower && (a.fields['Notes'] || '').trim())
+                    .filter(a => (a.fields['Referee Name'] || '').trim().toLowerCase() === nameLower && (a.fields['Notes'] || '').trim() && !_sessionLabel.test(a.fields['Notes'].trim()))
                     .map(a => a.fields['Notes'].trim())
             )];
             const rows = [
@@ -3112,7 +3113,10 @@
                     const ref  = allRefs.find(r => (r.fields['Name'] || '').trim().toLowerCase() === name.toLowerCase());
                     const club = ref ? (ref.fields['Club Preference'] || '') : '';
                     const exp  = ref ? (ref.fields['Years Reffing'] || '') : '';
-                    const notes = (a.fields['Notes'] || '').trim();
+                    const rawNote = (a.fields['Notes'] || '').trim();
+                    // Filter out seed-injected session labels — only keep real user-submitted notes
+                    const sessionLabel = /^(friday|saturday|sunday)\s+(morning|afternoon|night|evening)/i;
+                    const notes = sessionLabel.test(rawNote) ? '' : rawNote;
                     refRows.push({ name, date, club, start, end, exp, notes });
                 });
                 refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
@@ -3138,11 +3142,12 @@
                         onmouseenter="showRefTooltip('${safeName}', this, event)"
                         onmouseleave="hideRefTooltip()">
                         <td style="${cell}">${r.date}</td>
-                        <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's assignments">${r.name}${countBadge}${r.notes ? `<span title="${r.notes.replace(/"/g,'&quot;')}" style="margin-left:4px; cursor:help; font-style:normal; background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:1px 5px; font-size:0.65rem; font-weight:700; vertical-align:middle; color:#856404;">💬</span>` : ''}</td>
+                        <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's assignments">${r.name}${countBadge}</td>
                         <td style="${cell}">${fmtExp(r.exp)}</td>
                         <td style="${cell}">${r.club}</td>
                         <td style="${cell}">${fmt(r.start)}</td>
                         <td style="${cell}">${fmt(r.end)}</td>
+                        <td style="${cell} font-size:0.72rem; color:#856404; max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${r.notes.replace(/"/g,'&quot;')}">${r.notes}</td>
                     </tr>`;
                 }).join('') : `<tr><td colspan="6" style="${cell} color:#888;">No availability submitted.</td></tr>`;
                 const displayRefRows = sheet3RefClubFilter ? refRows.filter(r => r.club === sheet3RefClubFilter) : refRows;
@@ -3153,6 +3158,7 @@
                     <th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}</th>
                     ${clubColHeader}
                     <th style="${hdr}">Start</th><th style="${hdr}">End</th>
+                    <th style="${hdr}">Notes</th>
                 </tr>`;
                 refsFooter = `${displayRefRows.length}${displayRefRows.length !== refRows.length ? ` of ${refRows.length}` : ''} records`;
                 } // end club ref pane
