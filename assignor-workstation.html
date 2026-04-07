@@ -6298,12 +6298,19 @@
 
             } else {
                 // ── Standard mode: one pill per date ─────────────────────────────────
+                // Only show dates that have games in the current filtered view
+                // Count unique refs per date (not raw rows) to avoid double-counting multi-submission refs
                 const dateCounts = {};
-                allAvail.forEach(a => { const d = a.fields['Date']; if (d) dateCounts[d] = (dateCounts[d] || 0) + 1; });
+                allAvail.forEach(a => {
+                    const d = a.fields['Date'];
+                    if (!d || (visibleGameDates.size && !visibleGameDates.has(d))) return;
+                    if (!dateCounts[d]) dateCounts[d] = new Set();
+                    dateCounts[d].add(a.fields['Referee Name'] || a.fields['referee'] || a.fields['Name'] || '?');
+                });
                 const dates = Object.keys(dateCounts).sort();
                 if (!dates.length) { el.style.display = 'none'; return; }
                 const pills = dates.map(d => {
-                    const count = dateCounts[d];
+                    const count = dateCounts[d].size;
                     const color = count >= 10 ? '#16a34a' : count >= 5 ? '#d97706' : '#dc2626';
                     const bg    = count >= 10 ? '#dcfce7' : count >= 5 ? '#fef3c7' : '#fee2e2';
                     const dow   = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short' });
