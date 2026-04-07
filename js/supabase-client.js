@@ -42,7 +42,7 @@ class SupabaseClientWrapper {
             'State':   'state',
             'Notes':   'notes',
             'Status':  'status',
-            'Gender':  'gender',
+            // 'Gender' stays as 'Gender' (Title Case column is ACTIVE — lowercase `gender` is stale duplicate)
             'Games':   'games',
             'Age':     'age',
             'Rating':  'rating',
