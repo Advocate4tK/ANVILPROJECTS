@@ -90,6 +90,24 @@ if (loginSection) {
         el && el.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
     });
 
+    // Forgot password
+    const forgotLink = document.getElementById('forgotLink');
+    const forgotMsg  = document.getElementById('forgotMsg');
+    forgotLink && forgotLink.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const email = (document.getElementById('adminEmail') || {}).value || '';
+        if (!email) {
+            loginError.textContent = 'Enter your email first.';
+            loginError.style.display = 'block';
+            return;
+        }
+        const { error } = await supabaseClient.client.auth.resetPasswordForEmail(email, {
+            redirectTo: 'https://referee-tool.com/reset-password.html'
+        });
+        forgotMsg.style.display = 'block';
+        forgotMsg.textContent = error ? 'Error: ' + error.message : 'Recovery email sent — check your inbox.';
+    });
+
     // Logout
     logoutBtn && logoutBtn.addEventListener('click', async function() {
         await supabaseClient.client.auth.signOut();
