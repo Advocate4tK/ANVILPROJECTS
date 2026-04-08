@@ -94,6 +94,14 @@ class SupabaseClientWrapper {
             'clubs':     'Clubs',
             'active':    'Active',
             'key':       'Key',
+            // tournament_games snake_case → Title Case (in case table was created with snake_case cols)
+            'home_team':   'Home Team',
+            'away_team':   'Away Team',
+            'age_group':   'Age Group',
+            'venue_id':    'Venue ID',
+            'field_id':    'Field ID',
+            'game_id':     'GAME ID',
+            'source_club': 'Source Club',
             // NOTE: All multi-word columns pass through with their original names (spaces preserved)
             // Only single-word lowercased cols need reverse mapping (handled above)
         };
