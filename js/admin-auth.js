@@ -1,19 +1,27 @@
-const ADMIN_HASH = '7f4a8b2c9e1d6f3a5b8c2e4d7f9a1b3c'; // hashed version stored server-side
+// ── Supabase Auth — replaces generic password check ───────────────────────────
 
-function hashPassword(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const chr = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + chr;
-        hash |= 0;
+// Synchronous session check using Supabase's localStorage token
+// Key format: sb-{projectRef}-auth-token
+function _getSupabaseSession() {
+    try {
+        const url   = (typeof CONFIG !== 'undefined') ? CONFIG.SUPABASE_URL : '';
+        const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
+        if (!match) return null;
+        const key  = `sb-${match[1]}-auth-token`;
+        const raw  = localStorage.getItem(key);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        const exp  = data?.expires_at || 0;
+        // expires_at is in seconds
+        if (exp && exp < Math.floor(Date.now() / 1000)) return null;
+        return data;
+    } catch (e) {
+        return null;
     }
-    return hash.toString(16);
 }
 
-const CORRECT_HASH = hashPassword('Referee33**');
-
 function isLoggedIn() {
-    return sessionStorage.getItem('adminAuth') === CORRECT_HASH;
+    return _getSupabaseSession() !== null;
 }
 
 function checkAdminAccess() {
@@ -22,12 +30,18 @@ function checkAdminAccess() {
     }
 }
 
-// ── Admin page logic ───────────────────────────────────────────────────────────
-const loginSection    = document.getElementById('loginSection');
-const adminDashboard  = document.getElementById('adminDashboard');
-const loginBtn        = document.getElementById('loginBtn');
-const logoutBtn       = document.getElementById('logoutBtn');
-const loginError      = document.getElementById('loginError');
+// Returns the current user's Supabase auth.uid() — use for assignor_id writes
+function currentUserId() {
+    const s = _getSupabaseSession();
+    return s?.user?.id || null;
+}
+
+// ── Admin page logic (only runs when loginSection exists) ─────────────────────
+const loginSection   = document.getElementById('loginSection');
+const adminDashboard = document.getElementById('adminDashboard');
+const loginBtn       = document.getElementById('loginBtn');
+const logoutBtn      = document.getElementById('logoutBtn');
+const loginError     = document.getElementById('loginError');
 
 function showSessionBadge(visible) {
     const badge = document.getElementById('sessionBadge');
@@ -35,40 +49,52 @@ function showSessionBadge(visible) {
 }
 
 if (loginSection) {
-    // Already logged in — show dashboard
+    // Already have a valid session — skip the form
     if (isLoggedIn()) {
-        loginSection.style.display = 'none';
+        loginSection.style.display  = 'none';
         adminDashboard.style.display = 'block';
         showSessionBadge(true);
     }
 
-    // Login button
-    loginBtn && loginBtn.addEventListener('click', function() {
-        const input = document.getElementById('adminPassword').value;
-        const override = localStorage.getItem('adminPasswordOverride');
-        const valid = override ? (input === override) : (hashPassword(input) === CORRECT_HASH);
-        if (valid) {
-            sessionStorage.setItem('adminAuth', CORRECT_HASH);
-            loginSection.style.display = 'none';
+    // Login
+    async function doLogin() {
+        const email    = (document.getElementById('adminEmail')    || {}).value || '';
+        const password = (document.getElementById('adminPassword') || {}).value || '';
+        if (!email || !password) {
+            loginError.textContent = 'Enter your email and password.';
+            loginError.style.display = 'block';
+            return;
+        }
+        try {
+            const { data, error } = await supabaseClient.client.auth.signInWithPassword({ email, password });
+            if (error || !data.session) {
+                loginError.textContent = 'Invalid email or password.';
+                loginError.style.display = 'block';
+                return;
+            }
+            loginError.style.display  = 'none';
+            loginSection.style.display  = 'none';
             adminDashboard.style.display = 'block';
-            loginError.style.display = 'none';
             showSessionBadge(true);
-        } else {
+        } catch (e) {
+            loginError.textContent = 'Login failed. Try again.';
             loginError.style.display = 'block';
         }
-    });
+    }
 
-    // Allow Enter key to submit
-    document.getElementById('adminPassword') &&
-    document.getElementById('adminPassword').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') loginBtn.click();
+    loginBtn && loginBtn.addEventListener('click', doLogin);
+
+    // Enter key on either field
+    ['adminEmail', 'adminPassword'].forEach(id => {
+        const el = document.getElementById(id);
+        el && el.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
     });
 
     // Logout
-    logoutBtn && logoutBtn.addEventListener('click', function() {
-        sessionStorage.removeItem('adminAuth');
+    logoutBtn && logoutBtn.addEventListener('click', async function() {
+        await supabaseClient.client.auth.signOut();
         adminDashboard.style.display = 'none';
-        loginSection.style.display = 'block';
+        loginSection.style.display  = 'block';
         showSessionBadge(false);
     });
 }
