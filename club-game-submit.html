@@ -877,7 +877,6 @@
                 sel.innerHTML = `<option value="${match.id}" selected>${match.name}</option>`;
                 populateVenues();
                 updateCreateBtn();
-                loadScheduledGames();
             } else {
                 document.getElementById('clubSelectWrap').style.display = 'none';
                 document.getElementById('clubNotFoundMsg').style.display = 'block';
@@ -889,7 +888,12 @@
 
         // Auto-bypass doorway for authenticated admins using the assignor wrapper
         const params = new URLSearchParams(window.location.search);
-        if (params.has('assignor') && sessionStorage.getItem('adminAuth')) {
+        // Check Supabase session (replaces old adminAuth sessionStorage)
+        const _sbUrl = (typeof CONFIG !== 'undefined') ? CONFIG.SUPABASE_URL : '';
+        const _sbRef = (_sbUrl.match(/https:\/\/([^.]+)\.supabase\.co/) || [])[1];
+        const _sbSession = _sbRef ? JSON.parse(localStorage.getItem(`sb-${_sbRef}-auth-token`) || 'null') : null;
+        const _hasSupabaseSession = _sbSession && (_sbSession.expires_at > Math.floor(Date.now() / 1000));
+        if (params.has('assignor') && _hasSupabaseSession) {
             currentSubmitter = 'Assignor';
             document.getElementById('submitterName').textContent = 'Assignor';
             showMainForm();
