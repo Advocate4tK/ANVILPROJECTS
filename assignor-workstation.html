@@ -2801,9 +2801,31 @@
                             const sn = window.tournamentSiteLookup[venueObj.name];
                             return `<td style="${cell} min-width:160px;">${sn ? `<span style="font-weight:800;color:#6c3483;">Site ${sn}</span> — ${venueObj.name}` : vName}</td>`;
                         }
+                        // Tournament: no venue — show inline site picker
+                        if (window.tournamentMode && !venueObj) {
+                            const sl = window.tournamentSiteLookup || {};
+                            const tmVenueOpts = allVenues
+                                .filter(v => sl[v.name])
+                                .sort((a, b) => (sl[a.name] || 99) - (sl[b.name] || 99))
+                                .map(v => `<option value="${v.id}">Site ${sl[v.name]} — ${v.name}</option>`)
+                                .join('');
+                            return `<td style="${cell} min-width:180px;" onclick="event.stopPropagation()">
+                                <select class="vf-select" onchange="tmOnVenueChange('${gid}',this)" style="width:100%;font-size:0.72rem;">
+                                    <option value="">— Pick site —</option>${tmVenueOpts}
+                                </select>
+                            </td>`;
+                        }
                         return `<td style="${cell}">${vName}</td>`;
                     },
                     field:    () => {
+                        // Tournament: no venue — show cascading field picker (populated by tmOnVenueChange)
+                        if (window.tournamentMode && !venueObj) {
+                            return `<td style="${cell}" onclick="event.stopPropagation()">
+                                <select class="vf-select" id="tmFieldSel-${gid}" onchange="tmOnFieldChange('${gid}',this)" style="width:100%;font-size:0.72rem;" disabled>
+                                    <option value="">Field…</option>
+                                </select>
+                            </td>`;
+                        }
                         let name = fieldObj ? fieldObj.name
                                  : (window.tournamentMode && !f['Field ID'] && venueObj) ? 'Field 1'
                                  : (f['Field ID'] || '—');
@@ -6065,6 +6087,31 @@
         }
 
         // ── Unassign ref from slot ────────────────────────────────────────────
+        // ── Tournament inline venue/field pickers ─────────────────────────────
+        function tmOnVenueChange(gameId, venueSelect) {
+            const venueId  = parseInt(venueSelect.value) || 0;
+            const fieldSel = document.getElementById(`tmFieldSel-${gameId}`);
+            if (fieldSel) {
+                if (venueId) {
+                    const fieldsForVenue = allFields.filter(f => f.venueId == venueId);
+                    fieldSel.innerHTML = `<option value="">Field…</option>` +
+                        fieldsForVenue.map(f => `<option value="${f.fieldId}">${f.name}</option>`).join('');
+                    fieldSel.disabled = fieldsForVenue.length === 0;
+                } else {
+                    fieldSel.innerHTML = `<option value="">Field…</option>`;
+                    fieldSel.disabled = true;
+                }
+            }
+            saveVenueField(gameId, venueId, 0);
+        }
+
+        function tmOnFieldChange(gameId, fieldSelect) {
+            const fieldId = parseInt(fieldSelect.value) || 0;
+            const game    = allGames.find(g => String(g.id) === String(gameId));
+            const venueId = parseInt(game?.fields['Venue ID']) || 0;
+            saveVenueField(gameId, venueId, fieldId);
+        }
+
         function onVenueChange(gameId, venueSelect) {
             const venueId = parseInt(venueSelect.value) || 0;
             const fieldSel = document.getElementById(`fieldSel-${gameId}`);
@@ -6113,7 +6160,12 @@
                 const updates = {};
                 updates['Venue ID'] = venueId || null;
                 updates['Field ID'] = fieldId || null;
-                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, updates);
+                if (window.tournamentMode) {
+                    await supabaseClient.updateRecord('tournament_games', gameId, updates);
+                    renderSheet3View(sheet3LastFiltered);
+                } else {
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, updates);
+                }
             } catch(e) {
                 // Roll back state and notify assignor
                 if (game) {
