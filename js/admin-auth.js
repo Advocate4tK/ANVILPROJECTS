@@ -1,4 +1,4 @@
-// ── Supabase Auth — replaces generic password check ───────────────────────────
+// ── Supabase Auth — username-based login ────────────────────────────────────
 
 // Synchronous session check using Supabase's localStorage token
 // Key format: sb-{projectRef}-auth-token
@@ -36,6 +36,17 @@ function currentUserId() {
     return s?.user?.id || null;
 }
 
+// Resolve username → email via assignor_profiles (anon SELECT)
+async function _resolveUsernameToEmail(username) {
+    const { data, error } = await supabaseClient.client
+        .from('assignor_profiles')
+        .select('email')
+        .eq('username', username.toLowerCase().trim())
+        .maybeSingle();
+    if (error || !data) return null;
+    return data.email;
+}
+
 // ── Admin page logic (only runs when loginSection exists) ─────────────────────
 const loginSection   = document.getElementById('loginSection');
 const adminDashboard = document.getElementById('adminDashboard');
@@ -58,17 +69,23 @@ if (loginSection) {
 
     // Login
     async function doLogin() {
-        const email    = (document.getElementById('adminEmail')    || {}).value || '';
+        const username = (document.getElementById('adminUsername') || {}).value || '';
         const password = (document.getElementById('adminPassword') || {}).value || '';
-        if (!email || !password) {
-            loginError.textContent = 'Enter your email and password.';
+        if (!username || !password) {
+            loginError.textContent = 'Enter your username and password.';
+            loginError.style.display = 'block';
+            return;
+        }
+        const email = await _resolveUsernameToEmail(username);
+        if (!email) {
+            loginError.textContent = 'Username not found.';
             loginError.style.display = 'block';
             return;
         }
         try {
             const { data, error } = await supabaseClient.client.auth.signInWithPassword({ email, password });
             if (error || !data.session) {
-                loginError.textContent = 'Invalid email or password.';
+                loginError.textContent = 'Incorrect username or password.';
                 loginError.style.display = 'block';
                 return;
             }
@@ -85,19 +102,25 @@ if (loginSection) {
     loginBtn && loginBtn.addEventListener('click', doLogin);
 
     // Enter key on either field
-    ['adminEmail', 'adminPassword'].forEach(id => {
+    ['adminUsername', 'adminPassword'].forEach(id => {
         const el = document.getElementById(id);
         el && el.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
     });
 
-    // Forgot password
+    // Forgot password — type username, resolves to email, sends reset link
     const forgotLink = document.getElementById('forgotLink');
     const forgotMsg  = document.getElementById('forgotMsg');
     forgotLink && forgotLink.addEventListener('click', async (e) => {
         e.preventDefault();
-        const email = (document.getElementById('adminEmail') || {}).value || '';
+        const username = (document.getElementById('adminUsername') || {}).value || '';
+        if (!username) {
+            loginError.textContent = 'Enter your username first.';
+            loginError.style.display = 'block';
+            return;
+        }
+        const email = await _resolveUsernameToEmail(username);
         if (!email) {
-            loginError.textContent = 'Enter your email first.';
+            loginError.textContent = 'Username not found.';
             loginError.style.display = 'block';
             return;
         }
