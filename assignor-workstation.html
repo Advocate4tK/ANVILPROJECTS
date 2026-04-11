@@ -2325,8 +2325,8 @@
             try {
                 const gameIds = allGames.map(g => g.id);
                 if (!gameIds.length) return;
-                const { data, error } = await supabaseClient.client.from('staging').select('*').in('game_id', gameIds);
-                if (error) { console.error('staging fetch:', error); return; }
+                const { data, error } = await supabaseClient.client.from('staging3').select('*').in('game_id', gameIds);
+                if (error) { console.error('staging3 fetch:', error); return; }
                 sheet3StagedRefs = {};
                 (data || []).forEach(row => {
                     const gid = String(row.game_id);
@@ -2425,9 +2425,9 @@
             // Delete the now-vacated last slot
             if (oldLen > 0) {
                 promises.push(
-                    supabaseClient.client.from('staging')
+                    supabaseClient.client.from('staging3')
                         .delete().eq('game_id', parseInt(gid)).eq('slot', oldLen - 1)
-                        .then(() => {}).catch(e => console.error('slide delete:', e))
+                        .then(() => {}).catch(e => console.error('staging3 slide delete:', e))
                 );
             }
             return promises;
@@ -2653,10 +2653,10 @@
         async function sheet3UpsertSlot(gid, slot, name) {
             try {
                 // Delete first (avoids upsert conflict/RLS UPDATE issues), then insert if name provided
-                await supabaseClient.client.from('staging')
+                await supabaseClient.client.from('staging3')
                     .delete().eq('game_id', parseInt(gid)).eq('slot', slot);
                 if (name) {
-                    await supabaseClient.client.from('staging')
+                    await supabaseClient.client.from('staging3')
                         .insert({ game_id: parseInt(gid), slot: slot, ref_name: name });
                 }
             } catch(e) { console.error('sheet3UpsertSlot:', e); }
@@ -5415,7 +5415,7 @@
             document.querySelectorAll('.slot').forEach(slot => {
                 slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('drag-over'); });
                 slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
-                slot.addEventListener('drop', e => {
+                slot.addEventListener('drop', async e => {
                     e.preventDefault();
                     slot.classList.remove('drag-over');
                     const targetGameId   = slot.dataset.gameId;
@@ -5447,12 +5447,12 @@
                             if (dragSourceGameId === targetGameId && dragRefName === targetRefName) {
                                 alert(`${dragRefName} is already assigned to this game in another position.`);
                             } else {
-                                assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
-                                assignRef(dragSourceGameId, dragSourcePosition, targetRefId || '', targetRefName);
+                                await assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
+                                await assignRef(dragSourceGameId, dragSourcePosition, targetRefId || '', targetRefName);
                             }
                         } else {
-                            assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
-                            unassignRef(dragSourceGameId, dragSourcePosition);
+                            await assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
+                            await unassignRef(dragSourceGameId, dragSourcePosition);
                         }
                     } else if (!dragSourceGameId) {
                         const targetGame    = allGames.find(g => String(g.id) === String(targetGameId));
@@ -5462,7 +5462,7 @@
                         if (alreadyOnGame) {
                             alert(`${dragRefName} is already assigned to this game in another position.`);
                         } else {
-                            assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
+                            await assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
                         }
                     }
                     dragSourceGameId   = null;

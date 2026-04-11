@@ -33,13 +33,9 @@ const CONFIG = {
     SUPABASE_ANON_KEY: 'sb_publishable_pJX6Fsg4YrSNEhfNTHbkLA_tzFJmEUb',
 
 
-    // Your Airtable Personal Access Token
-    // Example: 'patAbCdEfGhIjKlMnOpQrStUvWxYz'
-    AIRTABLE_API_KEY: 'pat43h03yDHILzEtF.6f3ee6e4f539632e12b9e8b70c447f586f884e842f3a47d7c582aaf7efaf0205',
-
-    // Your Airtable Base ID
-    // Example: 'appAbC123XyZ456'
-    AIRTABLE_BASE_ID: 'apppmpRGRjjnawZc2',
+    // Airtable — DEPRECATED. Migrated to Supabase 2026-03-24. Keys removed.
+    AIRTABLE_API_KEY: '',
+    AIRTABLE_BASE_ID: '',
 
     // Table names in your Airtable base
     // IMPORTANT: These must match EXACTLY (case-sensitive)
