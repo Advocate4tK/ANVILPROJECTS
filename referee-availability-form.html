@@ -281,7 +281,12 @@
                                 </label>
                             </div>
 
-                        <!-- Griswold Payment Preference — shown when Griswold is checked -->
+                        <!-- Griswold Payment — on file confirmation (shown if payment method already saved) -->
+                        <div id="griswoldPayOnFile" style="display:none; margin-top:12px; background:#f0fdf4; border:1.5px solid #22c55e; border-radius:8px; padding:10px 14px; font-size:0.85rem; color:#166534;">
+                            ✅ <span id="griswoldPayOnFileMsg">Griswold payment preference on file.</span>
+                        </div>
+
+                        <!-- Griswold Payment Preference — shown when Griswold is checked and no payment on file -->
                         <div id="griswoldPaySection" style="display:none; margin-top:12px; background:#fef9f0; border:1.5px solid #f59e0b; border-radius:8px; padding:14px 16px;">
                             <div style="font-weight:700; font-size:0.88rem; color:#92400e; margin-bottom:6px;">✉️ Griswold Payment Preference</div>
                             <div style="font-size:0.82rem; color:#555; margin-bottom:10px;">How do you prefer to be paid for Griswold games?</div>
@@ -513,7 +518,16 @@
             const griswoldCb = document.querySelector('input[name="locations"][value="Griswold"]');
             if (griswoldCb) {
                 griswoldCb.addEventListener('change', function() {
-                    document.getElementById('griswoldPaySection').style.display = this.checked ? 'block' : 'none';
+                    if (!this.checked) {
+                        document.getElementById('griswoldPaySection').style.display = 'none';
+                        document.getElementById('griswoldPayOnFile').style.display  = 'none';
+                    } else if (window._griswoldPayOnFile) {
+                        document.getElementById('griswoldPayOnFile').style.display  = 'block';
+                        document.getElementById('griswoldPaySection').style.display = 'none';
+                    } else {
+                        document.getElementById('griswoldPaySection').style.display = 'block';
+                        document.getElementById('griswoldPayOnFile').style.display  = 'none';
+                    }
                 });
             }
 
@@ -731,14 +745,20 @@
                         if (clubPref.includes('Griswold')) {
                             const griswoldCb = document.querySelector('input[name="locations"][value="Griswold"]');
                             if (griswoldCb) griswoldCb.checked = true;
-                            document.getElementById('griswoldPaySection').style.display = 'block';
-                            const storedMethod = f['payment_method'] || 'venmo';
-                            const radioToCheck = document.querySelector(`input[name="griswoldPayMethod"][value="${storedMethod}"]`);
-                            if (radioToCheck) radioToCheck.checked = true;
-                            if (storedMethod === 'venmo' && f['venmo']) {
-                                document.getElementById('griswoldVenmo').value = '@' + f['venmo'].replace(/^@/, '');
+                            const storedMethod = f['payment_method'] || '';
+                            if (storedMethod) {
+                                // Payment already on file — show confirmation, skip the form
+                                window._griswoldPayOnFile = true;
+                                const methodLabel = storedMethod === 'check' ? 'Check (mail)' : ('Venmo' + (f['venmo'] ? ' (@' + f['venmo'].replace(/^@/, '') + ')' : ''));
+                                document.getElementById('griswoldPayOnFileMsg').textContent = `Griswold payment on file: ${methodLabel}`;
+                                document.getElementById('griswoldPayOnFile').style.display  = 'block';
+                                document.getElementById('griswoldPaySection').style.display = 'none';
+                            } else {
+                                // No payment on file — show the form
+                                window._griswoldPayOnFile = false;
+                                document.getElementById('griswoldPaySection').style.display = 'block';
+                                document.getElementById('griswoldPayOnFile').style.display  = 'none';
                             }
-                            toggleGriswoldPay();
                         }
 
                         // Store for age recalculation, upcoming query, and submit

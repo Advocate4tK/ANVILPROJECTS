@@ -57,8 +57,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     refUpdates['Club Preference'] = locations; // array for multi-select
                 }
 
-                // Griswold payment preference
-                if (locations.includes('Griswold')) {
+                // Griswold payment preference — skip if already on file
+                if (locations.includes('Griswold') && !window._griswoldPayOnFile) {
                     const payMethod = document.querySelector('input[name="griswoldPayMethod"]:checked')?.value || 'venmo';
                     refUpdates['payment_method'] = payMethod;
                     if (payMethod === 'venmo') {
