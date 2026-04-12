@@ -580,21 +580,21 @@
                     document.getElementById('loggingName').textContent = `${firstName} ${lastName}`;
                     document.getElementById('loggingBadge').style.display = 'block';
 
-                    // Set Griswold payment flag if on file (session resume path)
+                    // Set Griswold payment flag if on file (session resume path) — fire and forget
                     if (email) {
-                        try {
-                            const { data: refRows } = await supabaseClient.client
-                                .from('referees')
-                                .select('payment_method, venmo')
-                                .eq('email', email)
-                                .limit(1);
-                            const ref = refRows?.[0];
-                            if (ref?.payment_method) {
-                                window._griswoldPayOnFile = true;
-                                const methodLabel = ref.payment_method === 'check' ? 'Check (mail)' : ('Venmo' + (ref.venmo ? ' (@' + ref.venmo.replace(/^@/, '') + ')' : ''));
-                                document.getElementById('griswoldPayOnFileMsg').textContent = `Griswold payment on file: ${methodLabel}`;
-                            }
-                        } catch(e) { /* non-critical */ }
+                        supabaseClient.client
+                            .from('referees')
+                            .select('payment_method, venmo')
+                            .eq('email', email)
+                            .limit(1)
+                            .then(({ data: refRows }) => {
+                                const ref = refRows?.[0];
+                                if (ref?.payment_method) {
+                                    window._griswoldPayOnFile = true;
+                                    const methodLabel = ref.payment_method === 'check' ? 'Check (mail)' : ('Venmo' + (ref.venmo ? ' (@' + ref.venmo.replace(/^@/, '') + ')' : ''));
+                                    document.getElementById('griswoldPayOnFileMsg').textContent = `Griswold payment on file: ${methodLabel}`;
+                                }
+                            }).catch(() => {});
                     }
 
                     unlockForm();
