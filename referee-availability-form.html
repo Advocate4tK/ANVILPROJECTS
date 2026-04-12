@@ -573,67 +573,11 @@
                     document.getElementById('refereeFirstName').value = firstName;
                     document.getElementById('refereeLastName').value  = lastName;
                     document.getElementById('refereeEmail').value     = email;
-                    document.getElementById('entryFieldset').style.display  = 'none';
-                    document.getElementById('contactSection').style.display = 'none';
-                    document.getElementById('returningWelcome').style.display = 'block';
-                    document.getElementById('welcomeName').textContent = `👋 Welcome back, ${firstName} ${lastName}!`;
-                    document.getElementById('welcomeSubtitle').textContent = `Please submit the availability form below and we'll be in touch soon.`;
-                    document.getElementById('loggingName').textContent = `${firstName} ${lastName}`;
-                    document.getElementById('loggingBadge').style.display = 'block';
-
-                    // Full profile check on session resume — same logic as email lookup path
-                    unlockForm();
-                    if (email) {
-                        airtableClient.findRefereeByEmail(email).then(referee => {
-                            if (!referee) { unlockAvailability(); return; }
-                            const f = referee.fields;
-                            window._foundRefId   = referee.id;
-                            window._foundRefDob  = f['Date of Birth'] || null;
-                            window._foundRefName = f['Name'] || `${firstName} ${lastName}`;
-
-                            // Griswold payment flag
-                            const storedMethod = f['payment_method'] || '';
-                            if (storedMethod) {
-                                window._griswoldPayOnFile = true;
-                                const methodLabel = storedMethod === 'check' ? 'Check (mail)' : ('Venmo' + (f['venmo'] ? ' (@' + f['venmo'].replace(/^@/, '') + ')' : ''));
-                                document.getElementById('griswoldPayOnFileMsg').textContent = `Griswold payment on file: ${methodLabel}`;
-                            }
-
-                            // Pre-fill visible fields silently
-                            if (f['Phone'])               document.getElementById('refereePhone').value       = f['Phone'];
-                            if (f['Years Reffing'])        document.getElementById('yearsReffing').value       = f['Years Reffing'];
-                            if (f['Certification Level'])  document.getElementById('certificationLevel').value = f['Certification Level'];
-                            if (f['Gender'])               document.getElementById('refereeGender').value      = f['Gender'];
-                            if (f['Address'])              document.getElementById('refereeAddress').value     = f['Address'];
-                            if (f['City'])                 document.getElementById('refereeCity').value        = f['City'];
-                            if (f['State'])                document.getElementById('refereeState').value       = f['State'];
-                            if (f['Zip Code'])             document.getElementById('refereeZip').value         = f['Zip Code'];
-                            if (f['Date of Birth'])        document.getElementById('refereeBirthDate').value   = f['Date of Birth'];
-
-                            const missingFields = [
-                                !f['Phone']               && 'Phone',
-                                !f['Date of Birth']       && 'Date of Birth',
-                                !f['Address']             && 'Address',
-                                !(f['City'] && f['Zip Code']) && 'City / Zip',
-                                !f['Years Reffing']       && 'Years Reffing',
-                                !f['Gender']              && 'Gender',
-                            ].filter(Boolean);
-
-                            if (missingFields.length > 0) {
-                                hideFilledFields(f);
-                                document.getElementById('welcomeSubtitle').textContent = `We just need a couple more details: ${missingFields.join(', ')}.`;
-                                document.getElementById('contactSection').style.display = 'block';
-                                document.getElementById('availabilitySection').style.display = 'none';
-                                document.getElementById('availabilitySection').style.opacity = '0';
-                            } else {
-                                document.getElementById('welcomeSubtitle').textContent = '✅ We found your profile — your personal information has been confirmed and pre-filled. Just fill in your availability below.';
-                                document.getElementById('contactSection').style.display = 'none';
-                                unlockAvailability();
-                            }
-                        }).catch(() => { unlockAvailability(); });
-                    } else {
-                        unlockAvailability();
-                    }
+                    // Hide entry form, pre-fill fields, then run the full email lookup
+                    // so the profile check (missing fields, Griswold payment, etc.) runs identically
+                    // to the normal path — no duplicated logic, no unsafe fallbacks
+                    document.getElementById('entryFieldset').style.display = 'none';
+                    runEmailLookup();
                 } catch(e) {
                     sessionStorage.removeItem('refSession');
                 }
