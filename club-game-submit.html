@@ -2306,6 +2306,9 @@
         document.getElementById('mainForm').style.display            = 'none';
         document.getElementById('scheduledGamesSection').style.display = 'none';
         document.getElementById('paymentSection').style.display      = 'block';
+        document.querySelector('h1').textContent                     = '💳 Ref Payments';
+        document.getElementById('pageSubtitle').textContent         = 'Griswold Soccer — Payment Portal';
+        document.title                                               = 'Griswold Ref Payments';
         loadPaymentSection();
     }
 
@@ -2333,91 +2336,113 @@
                 if (nm) refByName[nm] = r.fields;
             });
 
-            // Past Griswold games with at least one ref assigned
+            // All Griswold games with at least one ref assigned
             const grisGames = games
                 .filter(r => {
                     const dateStr = r.fields['Date'] || '';
-                    if (!dateStr || dateStr >= today) return false;
+                    if (!dateStr) return false;
                     const home   = (r.fields['Home Team']   || '').toLowerCase();
                     const source = (r.fields['Source Club'] || '').toLowerCase();
                     const club   = (r.fields['Club']        || '').toLowerCase();
                     if (!home.includes('griswold') && !source.includes('griswold') && !club.includes('griswold')) return false;
                     return !!(resolveRef(r.fields['Center Referee']) || resolveRef(r.fields['AR 1']) || resolveRef(r.fields['AR 2']));
                 })
-                .sort((a, b) => (b.fields['Date'] || '').localeCompare(a.fields['Date'] || ''));
+                .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || ''));
 
             if (!grisGames.length) {
-                document.getElementById('payContent').innerHTML = '<p style="color:#888; font-size:0.85rem;">No past games with assigned refs yet.</p>';
+                document.getElementById('payContent').innerHTML = '<p style="color:#888; font-size:0.85rem;">No games with assigned refs yet.</p>';
                 return;
             }
 
-            // Group by week (most recent first)
-            const byWeek = {};
-            grisGames.forEach(r => {
-                const wk = getWeekLabel(r.fields['Date']);
-                if (!byWeek[wk.key]) byWeek[wk.key] = { label: wk.label, games: [] };
-                byWeek[wk.key].games.push(r);
-            });
+            const pastGames     = grisGames.filter(r => (r.fields['Date'] || '') <  today);
+            const upcomingGames = grisGames.filter(r => (r.fields['Date'] || '') >= today);
 
-            let html = '';
-            for (const wkKey of Object.keys(byWeek).sort().reverse()) {
-                const wk = byWeek[wkKey];
-                html += `<div class="pay-week-group">
-                    <div class="pay-week-label">${wk.label}</div>
-                    <div style="border-radius:8px; overflow:hidden; border:1px solid var(--border);">
-                    <table class="pay-table">
-                        <thead><tr>
-                            <th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Venmo / Check</th><th></th>
-                        </tr></thead><tbody>`;
-
-                wk.games.forEach(r => {
-                    const f      = r.fields;
-                    const date   = f['Date'] || '—';
-                    const age    = f['Age Group'] || '—';
-                    const game   = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
-                    const isPaid = (f['Payment Status'] || '').toLowerCase() === 'paid';
-
-                    const slots = [
-                        { name: resolveRef(f['Center Referee']), pos: 'CR',  rateKey: 'CR'  },
-                        { name: resolveRef(f['AR 1']),            pos: 'AR1', rateKey: 'AR' },
-                        { name: resolveRef(f['AR 2']),            pos: 'AR2', rateKey: 'AR' }
-                    ].filter(s => s.name);
-
-                    slots.forEach((slot, idx) => {
-                        const rf        = refByName[slot.name.trim().toLowerCase()] || {};
-                        const venmo     = rf['venmo']          || '';
-                        const payMethod = rf['payment_method'] || 'venmo';
-                        const address   = [rf['address'], rf['city'], rf['state']].filter(Boolean).join(', ');
-                        const rate      = grisRate(slot.rateKey, age);
-
-                        const venmoHtml = payMethod === 'check'
-                            ? `<span class="pay-check-note">Check: ${address || '(no address on file)'}</span>`
-                            : (venmo
-                                ? `<span class="pay-venmo">@${venmo.replace(/^@/, '')}</span>`
-                                : `<span style="color:#aaa; font-size:0.75rem;">—</span>`);
-
-                        const posBadge = slot.pos === 'CR'
-                            ? `<span class="pay-pos-badge pay-pos-cr">CR</span>`
-                            : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
-
-                        const btnHtml = idx === 0
-                            ? `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ Paid' : 'Mark Paid'}</button>`
-                            : '';
-
-                        html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}">
-                            <td>${idx === 0 ? date : ''}</td>
-                            <td style="font-size:0.76rem; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${idx === 0 ? game : ''}</td>
-                            <td>${idx === 0 ? age : ''}</td>
-                            <td>${slot.name}</td>
-                            <td>${posBadge}</td>
-                            <td>$<input class="pay-amount" type="number" value="${rate}" min="0" step="1"></td>
-                            <td>${venmoHtml}</td>
-                            <td>${btnHtml}</td>
-                        </tr>`;
-                    });
+            function buildGameRows(gameList, allowPay) {
+                // Group by week
+                const byWeek = {};
+                gameList.forEach(r => {
+                    const wk = getWeekLabel(r.fields['Date']);
+                    if (!byWeek[wk.key]) byWeek[wk.key] = { label: wk.label, games: [] };
+                    byWeek[wk.key].games.push(r);
                 });
 
-                html += `</tbody></table></div></div>`;
+                let html = '';
+                const weekOrder = Object.keys(byWeek).sort();
+                if (!allowPay) weekOrder.reverse(); // upcoming: soonest first
+                else weekOrder.reverse();           // past: most recent first
+
+                for (const wkKey of weekOrder) {
+                    const wk = byWeek[wkKey];
+                    html += `<div class="pay-week-group">
+                        <div class="pay-week-label">${wk.label}</div>
+                        <div style="border-radius:8px; overflow:hidden; border:1px solid var(--border);">
+                        <table class="pay-table">
+                            <thead><tr>
+                                <th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Venmo / Check</th><th></th>
+                            </tr></thead><tbody>`;
+
+                    wk.games.forEach(r => {
+                        const f      = r.fields;
+                        const date   = f['Date'] || '—';
+                        const age    = f['Age Group'] || '—';
+                        const game   = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
+                        const isPaid = (f['Payment Status'] || '').toLowerCase() === 'paid';
+
+                        const slots = [
+                            { name: resolveRef(f['Center Referee']), pos: 'CR',  rateKey: 'CR' },
+                            { name: resolveRef(f['AR 1']),            pos: 'AR1', rateKey: 'AR' },
+                            { name: resolveRef(f['AR 2']),            pos: 'AR2', rateKey: 'AR' }
+                        ].filter(s => s.name);
+
+                        slots.forEach((slot, idx) => {
+                            const rf        = refByName[slot.name.trim().toLowerCase()] || {};
+                            const venmo     = rf['venmo']          || '';
+                            const payMethod = rf['payment_method'] || 'venmo';
+                            const address   = [rf['address'], rf['city'], rf['state']].filter(Boolean).join(', ');
+                            const rate      = grisRate(slot.rateKey, age);
+
+                            const venmoHtml = payMethod === 'check'
+                                ? `<span class="pay-check-note">Check: ${address || '(no address on file)'}</span>`
+                                : (venmo
+                                    ? `<span class="pay-venmo">@${venmo.replace(/^@/, '')}</span>`
+                                    : `<span style="color:#aaa; font-size:0.75rem;">—</span>`);
+
+                            const posBadge = slot.pos === 'CR'
+                                ? `<span class="pay-pos-badge pay-pos-cr">CR</span>`
+                                : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
+
+                            const btnHtml = idx === 0
+                                ? (allowPay
+                                    ? `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ Paid' : 'Mark Paid'}</button>`
+                                    : `<span style="font-size:0.72rem; color:#aaa;">Upcoming</span>`)
+                                : '';
+
+                            html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}">
+                                <td>${idx === 0 ? date : ''}</td>
+                                <td style="font-size:0.76rem; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${idx === 0 ? game : ''}</td>
+                                <td>${idx === 0 ? age : ''}</td>
+                                <td>${slot.name}</td>
+                                <td>${posBadge}</td>
+                                <td>$<input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled style="opacity:0.5"' : ''}></td>
+                                <td>${venmoHtml}</td>
+                                <td>${btnHtml}</td>
+                            </tr>`;
+                        });
+                    });
+
+                    html += `</tbody></table></div></div>`;
+                }
+                return html;
+            }
+
+            let html = '';
+            if (pastGames.length) {
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">Needs Payment</div>`;
+                html += buildGameRows(pastGames, true);
+            }
+            if (upcomingGames.length) {
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin:${pastGames.length ? '24px' : '0'} 0 12px;">Upcoming</div>`;
+                html += buildGameRows(upcomingGames, false);
             }
 
             document.getElementById('payContent').innerHTML = html;
