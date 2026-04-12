@@ -561,6 +561,9 @@
         }
         document.getElementById('refereeBirthDate').addEventListener('change', updateGuardianSection);
 
+        // Clear all location checkboxes on load — prevent browser form restore from pre-checking them
+        document.querySelectorAll('input[name="locations"]').forEach(cb => cb.checked = false);
+
         // Resume session — skip entry step and go straight to availability
             const session = sessionStorage.getItem('refSession');
             if (session) {
@@ -576,6 +579,24 @@
                     document.getElementById('welcomeSubtitle').textContent = `Please submit the availability form below and we'll be in touch soon.`;
                     document.getElementById('loggingName').textContent = `${firstName} ${lastName}`;
                     document.getElementById('loggingBadge').style.display = 'block';
+
+                    // Set Griswold payment flag if on file (session resume path)
+                    if (email) {
+                        try {
+                            const { data: refRows } = await supabaseClient.client
+                                .from('referees')
+                                .select('payment_method, venmo')
+                                .eq('email', email)
+                                .limit(1);
+                            const ref = refRows?.[0];
+                            if (ref?.payment_method) {
+                                window._griswoldPayOnFile = true;
+                                const methodLabel = ref.payment_method === 'check' ? 'Check (mail)' : ('Venmo' + (ref.venmo ? ' (@' + ref.venmo.replace(/^@/, '') + ')' : ''));
+                                document.getElementById('griswoldPayOnFileMsg').textContent = `Griswold payment on file: ${methodLabel}`;
+                            }
+                        } catch(e) { /* non-critical */ }
+                    }
+
                     unlockForm();
                     unlockAvailability();
                 } catch(e) {
