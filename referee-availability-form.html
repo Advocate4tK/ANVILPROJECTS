@@ -280,6 +280,27 @@
                                     WAM
                                 </label>
                             </div>
+
+                        <!-- Griswold Payment Preference — shown when Griswold is checked -->
+                        <div id="griswoldPaySection" style="display:none; margin-top:12px; background:#fef9f0; border:1.5px solid #f59e0b; border-radius:8px; padding:14px 16px;">
+                            <div style="font-weight:700; font-size:0.88rem; color:#92400e; margin-bottom:6px;">✉️ Griswold Payment Preference</div>
+                            <div style="font-size:0.82rem; color:#555; margin-bottom:10px;">How do you prefer to be paid for Griswold games?</div>
+                            <div style="display:flex; gap:20px; margin-bottom:10px;">
+                                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; font-size:0.88rem;">
+                                    <input type="radio" name="griswoldPayMethod" value="venmo" checked onchange="toggleGriswoldPay()"> Venmo
+                                </label>
+                                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; font-size:0.88rem;">
+                                    <input type="radio" name="griswoldPayMethod" value="check" onchange="toggleGriswoldPay()"> Check (mail)
+                                </label>
+                            </div>
+                            <div id="griswoldVenmoField">
+                                <label style="font-size:0.82rem; font-weight:600; color:#333; display:block; margin-bottom:4px;">Venmo Handle</label>
+                                <input type="text" id="griswoldVenmo" placeholder="@your-venmo-handle" style="width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:0.88rem; box-sizing:border-box;">
+                            </div>
+                            <div id="griswoldCheckNote" style="display:none; font-size:0.82rem; color:#78350f; margin-top:4px;">
+                                ✅ Check payments will be mailed to the address on your profile.
+                            </div>
+                        </div>
                         </div>
 
                         <div class="form-group">
@@ -478,9 +499,23 @@
             return first && last && email;
         }
 
+        function toggleGriswoldPay() {
+            const method = document.querySelector('input[name="griswoldPayMethod"]:checked')?.value;
+            document.getElementById('griswoldVenmoField').style.display = method === 'check' ? 'none' : 'block';
+            document.getElementById('griswoldCheckNote').style.display  = method === 'check' ? 'block' : 'none';
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             const container = document.getElementById('availabilityDays');
             container.appendChild(createDayRow(1));
+
+            // Show/hide Griswold payment section when checkbox toggled
+            const griswoldCb = document.querySelector('input[name="locations"][value="Griswold"]');
+            if (griswoldCb) {
+                griswoldCb.addEventListener('change', function() {
+                    document.getElementById('griswoldPaySection').style.display = this.checked ? 'block' : 'none';
+                });
+            }
 
             // ── Global state for returning ref age update ───────────────────────
         window._foundRefId  = null; // Airtable record ID of returning ref
@@ -690,6 +725,21 @@
                         if (f['State'])                document.getElementById('refereeState').value         = f['State'];
                         if (f['Zip Code'])             document.getElementById('refereeZip').value           = f['Zip Code'];
                         if (f['Date of Birth'])        document.getElementById('refereeBirthDate').value     = f['Date of Birth'];
+
+                        // Pre-fill Griswold payment preference if they previously selected Griswold
+                        const clubPref = Array.isArray(f['Club Preference']) ? f['Club Preference'] : (f['Club Preference'] || '').split(',').map(s => s.trim());
+                        if (clubPref.includes('Griswold')) {
+                            const griswoldCb = document.querySelector('input[name="locations"][value="Griswold"]');
+                            if (griswoldCb) griswoldCb.checked = true;
+                            document.getElementById('griswoldPaySection').style.display = 'block';
+                            const storedMethod = f['payment_method'] || 'venmo';
+                            const radioToCheck = document.querySelector(`input[name="griswoldPayMethod"][value="${storedMethod}"]`);
+                            if (radioToCheck) radioToCheck.checked = true;
+                            if (storedMethod === 'venmo' && f['venmo']) {
+                                document.getElementById('griswoldVenmo').value = '@' + f['venmo'].replace(/^@/, '');
+                            }
+                            toggleGriswoldPay();
+                        }
 
                         // Store for age recalculation, upcoming query, and submit
                         window._foundRefId   = referee.id;

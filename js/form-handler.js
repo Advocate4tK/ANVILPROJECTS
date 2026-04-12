@@ -57,6 +57,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     refUpdates['Club Preference'] = locations; // array for multi-select
                 }
 
+                // Griswold payment preference
+                if (locations.includes('Griswold')) {
+                    const payMethod = document.querySelector('input[name="griswoldPayMethod"]:checked')?.value || 'venmo';
+                    refUpdates['payment_method'] = payMethod;
+                    if (payMethod === 'venmo') {
+                        const venmo = (document.getElementById('griswoldVenmo')?.value || '').trim().replace(/^@/, '');
+                        if (venmo) refUpdates['venmo'] = venmo;
+                    }
+                }
 
                 if (Object.keys(refUpdates).length > 0) {
                     try {
