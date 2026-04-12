@@ -819,13 +819,17 @@
 
                         let nameMatch = null;
                         try {
-                            const nameResults = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, {
-                                // Word-boundary search handles middle initials (e.g. "Tod L Smith" matched by "Tod Smith")
-                                // Padding Name with spaces lets FIND detect word edges without regex
-                                filterByFormula: `AND(FIND("${typedFirst} ", {Name} & " ") > 0, FIND(" ${typedLast}", " " & {Name}) > 0)`,
-                                maxRecords: 1
-                            });
-                            if (nameResults.length > 0) nameMatch = nameResults[0];
+                            // Direct Supabase query — ILIKE on both first and last name
+                            // Handles middle initials: "Tod L Smith" matches search for "Tod Smith"
+                            const { data: nameRows } = await supabaseClient.client
+                                .from('referees')
+                                .select('*')
+                                .ilike('name', `%${typedFirst}%`)
+                                .ilike('name', `%${typedLast}%`)
+                                .limit(1);
+                            if (nameRows && nameRows.length > 0) {
+                                nameMatch = { id: nameRows[0].id, fields: nameRows[0] };
+                            }
                         } catch(e) { /* ignore — fall through to new ref */ }
 
                         if (nameMatch) {
