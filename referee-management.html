@@ -154,6 +154,12 @@
                         </div>
                     </div>
 
+                    <!-- Club Connections -->
+                    <div class="card-section" id="clubConnectionsSection" style="display:none;">
+                        <div class="card-section-title">Club Connections</div>
+                        <div id="clubConnectionsList"></div>
+                    </div>
+
                     <div class="card-actions">
                         <button class="save-card-btn" onclick="saveCard()">Save Changes</button>
                         <span class="save-status" id="saveStatus">✓ Saved</span>
@@ -274,6 +280,7 @@
             document.getElementById('saveStatus').style.display = 'none';
             document.getElementById('saveErr').style.display    = 'none';
             document.getElementById('refCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            loadClubConnections(f['Name'] || '');
         }
 
         function renderCAFields(caName, caId) {
@@ -362,6 +369,47 @@
                 errEl.textContent    = 'Error: ' + e.message;
                 errEl.style.display  = 'inline';
             }
+        }
+
+        // ── Club Connections ──────────────────────────────────────────────────
+        async function loadClubConnections(refName) {
+            const section = document.getElementById('clubConnectionsSection');
+            const list    = document.getElementById('clubConnectionsList');
+            section.style.display = 'none';
+            list.innerHTML = '';
+            if (!refName) return;
+
+            try {
+                const { data: clubs } = await supabaseClient.client
+                    .from('clubs')
+                    .select('name, "Club Name", president, payment_coordinator, assignor, "Club Admin"')
+                    .or(`president.ilike.${refName},payment_coordinator.ilike.${refName},assignor.ilike.${refName},"Club Admin".ilike.${refName}`);
+
+                if (!clubs || !clubs.length) return;
+
+                const rows = [];
+                clubs.forEach(c => {
+                    const clubLabel = c['Club Name'] || c.name || '—';
+                    const roles = [];
+                    if ((c.president || '').toLowerCase() === refName.toLowerCase())            roles.push('President');
+                    if ((c.payment_coordinator || '').toLowerCase() === refName.toLowerCase()) roles.push('Payment Coordinator');
+                    if ((c.assignor || '').toLowerCase() === refName.toLowerCase())            roles.push('Assignor');
+                    if ((c['Club Admin'] || '').toLowerCase() === refName.toLowerCase())       roles.push('Club Admin');
+                    if (roles.length) rows.push({ clubLabel, roles });
+                });
+
+                if (!rows.length) return;
+
+                list.innerHTML = rows.map(r => `
+                    <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #f0f0f0;">
+                        <span style="font-weight:700; color:#0f3460; min-width:160px;">${r.clubLabel}</span>
+                        <span style="display:flex; gap:6px; flex-wrap:wrap;">${r.roles.map(role =>
+                            `<span style="font-size:0.75rem; font-weight:700; background:#e8f0fe; color:#1a56db; border-radius:4px; padding:2px 8px;">${role}</span>`
+                        ).join('')}</span>
+                    </div>`).join('');
+
+                section.style.display = 'block';
+            } catch(e) { /* non-critical */ }
         }
 
         function closeCard() {
