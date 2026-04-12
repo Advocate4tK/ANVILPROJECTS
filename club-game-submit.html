@@ -259,6 +259,8 @@
         .btn-venmo-pay:hover { background:#5c4ee8; color:white; }
         .pay-action-cell { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
         .pay-check-note { font-size:0.74rem; color:#555; }
+        .pay-check-badge { display:inline-block; background:#fef3c7; border:1.5px solid #f59e0b; color:#92400e; font-size:0.72rem; font-weight:800; padding:2px 8px; border-radius:6px; white-space:nowrap; margin-bottom:3px; }
+        .pay-paid-at { font-size:0.7rem; color:#15803d; margin-top:2px; }
 
         /* ── Portal choice screen ── */
         .portal-choice { max-width:500px; margin:0 auto 24px; }
@@ -2349,6 +2351,16 @@
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 })
             ]);
 
+            // Supplemental fetch: paid_at bypasses PostgREST schema cache
+            const paidAtById = {};
+            try {
+                const { data: paidRows } = await supabaseClient.client
+                    .from('games')
+                    .select('id, paid_at')
+                    .not('paid_at', 'is', null);
+                (paidRows || []).forEach(r => { paidAtById[r.id] = r.paid_at; });
+            } catch(e) { /* non-critical */ }
+
             // name (lowercase) → referee fields map for venmo/payment_method/address lookup
             const refByName = {};
             refRecs.forEach(r => {
@@ -2407,6 +2419,7 @@
                         const age    = f['Age Group'] || '—';
                         const game   = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
                         const isPaid = (f['Payment Status'] || '').toLowerCase() === 'paid';
+                        const paidAt = paidAtById[r.id] ? new Date(paidAtById[r.id]).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
 
                         const slots = [
                             { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
@@ -2422,7 +2435,7 @@
                             const rate      = grisRate(slot.rateKey, age);
 
                             const venmoHtml = payMethod === 'check'
-                                ? `<span class="pay-check-note">Check: ${address || '(no address on file)'}</span>`
+                                ? `<span class="pay-check-badge">✉️ Check</span><br><span class="pay-check-note">${address || '(no address on file)'}</span>`
                                 : (venmo
                                     ? `<span class="pay-venmo">@${venmo.replace(/^@/, '')}</span>`
                                     : `<span style="color:#aaa; font-size:0.75rem;">—</span>`);
@@ -2437,7 +2450,7 @@
                                 ? `<a class="btn-venmo-pay" href="https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount=${rate}&note=${venmoNote}" target="_blank" onclick="this.href='https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount='+this.closest('tr').querySelector('.pay-amount').value+'&note=${venmoNote}'">💸 Pay</a>`
                                 : '';
                             const markPaidBtn = (idx === 0 && allowPay)
-                                ? `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ Paid' : 'Mark Paid'}</button>`
+                                ? `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ Paid' : 'Mark Paid'}</button>${isPaid && paidAt ? `<span class="pay-paid-at">${paidAt}</span>` : ''}`
                                 : '';
                             const upcomingLbl = (!allowPay && idx === 0)
                                 ? `<span style="font-size:0.72rem; color:#aaa;">Upcoming</span>` : '';
@@ -2482,14 +2495,21 @@
         btn.textContent = 'Saving…';
         btn.disabled = true;
         try {
-            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
-                'Payment Status': 'Paid'
-            });
+            const now = new Date().toISOString();
+            await Promise.all([
+                airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Payment Status': 'Paid' }),
+                supabaseClient.client.from('games').update({ paid_at: now }).eq('id', gameId)
+            ]);
             document.querySelectorAll(`tr[data-game="${gameId}"]`).forEach(row => {
                 row.classList.add('row-paid');
             });
             btn.textContent = '✓ Paid';
             btn.classList.add('paid');
+            const tsLabel = new Date(now).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+            const tsEl = document.createElement('span');
+            tsEl.className = 'pay-paid-at';
+            tsEl.textContent = tsLabel;
+            btn.parentNode.appendChild(tsEl);
         } catch(e) {
             btn.textContent = 'Mark Paid';
             btn.disabled = false;
