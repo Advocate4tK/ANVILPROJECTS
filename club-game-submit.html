@@ -255,6 +255,9 @@
         .btn-mark-paid { padding:5px 13px; border:1.5px solid var(--accent); border-radius:6px; background:white; color:#14532d; font-size:0.76rem; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; }
         .btn-mark-paid:hover:not([disabled]) { background:var(--accent); color:white; }
         .btn-mark-paid.paid { background:#dcfce7; border-color:#15803d; color:#14532d; cursor:default; }
+        .btn-venmo-pay { display:inline-block; padding:5px 11px; border:1.5px solid #5c4ee8; border-radius:6px; background:#f4f2ff; color:#5c4ee8; font-size:0.76rem; font-weight:700; cursor:pointer; white-space:nowrap; text-decoration:none; transition:all 0.15s; margin-bottom:4px; }
+        .btn-venmo-pay:hover { background:#5c4ee8; color:white; }
+        .pay-action-cell { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
         .pay-check-note { font-size:0.74rem; color:#555; }
 
         /* ── Portal choice screen ── */
@@ -2411,11 +2414,17 @@
                                 ? `<span class="pay-pos-badge pay-pos-cr">CR</span>`
                                 : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
 
-                            const btnHtml = idx === 0
-                                ? (allowPay
-                                    ? `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ Paid' : 'Mark Paid'}</button>`
-                                    : `<span style="font-size:0.72rem; color:#aaa;">Upcoming</span>`)
+                            const venmoHandle = venmo.replace(/^@/, '');
+                            const venmoNote   = encodeURIComponent(`Griswold Soccer - ${slot.pos} ${date}`);
+                            const venmoPayBtn = (allowPay && venmo && payMethod !== 'check')
+                                ? `<a class="btn-venmo-pay" href="https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount=${rate}&note=${venmoNote}" target="_blank" onclick="this.href='https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount='+this.closest('tr').querySelector('.pay-amount').value+'&note=${venmoNote}'">💸 Pay</a>`
                                 : '';
+                            const markPaidBtn = (idx === 0 && allowPay)
+                                ? `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ Paid' : 'Mark Paid'}</button>`
+                                : '';
+                            const upcomingLbl = (!allowPay && idx === 0)
+                                ? `<span style="font-size:0.72rem; color:#aaa;">Upcoming</span>` : '';
+                            const btnHtml = `<div class="pay-action-cell">${venmoPayBtn}${markPaidBtn}${upcomingLbl}</div>`;
 
                             html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}">
                                 <td>${idx === 0 ? date : ''}</td>
