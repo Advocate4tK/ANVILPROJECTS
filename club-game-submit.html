@@ -235,6 +235,27 @@
         .csv-preview-table td { padding:5px 10px; border-bottom:1px solid var(--border); }
         .csv-preview-table tr:nth-child(even) td { background:var(--bg); }
         .csv-preview-table tr.csv-row-invalid td { background:#fee2e2; color:#991b1b; }
+
+        /* ── Griswold Payment Dashboard ── */
+        .pay-header { display:flex; align-items:center; gap:14px; margin-bottom:18px; border-bottom:2px solid var(--deep); padding-bottom:12px; }
+        .pay-header h2 { font-family:'Barlow Condensed',sans-serif; font-size:1.6rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1px; margin:0; }
+        .pay-week-group { margin-bottom:28px; }
+        .pay-week-label { font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; padding:4px 0; border-bottom:1px solid var(--border); }
+        .pay-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+        .pay-table th { background:var(--deep); color:rgba(255,255,255,0.85); padding:8px 10px; text-align:left; font-family:'DM Sans',sans-serif; font-weight:600; font-size:0.74rem; letter-spacing:0.3px; white-space:nowrap; }
+        .pay-table td { padding:7px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+        .pay-table tr:nth-child(even) td { background:var(--bg); }
+        .pay-table tr.row-paid td { background:#dcfce7 !important; color:#14532d; }
+        .pay-amount { width:68px; padding:4px 7px; border:1.5px solid var(--border); border-radius:5px; font-size:0.82rem; font-family:'DM Sans',sans-serif; text-align:right; background:#fafaf8; }
+        .pay-amount:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px rgba(0,200,83,0.13); }
+        .pay-venmo { font-family:'JetBrains Mono',monospace; font-size:0.78rem; color:#2563eb; }
+        .pay-pos-badge { font-size:0.68rem; font-weight:800; padding:2px 7px; border-radius:8px; white-space:nowrap; }
+        .pay-pos-cr { background:rgba(9,20,42,0.1); color:var(--deep); }
+        .pay-pos-ar { background:rgba(0,200,83,0.13); color:#145b27; }
+        .btn-mark-paid { padding:5px 13px; border:1.5px solid var(--accent); border-radius:6px; background:white; color:#14532d; font-size:0.76rem; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; }
+        .btn-mark-paid:hover:not([disabled]) { background:var(--accent); color:white; }
+        .btn-mark-paid.paid { background:#dcfce7; border-color:#15803d; color:#14532d; cursor:default; }
+        .pay-check-note { font-size:0.74rem; color:#555; }
     </style>
 </head>
 <body>
@@ -484,6 +505,9 @@
             <div id="scheduledGamesSection" style="margin-top:28px; display:none;">
                 <div id="scheduledGamesContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>
             </div>
+
+            <!-- Griswold Payment Dashboard (Jeff Green — ?pay=jeff only) -->
+            <div id="paymentSection" style="display:none; margin-top:28px;"></div>
 
             <!-- Submission History (localStorage) — hidden, replaced by live section above -->
             <div id="submissionHistory" style="display:none;">
@@ -910,6 +934,12 @@
             currentSubmitter = 'Assignor';
             document.getElementById('submitterName').textContent = 'Assignor';
             showMainForm();
+            return;
+        }
+
+        // Griswold payment portal — Jeff Green access via ?pay=jeff
+        if (params.get('pay') === 'jeff' && (urlParam || '').toLowerCase() === 'griswold') {
+            initPaymentMode();
             return;
         }
 
@@ -2206,6 +2236,170 @@
     });
 
     // ── End CSV Upload Tab ────────────────────────────────────────────────────
+
+    // ── Griswold Payment Dashboard ────────────────────────────────────────────
+    // URL: club-game-submit.html?club=griswold&pay=jeff
+    // Jeff Green sees past games, ref names, venmo handles, and marks games paid.
+
+    // ── Edit pay rates here ──
+    const GRISWOLD_RATES = {
+        CR: { U8:30, U10:30, U12:35, U14:40, U16:45, U17:45, U19:50, default:35 },
+        AR: { U8:20, U10:20, U12:22, U14:25, U16:28, U17:28, U19:30, default:22 }
+    };
+
+    function grisRate(posKey, ageGroup) {
+        const ag = (ageGroup || '').replace(/\s+/g, '').toUpperCase(); // "U 12" → "U12"
+        return GRISWOLD_RATES[posKey][ag] || GRISWOLD_RATES[posKey].default;
+    }
+
+    function initPaymentMode() {
+        document.getElementById('preDoorwayClubName').style.display  = 'none';
+        document.getElementById('doorwayStep1').style.display        = 'none';
+        document.getElementById('doorwayStep2').style.display        = 'none';
+        document.getElementById('mainForm').style.display            = 'none';
+        document.getElementById('scheduledGamesSection').style.display = 'none';
+        document.getElementById('paymentSection').style.display      = 'block';
+        loadPaymentSection();
+    }
+
+    async function loadPaymentSection() {
+        const section = document.getElementById('paymentSection');
+        section.innerHTML = `
+            <div class="pay-header">
+                <img src="PICS/griswold.png" height="42" style="opacity:0.9;" alt="Griswold">
+                <h2>Griswold Ref Payments</h2>
+            </div>
+            <p style="color:var(--muted); font-size:0.85rem; margin-bottom:20px;">Past games with assigned referees. Confirm amounts, then pay via Venmo or check.</p>
+            <div id="payContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>`;
+
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const [games, refRecs] = await Promise.all([
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 })
+            ]);
+
+            // name (lowercase) → referee fields map for venmo/payment_method/address lookup
+            const refByName = {};
+            refRecs.forEach(r => {
+                const nm = (r.fields['Name'] || '').trim().toLowerCase();
+                if (nm) refByName[nm] = r.fields;
+            });
+
+            // Past Griswold games with at least one ref assigned
+            const grisGames = games
+                .filter(r => {
+                    const dateStr = r.fields['Date'] || '';
+                    if (!dateStr || dateStr >= today) return false;
+                    const home   = (r.fields['Home Team']   || '').toLowerCase();
+                    const source = (r.fields['Source Club'] || '').toLowerCase();
+                    const club   = (r.fields['Club']        || '').toLowerCase();
+                    if (!home.includes('griswold') && !source.includes('griswold') && !club.includes('griswold')) return false;
+                    return !!(resolveRef(r.fields['Center Referee']) || resolveRef(r.fields['AR 1']) || resolveRef(r.fields['AR 2']));
+                })
+                .sort((a, b) => (b.fields['Date'] || '').localeCompare(a.fields['Date'] || ''));
+
+            if (!grisGames.length) {
+                document.getElementById('payContent').innerHTML = '<p style="color:#888; font-size:0.85rem;">No past games with assigned refs yet.</p>';
+                return;
+            }
+
+            // Group by week (most recent first)
+            const byWeek = {};
+            grisGames.forEach(r => {
+                const wk = getWeekLabel(r.fields['Date']);
+                if (!byWeek[wk.key]) byWeek[wk.key] = { label: wk.label, games: [] };
+                byWeek[wk.key].games.push(r);
+            });
+
+            let html = '';
+            for (const wkKey of Object.keys(byWeek).sort().reverse()) {
+                const wk = byWeek[wkKey];
+                html += `<div class="pay-week-group">
+                    <div class="pay-week-label">${wk.label}</div>
+                    <div style="border-radius:8px; overflow:hidden; border:1px solid var(--border);">
+                    <table class="pay-table">
+                        <thead><tr>
+                            <th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Venmo / Check</th><th></th>
+                        </tr></thead><tbody>`;
+
+                wk.games.forEach(r => {
+                    const f      = r.fields;
+                    const date   = f['Date'] || '—';
+                    const age    = f['Age Group'] || '—';
+                    const game   = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
+                    const isPaid = (f['Payment Status'] || '').toLowerCase() === 'paid';
+
+                    const slots = [
+                        { name: resolveRef(f['Center Referee']), pos: 'CR',  rateKey: 'CR'  },
+                        { name: resolveRef(f['AR 1']),            pos: 'AR1', rateKey: 'AR' },
+                        { name: resolveRef(f['AR 2']),            pos: 'AR2', rateKey: 'AR' }
+                    ].filter(s => s.name);
+
+                    slots.forEach((slot, idx) => {
+                        const rf        = refByName[slot.name.trim().toLowerCase()] || {};
+                        const venmo     = rf['venmo']          || '';
+                        const payMethod = rf['payment_method'] || 'venmo';
+                        const address   = [rf['address'], rf['city'], rf['state']].filter(Boolean).join(', ');
+                        const rate      = grisRate(slot.rateKey, age);
+
+                        const venmoHtml = payMethod === 'check'
+                            ? `<span class="pay-check-note">Check: ${address || '(no address on file)'}</span>`
+                            : (venmo
+                                ? `<span class="pay-venmo">@${venmo.replace(/^@/, '')}</span>`
+                                : `<span style="color:#aaa; font-size:0.75rem;">—</span>`);
+
+                        const posBadge = slot.pos === 'CR'
+                            ? `<span class="pay-pos-badge pay-pos-cr">CR</span>`
+                            : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
+
+                        const btnHtml = idx === 0
+                            ? `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ Paid' : 'Mark Paid'}</button>`
+                            : '';
+
+                        html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}">
+                            <td>${idx === 0 ? date : ''}</td>
+                            <td style="font-size:0.76rem; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${idx === 0 ? game : ''}</td>
+                            <td>${idx === 0 ? age : ''}</td>
+                            <td>${slot.name}</td>
+                            <td>${posBadge}</td>
+                            <td>$<input class="pay-amount" type="number" value="${rate}" min="0" step="1"></td>
+                            <td>${venmoHtml}</td>
+                            <td>${btnHtml}</td>
+                        </tr>`;
+                    });
+                });
+
+                html += `</tbody></table></div></div>`;
+            }
+
+            document.getElementById('payContent').innerHTML = html;
+
+        } catch(e) {
+            document.getElementById('payContent').innerHTML = `<p style="color:#991b1b; font-size:0.85rem;">Error loading payment data: ${e.message}</p>`;
+        }
+    }
+
+    async function markGamePaid(gameId, btn) {
+        btn.textContent = 'Saving…';
+        btn.disabled = true;
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                'Payment Status': 'Paid'
+            });
+            document.querySelectorAll(`tr[data-game="${gameId}"]`).forEach(row => {
+                row.classList.add('row-paid');
+            });
+            btn.textContent = '✓ Paid';
+            btn.classList.add('paid');
+        } catch(e) {
+            btn.textContent = 'Mark Paid';
+            btn.disabled = false;
+            alert('Could not save payment status: ' + e.message);
+        }
+    }
+
+    // ── End Griswold Payment Dashboard ────────────────────────────────────────
 
     // Populate season badges in static headers
     const _season = getCurrentSeason();
