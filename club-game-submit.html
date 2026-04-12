@@ -565,8 +565,9 @@
     let allFields = [];
     let clubLeagueMap = {};
     let stagedGames   = [];
-    let currentClubRecord = null; // Airtable club record for this page
-    let currentSubmitter  = '';   // name of person who completed doorway
+    let currentClubRecord    = null; // Airtable club record for this page
+    let currentSubmitter     = '';   // name of person who completed doorway
+    let _clubPayCoord        = '';   // payment_coordinator (supplemental — bypasses schema cache)
     let refById           = {};   // Airtable referee record ID → display name
 
     // Keys are set per-club once the URL param is known
@@ -720,7 +721,7 @@
         document.getElementById('submitterName').textContent = currentSubmitter;
 
         // Multi-role users — show portal choice screen if name matches payment_coordinator on club record
-        const _payCoord = (currentClubRecord?.fields?.['payment_coordinator'] || '').trim().toLowerCase();
+        const _payCoord = _clubPayCoord || (currentClubRecord?.fields?.['payment_coordinator'] || '').trim().toLowerCase();
         if (_payCoord && currentSubmitter.trim().toLowerCase() === _payCoord) {
             document.getElementById('doorwayStep1').style.display = 'none';
             document.getElementById('portalChoice').style.display = 'block';
@@ -929,6 +930,18 @@
 
             if (match) {
                 currentClubRecord = match.record || null;
+
+                // Supplemental fetch: payment_coordinator bypasses PostgREST schema cache
+                if (currentClubRecord?.id) {
+                    try {
+                        const { data: _pcRow } = await supabaseClient.client
+                            .from('clubs')
+                            .select('payment_coordinator')
+                            .eq('id', currentClubRecord.id)
+                            .single();
+                        _clubPayCoord = (_pcRow?.payment_coordinator || '').trim().toLowerCase();
+                    } catch(e) { /* non-critical */ }
+                }
 
                 // Display name: tournament label or club name
                 const displayName = tConf ? tConf.label : (match.displayName || match.name);
