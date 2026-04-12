@@ -1058,6 +1058,15 @@
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.ASSIGNORS, { maxRecords: 100 }),
                 ]);
 
+                // Supplemental fetch for payment coordinator columns (bypasses schema cache wrapper)
+                const clubPayMap = {};
+                try {
+                    const { data: payRows } = await supabaseClient.client
+                        .from('clubs')
+                        .select('id, payment_coordinator, payment_coordinator_email');
+                    (payRows || []).forEach(r => { clubPayMap[String(r.id)] = r; });
+                } catch(e) { /* non-critical */ }
+
                 // ── Schedule Change Alert ─────────────────────────────────────
                 const changeGames = allGames.filter(r => (r.fields['Game Status'] || '').toLowerCase() === 'change requested');
                 const changeBanner = document.getElementById('changeAlertBanner');
@@ -1485,8 +1494,9 @@
                         const assignor     = f['assignor'] || f['Assignor'] || '';
                         const assignorEmail = f['Assignor Email'] || '';
                         const assignorPhone = f['Assignor Phone'] || '';
-                        const payCoord      = f['payment_coordinator'] || '';
-                        const payCoordEmail = f['payment_coordinator_email'] || '';
+                        const _pay          = clubPayMap[String(cid)] || {};
+                        const payCoord      = f['payment_coordinator'] || _pay.payment_coordinator || '';
+                        const payCoordEmail = f['payment_coordinator_email'] || _pay.payment_coordinator_email || '';
                         const submitUrl = f['Club Game Upload'] || '';
 
                         const totalGames = (cid ? gameCountById[cid]  : 0) || clubGameCount[clubName]  || 0;
