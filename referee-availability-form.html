@@ -581,25 +581,59 @@
                     document.getElementById('loggingName').textContent = `${firstName} ${lastName}`;
                     document.getElementById('loggingBadge').style.display = 'block';
 
-                    // Set Griswold payment flag if on file (session resume path) — fire and forget
-                    if (email) {
-                        supabaseClient.client
-                            .from('referees')
-                            .select('payment_method, venmo')
-                            .eq('email', email)
-                            .limit(1)
-                            .then(({ data: refRows }) => {
-                                const ref = refRows?.[0];
-                                if (ref?.payment_method) {
-                                    window._griswoldPayOnFile = true;
-                                    const methodLabel = ref.payment_method === 'check' ? 'Check (mail)' : ('Venmo' + (ref.venmo ? ' (@' + ref.venmo.replace(/^@/, '') + ')' : ''));
-                                    document.getElementById('griswoldPayOnFileMsg').textContent = `Griswold payment on file: ${methodLabel}`;
-                                }
-                            }).catch(() => {});
-                    }
-
+                    // Full profile check on session resume — same logic as email lookup path
                     unlockForm();
-                    unlockAvailability();
+                    if (email) {
+                        airtableClient.findRefereeByEmail(email).then(referee => {
+                            if (!referee) { unlockAvailability(); return; }
+                            const f = referee.fields;
+                            window._foundRefId   = referee.id;
+                            window._foundRefDob  = f['Date of Birth'] || null;
+                            window._foundRefName = f['Name'] || `${firstName} ${lastName}`;
+
+                            // Griswold payment flag
+                            const storedMethod = f['payment_method'] || '';
+                            if (storedMethod) {
+                                window._griswoldPayOnFile = true;
+                                const methodLabel = storedMethod === 'check' ? 'Check (mail)' : ('Venmo' + (f['venmo'] ? ' (@' + f['venmo'].replace(/^@/, '') + ')' : ''));
+                                document.getElementById('griswoldPayOnFileMsg').textContent = `Griswold payment on file: ${methodLabel}`;
+                            }
+
+                            // Pre-fill visible fields silently
+                            if (f['Phone'])               document.getElementById('refereePhone').value       = f['Phone'];
+                            if (f['Years Reffing'])        document.getElementById('yearsReffing').value       = f['Years Reffing'];
+                            if (f['Certification Level'])  document.getElementById('certificationLevel').value = f['Certification Level'];
+                            if (f['Gender'])               document.getElementById('refereeGender').value      = f['Gender'];
+                            if (f['Address'])              document.getElementById('refereeAddress').value     = f['Address'];
+                            if (f['City'])                 document.getElementById('refereeCity').value        = f['City'];
+                            if (f['State'])                document.getElementById('refereeState').value       = f['State'];
+                            if (f['Zip Code'])             document.getElementById('refereeZip').value         = f['Zip Code'];
+                            if (f['Date of Birth'])        document.getElementById('refereeBirthDate').value   = f['Date of Birth'];
+
+                            const missingFields = [
+                                !f['Phone']               && 'Phone',
+                                !f['Date of Birth']       && 'Date of Birth',
+                                !f['Address']             && 'Address',
+                                !(f['City'] && f['Zip Code']) && 'City / Zip',
+                                !f['Years Reffing']       && 'Years Reffing',
+                                !f['Gender']              && 'Gender',
+                            ].filter(Boolean);
+
+                            if (missingFields.length > 0) {
+                                hideFilledFields(f);
+                                document.getElementById('welcomeSubtitle').textContent = `We just need a couple more details: ${missingFields.join(', ')}.`;
+                                document.getElementById('contactSection').style.display = 'block';
+                                document.getElementById('availabilitySection').style.display = 'none';
+                                document.getElementById('availabilitySection').style.opacity = '0';
+                            } else {
+                                document.getElementById('welcomeSubtitle').textContent = '✅ We found your profile — your personal information has been confirmed and pre-filled. Just fill in your availability below.';
+                                document.getElementById('contactSection').style.display = 'none';
+                                unlockAvailability();
+                            }
+                        }).catch(() => { unlockAvailability(); });
+                    } else {
+                        unlockAvailability();
+                    }
                 } catch(e) {
                     sessionStorage.removeItem('refSession');
                 }
