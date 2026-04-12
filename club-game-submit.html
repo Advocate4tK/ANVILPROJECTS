@@ -256,6 +256,17 @@
         .btn-mark-paid:hover:not([disabled]) { background:var(--accent); color:white; }
         .btn-mark-paid.paid { background:#dcfce7; border-color:#15803d; color:#14532d; cursor:default; }
         .pay-check-note { font-size:0.74rem; color:#555; }
+
+        /* ── Portal choice screen ── */
+        .portal-choice { max-width:500px; margin:0 auto 24px; }
+        .portal-choice h2 { color:#0f3460; font-size:1.1rem; margin-bottom:4px; }
+        .portal-choice p  { color:#666; font-size:0.88rem; margin-bottom:20px; }
+        .portal-choice-cards { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        .portal-card { border:2px solid var(--border); border-radius:12px; padding:22px 18px; cursor:pointer; text-align:center; background:var(--surface); transition:border-color 0.15s, box-shadow 0.15s, transform 0.1s; }
+        .portal-card:hover { border-color:var(--accent); box-shadow:var(--shadow-md); transform:translateY(-2px); }
+        .portal-card-icon { font-size:2rem; margin-bottom:10px; }
+        .portal-card-title { font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:var(--deep); margin-bottom:4px; }
+        .portal-card-desc  { font-size:0.78rem; color:var(--muted); line-height:1.4; }
     </style>
 </head>
 <body>
@@ -277,6 +288,24 @@
             <div id="preDoorwayClubName" style="display:none; text-align:center; margin:0 auto 20px; max-width:500px;">
                 <div style="font-size:clamp(24px, 5vw, 48px); font-weight:900; color:#e94560; text-transform:uppercase; letter-spacing:3px; line-height:1.15; text-shadow:2px 2px 0px rgba(233,69,96,0.18);" id="preDoorwayName"></div>
                 <div style="font-size:0.82rem; color:#888; margin-top:6px; letter-spacing:1px; text-transform:uppercase; font-weight:600;">Game Submission Portal</div>
+            </div>
+
+            <!-- Portal choice screen (shown for multi-role users like Jeff Green) -->
+            <div id="portalChoice" class="form-container portal-choice" style="display:none;">
+                <h2>Where do you want to go?</h2>
+                <p>Choose your portal below.</p>
+                <div class="portal-choice-cards">
+                    <div class="portal-card" onclick="portalGo('pay')">
+                        <div class="portal-card-icon">💳</div>
+                        <div class="portal-card-title">Pay Refs</div>
+                        <div class="portal-card-desc">View assigned games, Venmo handles, and mark refs paid</div>
+                    </div>
+                    <div class="portal-card" onclick="portalGo('schedule')">
+                        <div class="portal-card-icon">📋</div>
+                        <div class="portal-card-title">Submit Games</div>
+                        <div class="portal-card-desc">Enter home games for referee scheduling</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Doorway Step 1: Name -->
@@ -687,11 +716,13 @@
         currentSubmitter = `${first} ${last}`;
         document.getElementById('submitterName').textContent = currentSubmitter;
 
-        // Payment coordinator redirect — Griswold only
-        // Jeff Green goes to the payment portal instead of the submission form
+        // Multi-role users — show portal choice screen instead of going straight to submission
         const _clubSlug = new URLSearchParams(window.location.search).get('club') || '';
-        if (_clubSlug.toLowerCase() === 'griswold' && currentSubmitter.trim().toLowerCase() === 'jeff green') {
-            window.location.href = window.location.pathname + '?club=griswold&pay=jeff';
+        const PAYMENT_COORDINATORS = { griswold: ['jeff green'] }; // add names here as needed
+        const _coords = PAYMENT_COORDINATORS[_clubSlug.toLowerCase()] || [];
+        if (_coords.includes(currentSubmitter.trim().toLowerCase())) {
+            document.getElementById('doorwayStep1').style.display = 'none';
+            document.getElementById('portalChoice').style.display = 'block';
             return;
         }
 
@@ -798,6 +829,16 @@
         const [f1, ...rest] = currentSubmitter.split(' ');
         localStorage.setItem(SUBMITTER_KEY, JSON.stringify({ first: f1, last: rest.join(' ') }));
         loadScheduledGames();
+    }
+
+    function portalGo(dest) {
+        document.getElementById('portalChoice').style.display = 'none';
+        if (dest === 'pay') {
+            const slug = new URLSearchParams(window.location.search).get('club') || 'griswold';
+            window.location.href = window.location.pathname + `?club=${slug}&pay=jeff`;
+        } else {
+            showMainForm();
+        }
     }
 
     function resetDoorway() {
