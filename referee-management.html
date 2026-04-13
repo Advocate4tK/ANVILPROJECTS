@@ -270,6 +270,18 @@
             return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
         }
 
+        // ── Age check ────────────────────────────────────────────────────────
+        function isUnder18(dob) {
+            if (!dob) return false;
+            const birth = new Date(dob);
+            if (isNaN(birth)) return false;
+            const today = new Date();
+            let age = today.getFullYear() - birth.getFullYear();
+            const m = today.getMonth() - birth.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+            return age < 18;
+        }
+
         // ── Apply all filters ─────────────────────────────────────────────────
         function applyFilters() {
             const q         = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
@@ -324,9 +336,12 @@
             list.innerHTML = shown.map(r => {
                 const f = r.fields;
                 const joined = formatJoined(r);
+                const isMinor = isUnder18(f['Date of Birth']);
+                const nameColor = isMinor ? '#1a7a3c' : '#0f3460';
+                const badge = isMinor ? '<span style="font-size:0.68rem; font-weight:800; background:#d4edda; color:#1a7a3c; border-radius:4px; padding:1px 6px; margin-left:6px;">U18</span>' : '';
                 return `<div class="result-row" onclick="openCard('${r.id}')">
                     <div>
-                        <div class="result-name">${f['Name'] || '—'}</div>
+                        <div class="result-name" style="color:${nameColor};">${f['Name'] || '—'}${badge}</div>
                         <div class="result-sub">${f['Email'] || ''} ${f['phone'] || f['Phone'] || ''}</div>
                     </div>
                     <div style="text-align:right;">
