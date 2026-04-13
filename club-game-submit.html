@@ -2368,7 +2368,7 @@
             const today = new Date().toISOString().split('T')[0];
             const [rawGrisGames, refRecs, ratesResult] = await Promise.all([
                 supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY).from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 2000 }),
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order')
             ]);
             const games = airtableClient._wrapAll(rawGrisGames.data || []);
@@ -2405,10 +2405,18 @@
             } catch(e) { /* non-critical */ }
 
             // name (lowercase) → referee fields map for venmo/payment_method/address lookup
+            // Also indexes by "first last" stripped of middle names for fuzzy matching
             const refByName = {};
             refRecs.forEach(r => {
                 const nm = (r.fields['Name'] || '').trim().toLowerCase();
-                if (nm) refByName[nm] = r.fields;
+                if (!nm) return;
+                refByName[nm] = r.fields;
+                // Also index as "first last" (strips middle name/initial)
+                const parts = nm.split(/\s+/);
+                if (parts.length > 2) {
+                    const shortKey = `${parts[0]} ${parts[parts.length - 1]}`;
+                    if (!refByName[shortKey]) refByName[shortKey] = r.fields;
+                }
             });
 
             // All Griswold games with at least one ref assigned
