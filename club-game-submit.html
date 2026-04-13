@@ -721,9 +721,11 @@
         currentSubmitter = `${first} ${last}`;
         document.getElementById('submitterName').textContent = currentSubmitter;
 
-        // Multi-role users — show portal choice screen if name matches payment_coordinator on club record
-        const _payCoord = _clubPayCoord || (currentClubRecord?.fields?.['payment_coordinator'] || '').trim().toLowerCase();
-        if (_payCoord && currentSubmitter.trim().toLowerCase() === _payCoord) {
+        // Multi-role users — show portal choice screen if name matches payment_coordinator or president
+        const _payCoord  = _clubPayCoord || (currentClubRecord?.fields?.['payment_coordinator'] || '').trim().toLowerCase();
+        const _president = (currentClubRecord?.fields?.['president'] || '').trim().toLowerCase();
+        const _submitterLC = currentSubmitter.trim().toLowerCase();
+        if (_payCoord && (_submitterLC === _payCoord || (_president && _submitterLC === _president))) {
             document.getElementById('doorwayStep1').style.display = 'none';
             document.getElementById('portalChoice').style.display = 'block';
             return;
@@ -2365,7 +2367,7 @@
         try {
             const today = new Date().toISOString().split('T')[0];
             const [rawGrisGames, refRecs, ratesResult] = await Promise.all([
-                supabaseClient.client.from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
+                supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY).from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 }),
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order')
             ]);
