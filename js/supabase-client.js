@@ -130,7 +130,9 @@ class SupabaseClientWrapper {
     _wrap(row) {
         if (!row) return null;
         const { id, created_at, club_id, ...fields } = row;
-        return { id, fields: this._denormalizeFields(fields) };
+        const denorm = this._denormalizeFields(fields);
+        if (created_at) denorm['created_at'] = created_at;
+        return { id, fields: denorm };
     }
 
     _wrapAll(rows) {
