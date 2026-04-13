@@ -2311,14 +2311,24 @@
     // Jeff Green sees past games, ref names, venmo handles, and marks games paid.
 
     // ── Edit pay rates here ──
-    const GRISWOLD_RATES = {
-        CR: { U8:30, U10:30, U12:35, U14:40, U16:45, U17:45, U19:50, default:35 },
-        AR: { U8:20, U10:20, U12:22, U14:25, U16:28, U17:28, U19:30, default:22 }
-    };
+    // Pay rates loaded from DB — keyed by age_group string from pay_rates table
+    let _payRates = []; // array of { age_group, center, ar, solo }
 
-    function grisRate(posKey, ageGroup) {
-        const ag = (ageGroup || '').replace(/\s+/g, '').toUpperCase(); // "U 12" → "U12"
-        return GRISWOLD_RATES[posKey][ag] || GRISWOLD_RATES[posKey].default;
+    // Map a game age group (e.g. "U10", "U 12", "U13") to a pay_rates band (e.g. "U9-U10")
+    function ageBand(ageGroup) {
+        const n = parseInt((ageGroup || '').replace(/\D/g, ''), 10);
+        if (isNaN(n)) return null;
+        if (n <= 10) return 'U9-U10';
+        if (n <= 12) return 'U11-U12';
+        return 'U13-U15';
+    }
+
+    function getRate(posKey, ageGroup, isSolo) {
+        const band = ageBand(ageGroup);
+        const row  = _payRates.find(r => r.age_group === band) || _payRates[_payRates.length - 1];
+        if (!row) return 0;
+        if (isSolo && row.solo != null) return row.solo;
+        return posKey === 'CR' ? row.center : row.ar;
     }
 
     function initPaymentMode() {
@@ -2343,14 +2353,37 @@
                 <button onclick="window.location.href='?club=${_payClub}'" style="position:absolute; top:50%; right:0; transform:translateY(-50%); background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.35); color:white; border-radius:12px; padding:4px 12px; font-size:0.78rem; cursor:pointer;">🚪 Exit</button>
             </div>
             <p style="color:var(--muted); font-size:0.85rem; margin-bottom:12px;">Tap <strong>💸 Pay</strong> next to each ref — it opens Venmo pre-filled with their handle and amount. Confirm in Venmo, then hit <strong>Mark Paid</strong>. Works on your phone or desktop.</p>
+            <div id="payRateTable" style="margin-bottom:14px;"></div>
             <div id="payContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>`;
 
         try {
             const today = new Date().toISOString().split('T')[0];
-            const [games, refRecs] = await Promise.all([
+            const [games, refRecs, ratesResult] = await Promise.all([
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 500 }),
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 })
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 }),
+                supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('age_group')
             ]);
+            _payRates = (ratesResult.data || []);
+
+            // Render rate schedule
+            if (_payRates.length) {
+                const rateRows = _payRates.map(r =>
+                    `<tr><td style="padding:4px 10px;">${r.age_group}</td><td style="padding:4px 10px; text-align:center;">$${r.center}</td><td style="padding:4px 10px; text-align:center;">$${r.ar}</td><td style="padding:4px 10px; text-align:center;">${r.solo != null ? '$'+r.solo : '—'}</td></tr>`
+                ).join('');
+                document.getElementById('payRateTable').innerHTML = `
+                    <details style="font-size:0.8rem; color:var(--muted);">
+                        <summary style="cursor:pointer; font-weight:600;">📋 Current Pay Rates</summary>
+                        <table style="margin-top:6px; border-collapse:collapse; width:100%; max-width:320px;">
+                            <thead><tr style="background:rgba(255,255,255,0.1);">
+                                <th style="padding:4px 10px; text-align:left;">Age Group</th>
+                                <th style="padding:4px 10px;">Center</th>
+                                <th style="padding:4px 10px;">AR</th>
+                                <th style="padding:4px 10px;">Solo CR</th>
+                            </tr></thead>
+                            <tbody>${rateRows}</tbody>
+                        </table>
+                    </details>`;
+            }
 
             // Supplemental fetch: paid_at bypasses PostgREST schema cache
             const paidAtById = {};
@@ -2428,12 +2461,13 @@
                             { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
                         ].filter(s => s.name);
 
+                        const isSolo = slots.length === 1 && slots[0].pos === 'CR';
                         slots.forEach((slot, idx) => {
                             const rf        = refByName[slot.name.trim().toLowerCase()] || {};
                             const venmo     = rf['venmo']          || '';
                             const payMethod = rf['payment_method'] || 'venmo';
                             const address   = [rf['address'], rf['city'], rf['state']].filter(Boolean).join(', ');
-                            const rate      = grisRate(slot.rateKey, age);
+                            const rate      = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
 
                             const venmoHtml = payMethod === 'check'
                                 ? `<span class="pay-check-badge">✉️ Check</span><br><span class="pay-check-note">${address || '(no address on file)'}</span>`
