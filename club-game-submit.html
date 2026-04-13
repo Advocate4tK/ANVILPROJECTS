@@ -2314,17 +2314,23 @@
     // Pay rates loaded from DB — keyed by age_group string from pay_rates table
     let _payRates = []; // array of { age_group, center, ar, solo }
 
-    // Map a game age group (e.g. "U10", "U 12", "U13") to a pay_rates band (e.g. "U9-U10")
-    function ageBand(ageGroup) {
-        const n = parseInt((ageGroup || '').replace(/\D/g, ''), 10);
+    // Map a game age group (e.g. "U10", "U 12", "U13") to a pay_rates band
+    // Tries exact match first, then numeric fallback
+    function ageBand(ageGroup, rates) {
+        const ag = (ageGroup || '').replace(/\s+/g, '');
+        // Exact match (e.g. stored as "U8" or "U9-U10")
+        if (rates.find(r => r.age_group === ag)) return ag;
+        const n = parseInt(ag.replace(/\D/g, ''), 10);
         if (isNaN(n)) return null;
+        if (n <= 8)  return 'U8';
         if (n <= 10) return 'U9-U10';
         if (n <= 12) return 'U11-U12';
-        return 'U13-U15';
+        if (n <= 15) return 'U13-U15';
+        return 'U18-U19';
     }
 
     function getRate(posKey, ageGroup, isSolo) {
-        const band = ageBand(ageGroup);
+        const band = ageBand(ageGroup, _payRates);
         const row  = _payRates.find(r => r.age_group === band) || _payRates[_payRates.length - 1];
         if (!row) return 0;
         if (isSolo && row.solo != null) return row.solo;
