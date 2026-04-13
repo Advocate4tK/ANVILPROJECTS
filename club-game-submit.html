@@ -2364,11 +2364,12 @@
 
         try {
             const today = new Date().toISOString().split('T')[0];
-            const [games, refRecs, ratesResult] = await Promise.all([
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 500 }),
+            const [rawGrisGames, refRecs, ratesResult] = await Promise.all([
+                supabaseClient.client.from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 }),
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order')
             ]);
+            const games = airtableClient._wrapAll(rawGrisGames.data || []);
             _payRates = (ratesResult.data || []);
 
             // Render rate schedule
