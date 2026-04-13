@@ -2404,10 +2404,12 @@
                 (paidRows || []).forEach(r => { paidAtById[r.id] = r.paid_at; });
             } catch(e) { /* non-critical */ }
 
-            // name (lowercase) → referee fields map for venmo/payment_method/address lookup
-            // Also indexes by "first last" stripped of middle names for fuzzy matching
+            // Build dual lookup maps: by name (plain text games) and by ID ([1092] workstation format)
             const refByName = {};
+            const refById   = {};
             refRecs.forEach(r => {
+                // Index by numeric ID
+                if (r.id) refById[String(r.id)] = r.fields;
                 const nm = (r.fields['Name'] || '').trim().toLowerCase();
                 if (!nm) return;
                 refByName[nm] = r.fields;
@@ -2418,6 +2420,13 @@
                     if (!refByName[shortKey]) refByName[shortKey] = r.fields;
                 }
             });
+
+            // Resolve a ref slot value to a fields object — handles both "[1092]" and "Tod Smith"
+            function resolveRef(val) {
+                const idMatch = (val || '').match(/^\[(\d+)\]$/);
+                if (idMatch) return refById[idMatch[1]] || {};
+                return refByName[(val || '').trim().toLowerCase()] || {};
+            }
 
             // All Griswold games with at least one ref assigned
             const grisGames = games
@@ -2483,7 +2492,7 @@
                         const isSolo = slots.length === 1 && slots[0].pos === 'CR';
                         let gameTotal = 0;
                         slots.forEach((slot, idx) => {
-                            const rf        = refByName[slot.name.trim().toLowerCase()] || {};
+                            const rf        = resolveRef(slot.name);
                             const venmo     = rf['venmo']          || '';
                             const payMethod = rf['payment_method'] || 'venmo';
                             const address   = [rf['address'], rf['city'], rf['state']].filter(Boolean).join(', ');
@@ -2510,7 +2519,7 @@
                                 <td>${idx === 0 ? date : ''}</td>
                                 <td style="font-size:0.76rem; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${idx === 0 ? game : ''}</td>
                                 <td>${idx === 0 ? age : ''}</td>
-                                <td>${slot.name}</td>
+                                <td>${rf['Name'] || slot.name}</td>
                                 <td>${posBadge}</td>
                                 <td>$<input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled style="opacity:0.5"' : ''}></td>
                                 <td>${venmoHtml}</td>
