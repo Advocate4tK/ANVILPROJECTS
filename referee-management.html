@@ -9,6 +9,13 @@
         .search-wrap { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
         .search-wrap input { padding:10px 16px; border:1.5px solid #ccc; border-radius:8px; font-size:0.95rem; width:320px; font-family:inherit; }
         .search-wrap input:focus { outline:none; border-color:#e94560; box-shadow:0 0 0 3px rgba(233,69,96,0.1); }
+        .filter-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+        .filter-btn { padding:6px 14px; border:1.5px solid #ddd; border-radius:20px; font-size:0.82rem; font-weight:700; cursor:pointer; background:white; color:#555; transition:all 0.15s; font-family:inherit; }
+        .filter-btn:hover { border-color:#e94560; color:#e94560; }
+        .filter-btn.active { background:#e94560; color:white; border-color:#e94560; }
+        .filter-club { padding:6px 12px; border:1.5px solid #ddd; border-radius:20px; font-size:0.82rem; font-family:inherit; cursor:pointer; color:#555; background:white; }
+        .filter-club:focus { outline:none; border-color:#e94560; }
+        .result-joined { font-size:0.75rem; color:#aaa; white-space:nowrap; }
         .result-list { display:flex; flex-direction:column; gap:8px; margin-bottom:24px; }
         .result-row { display:flex; justify-content:space-between; align-items:center; background:white; border:1px solid #e0e0e0; border-radius:8px; padding:12px 16px; cursor:pointer; transition:all 0.15s; }
         .result-row:hover { border-color:#e94560; background:#fff8f9; }
@@ -49,9 +56,18 @@
             </div>
 
             <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); margin-bottom:24px;">
-                <div class="search-wrap">
-                    <input type="text" id="searchInput" placeholder="Search by name or email…" oninput="onSearch()">
+                <div class="filter-bar">
+                    <button class="filter-btn" id="btn-today" onclick="setDateFilter('today')">Today</button>
+                    <button class="filter-btn" id="btn-week" onclick="setDateFilter('week')">This Week</button>
+                    <button class="filter-btn" id="btn-month" onclick="setDateFilter('month')">This Month</button>
+                    <button class="filter-btn active" id="btn-all" onclick="setDateFilter('all')">All</button>
+                    <select class="filter-club" id="clubFilter" onchange="applyFilters()">
+                        <option value="">All Clubs</option>
+                    </select>
                     <span id="countNote" class="count-note"></span>
+                </div>
+                <div class="search-wrap">
+                    <input type="text" id="searchInput" placeholder="Search by name or email…" oninput="applyFilters()">
                 </div>
                 <div id="resultList" class="result-list"></div>
             </div>
@@ -181,48 +197,145 @@
     <script>
         // Accessible to all assignors — no hard login gate
 
-        let allRefs   = [];
-        let currentId = null;
-        let caLocked  = false;
+        let allRefs    = [];
+        let currentId  = null;
+        let caLocked   = false;
+        let activeDateFilter = 'all';
 
         // ── Load all refs on start ────────────────────────────────────────────
         async function loadRefs() {
             try {
                 allRefs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 });
                 allRefs.sort((a, b) => (a.fields['Name'] || '').localeCompare(b.fields['Name'] || ''));
-                document.getElementById('countNote').textContent = `${allRefs.length} referees loaded`;
+                populateClubFilter();
+                applyFilters();
             } catch(e) {
                 document.getElementById('countNote').textContent = 'Failed to load referees.';
             }
         }
 
-        // ── Search ────────────────────────────────────────────────────────────
-        function onSearch() {
-            const q = document.getElementById('searchInput').value.trim().toLowerCase();
-            if (q.length < 2) {
-                document.getElementById('resultList').innerHTML = '';
-                return;
+        // ── Populate club dropdown ────────────────────────────────────────────
+        function populateClubFilter() {
+            const clubs = new Set();
+            allRefs.forEach(r => {
+                let cp = r.fields['Club Preference'] || '';
+                if (typeof cp === 'string' && cp.startsWith('[')) {
+                    try { cp = JSON.parse(cp); } catch(e) { cp = [cp]; }
+                }
+                if (Array.isArray(cp)) cp.forEach(c => c && clubs.add(c.trim()));
+                else cp.split(',').forEach(c => c.trim() && clubs.add(c.trim()));
+            });
+            const sel = document.getElementById('clubFilter');
+            [...clubs].sort().forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c; opt.textContent = c;
+                sel.appendChild(opt);
+            });
+        }
+
+        // ── Date filter ───────────────────────────────────────────────────────
+        function setDateFilter(val) {
+            activeDateFilter = val;
+            ['today','week','month','all'].forEach(v => {
+                const btn = document.getElementById('btn-' + v);
+                if (btn) btn.classList.toggle('active', v === val);
+            });
+            applyFilters();
+        }
+
+        function passesDateFilter(r) {
+            if (activeDateFilter === 'all') return true;
+            const created = r.fields['created_at'] || r.fields['Created At'] || '';
+            if (!created) return false;
+            const d = new Date(created);
+            const now = new Date();
+            if (activeDateFilter === 'today') {
+                return d.toDateString() === now.toDateString();
             }
-            const matches = allRefs.filter(r => {
-                const name  = (r.fields['Name']  || '').toLowerCase();
-                const email = (r.fields['Email'] || '').toLowerCase();
-                const email2 = (r.fields['Email 2'] || '').toLowerCase();
-                return name.includes(q) || email.includes(q) || email2.includes(q);
-            }).slice(0, 15);
+            if (activeDateFilter === 'week') {
+                const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
+                return d >= weekAgo;
+            }
+            if (activeDateFilter === 'month') {
+                return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+            }
+            return true;
+        }
+
+        function formatJoined(r) {
+            const created = r.fields['created_at'] || r.fields['Created At'] || '';
+            if (!created) return '';
+            const d = new Date(created);
+            return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+        }
+
+        // ── Apply all filters ─────────────────────────────────────────────────
+        function applyFilters() {
+            const q         = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+            const clubVal   = (document.getElementById('clubFilter')?.value  || '').toLowerCase();
+
+            let matches = allRefs.filter(r => {
+                const f = r.fields;
+
+                // Date filter
+                if (!passesDateFilter(r)) return false;
+
+                // Club filter
+                if (clubVal) {
+                    let cp = f['Club Preference'] || '';
+                    if (typeof cp === 'string' && cp.startsWith('[')) {
+                        try { cp = JSON.parse(cp).join(', '); } catch(e) {}
+                    } else if (Array.isArray(cp)) cp = cp.join(', ');
+                    if (!cp.toLowerCase().includes(clubVal)) return false;
+                }
+
+                // Text search (optional — show all if blank)
+                if (q.length >= 2) {
+                    const name   = (f['Name']    || '').toLowerCase();
+                    const email  = (f['Email']   || '').toLowerCase();
+                    const email2 = (f['Email 2'] || '').toLowerCase();
+                    if (!name.includes(q) && !email.includes(q) && !email2.includes(q)) return false;
+                }
+
+                return true;
+            });
+
+            // Sort: newest first when date filter active, alpha otherwise
+            if (activeDateFilter !== 'all') {
+                matches.sort((a, b) => {
+                    const da = new Date(a.fields['created_at'] || 0);
+                    const db = new Date(b.fields['created_at'] || 0);
+                    return db - da;
+                });
+            }
+
+            const limit = 50;
+            const shown = matches.slice(0, limit);
+            document.getElementById('countNote').textContent =
+                matches.length === 0 ? 'No matches' :
+                matches.length > limit ? `Showing ${limit} of ${matches.length}` :
+                `${matches.length} referee${matches.length !== 1 ? 's' : ''}`;
 
             const list = document.getElementById('resultList');
-            if (!matches.length) {
-                list.innerHTML = '<p style="color:#aaa; font-size:0.88rem;">No matches found.</p>';
+            if (!shown.length) {
+                list.innerHTML = activeDateFilter === 'all' && !q && !clubVal
+                    ? `<p style="color:#aaa; font-size:0.88rem;">${allRefs.length} referees loaded — use filters or search above.</p>`
+                    : '<p style="color:#aaa; font-size:0.88rem;">No matches found.</p>';
                 return;
             }
-            list.innerHTML = matches.map(r => {
+
+            list.innerHTML = shown.map(r => {
                 const f = r.fields;
+                const joined = formatJoined(r);
                 return `<div class="result-row" onclick="openCard('${r.id}')">
                     <div>
                         <div class="result-name">${f['Name'] || '—'}</div>
                         <div class="result-sub">${f['Email'] || ''} ${f['phone'] || f['Phone'] || ''}</div>
                     </div>
-                    <div style="font-size:0.78rem; color:#aaa;">${f['Years Reffing'] || ''} ${f['Certification Level'] ? '· ' + f['Certification Level'] : ''}</div>
+                    <div style="text-align:right;">
+                        <div style="font-size:0.78rem; color:#aaa;">${f['Years Reffing'] || ''} ${f['Certification Level'] ? '· ' + f['Certification Level'] : ''}</div>
+                        ${joined ? `<div class="result-joined">Joined ${joined}</div>` : ''}
+                    </div>
                 </div>`;
             }).join('');
         }
