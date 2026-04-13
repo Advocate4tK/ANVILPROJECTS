@@ -244,7 +244,7 @@
         .pay-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
         .pay-table th { background:var(--deep); color:rgba(255,255,255,0.85); padding:8px 10px; text-align:left; font-family:'DM Sans',sans-serif; font-weight:600; font-size:0.74rem; letter-spacing:0.3px; white-space:nowrap; }
         .pay-table td { padding:7px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
-        .pay-table tr:nth-child(even) td { background:var(--bg); }
+        .pay-table tr td { border-bottom:1px solid rgba(0,0,0,0.05); }
         .pay-table tr.row-paid td { background:#dcfce7 !important; color:#14532d; }
         .pay-amount { width:68px; padding:4px 7px; border:1.5px solid var(--border); border-radius:5px; font-size:0.82rem; font-family:'DM Sans',sans-serif; text-align:right; background:#fafaf8; }
         .pay-amount:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px rgba(0,200,83,0.13); }
@@ -2473,12 +2473,14 @@
                         ].filter(s => s.name);
 
                         const isSolo = slots.length === 1 && slots[0].pos === 'CR';
+                        let gameTotal = 0;
                         slots.forEach((slot, idx) => {
                             const rf        = refByName[slot.name.trim().toLowerCase()] || {};
                             const venmo     = rf['venmo']          || '';
                             const payMethod = rf['payment_method'] || 'venmo';
                             const address   = [rf['address'], rf['city'], rf['state']].filter(Boolean).join(', ');
                             const rate      = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                            gameTotal      += rate;
 
                             const venmoHtml = payMethod === 'check'
                                 ? `<span class="pay-check-badge">✉️ Check</span><br><span class="pay-check-note">${address || '(no address on file)'}</span>`
@@ -2495,12 +2497,6 @@
                             const venmoPayBtn = (allowPay && !isPaid && venmo && payMethod !== 'check')
                                 ? `<a class="btn-venmo-pay" href="https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount=${rate}&note=${venmoNote}" target="_blank" onclick="this.href='https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount='+this.closest('tr').querySelector('.pay-amount').value+'&note=${venmoNote}'">💸 Pay</a>`
                                 : '';
-                            const markPaidBtn = (idx === 0 && allowPay)
-                                ? `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ Paid' : 'Mark Paid'}</button>${isPaid && paidAt ? `<span class="pay-paid-at">${paidAt}</span>` : ''}`
-                                : '';
-                            const upcomingLbl = (!allowPay && idx === 0)
-                                ? `<span style="font-size:0.72rem; color:#aaa;">Upcoming</span>` : '';
-                            const btnHtml = `<div class="pay-action-cell">${venmoPayBtn}${markPaidBtn}${upcomingLbl}</div>`;
 
                             html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}" style="${rowBg}">
                                 <td>${idx === 0 ? date : ''}</td>
@@ -2510,9 +2506,27 @@
                                 <td>${posBadge}</td>
                                 <td>$<input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled style="opacity:0.5"' : ''}></td>
                                 <td>${venmoHtml}</td>
-                                <td>${btnHtml}</td>
+                                <td>${venmoPayBtn}</td>
                             </tr>`;
                         });
+
+                        // Game footer row — Mark Paid lives here, not on individual ref rows
+                        if (allowPay) {
+                            const footerBg = isPaid ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]}; filter:brightness(0.96);`;
+                            const markPaidBtn = `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ All Paid' : 'Mark All Paid'}</button>${isPaid && paidAt ? `<span class="pay-paid-at">${paidAt}</span>` : ''}`;
+                            html += `<tr style="${footerBg} border-top:1.5px solid rgba(0,0,0,0.08);">
+                                <td colspan="5" style="text-align:right; padding-right:10px; font-size:0.74rem; color:#555; font-weight:600;">Total: $${gameTotal}</td>
+                                <td colspan="3" style="text-align:right; padding:6px 10px;">
+                                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">${markPaidBtn}</div>
+                                </td>
+                            </tr>`;
+                        } else {
+                            const upcomingBg = `background:${_gameColors[gameIdx % _gameColors.length]}; filter:brightness(0.96);`;
+                            html += `<tr style="${upcomingBg} border-top:1.5px solid rgba(0,0,0,0.08);">
+                                <td colspan="5" style="text-align:right; padding-right:10px; font-size:0.74rem; color:#555; font-weight:600;">Total: $${gameTotal}</td>
+                                <td colspan="3" style="padding:6px 10px; text-align:right;"><span style="font-size:0.72rem; color:#aaa; font-style:italic;">Upcoming</span></td>
+                            </tr>`;
+                        }
                     });
 
                     html += `</tbody></table></div></div>`;
