@@ -194,6 +194,13 @@
             display: inline-block;
         }
 
+        /* Laser burn — white hot cools to red */
+        @keyframes laserCool {
+            0%   { background:#ffffff; box-shadow:0 0 4px #fff,0 0 14px #fff,0 0 30px rgba(255,200,100,1),0 0 55px rgba(255,80,20,0.8); }
+            20%  { background:#ffcc77; box-shadow:0 0 4px #ffaa44,0 0 14px rgba(255,150,50,0.9),0 0 30px rgba(255,80,20,0.6); }
+            55%  { background:#ff5533; box-shadow:0 0 4px #ef4444,0 0 12px rgba(239,68,68,0.85),0 0 26px rgba(239,68,68,0.55); }
+            100% { background:#ef4444; box-shadow:0 0 4px #ef4444,0 0 10px rgba(239,68,68,0.65),0 0 22px rgba(239,68,68,0.35); }
+        }
 
         @keyframes letterRipple {
             0%   { transform: scale(1)    translateY(0)    skewX(0deg);    }
@@ -662,6 +669,43 @@
 
             var toolDuration    = toolLetters.length * LETTER_GAP;
             var taglineDuration = taglineLetters.length * LETTER_GAP;
+
+            // Laser underline — measured at fire time, injected into hero-section
+            function addLaser(el, delayMs, durationMs) {
+                var hero = document.querySelector('.hero-section');
+                setTimeout(function() {
+                    var letters   = el.querySelectorAll('.ripple-letter');
+                    if (!letters.length) return;
+                    var heroRect  = hero.getBoundingClientRect();
+                    var firstRect = letters[0].getBoundingClientRect();
+                    var lastRect  = letters[letters.length - 1].getBoundingClientRect();
+                    var lLeft  = Math.round(firstRect.left  - heroRect.left);
+                    var lTop   = Math.round(firstRect.bottom - heroRect.top + 4);
+                    var lWidth = Math.round(lastRect.right  - firstRect.left);
+
+                    var line = document.createElement('span');
+                    line.style.cssText =
+                        'position:absolute;left:' + lLeft + 'px;top:' + lTop + 'px;' +
+                        'height:3px;width:0;background:#ffffff;border-radius:2px;' +
+                        'box-shadow:0 0 4px #fff,0 0 14px #fff,0 0 30px rgba(255,200,100,1),0 0 55px rgba(255,80,20,0.8);' +
+                        'pointer-events:none;z-index:20;';
+                    hero.appendChild(line);
+
+                    requestAnimationFrame(function() {
+                        // Sweep the white-hot line across
+                        line.style.transition = 'width ' + durationMs + 'ms linear';
+                        line.style.width = lWidth + 'px';
+                        // After sweep completes, cool from white-hot down to red glow
+                        setTimeout(function() {
+                            line.style.transition = 'none';
+                            line.style.animation  = 'laserCool 2s ease-out forwards';
+                        }, durationMs);
+                    });
+                }, delayMs);
+            }
+
+            addLaser(toolEl,    BASE_DELAY,                     toolDuration);
+            addLaser(taglineEl, BASE_DELAY + toolDuration + 80, taglineDuration);
         });
     </script>
     <script>
