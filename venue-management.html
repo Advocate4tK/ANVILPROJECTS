@@ -40,6 +40,10 @@
         .save-status { font-size:0.85rem; color:#27ae60; font-weight:600; display:none; }
         .save-err { font-size:0.85rem; color:#e74c3c; font-weight:600; display:none; }
         .ca-id-display { font-size:0.88rem; color:#152d55; font-weight:700; background:#f0f4ff; padding:8px 10px; border-radius:6px; border:1.5px dashed #c8d8f0; display:inline-block; min-width:80px; }
+        .ca-locked { display:flex; align-items:center; gap:8px; }
+        .ca-locked span { font-size:0.88rem; color:#152d55; font-weight:600; flex:1; background:#f0f4ff; padding:8px 10px; border-radius:6px; border:1.5px dashed #c8d8f0; }
+        .unlock-btn { background:none; border:1.5px solid #aaa; border-radius:6px; padding:5px 10px; font-size:0.75rem; color:#888; cursor:pointer; white-space:nowrap; font-family:inherit; }
+        .unlock-btn:hover { border-color:#e94560; color:#e94560; }
     </style>
 </head>
 <body>
@@ -120,7 +124,11 @@
                             </div>
                             <div class="field-item">
                                 <label>CA Venue ID</label>
-                                <input type="number" id="fCaId" placeholder="e.g. 795">
+                                <div id="caIdWrap"></div>
+                                <div id="caConfirmRow" style="display:none; margin-top:8px; gap:8px; align-items:center; flex-wrap:wrap;">
+                                    <button onclick="confirmCA()" style="background:#152d55; color:#fff; border:none; border-radius:6px; padding:5px 14px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:inherit;">🔒 Lock</button>
+                                    <span style="font-size:0.78rem; color:#aaa;">Once locked, only SA can unlock.</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -146,6 +154,33 @@
         const db = new SupabaseClientWrapper(CONFIG);
         let allVenues = [];
         let currentVenueId = null;
+        let caLocked = true;
+
+        function renderCAField(caId) {
+            const wrap = document.getElementById('caIdWrap');
+            const confirmRow = document.getElementById('caConfirmRow');
+            const display = caId ? String(Math.round(caId)) : '—';
+            if (caLocked) {
+                wrap.innerHTML = `<div class="ca-locked"><span>${display}</span><button class="unlock-btn" onclick="unlockCA()">🔓 Unlock</button></div>`;
+                confirmRow.style.display = 'none';
+            } else {
+                wrap.innerHTML = `<input type="number" id="fCaId" value="${caId || ''}" placeholder="e.g. 795" style="width:100%; padding:8px 10px; border:1.5px solid #ddd; border-radius:6px; font-size:0.88rem; font-family:inherit; box-sizing:border-box;">`;
+                confirmRow.style.display = 'flex';
+            }
+        }
+
+        function unlockCA() {
+            caLocked = false;
+            const v = allVenues.find(x => x.id === currentVenueId);
+            renderCAField(v ? v['Venue ID'] : '');
+        }
+
+        function confirmCA() {
+            const input = document.getElementById('fCaId');
+            if (!input || !input.value.trim()) { alert('Enter a CA Venue ID before locking.'); return; }
+            caLocked = true;
+            renderCAField(parseFloat(input.value));
+        }
 
         async function loadVenues() {
             const res = await db.client.from('venues')
@@ -217,7 +252,8 @@
             document.getElementById('fState').value     = v.state || '';
             document.getElementById('fZip').value       = v.zip || '';
             document.getElementById('fClub').value      = v.club_name || '';
-            document.getElementById('fCaId').value      = v['Venue ID'] ? Math.round(v['Venue ID']) : '';
+            caLocked = true;
+            renderCAField(v['Venue ID']);
 
             document.getElementById('venueCard').style.display = 'block';
             document.getElementById('saveStatus').style.display = 'none';
@@ -230,7 +266,11 @@
         async function saveVenue() {
             if (!currentVenueId) return;
 
-            const caId = document.getElementById('fCaId').value;
+            const caInput = document.getElementById('fCaId');
+            const caIdSpan = document.querySelector('#caIdWrap .ca-locked span');
+            const caId = caLocked
+                ? (caIdSpan ? caIdSpan.textContent.replace('—','').trim() : '')
+                : (caInput ? caInput.value.trim() : '');
             const updates = {
                 'Venue Name': document.getElementById('fVenueName').value.trim(),
                 'address':    document.getElementById('fAddress').value.trim(),
