@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Venue & Field Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            background-color: #060e20 !important;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            ) !important;
+        }
+        .search-wrap { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+        .search-wrap input { padding:10px 16px; border:1.5px solid #ccc; border-radius:8px; font-size:0.95rem; width:320px; font-family:inherit; }
+        .search-wrap input:focus { outline:none; border-color:#00c853; box-shadow:0 0 0 3px rgba(0,200,83,0.1); }
+        .filter-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+        .filter-club { padding:6px 12px; border:1.5px solid #ddd; border-radius:20px; font-size:0.82rem; font-family:inherit; cursor:pointer; color:#555; background:white; max-width:200px; }
+        .filter-club:focus { outline:none; border-color:#00c853; }
+        .count-note { font-size:0.85rem; color:#888; }
+        .result-list { display:flex; flex-direction:column; gap:8px; margin-bottom:24px; }
+        .result-row { display:flex; justify-content:space-between; align-items:center; background:white; border:1px solid #e0e0e0; border-radius:8px; padding:12px 16px; cursor:pointer; transition:all 0.15s; }
+        .result-row:hover { border-color:#00c853; background:#f4fff8; }
+        .result-row.active { border-color:#152d55; background:#f0f4ff; }
+        .result-name { font-weight:700; color:#152d55; }
+        .result-sub { font-size:0.82rem; color:#888; margin-top:2px; }
+        .result-ca { font-size:0.75rem; font-weight:700; color:#fff; background:#152d55; border-radius:4px; padding:2px 8px; white-space:nowrap; }
+        .venue-card { background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.08); border-top:4px solid #00c853; }
+        .card-section { margin-bottom:22px; }
+        .card-section-title { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#aaa; margin-bottom:12px; padding-bottom:6px; border-bottom:1px solid #eee; }
+        .field-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:14px; }
+        .field-item label { display:block; font-size:0.75rem; font-weight:700; color:#555; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px; }
+        .field-item input, .field-item select { width:100%; padding:8px 10px; border:1.5px solid #ddd; border-radius:6px; font-size:0.88rem; font-family:inherit; box-sizing:border-box; }
+        .field-item input:focus, .field-item select:focus { outline:none; border-color:#00c853; box-shadow:0 0 0 2px rgba(0,200,83,0.1); }
+        .card-actions { display:flex; gap:10px; align-items:center; margin-top:24px; }
+        .save-card-btn { background:#152d55; color:white; border:none; border-radius:8px; padding:10px 28px; font-size:0.9rem; font-weight:700; cursor:pointer; font-family:inherit; }
+        .save-card-btn:hover { background:#00c853; color:#09142a; }
+        .save-status { font-size:0.85rem; color:#27ae60; font-weight:600; display:none; }
+        .save-err { font-size:0.85rem; color:#e74c3c; font-weight:600; display:none; }
+        .ca-id-display { font-size:0.88rem; color:#152d55; font-weight:700; background:#f0f4ff; padding:8px 10px; border-radius:6px; border:1.5px dashed #c8d8f0; display:inline-block; min-width:80px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📍 Venue & Field Management</h1>
+            <p class="subtitle">Search, view, and edit venue records</p>
+        </header>
+
+        <main>
+            <div style="margin-bottom:20px;">
+                <a href="admin.html" class="btn-back">← Admin Portal</a>
+            </div>
+
+            <!-- Search & Filter -->
+            <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); margin-bottom:24px;">
+                <div class="filter-bar">
+                    <select class="filter-club" id="clubFilter" onchange="applyFilters()">
+                        <option value="">All Clubs</option>
+                    </select>
+                    <span id="countNote" class="count-note"></span>
+                </div>
+                <div style="font-size:0.8rem; color:#aaa; margin-bottom:12px;">Filter by club or search by name, city, or address. Click any venue to view and edit.</div>
+                <div class="search-wrap">
+                    <input type="text" id="searchInput" placeholder="Search by name, city, or address…" oninput="applyFilters()">
+                </div>
+                <div id="resultList" class="result-list"></div>
+            </div>
+
+            <!-- Detail Card -->
+            <div id="venueCard" style="display:none;">
+                <div class="venue-card">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:8px;">
+                        <div>
+                            <div style="font-size:1.3rem; font-weight:900; color:#152d55;" id="cardTitle"></div>
+                            <div style="font-size:0.82rem; color:#aaa; margin-top:4px;" id="cardSub"></div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:0.72rem; font-weight:700; color:#aaa; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">CA Venue ID</div>
+                            <div class="ca-id-display" id="cardCaId">—</div>
+                        </div>
+                    </div>
+
+                    <!-- Location -->
+                    <div class="card-section">
+                        <div class="card-section-title">Location</div>
+                        <div class="field-grid">
+                            <div class="field-item" style="grid-column:span 2;">
+                                <label>Venue Name</label>
+                                <input type="text" id="fVenueName">
+                            </div>
+                            <div class="field-item" style="grid-column:span 2;">
+                                <label>Address</label>
+                                <input type="text" id="fAddress">
+                            </div>
+                            <div class="field-item">
+                                <label>City</label>
+                                <input type="text" id="fCity">
+                            </div>
+                            <div class="field-item">
+                                <label>State</label>
+                                <input type="text" id="fState" maxlength="2" style="text-transform:uppercase;">
+                            </div>
+                            <div class="field-item">
+                                <label>Zip</label>
+                                <input type="text" id="fZip">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Assignment -->
+                    <div class="card-section">
+                        <div class="card-section-title">Assignment</div>
+                        <div class="field-grid">
+                            <div class="field-item">
+                                <label>Club</label>
+                                <input type="text" id="fClub">
+                            </div>
+                            <div class="field-item">
+                                <label>CA Venue ID</label>
+                                <input type="number" id="fCaId" placeholder="e.g. 795">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-actions">
+                        <button class="save-card-btn" onclick="saveVenue()">Save Changes</button>
+                        <span class="save-status" id="saveStatus">✅ Saved</span>
+                        <span class="save-err" id="saveErr">❌ Save failed</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="https://anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <a href="https://anvil-arts.com"><img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Anvil Arts"></a></p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase-client.js"></script>
+    <script>
+        const db = new SupabaseClientWrapper(CONFIG);
+        let allVenues = [];
+        let currentVenueId = null;
+
+        async function loadVenues() {
+            const res = await db.client.from('venues')
+                .select('id, "Venue Name", "Venue ID", address, city, state, zip, club_name')
+                .order('Venue Name', { ascending: true });
+
+            if (res.error) { console.error(res.error); return; }
+
+            allVenues = res.data || [];
+
+            // Populate club filter
+            const clubs = [...new Set(allVenues.map(v => v.club_name).filter(Boolean))].sort();
+            const sel = document.getElementById('clubFilter');
+            clubs.forEach(c => {
+                const o = document.createElement('option');
+                o.value = c; o.textContent = c;
+                sel.appendChild(o);
+            });
+
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const q     = document.getElementById('searchInput').value.trim().toLowerCase();
+            const club  = document.getElementById('clubFilter').value;
+
+            let filtered = allVenues.filter(v => {
+                const name    = (v['Venue Name'] || '').toLowerCase();
+                const city    = (v.city || '').toLowerCase();
+                const address = (v.address || '').toLowerCase();
+                const matchQ  = !q || name.includes(q) || city.includes(q) || address.includes(q);
+                const matchC  = !club || v.club_name === club;
+                return matchQ && matchC;
+            });
+
+            document.getElementById('countNote').textContent = `${filtered.length} venue${filtered.length !== 1 ? 's' : ''}`;
+            renderList(filtered);
+        }
+
+        function renderList(venues) {
+            const list = document.getElementById('resultList');
+            if (!venues.length) {
+                list.innerHTML = '<div style="color:#aaa; font-size:0.9rem; padding:8px 0;">No venues found.</div>';
+                return;
+            }
+            list.innerHTML = venues.map(v => `
+                <div class="result-row ${v.id === currentVenueId ? 'active' : ''}" onclick="openVenue(${v.id})">
+                    <div>
+                        <div class="result-name">${v['Venue Name'] || '—'}</div>
+                        <div class="result-sub">${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; ${v.club_name || 'No club'}</div>
+                    </div>
+                    <div class="result-ca">${v['Venue ID'] ? 'CA ' + Math.round(v['Venue ID']) : 'No CA ID'}</div>
+                </div>
+            `).join('');
+        }
+
+        function openVenue(id) {
+            const v = allVenues.find(x => x.id === id);
+            if (!v) return;
+            currentVenueId = id;
+
+            document.getElementById('cardTitle').textContent = v['Venue Name'] || 'Unnamed Venue';
+            document.getElementById('cardSub').textContent   = [v.city, v.state].filter(Boolean).join(', ') || '';
+            document.getElementById('cardCaId').textContent  = v['Venue ID'] ? Math.round(v['Venue ID']) : '—';
+
+            document.getElementById('fVenueName').value = v['Venue Name'] || '';
+            document.getElementById('fAddress').value   = v.address || '';
+            document.getElementById('fCity').value      = v.city || '';
+            document.getElementById('fState').value     = v.state || '';
+            document.getElementById('fZip').value       = v.zip || '';
+            document.getElementById('fClub').value      = v.club_name || '';
+            document.getElementById('fCaId').value      = v['Venue ID'] ? Math.round(v['Venue ID']) : '';
+
+            document.getElementById('venueCard').style.display = 'block';
+            document.getElementById('saveStatus').style.display = 'none';
+            document.getElementById('saveErr').style.display    = 'none';
+
+            applyFilters();
+            document.getElementById('venueCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function saveVenue() {
+            if (!currentVenueId) return;
+
+            const caId = document.getElementById('fCaId').value;
+            const updates = {
+                'Venue Name': document.getElementById('fVenueName').value.trim(),
+                'address':    document.getElementById('fAddress').value.trim(),
+                'city':       document.getElementById('fCity').value.trim(),
+                'state':      document.getElementById('fState').value.trim().toUpperCase(),
+                'zip':        document.getElementById('fZip').value.trim() || null,
+                'club_name':  document.getElementById('fClub').value.trim(),
+                'Venue ID':   caId ? parseFloat(caId) : null
+            };
+
+            const res = await db.client.from('venues').update(updates).eq('id', currentVenueId);
+
+            if (res.error) {
+                document.getElementById('saveErr').style.display = 'inline';
+                document.getElementById('saveStatus').style.display = 'none';
+                console.error(res.error);
+                return;
+            }
+
+            // Update local cache
+            const idx = allVenues.findIndex(v => v.id === currentVenueId);
+            if (idx >= 0) {
+                allVenues[idx] = { ...allVenues[idx], ...updates };
+            }
+
+            document.getElementById('cardTitle').textContent = updates['Venue Name'];
+            document.getElementById('cardCaId').textContent  = caId ? Math.round(caId) : '—';
+            document.getElementById('saveStatus').style.display = 'inline';
+            document.getElementById('saveErr').style.display    = 'none';
+            setTimeout(() => document.getElementById('saveStatus').style.display = 'none', 3000);
+
+            applyFilters();
+        }
+
+        loadVenues();
+    </script>
+</body>
+</html>
