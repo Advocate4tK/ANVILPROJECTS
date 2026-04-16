@@ -747,11 +747,11 @@
 
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/supabase-client.js?v=9"></script>
     <script>
-        emailjs.init('p0JPOZ4XKJ86egvTB');
-
-        document.getElementById('demoSubmitBtn').addEventListener('click', function() {
+        document.getElementById('demoSubmitBtn').addEventListener('click', async function() {
             const name  = document.getElementById('dName').value.trim();
             const club  = document.getElementById('dClub').value.trim();
             const email = document.getElementById('dEmail').value.trim();
@@ -767,18 +767,20 @@
             this.disabled = true;
             this.textContent = 'Sending…';
 
-            const body = `New Reff Tool inquiry (from demo page):\n\nName: ${name}\nClub: ${club}\nEmail: ${email}\nPhone: ${phone || '—'}\nRole: ${role || '—'}\n\nMessage:\n${msg || '—'}`;
+            const { error } = await supabaseClient
+                .from('leads')
+                .insert([{ name, club, email, phone: phone || null, role: role || null, message: msg || null }]);
 
-            emailjs.send('nectassignor@gmail.com', 'template_e6a6ab', {
-                from_name: name, club, reply_to: email, message: body
-            }).then(() => {
-                document.getElementById('demoSuccessMsg').style.display = 'block';
-                this.style.display = 'none';
-            }).catch(() => {
-                window.location.href = `mailto:nectassignor@gmail.com?subject=Reff Tool Inquiry — ${club}&body=${encodeURIComponent(body)}`;
-                document.getElementById('demoSuccessMsg').style.display = 'block';
-                this.style.display = 'none';
-            });
+            if (error) {
+                console.error('Lead insert error:', error);
+                this.disabled = false;
+                this.textContent = 'Send Request';
+                alert('Something went wrong. Please try again.');
+                return;
+            }
+
+            document.getElementById('demoSuccessMsg').style.display = 'block';
+            this.style.display = 'none';
         });
     </script>
 </body>

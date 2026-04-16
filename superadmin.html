@@ -244,6 +244,19 @@
                     </div>
                 </div>
 
+                <!-- ── Leads ── -->
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:#aaa; margin-bottom:8px;">
+                    Demo Inquiries — Leads
+                    <span id="leadsNewBadge" style="display:none; margin-left:8px; background:#e94560; color:#fff; font-size:0.7rem; padding:2px 8px; border-radius:20px; vertical-align:middle;"></span>
+                </div>
+                <div style="margin-bottom:40px;">
+                    <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #e94560; border-radius:10px; padding:14px 18px;">
+                        <div id="leadsLoading" style="color:#888; font-size:0.85rem; text-align:center; padding:10px 0;">Loading…</div>
+                        <div id="leadsEmpty" style="display:none; color:#888; font-size:0.85rem; text-align:center; padding:10px 0;">No inquiries yet.</div>
+                        <div id="leadsList" style="display:flex; flex-direction:column; gap:10px;"></div>
+                    </div>
+                </div>
+
                 <!-- ── Season Configuration ── -->
                 <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:#aaa; margin-bottom:8px;">Season</div>
                 <div style="margin-bottom:40px;">
@@ -311,6 +324,71 @@
             if (pinOverride)  document.getElementById('pinReminderDisplay').textContent = pinOverride;
             if (passOverride) document.getElementById('adminPassDisplay').textContent   = passOverride;
             loadAppVersion();
+            loadLeads();
+        }
+
+        async function loadLeads() {
+            const { data, error } = await supabaseClient
+                .from('leads')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            document.getElementById('leadsLoading').style.display = 'none';
+
+            if (error || !data || data.length === 0) {
+                document.getElementById('leadsEmpty').style.display = 'block';
+                return;
+            }
+
+            const unviewed = data.filter(l => !l.viewed).length;
+            if (unviewed > 0) {
+                const badge = document.getElementById('leadsNewBadge');
+                badge.textContent = unviewed + ' new';
+                badge.style.display = 'inline';
+            }
+
+            const list = document.getElementById('leadsList');
+            list.innerHTML = data.map(l => {
+                const ts = new Date(l.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+                const newDot = !l.viewed ? `<span style="display:inline-block;width:8px;height:8px;background:#e94560;border-radius:50%;margin-right:6px;flex-shrink:0;"></span>` : '';
+                return `
+                <div style="border:1px solid #e2d9ce; border-radius:8px; overflow:hidden; background:#fff;">
+                    <div style="display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer;" onclick="toggleLead(${l.id}, this)">
+                        ${newDot}
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1rem; color:#09142a; text-transform:uppercase; letter-spacing:0.5px;">${l.name}</div>
+                            <div style="font-size:0.8rem; color:#666;">${l.club} &nbsp;·&nbsp; ${l.email} &nbsp;·&nbsp; ${ts}</div>
+                        </div>
+                        <button onclick="event.stopPropagation(); deleteLead(${l.id}, this)" style="background:#fee2e2; color:#e74c3c; border:none; border-radius:6px; padding:4px 10px; font-size:0.75rem; font-weight:700; cursor:pointer; flex-shrink:0;">Delete</button>
+                    </div>
+                    <div id="lead-detail-${l.id}" style="display:none; padding:12px 14px; border-top:1px solid #e2d9ce; font-size:0.85rem; color:#444; line-height:1.6;">
+                        <div><strong>Phone:</strong> ${l.phone || '—'}</div>
+                        <div><strong>Role:</strong> ${l.role || '—'}</div>
+                        <div style="margin-top:6px;"><strong>Message:</strong><br>${l.message ? l.message.replace(/\n/g,'<br>') : '—'}</div>
+                        <div style="margin-top:8px;">
+                            <a href="mailto:${l.email}?subject=Re: Referee Tool Inquiry" style="background:#09142a; color:#fff; font-size:0.78rem; font-weight:700; padding:5px 12px; border-radius:6px; text-decoration:none;">Reply ↗</a>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            // Mark all as viewed
+            await supabaseClient.from('leads').update({ viewed: true }).eq('viewed', false);
+            document.getElementById('leadsNewBadge').style.display = 'none';
+        }
+
+        function toggleLead(id, row) {
+            const detail = document.getElementById('lead-detail-' + id);
+            detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function deleteLead(id, btn) {
+            if (!confirm('Delete this lead?')) return;
+            btn.disabled = true;
+            await supabaseClient.from('leads').delete().eq('id', id);
+            btn.closest('[style*="border:1px"]').remove();
+            const remaining = document.getElementById('leadsList').children.length;
+            if (remaining === 0) document.getElementById('leadsEmpty').style.display = 'block';
         }
 
         function getAutoSeason() {
