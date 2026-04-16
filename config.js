@@ -64,7 +64,7 @@ const CONFIG = {
     EMAILJS: {
         PUBLIC_KEY:  'p0JPOZ4XKJ86egvTB',
         SERVICE_ID:  'nectassignor@gmail.com',
-        TEMPLATE_ID: 'template1',
+        TEMPLATE_ID: 'template_j04a0p6',
     },
 
     // Form settings
