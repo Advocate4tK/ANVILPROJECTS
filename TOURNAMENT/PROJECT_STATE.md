@@ -65,9 +65,10 @@ Injects abbreviated names into `allVenues` at load time for tournament mode.
 ---
 
 ## Open Issues
-- **103 Opt columns**: Staging table has a game with ~103 refs queued. Likely auto-seed ran before tournamentMode was set. Fix: purge tournament staging records and let Eric assign manually.
-- **"—" rows (no venue/field)**: Games whose spreadsheet venue names couldn't be mapped during seed import. Fix: cross-reference Eric's spreadsheet for those rows.
-- **Veteran's Park (Hebron)**: Unknown site number — ask Eric.
+- **103 Opt columns**: ✅ RESOLVED 2026-04-14 — 46,778 staging rows deleted via SQL (`DELETE FROM staging WHERE game_id IN (SELECT id FROM tournament_games)`). Eric can now assign manually from ref pane.
+- **Home/Away blank in tournament games pane**: tournament_games table column names unknown — may be snake_case (home_team/away_team) vs workstation expecting Title Case (Home Team/Away Team). Needs DB verification.
+- **"—" rows (no venue/field)**: Games whose spreadsheet venue names couldn't be mapped during seed. Cross-reference Eric's spreadsheet.
+- **Veteran's Park (Hebron)**: CONFIRMED Site 6 by Tod (2026-04-13).
 
 ---
 

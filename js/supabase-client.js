@@ -377,9 +377,20 @@ class SupabaseClientWrapper {
 
     /**
      * Create an availability record
+     * Note: does NOT use .select() after insert — anon users can't read back rows (RLS),
+     * and form-handler doesn't need the returned record anyway.
      */
     async createAvailability(availabilityData) {
-        return await this.createRecord(this.tables.AVAILABILITY, availabilityData);
+        try {
+            const { error } = await this.client
+                .from('availability')
+                .insert(this._normalizeFields(availabilityData));
+            if (error) throw new Error(error.message);
+            return { id: null };
+        } catch (error) {
+            console.error('SupabaseClient createAvailability error:', error);
+            throw error;
+        }
     }
 
     /**
