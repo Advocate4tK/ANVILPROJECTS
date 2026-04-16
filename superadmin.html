@@ -331,6 +331,7 @@
             const { data, error } = await supabaseClient.client
                 .from('leads')
                 .select('*')
+                .eq('archived', false)
                 .order('created_at', { ascending: false });
 
             document.getElementById('leadsLoading').style.display = 'none';
@@ -359,7 +360,7 @@
                         <div style="font-size:0.8rem; color:#666;">${l.club} &nbsp;·&nbsp; ${l.email} &nbsp;·&nbsp; ${ts}</div>
                     </div>
                     <a href="lead-detail.html?id=${l.id}" target="_blank" style="background:#09142a; color:#fff; font-size:0.78rem; font-weight:700; padding:5px 12px; border-radius:6px; text-decoration:none; white-space:nowrap; flex-shrink:0;">Open ↗</a>
-                    <button onclick="deleteLead(${l.id}, this)" style="background:#fee2e2; color:#e74c3c; border:none; border-radius:6px; padding:4px 10px; font-size:0.75rem; font-weight:700; cursor:pointer; flex-shrink:0;">Delete</button>
+                    <button onclick="archiveLead(${l.id}, this)" style="background:#fef3c7; color:#b45309; border:none; border-radius:6px; padding:4px 10px; font-size:0.75rem; font-weight:700; cursor:pointer; flex-shrink:0;">Archive</button>
                 </div>`;
             }).join('');
 
@@ -373,11 +374,11 @@
             detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
         }
 
-        async function deleteLead(id, btn) {
-            if (!confirm('Delete this lead?')) return;
+        async function archiveLead(id, btn) {
+            if (!confirm('Archive this lead?')) return;
             btn.disabled = true;
-            await supabaseClient.client.from('leads').delete().eq('id', id);
-            btn.closest('[style*="border:1px"]').remove();
+            await supabaseClient.client.from('leads').update({ archived: true }).eq('id', id);
+            btn.closest('div[style*="border:1px"]').remove();
             const remaining = document.getElementById('leadsList').children.length;
             if (remaining === 0) document.getElementById('leadsEmpty').style.display = 'block';
         }
