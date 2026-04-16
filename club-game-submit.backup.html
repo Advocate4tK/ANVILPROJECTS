@@ -1,0 +1,2218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submit Games</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        /* ── Ticker tape ── */
+        #tickerContainer {
+            position: sticky;
+            top: 0;
+            z-index: 200;
+        }
+        .ticker-bar {
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            height: 40px;
+        }
+        .ticker-badge {
+            padding: 0 16px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .ticker-track {
+            flex: 1;
+            overflow: hidden;
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+        .ticker-content {
+            display: inline-block;
+            white-space: nowrap;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.84rem;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            animation: ticker-scroll 35s linear infinite;
+        }
+        @keyframes ticker-scroll {
+            from { transform: translateX(100vw); }
+            to   { transform: translateX(-100%); }
+        }
+
+        .page-intro {
+            background: rgba(9,20,42,0.05);
+            border-left: 4px solid var(--accent);
+            padding: 13px 16px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 26px;
+            font-size: 0.86rem;
+            color: var(--text);
+        }
+
+        .club-select-wrap { margin-bottom: 22px; }
+        .club-select-wrap label { display: block; font-weight: 600; margin-bottom: 6px; }
+        .club-select-wrap select {
+            width: 100%; max-width: 340px;
+            padding: 10px 14px;
+            border: 1.5px solid var(--accent);
+            border-radius: 8px;
+            font-size: 0.92rem;
+            background: var(--surface);
+        }
+
+        /* ── Entry form ── */
+        .entry-form {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-top: 3px solid var(--accent);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 22px;
+            box-shadow: var(--shadow-sm);
+        }
+        .entry-form h3 {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: var(--deep);
+            margin-bottom: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .form-grid .span2 { grid-column: span 2; }
+        .field-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+        .field-group input,
+        .field-group select {
+            width: 100%; padding: 8px 10px;
+            border: 1.5px solid var(--border);
+            border-radius: 6px; font-size: 0.86rem;
+            background: #faf9f7; font-family: 'DM Sans', sans-serif;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .field-group input:focus,
+        .field-group select:focus {
+            outline: none; border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0,200,83,0.11);
+        }
+        .field-group select:disabled { background: var(--bg); color: var(--muted); }
+        .create-btn-row { display: flex; justify-content: flex-end; }
+
+        /* ── Staged games table ── */
+        .staged-section { margin-bottom: 22px; display: none; }
+        .staged-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .staged-header h3 { font-family: 'Barlow Condensed', sans-serif; font-size: 1.05rem; font-weight: 800; color: var(--deep); text-transform: uppercase; letter-spacing: 0.5px; }
+        .staged-count { font-size: 0.78rem; color: var(--deep); background: rgba(0,200,83,0.15); padding: 3px 10px; border-radius: 12px; font-weight: 700; }
+        .staged-table-wrap { margin-bottom: 14px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+        .staged-table { width: 100%; border-collapse: collapse; font-size: 0.76rem; table-layout: fixed; }
+        .staged-table th { background: var(--deep); color: rgba(255,255,255,0.85); padding: 7px 8px; text-align: left; white-space: nowrap; overflow: hidden; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.72rem; letter-spacing: 0.3px; }
+        .staged-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .staged-table th:nth-child(1), .staged-table td:nth-child(1) { width: 30px; }
+        .staged-table th:nth-child(2), .staged-table td:nth-child(2) { width: 80px; }
+        .staged-table th:nth-child(3), .staged-table td:nth-child(3) { width: 72px; }
+        .staged-table th:nth-child(4), .staged-table td:nth-child(4) { width: 14%; }
+        .staged-table th:nth-child(5), .staged-table td:nth-child(5) { width: 14%; }
+        .staged-table th:nth-child(6), .staged-table td:nth-child(6) { width: 44px; }
+        .staged-table th:nth-child(7), .staged-table td:nth-child(7) { width: 60px; }
+        .staged-table th:nth-child(8), .staged-table td:nth-child(8) { width: 55px; }
+        .staged-table th:nth-child(9), .staged-table td:nth-child(9) { width: 14%; }
+        .staged-table th:nth-child(10), .staged-table td:nth-child(10) { width: 80px; }
+        .staged-table th:nth-child(11), .staged-table td:nth-child(11) { width: auto; }
+        .staged-table th:nth-child(12), .staged-table td:nth-child(12) { width: 220px; white-space: normal; }
+        .staged-table th:nth-child(13), .staged-table td:nth-child(13) { width: 28px; }
+        .staged-table tr:nth-child(even) { background: var(--bg); }
+        .staged-table tr.submitted-row td { background: #dcfce7; color: #14532d; }
+        .staged-table tr.error-row td    { background: #fee2e2; color: #991b1b; }
+        .staged-table tr.skipped-row td  { background: #fef3c7; color: #78350f; }
+        .remove-row-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; transition: color 0.15s; }
+        .remove-row-btn:hover { color: var(--danger); background: #fee2e2; }
+        .submit-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+        /* ── Progress ── */
+        .progress-bar-wrap { background: var(--border); border-radius: 8px; height: 8px; margin-top: 16px; overflow: hidden; display: none; }
+        .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; border-radius: 8px; }
+        #progressText { text-align: center; font-size: 0.82rem; color: var(--muted); margin-top: 8px; display: none; }
+        .summary-box { padding: 13px 18px; border-radius: 8px; margin-top: 16px; font-weight: 600; display: none; font-size: 0.88rem; }
+        .summary-box.all-good    { background: #dcfce7; color: #14532d; }
+        .summary-box.some-errors { background: #fef3c7; color: #78350f; }
+
+        /* ── Scheduled Games ── */
+        .ref-badge { background: rgba(9,20,42,0.07); color: var(--deep); font-size:0.72rem; font-weight:700; padding:2px 7px; border-radius:8px; white-space:nowrap; display:inline-block; margin:1px 2px; }
+        .status-badge { font-size:0.7rem; font-weight:700; padding:2px 9px; border-radius:10px; white-space:nowrap; letter-spacing:0.2px; }
+        .status-submitted   { background:#dcfce7; color:#14532d; }
+        .status-assigned    { background:rgba(9,20,42,0.08); color:var(--deep); }
+        .status-change-req  { background:#fef3c7; color:#78350f; }
+        .btn-change { background:none; border:1px solid var(--amber); color:#92400e; border-radius:6px; padding:3px 10px; font-size:0.76rem; font-weight:600; cursor:pointer; white-space:nowrap; transition: all 0.15s; }
+        .btn-change:hover { background: var(--amber); color: white; }
+
+        /* ── Game card layout ── */
+        .game-card {
+            background: var(--surface);
+            border-radius: 8px;
+            border-left: 4px solid var(--deep);
+            padding: 9px 13px;
+            margin-bottom: 6px;
+            box-shadow: var(--shadow-sm);
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            transition: box-shadow 0.15s;
+        }
+        .game-card:hover { box-shadow: var(--shadow-md); }
+        .game-card.change-req     { border-left-color: var(--amber); background: #fffbeb; }
+        .game-card.change-done    { border-left-color: var(--accent); background: #f0fdf4; }
+        .game-card.cancelled-game { border-left-color: #dc2626; background: #fef2f2; opacity: 0.82; }
+        .game-card.cancelled-game .game-matchup { color: #991b1b; text-decoration: line-through; }
+        .game-card-main { flex: 1 1 280px; min-width: 0; }
+        .game-matchup { font-family: 'Barlow Condensed', sans-serif; font-size: 1rem; font-weight: 800; color: var(--deep); margin-bottom: 1px; letter-spacing: 0.2px; }
+        .game-card.change-req  .game-matchup { color: #92400e; }
+        .game-card.change-done .game-matchup { color: var(--accent-dark); }
+        .game-meta { font-size: 0.73rem; color: var(--muted); margin-bottom: 2px; }
+        .game-refs { font-size: 0.73rem; color: var(--muted); }
+        .game-refs-label { font-weight: 600; margin-right: 4px; }
+        .game-card-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+        .submitted-by-lbl { font-size: 0.68rem; color: #bbb; }
+        .chg-section-hdr {
+            display: flex; align-items: center; gap: 10px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.95rem; font-weight: 800; text-transform: uppercase;
+            letter-spacing: 1.5px; margin-bottom: 10px; padding-bottom: 6px;
+        }
+        .chg-section-hdr.pending  { color: #92400e; border-bottom: 2px solid var(--amber); }
+        .chg-section-hdr.resolved { color: var(--accent-dark); border-bottom: 2px solid var(--accent); }
+        .chg-req-detail { font-size: 0.78rem; background: rgba(9,20,42,0.04); border-radius: 6px; padding: 7px 10px; margin-top: 6px; color: var(--muted); }
+        .chg-req-detail strong { color: var(--text); }
+
+        /* ── Change Request inline form ── */
+        .change-form { background:#fffbeb; border:1px solid #fde68a; border-left:3px solid var(--amber); border-radius:8px; padding:13px 15px; margin-top:8px; display:none; }
+        .change-form label { font-size:0.78rem; font-weight:600; color:var(--text); display:block; margin-bottom:3px; margin-top:10px; }
+        .change-form label:first-child { margin-top:0; }
+        .change-form input, .change-form textarea { width:100%; padding:7px 10px; border:1.5px solid var(--border); border-radius:6px; font-size:0.86rem; font-family:'DM Sans',sans-serif; box-sizing:border-box; background:#faf9f7; }
+        .change-form textarea { height:60px; resize:vertical; }
+        .change-form-btns { display:flex; gap:8px; margin-top:10px; }
+
+        /* ── Modify Game inline form ── */
+        .modify-form { background:rgba(9,20,42,0.04); border:1px solid var(--border); border-left:3px solid var(--deep); border-radius:8px; padding:13px 15px; margin-top:8px; display:none; }
+        .modify-form label { font-size:0.78rem; font-weight:600; color:var(--text); display:block; margin-bottom:3px; margin-top:10px; }
+        .modify-form label:first-of-type { margin-top:0; }
+        .modify-form input, .modify-form select { width:100%; padding:7px 10px; border:1.5px solid var(--border); border-radius:6px; font-size:0.86rem; font-family:'DM Sans',sans-serif; box-sizing:border-box; background:#faf9f7; }
+        .modify-form-btns { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+        .btn-cancel-game { background:none; border:1px solid var(--danger); color:var(--danger); border-radius:6px; padding:3px 10px; font-size:0.76rem; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; }
+        .btn-cancel-game:hover { background:var(--danger); color:white; }
+        .btn-modify-game { background:none; border:1px solid var(--deep); color:var(--deep); border-radius:6px; padding:3px 10px; font-size:0.76rem; font-weight:600; cursor:pointer; white-space:nowrap; transition:all 0.15s; }
+        .btn-modify-game:hover { background:var(--deep); color:white; }
+
+        /* ── CSV upload tab ── */
+        .tab-toggle { display:flex; margin-bottom:20px; border-radius:8px; overflow:hidden; border:2px solid var(--deep); }
+        .tab-btn { flex:1; padding:10px 16px; border:none; font-family:'DM Sans',sans-serif; font-weight:700; font-size:0.88rem; cursor:pointer; transition:background 0.15s, color 0.15s; }
+        .tab-btn.active   { background:var(--deep); color:white; }
+        .tab-btn.inactive { background:white; color:var(--deep); }
+        .tab-btn.inactive:hover { background:rgba(9,20,42,0.06); }
+        .csv-drop-zone { border:2.5px dashed var(--deep); border-radius:10px; padding:36px 20px; text-align:center; cursor:pointer; background:rgba(9,20,42,0.03); transition:background 0.2s, border-color 0.2s; margin-bottom:16px; }
+        .csv-drop-zone.dragover { background:rgba(9,20,42,0.09); border-color:var(--accent); }
+        .csv-drop-zone p { margin:6px 0; color:var(--muted); font-size:0.88rem; }
+        .csv-preview-table { width:100%; border-collapse:collapse; font-size:0.78rem; margin-top:12px; }
+        .csv-preview-table th { background:var(--deep); color:white; padding:6px 10px; text-align:left; white-space:nowrap; }
+        .csv-preview-table td { padding:5px 10px; border-bottom:1px solid var(--border); }
+        .csv-preview-table tr:nth-child(even) td { background:var(--bg); }
+        .csv-preview-table tr.csv-row-invalid td { background:#fee2e2; color:#991b1b; }
+    </style>
+</head>
+<body>
+    <!-- Assignor ticker tape banners (stacked, hidden until loaded) -->
+    <div id="tickerContainer"></div>
+
+    <div class="container">
+        <header>
+            <h1>⚽ Submit Games</h1>
+            <p class="subtitle" id="pageSubtitle">Enter your home games for referee scheduling</p>
+            <div id="submitterBadge" style="display:none; position:absolute; top:14px; right:20px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); border-radius:20px; padding:6px 14px; font-size:0.8rem; color:white; align-items:center; gap:10px;">
+                <span>👤 <strong id="submitterName"></strong></span>
+                <a href="#" onclick="resetDoorway(); return false;" style="color:rgba(255,255,255,0.7); font-size:0.75rem; font-weight:600; text-decoration:none; margin-left:4px;">Log Out</a>
+            </div>
+        </header>
+
+        <main>
+            <!-- Club name — shown before doorway when URL param is present -->
+            <div id="preDoorwayClubName" style="display:none; text-align:center; margin:0 auto 20px; max-width:500px;">
+                <div style="font-size:clamp(24px, 5vw, 48px); font-weight:900; color:#e94560; text-transform:uppercase; letter-spacing:3px; line-height:1.15; text-shadow:2px 2px 0px rgba(233,69,96,0.18);" id="preDoorwayName"></div>
+                <div style="font-size:0.82rem; color:#888; margin-top:6px; letter-spacing:1px; text-transform:uppercase; font-weight:600;">Game Submission Portal</div>
+            </div>
+
+            <!-- Doorway Step 1: Name -->
+            <div id="doorwayStep1" class="form-container" style="max-width:500px; margin:0 auto 24px;">
+                <h2 style="color:#0f3460; margin-bottom:4px; font-size:1.1rem;">Who's submitting?</h2>
+                <p style="color:#666; font-size:0.88rem; margin-bottom:16px;">Enter your name to continue.</p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                    <div><label style="font-size:0.8rem; color:#555; display:block; margin-bottom:3px;">First Name <span style="color:#e74c3c">*</span></label>
+                        <input type="text" id="dwFirst" placeholder="First" autocomplete="off" style="width:100%; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit; box-sizing:border-box;"></div>
+                    <div><label style="font-size:0.8rem; color:#555; display:block; margin-bottom:3px;">Last Name <span style="color:#e74c3c">*</span></label>
+                        <input type="text" id="dwLast" placeholder="Last" autocomplete="off" style="width:100%; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit; box-sizing:border-box;"></div>
+                </div>
+                <button onclick="unlockSubmit()" style="width:100%; background:#0f3460; color:white; border:none; border-radius:8px; padding:10px; font-size:1rem; font-weight:700; cursor:pointer; margin-top:4px;">Continue →</button>
+                <p id="dwError" style="color:#e74c3c; font-size:0.85rem; margin-top:8px; display:none;"></p>
+            </div>
+
+            <!-- Doorway Step 2: Contact info (new users only) -->
+            <div id="doorwayStep2" class="form-container" style="max-width:500px; margin:0 auto 24px; display:none;">
+                <h2 style="color:#0f3460; margin-bottom:4px; font-size:1.1rem;">Welcome! One more step.</h2>
+                <p style="color:#666; font-size:0.88rem; margin-bottom:16px;">Looks like you're new here. Please provide your contact info — you won't be asked again.</p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                    <div><label style="font-size:0.8rem; color:#555; display:block; margin-bottom:3px;">Email <span style="color:#e74c3c">*</span></label>
+                        <input type="email" id="dwEmail" placeholder="email@example.com" style="width:100%; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit; box-sizing:border-box;"></div>
+                    <div><label style="font-size:0.8rem; color:#555; display:block; margin-bottom:3px;">Cell Phone <span style="color:#e74c3c">*</span></label>
+                        <input type="tel" id="dwPhone" placeholder="860-555-0100" style="width:100%; padding:9px 12px; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; font-family:inherit; box-sizing:border-box;"></div>
+                </div>
+                <button onclick="unlockStep2()" style="width:100%; background:#0f3460; color:white; border:none; border-radius:8px; padding:10px; font-size:1rem; font-weight:700; cursor:pointer; margin-top:4px;">Continue →</button>
+                <p id="dwError2" style="color:#e74c3c; font-size:0.85rem; margin-top:8px; display:none;"></p>
+            </div>
+
+            <!-- Main form — hidden until doorway complete -->
+            <div id="mainForm" style="display:none;">
+            <div class="form-container">
+
+                <div class="page-intro">
+                    Fill in each game and click <strong>Create Game</strong> to add it to your list.
+                    When all games are entered, click <strong>Submit All Games</strong> to send them to the assignor.
+                </div>
+
+                <!-- Club — shown as locked label when URL param present, dropdown otherwise -->
+                <div class="club-select-wrap" id="clubSelectWrap">
+                    <label for="clubSelect">Your Club <span style="color:#e74c3c">*</span></label>
+                    <select id="clubSelect">
+                        <option value="">— Loading clubs… —</option>
+                    </select>
+                </div>
+                <div id="clubLockedWrap" style="display:none; width:100%; margin-bottom:28px; flex-direction:column; align-items:center; text-align:center; gap:14px;">
+                    <img id="clubLockedLogo" src="" alt="" style="display:none; height:180px; width:auto; object-fit:contain; background:white; border-radius:12px; padding:10px; box-shadow:0 2px 12px rgba(0,0,0,0.1);">
+                    <div>
+                        <div style="font-size:clamp(18px, 3.5vw, 42px); font-weight:900; color:#e94560; text-transform:uppercase; letter-spacing:2px; line-height:1.15;" id="clubLockedName"></div>
+                        <div style="font-size:13px; color:#888; margin-top:4px;" id="clubLockedSub">Submitting games for this club</div>
+                    </div>
+                </div>
+                <div id="clubNotFoundMsg" style="display:none; background:#fadbd8; color:#922b21; padding:16px; border-radius:8px; margin-bottom:20px;">
+                    Club not found. Please check your link or contact your assignor.
+                </div>
+
+                <!-- Tab toggle -->
+                <div class="tab-toggle">
+                    <button class="tab-btn active" id="tabBtnEnter" onclick="switchTab('enter')">✏️ Enter Games</button>
+                    <button class="tab-btn inactive" id="tabBtnCSV" onclick="switchTab('csv')">📂 Upload CSV</button>
+                </div>
+
+                <!-- Tab: Enter Games -->
+                <div id="tabEnter">
+                <!-- Entry form -->
+                <div class="entry-form">
+                    <h3>Game Details</h3>
+                    <div class="form-grid">
+                        <div class="field-group">
+                            <label>Date <span style="color:#e74c3c">*</span></label>
+                            <input type="date" id="gDate">
+                        </div>
+                        <div class="field-group">
+                            <label>Time <span style="color:#e74c3c">*</span></label>
+                            <input type="time" id="gTime">
+                        </div>
+                        <div class="field-group span2">
+                            <label>Home Team <span style="color:#e74c3c">*</span></label>
+                            <input type="text" id="gHome" placeholder="e.g. Griswold FC Girls">
+                        </div>
+                        <div class="field-group span2">
+                            <label>Away Team <span style="color:#e74c3c">*</span></label>
+                            <input type="text" id="gAway" placeholder="e.g. Stonington SC Girls">
+                        </div>
+                        <div class="field-group">
+                            <label>Age Group <span style="color:#e74c3c">*</span></label>
+                            <select id="gAge">
+                                <option value="">— Select —</option>
+                                <option>U8</option>
+                                <option>U10</option>
+                                <option>U12</option>
+                                <option>U13</option>
+                                <option>U15</option>
+                                <option>U16</option>
+                                <option>U19</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label>Division / Team <span style="font-size:0.75rem; color:#888;">(optional)</span></label>
+                            <input type="text" id="gDivision" placeholder="e.g. Gold, Blue, Team A" maxlength="20">
+                        </div>
+                        <div class="field-group">
+                            <label>Gender <span style="color:#e74c3c">*</span></label>
+                            <select id="gGender">
+                                <option value="">— Select —</option>
+                                <option>Girls</option>
+                                <option>Boys</option>
+                                <option>Coed</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label>Game Type <span style="color:#e74c3c">*</span></label>
+                            <select id="gGameType">
+                                <option value="">— Select —</option>
+                                <option value="Rec">Rec</option>
+                                <option value="Comp">Comp / Travel</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label>Venue <span style="color:#e74c3c">*</span></label>
+                            <select id="gVenue">
+                                <option value="">— Select venue —</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label>Field <span style="color:#e74c3c">*</span></label>
+                            <select id="gField" disabled>
+                                <option value="">— Select venue first —</option>
+                            </select>
+                        </div>
+                        <div class="field-group span2">
+                            <label>Notes</label>
+                            <input type="text" id="gNotes" placeholder="Optional">
+                        </div>
+                    </div>
+                    <div class="create-btn-row">
+                        <button class="btn btn-primary" id="createGameBtn" disabled>+ Create Game</button>
+                    </div>
+                </div>
+                </div><!-- /tabEnter -->
+
+                <!-- Tab: Upload CSV -->
+                <div id="tabCSV" style="display:none;">
+                    <div class="page-intro" style="margin-bottom:12px;">
+                        Upload a CSV with your full game schedule. Select the format that matches your file, then drop it below.
+                    </div>
+                    <!-- Format selector -->
+                    <div style="margin-bottom:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <label style="font-weight:700; font-size:0.88rem; color:var(--deep);">File Format:</label>
+                        <select id="csvFormatSelect" style="font-family:'DM Sans',sans-serif; font-size:0.88rem; padding:6px 14px; border:2px solid var(--deep); border-radius:6px; background:white; color:var(--deep); cursor:pointer;">
+                            <option value="standard">Standard — Referee Tool Template</option>
+                            <option value="glast-rec">Glastonbury — Recreation</option>
+                            <option value="glast-travel">Glastonbury — Travel (Comp)</option>
+                        </select>
+                        <span id="csvTemplateLink" style="font-size:0.85rem;">
+                            <a id="csvTemplateLinkAnchor" href="referee-tool-games-upload-template.csv" download style="color:var(--accent-dark); font-weight:700;">⬇ Download Referee Tool Template</a>
+                        </span>
+                    </div>
+                    <div class="csv-drop-zone" id="csvDropZone">
+                        <div style="font-size:40px; margin-bottom:8px;">📂</div>
+                        <p><strong>Drag &amp; drop your CSV file here</strong></p>
+                        <p>or</p>
+                        <button class="btn btn-primary" type="button" onclick="document.getElementById('csvFileInput').click()">Browse File</button>
+                        <input type="file" id="csvFileInput" accept=".csv" style="display:none;">
+                    </div>
+                    <div id="csvPreviewSection" style="display:none;">
+                        <p id="csvPreviewCount" style="font-size:0.88rem; color:var(--muted); margin-bottom:8px;"></p>
+                        <div style="overflow-x:auto;">
+                            <table class="csv-preview-table" id="csvPreviewTable"></table>
+                        </div>
+                        <div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <button class="btn btn-primary" id="csvAddBtn">+ Add to Queue</button>
+                            <button class="btn btn-outline" id="csvClearBtn">Clear</button>
+                            <span id="csvAddResult" style="font-size:0.85rem; color:var(--accent-dark); font-weight:700;"></span>
+                        </div>
+                    </div>
+                </div><!-- /tabCSV -->
+
+                <!-- Staged games -->
+                <div class="staged-section" id="stagedSection">
+                    <div class="staged-header">
+                        <h3>Games Ready to Submit</h3>
+                        <span class="staged-count" id="stagedCount">0 games</span>
+                    </div>
+                    <div class="staged-table-wrap">
+                        <table class="staged-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Home Team</th>
+                                    <th>Away Team</th>
+                                    <th>Age</th>
+                                    <th>Gender</th>
+                                    <th>Type</th>
+                                    <th>Venue</th>
+                                    <th>Field</th>
+                                    <th>Notes</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="stagedBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="submit-row">
+                        <button class="btn btn-primary" id="submitBtn">Submit All Games</button>
+                    </div>
+                </div>
+
+                <!-- Progress -->
+                <div class="progress-bar-wrap" id="progressWrap">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <p id="progressText"></p>
+
+                <!-- Summary -->
+                <div class="summary-box" id="summaryBox"></div>
+
+            </div>
+            </div> <!-- /mainForm -->
+
+            <!-- Scheduled Games (live from Airtable, replaces localStorage history) -->
+            <div id="scheduledGamesSection" style="margin-top:28px; display:none;">
+                <div id="scheduledGamesContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>
+            </div>
+
+            <!-- Submission History (localStorage) — hidden, replaced by live section above -->
+            <div id="submissionHistory" style="display:none;">
+                <h2 style="font-family:'Barlow Condensed',sans-serif; color:#09142a; font-size:1.5rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; border-bottom:2px solid #09142a; padding-bottom:8px;">📋 Submitted Games <span id="historySeasonBadge" style="font-size:0.72rem; font-weight:700; background:#00c853; color:#09142a; padding:2px 10px; border-radius:10px; font-family:'DM Sans',sans-serif; vertical-align:middle; letter-spacing:0.3px;"></span></h2>
+                <div id="historyContent"></div>
+            </div>
+        </main>
+
+        <footer>
+            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"></p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/supabase-client.js?v=9"></script>
+    <script>
+        var airtableClient = supabaseClient;
+    </script>
+    <script>
+    let allClubs  = [];
+    let allVenues = [];
+    let allFields = [];
+    let clubLeagueMap = {};
+    let stagedGames   = [];
+    let currentClubRecord = null; // Airtable club record for this page
+    let currentSubmitter  = '';   // name of person who completed doorway
+    let refById           = {};   // Airtable referee record ID → display name
+
+    // Keys are set per-club once the URL param is known
+    let SUBMITTER_KEY = 'cgsSubmitter';
+    let HISTORY_KEY   = 'clubGameSubmitHistory';
+
+    // ── Submission History (localStorage, 2-week retention) ──────────────────
+    const TWO_WEEKS_MS  = 14 * 24 * 60 * 60 * 1000;
+
+    function loadHistory()         { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) { return []; } }
+    function saveHistory(h)        { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+    function pruneHistory(h)       { const cut = Date.now() - TWO_WEEKS_MS; return h.filter(g => g.submittedAt >= cut); }
+
+    function formatTime(t) {
+        if (!t) return '—';
+        const [h, m] = t.split(':').map(Number);
+        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+    }
+
+    function getCurrentSeason(dateStr) {
+        const d = dateStr ? new Date(dateStr) : new Date();
+        const m = d.getMonth() + 1;
+        const y = d.getFullYear();
+        if (m >= 3 && m <= 6)  return `Spring ${y}`;
+        if (m >= 7 && m <= 8)  return `Summer ${y}`;
+        if (m >= 9 && m <= 11) return `Fall ${y}`;
+        return `Winter ${y}`;
+    }
+
+    function getWeekLabel(dateStr) {
+        const d   = new Date(dateStr + 'T00:00:00');
+        const day = d.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const mon  = new Date(d); mon.setDate(d.getDate() + diff);
+        const sun  = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const fmt  = x => x.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        return { key: mon.toISOString().split('T')[0], label: `Week of ${fmt(mon)} – ${fmt(sun)}` };
+    }
+
+    function isFutureWeek(dateStr) {
+        if (!dateStr || dateStr === '—') return false;
+        const todayKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
+        const gameKey  = getWeekLabel(dateStr).key;
+        return gameKey > todayKey;
+    }
+
+    function addGamesToHistory(games) {
+        const history = pruneHistory(loadHistory());
+        const now = Date.now();
+        games.forEach(g => {
+            history.push({
+                date: g.date, time: g.time,
+                home: g.home, away: g.away,
+                age:  g.age,
+                venue: g.venueName || '', field: g.fieldName || '',
+                submittedBy: currentSubmitter,
+                submittedAt: now
+            });
+        });
+        saveHistory(history);
+        renderHistory();
+    }
+
+    function renderHistory() {
+        try {
+            const history = pruneHistory(loadHistory());
+            saveHistory(history);
+            const wrap    = document.getElementById('submissionHistory');
+            const content = document.getElementById('historyContent');
+            wrap.style.display = 'block';
+
+            if (history.length === 0) {
+                content.innerHTML = '<p style="color:#888; font-size:0.85rem;">No games submitted yet on this device.</p>';
+                return;
+            }
+
+            const weeks = {};
+            history.forEach(g => {
+                const dateStr = g.date || new Date(g.submittedAt).toISOString().split('T')[0];
+                const { key, label } = getWeekLabel(dateStr);
+                if (!weeks[key]) weeks[key] = { label, games: [] };
+                weeks[key].games.push(g);
+            });
+
+            const sortedWeeks = Object.entries(weeks).sort((a, b) => a[0].localeCompare(b[0]));
+            content.innerHTML = sortedWeeks.map(([, { label, games }]) => {
+                const rows = games
+                    .sort((a, b) => (a.date||'').localeCompare(b.date||'') || (a.time||'').localeCompare(b.time||''))
+                    .map(g => `<tr>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.date||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${formatTime(g.time)}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">${g.home||'—'} vs ${g.away||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.age||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.venue||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap;">${g.field||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap; color:#555; font-size:0.82rem;">${g.submittedBy||'—'}</td>
+                        <td style="padding:7px 12px; border-bottom:1px solid #f0f0f0;">
+                            <span style="background:#d5f5e3; color:#1e8449; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px;">SUBMITTED</span>
+                        </td>
+                    </tr>`).join('');
+                return `<div style="margin-bottom:18px;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid #e2d9ce; display:flex; align-items:center; gap:8px;">
+                        <span style="font-weight:800; white-space:nowrap;">${label}</span>
+                        <span style="background:#09142a; color:#fff; font-size:0.72rem; font-weight:700; padding:2px 10px; border-radius:8px; font-family:'DM Sans',sans-serif; min-width:22px; text-align:center; flex-shrink:0;">${games.length}</span>
+                    </div>
+                    <table style="width:100%; border-collapse:collapse; font-size:0.85rem; background:white; border-radius:8px; overflow:hidden; box-shadow:0 1px 6px rgba(0,0,0,0.06);">
+                        <thead><tr style="background:#0f3460; color:white;">
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Date</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Time</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Matchup</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Age</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Venue</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Field</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Submitted By</th>
+                            <th style="padding:7px 12px; text-align:left; font-weight:600;">Status</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`;
+            }).join('');
+        } catch(e) {
+            console.error('renderHistory error:', e);
+        }
+    }
+
+    // ── Doorway ───────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        ['dwFirst','dwLast'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') unlockSubmit(); });
+        });
+        ['dwEmail','dwPhone'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') unlockStep2(); });
+        });
+    });
+
+    async function unlockSubmit() {
+        const first = document.getElementById('dwFirst').value.trim();
+        const last  = document.getElementById('dwLast').value.trim();
+        const errEl = document.getElementById('dwError');
+
+        if (!first || !last) {
+            errEl.textContent = 'Please enter your first and last name to continue.';
+            errEl.style.display = 'block';
+            return;
+        }
+        errEl.style.display = 'none';
+
+        currentSubmitter = `${first} ${last}`;
+        document.getElementById('submitterName').textContent = currentSubmitter;
+
+        // Check if the entered name matches the saved Club Admin
+        const existingAdmin = currentClubRecord ? (currentClubRecord.fields['Club Admin'] || '') : '';
+        const nameMatches   = existingAdmin.trim().toLowerCase() === currentSubmitter.toLowerCase();
+        const isAdminBypass = currentSubmitter.toLowerCase() === 'admin override';
+        if (nameMatches || isAdminBypass) {
+            // Returning user or admin bypass — go straight to the form
+            showMainForm();
+        } else {
+            // New user or different person — ask for contact info
+            document.getElementById('doorwayStep1').style.display = 'none';
+            document.getElementById('doorwayStep2').style.display = 'block';
+            document.getElementById('dwEmail').focus();
+        }
+    }
+
+    async function unlockStep2() {
+        const email = document.getElementById('dwEmail').value.trim();
+        const phone = document.getElementById('dwPhone').value.trim();
+        const errEl = document.getElementById('dwError2');
+
+        if (!email || !phone) {
+            errEl.textContent = 'Please enter both your email and cell phone to continue.';
+            errEl.style.display = 'block';
+            return;
+        }
+        errEl.style.display = 'none';
+
+        // Save as Club Admin
+        if (currentClubRecord) {
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.CLUBS, currentClubRecord.id, {
+                    'Club Admin':       currentSubmitter,
+                    'Club Admin Email': email,
+                    'Club Admin Phone': phone,
+                });
+                console.log('Club Admin saved for', currentClubRecord.fields['Club Name'] || '');
+            } catch(e) {
+                console.warn('Could not save Club Admin:', e.message);
+            }
+        }
+
+        showMainForm();
+    }
+
+    async function loadAssignorBanner() {
+        try {
+            const BANNER_PRESETS = {
+                default: { bar: '#09142a', text: '#ffffff', badge: '#00c853', badgeText: '#09142a' },
+                alert:   { bar: '#dc2626', text: '#ffffff', badge: '#991b1b', badgeText: '#fecaca' },
+                warning: { bar: '#d97706', text: '#09142a', badge: '#92400e', badgeText: '#fef3c7' },
+                info:    { bar: '#2563eb', text: '#ffffff', badge: '#1e40af', badgeText: '#bfdbfe' },
+                green:   { bar: '#14532d', text: '#ffffff', badge: '#86efac', badgeText: '#14532d' },
+            };
+            const settings = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.SETTINGS, {
+                filterByFormula: `AND(LOWER({Key})='banner', {Active}=TRUE())`,
+                maxRecords: 50
+            });
+            const thisClub = (currentClubRecord ? (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '') : '').toLowerCase().trim();
+            // Collect all matching banners: club-specific + all-clubs
+            const matches = settings.filter(r => {
+                const targets = (r.fields['Clubs'] || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+                return targets.length === 0 || targets.includes(thisClub);
+            });
+            const container = document.getElementById('tickerContainer');
+            container.innerHTML = '';
+            // Red banners first, then everything else
+            const sorted = [...matches].sort((a, b) => {
+                const aRed = (a.fields['Style'] || '').toLowerCase() === 'red';
+                const bRed = (b.fields['Style'] || '').toLowerCase() === 'red';
+                return bRed - aRed;
+            });
+            sorted.forEach(match => {
+                const msg   = (match.fields['Value'] || '').trim();
+                const style = match.fields['Style'] || 'default';
+                if (!msg) return;
+                const isRed  = style.toLowerCase() === 'red';
+                const preset = BANNER_PRESETS[style] || BANNER_PRESETS.default;
+                const duration = Math.max(12, Math.round(msg.length * 0.28));
+                const bar = document.createElement('div');
+                bar.className = 'ticker-bar';
+                bar.style.background   = preset.bar;
+                bar.style.borderBottom = `2px solid ${preset.badge}`;
+                if (isRed) bar.style.height = '52px';
+                bar.innerHTML = `
+                    <span class="ticker-badge" style="background:${preset.badge}; color:${preset.badgeText};">${isRed ? '⚠️ URGENT' : '📢 Notice'}</span>
+                    <div class="ticker-track">
+                        <span class="ticker-content" style="color:${preset.text}; animation-duration:${duration}s; ${isRed ? 'font-size:1.05rem; font-weight:700;' : ''}">${msg}</span>
+                    </div>`;
+                container.appendChild(bar);
+            });
+        } catch(e) { /* banner is non-critical — fail silently */ }
+    }
+
+    function showMainForm() {
+        document.getElementById('doorwayStep1').style.display  = 'none';
+        document.getElementById('doorwayStep2').style.display  = 'none';
+        document.getElementById('preDoorwayClubName').style.display = 'none';
+        document.getElementById('mainForm').style.display      = 'block';
+        document.getElementById('submitterBadge').style.display = 'flex';
+        if (!new URLSearchParams(window.location.search).has('assignor')) loadAssignorBanner();
+        const [f1, ...rest] = currentSubmitter.split(' ');
+        localStorage.setItem(SUBMITTER_KEY, JSON.stringify({ first: f1, last: rest.join(' ') }));
+        loadScheduledGames();
+    }
+
+    function resetDoorway() {
+        const pending = stagedGames.filter(g => g.status === 'pending');
+        if (pending.length > 0) {
+            if (!confirm(`You have ${pending.length} unsaved game${pending.length > 1 ? 's' : ''} — are you sure you want to log out? They will be lost.`)) return;
+        }
+        localStorage.removeItem(SUBMITTER_KEY);
+        currentSubmitter = '';
+        ['dwFirst','dwLast','dwEmail','dwPhone'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('dwError').style.display        = 'none';
+        document.getElementById('dwError2').style.display        = 'none';
+        document.getElementById('doorwayStep1').style.display     = 'block';
+        document.getElementById('doorwayStep2').style.display     = 'none';
+        document.getElementById('mainForm').style.display         = 'none';
+        document.getElementById('submitterBadge').style.display   = 'none';
+        document.getElementById('submissionHistory').style.display = 'none';
+    }
+
+    // Module-level — must be accessible by loadScheduledGames() and other top-level fns
+    let currentTournament = null;
+
+    window.addEventListener('load', async () => {
+        if (!airtableClient) { alert('Airtable client not initialized.'); return; }
+
+        // Club slug → logo path map (add entries as new clubs go live)
+        const CLUB_LOGO_MAP = {
+            'glastonbury':    'PICS/Glast.png',
+            'east-haddam':    'PICS/east-haddam.png',
+            'griswold':       'PICS/griswold.png',
+
+        };
+
+        // Tournament config map — keyed by ?club= slug
+        // URL pattern: club-game-submit.html?club=glastonbury-tournament
+        const TOURNAMENT_CONFIG = {
+            'glastonbury-tournament': {
+                label:     'Glastonbury Spring Warmup Tournament',
+                logo:      'PICS/Glast.png',
+                clubSlug:  'glastonbury',   // backing club record for venue/field lookup
+            },
+        };
+
+        // Club config — slugs with a forced game_type (hides the Game Type selector)
+        const CLUB_CONFIG = {
+            'neconn': { forcedGameType: 'Rec' },
+        };
+
+        // Set club-specific localStorage keys so history doesn't bleed across clubs
+        const urlParam = new URLSearchParams(window.location.search).get('club');
+        if (urlParam) {
+            const slug = urlParam.toLowerCase().replace(/[^a-z0-9]/g, '-');
+            HISTORY_KEY   = `clubGameSubmitHistory_${slug}`;
+            SUBMITTER_KEY = `cgsSubmitter_${slug}`;
+        }
+
+        // Migrate old generic keys into club-specific ones (one-time migration)
+        const oldHistory = localStorage.getItem('clubGameSubmitHistory');
+        if (oldHistory) {
+            if (!localStorage.getItem(HISTORY_KEY)) {
+                localStorage.setItem(HISTORY_KEY, oldHistory);
+            }
+            localStorage.removeItem('clubGameSubmitHistory');
+        }
+        localStorage.removeItem('cgsSubmitter');
+
+        await loadReferenceData();
+
+        // Banner loads after login — see loadAssignorBanner()
+
+        if (urlParam) {
+            const slug      = urlParam.toLowerCase().replace(/[^a-z0-9]/g, '-');
+            const normalize = s => s.toLowerCase().replace(/[\s-]+/g, '');
+
+            // Check if slug maps to a tournament (e.g. ?club=glastonbury-tournament)
+            const tConf = TOURNAMENT_CONFIG[slug];
+            if (tConf) currentTournament = tConf;
+
+            // Match against actual club records (direct for clubs; backing club for tournaments)
+            const lookupSlug = tConf ? tConf.clubSlug : slug;
+            const match = allClubs.find(c => normalize(c.name) === normalize(lookupSlug));
+
+            if (match) {
+                currentClubRecord = match.record || null;
+
+                // Display name: tournament label or club name
+                const displayName = tConf ? tConf.label : (match.displayName || match.name);
+                const logoSrc     = tConf ? tConf.logo : null;
+
+                document.getElementById('clubSelectWrap').style.display = 'none';
+                const lockedWrap = document.getElementById('clubLockedWrap');
+                lockedWrap.style.display = 'flex';
+                document.getElementById('clubLockedName').textContent = displayName;
+
+                // Pre-doorway club name (visible before login)
+                document.getElementById('preDoorwayName').textContent = displayName;
+                document.getElementById('preDoorwayClubName').style.display = 'block';
+
+                const logoEl = document.getElementById('clubLockedLogo');
+                if (logoSrc) {
+                    logoEl.src   = logoSrc;
+                    logoEl.alt   = displayName;
+                    logoEl.style.display = 'block';
+                } else {
+                    logoEl.style.display = 'none';
+                }
+
+                const subEl = document.getElementById('pageSubtitle');
+                subEl.textContent = tConf ? `${tConf.label} — Game Submission` : 'Home Game Submission';
+                subEl.style.cssText = '';
+
+                // Lock Game Type if club or tournament forces it
+                const forcedType = tConf ? 'Tournament' : (CLUB_CONFIG[slug]?.forcedGameType || null);
+                if (forcedType) {
+                    const gtWrap = document.getElementById('gGameType').closest('.field-group');
+                    if (gtWrap) gtWrap.style.display = 'none';
+                    document.getElementById('gGameType').innerHTML = `<option value="${forcedType}" selected>${forcedType}</option>`;
+                }
+
+                // Set the hidden select so existing logic still works
+                const sel = document.getElementById('clubSelect');
+                sel.innerHTML = `<option value="${match.id}" selected>${match.name}</option>`;
+                populateVenues();
+                updateCreateBtn();
+            } else {
+                document.getElementById('clubSelectWrap').style.display = 'none';
+                document.getElementById('clubNotFoundMsg').style.display = 'block';
+            }
+        } else {
+            // No param — show dropdown (admin/testing mode)
+            populateClubDropdown();
+        }
+
+        // Auto-bypass doorway for authenticated admins using the assignor wrapper
+        const params = new URLSearchParams(window.location.search);
+        // Check Supabase session (replaces old adminAuth sessionStorage)
+        const _sbUrl = (typeof CONFIG !== 'undefined') ? CONFIG.SUPABASE_URL : '';
+        const _sbRef = (_sbUrl.match(/https:\/\/([^.]+)\.supabase\.co/) || [])[1];
+        const _sbSession = _sbRef ? JSON.parse(localStorage.getItem(`sb-${_sbRef}-auth-token`) || 'null') : null;
+        const _hasSupabaseSession = _sbSession && (_sbSession.expires_at > Math.floor(Date.now() / 1000));
+        if (params.has('assignor') && _hasSupabaseSession) {
+            currentSubmitter = 'Assignor';
+            document.getElementById('submitterName').textContent = 'Assignor';
+            showMainForm();
+            return;
+        }
+
+        // Auto-fill saved submitter name
+        const saved = JSON.parse(localStorage.getItem(SUBMITTER_KEY) || 'null');
+        if (saved && saved.first && saved.last) {
+            document.getElementById('dwFirst').value = saved.first;
+            document.getElementById('dwLast').value  = saved.last;
+            const fullName = `${saved.first} ${saved.last}`;
+            const existingAdmin = currentClubRecord ? (currentClubRecord.fields['Club Admin'] || '') : '';
+            if (existingAdmin.trim().toLowerCase() === fullName.toLowerCase()) {
+                currentSubmitter = fullName;
+                document.getElementById('submitterName').textContent = currentSubmitter;
+                showMainForm();
+            }
+        }
+    });
+
+    // Parse Airtable autonumber list stored as CSV string e.g. '"1,128.0",867.0' → [1128, 867]
+    function parseAirtableIds(str) {
+        if (!str) return [];
+        return (str.match(/[\d,]+(?:\.\d+)?/g) || [])
+            .map(s => parseInt(s.replace(/,/g, ''), 10))
+            .filter(n => !isNaN(n));
+    }
+
+    // ── Load reference data ───────────────────────────────────────────────────
+    async function loadReferenceData() {
+        try {
+            const [clubs, venues, fieldRecs, refRecs] = await Promise.all([
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,     { maxRecords: 200 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,    { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,    { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES,  { maxRecords: 500 })
+            ]);
+            refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
+
+            // Build Airtable Venue ID → Supabase record id lookup
+            const venueByAirtableId = {};
+            venues.forEach(v => {
+                const aid = v.fields['Venue ID'];
+                if (aid) venueByAirtableId[parseInt(aid)] = v.id;
+            });
+
+            allClubs = clubs.map(c => ({
+                id:          c.id,
+                name:        c.fields['Club Name'] || c.fields['Name'] || '',
+                displayName: c.fields['Display Name'] || '',
+                league:      c.fields['League'] || 21,
+                venueIds:    parseAirtableIds(c.fields['venues'])
+                                 .map(aid => venueByAirtableId[aid]).filter(Boolean),
+                record:      c
+            })).filter(c => c.name).sort((a, b) => a.name.localeCompare(b.name));
+
+            allClubs.forEach(c => { clubLeagueMap[c.id] = c.league; });
+
+            allVenues = venues.map(v => ({
+                id:    v.id,
+                numId: v.fields['Venue ID'] || null,
+                name:  v.fields['Venue Name'] || '',
+            })).filter(v => v.name);
+
+            allFields = fieldRecs.map(f => ({
+                id:      f.id,
+                numId:   f.fields['Field ID'] || null,
+                name:    f.fields['Field Name'] || '',
+                venueId: f.fields['Venue ID']
+                             ? venueByAirtableId[parseInt(f.fields['Venue ID'])] : null
+            })).filter(f => f.name);
+
+        } catch (err) {
+            alert('Could not load data: ' + err.message);
+        }
+    }
+
+    // ── Club dropdown ─────────────────────────────────────────────────────────
+    function populateClubDropdown() {
+        const sel = document.getElementById('clubSelect');
+        sel.innerHTML = '<option value="">— Select your club —</option>'
+            + allClubs.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        sel.addEventListener('change', () => {
+            populateVenues();
+            updateCreateBtn();
+        });
+    }
+
+    // ── Venue / Field dropdowns ───────────────────────────────────────────────
+    function populateVenues() {
+        const clubId   = document.getElementById('clubSelect').value;
+        const venueEl  = document.getElementById('gVenue');
+        const club     = allClubs.find(c => String(c.id) === String(clubId));
+        const filtered = (club?.venueIds?.length > 0)
+            ? allVenues.filter(v => club.venueIds.includes(v.id))
+            : allVenues;
+
+        venueEl.innerHTML = '<option value="">— Select venue —</option>'
+            + filtered.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+        populateFields();
+    }
+
+    function populateFields() {
+        const venueId  = document.getElementById('gVenue').value;
+        const fieldEl  = document.getElementById('gField');
+        if (!venueId) {
+            fieldEl.innerHTML = '<option value="">— Select venue first —</option>';
+            fieldEl.disabled = true;
+            return;
+        }
+        const fields = allFields.filter(f => String(f.venueId) === String(venueId));
+        fieldEl.innerHTML = '<option value="">— Select field —</option>'
+            + fields.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+        fieldEl.disabled = fields.length === 0;
+    }
+
+    document.getElementById('gVenue').addEventListener('change', populateFields);
+
+    // ── Required field check → enable Create Game button ─────────────────────
+    function updateCreateBtn() {
+        const ok = document.getElementById('clubSelect').value
+            && document.getElementById('gDate').value
+            && document.getElementById('gTime').value
+            && document.getElementById('gHome').value.trim()
+            && document.getElementById('gAway').value.trim()
+            && document.getElementById('gAge').value
+            && document.getElementById('gGender').value
+            && document.getElementById('gGameType').value
+            && document.getElementById('gVenue').value
+            && document.getElementById('gField').value;
+        document.getElementById('createGameBtn').disabled = !ok;
+    }
+
+    ['clubSelect','gDate','gTime','gHome','gAway','gAge','gDivision','gGender','gGameType','gVenue','gField'].forEach(id => {
+        document.getElementById(id).addEventListener('input', updateCreateBtn);
+        document.getElementById(id).addEventListener('change', updateCreateBtn);
+    });
+
+    // ── Create Game → add to staging table ───────────────────────────────────
+    document.getElementById('createGameBtn').addEventListener('click', () => {
+        const venueId  = document.getElementById('gVenue').value;
+        const fieldId  = document.getElementById('gField').value;
+        const venueName = venueId ? (allVenues.find(v => v.id === venueId)?.name || '') : '';
+        const fieldName = fieldId ? (allFields.find(f => f.id === fieldId)?.name || '') : '';
+
+        const game = {
+            date:      document.getElementById('gDate').value,
+            time:      document.getElementById('gTime').value,
+            home:      document.getElementById('gHome').value.trim(),
+            away:      document.getElementById('gAway').value.trim(),
+            age:       (document.getElementById('gAge').value + (document.getElementById('gDivision').value.trim() ? ' ' + document.getElementById('gDivision').value.trim() : '')),
+            gender:    document.getElementById('gGender').value,
+            gameType:  document.getElementById('gGameType').value,
+            venueId,   venueName,
+            fieldId,   fieldName,
+            notes:     document.getElementById('gNotes').value.trim(),
+            status:    'pending'
+        };
+
+        stagedGames.push(game);
+        renderStagedTable();
+
+        // Clear form fields (keep date/venue/field for convenience)
+        document.getElementById('gHome').value     = '';
+        document.getElementById('gAway').value     = '';
+        document.getElementById('gAge').value      = '';
+        document.getElementById('gDivision').value = '';
+        document.getElementById('gGender').value   = '';
+        // keep gGameType — user likely entering same type repeatedly
+        document.getElementById('gNotes').value    = '';
+        document.getElementById('gHome').focus();
+        updateCreateBtn();
+    });
+
+    // ── Render staging table ──────────────────────────────────────────────────
+    function renderStagedTable() {
+        const section = document.getElementById('stagedSection');
+        const tbody   = document.getElementById('stagedBody');
+        const count   = document.getElementById('stagedCount');
+
+        section.style.display = stagedGames.length > 0 ? 'block' : 'none';
+        count.textContent = stagedGames.length === 1 ? '1 game' : `${stagedGames.length} games`;
+
+        tbody.innerHTML = stagedGames.map((g, i) => {
+            const dateDisplay = g.date.replace(/^(\d{4})-(\d{2})-(\d{2})$/, (_, y, m, d) =>
+                `${parseInt(m)}/${parseInt(d)}/${y}`);
+            const timeDisplay = g.time.replace(/^(\d+):(\d+)$/, (_, h, m) => {
+                const h24 = parseInt(h);
+                return `${h24 % 12 || 12}:${m} ${h24 >= 12 ? 'PM' : 'AM'}`;
+            });
+
+            let rowClass = '';
+            let statusCell = '—';
+            if (g.status === 'submitted') { rowClass = 'submitted-row'; statusCell = '✅ Submitted'; }
+            if (g.status === 'error')     { rowClass = 'error-row';     statusCell = `❌ Failed — ${g.errorMsg || ''}`; }
+            if (g.status === 'skipped')   { rowClass = 'skipped-row';   statusCell = '⏭️ Duplicate'; }
+
+            const removeBtn = g.status === 'pending'
+                ? `<button class="remove-row-btn" onclick="removeGame(${i})" title="Remove">✕</button>`
+                : '';
+
+            return `<tr class="${rowClass}">
+                <td>${i + 1}</td>
+                <td>${dateDisplay}</td>
+                <td>${timeDisplay}</td>
+                <td>${g.home}</td>
+                <td>${g.away}</td>
+                <td>${g.age}</td>
+                <td>${g.gender}</td>
+                <td>${g.gameType || 'Rec'}</td>
+                <td>${g.venueName}</td>
+                <td>${g.fieldName}</td>
+                <td>${g.notes}</td>
+                <td>${statusCell}</td>
+                <td>${removeBtn}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function removeGame(i) {
+        stagedGames.splice(i, 1);
+        renderStagedTable();
+    }
+
+    // ── Submit All Games ──────────────────────────────────────────────────────
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+        const clubId = document.getElementById('clubSelect').value;
+        if (!clubId) { alert('Please select your club first.'); return; }
+
+        const pending = stagedGames.filter(g => g.status === 'pending');
+        if (pending.length === 0) { alert('No games to submit.'); return; }
+
+        // Quick local duplicate pre-check
+        const historyKeys = new Set(
+            loadHistory().map(g => `${g.date}|${(g.home||'').toLowerCase()}|${(g.away||'').toLowerCase()}`)
+        );
+        const localDups = pending.filter(g =>
+            historyKeys.has(`${g.date}|${g.home.toLowerCase()}|${g.away.toLowerCase()}`)
+        );
+        if (localDups.length > 0) {
+            const names = localDups.map(g => `${g.home} vs ${g.away} (${g.date})`).join('\n');
+            if (!confirm(`${localDups.length} game(s) appear to already be submitted:\n\n${names}\n\nSubmit anyway?`)) return;
+        }
+
+        document.getElementById('submitBtn').disabled    = true;
+        document.getElementById('createGameBtn').disabled = true;
+        document.getElementById('progressWrap').style.display = 'block';
+        document.getElementById('progressText').style.display = 'block';
+        document.getElementById('summaryBox').style.display   = 'none';
+
+        const league = clubLeagueMap[clubId] || 21;
+        let successCount = 0, errorCount = 0, skipCount = 0;
+
+        // Duplicate check
+        document.getElementById('progressText').textContent = 'Checking for duplicates…';
+        let existingKeys = new Set();
+        try {
+            const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 1000 });
+            existing.forEach(r => {
+                existingKeys.add(`${r.fields['Date']}|${(r.fields['Home Team']||'').toLowerCase()}|${(r.fields['Away Team']||'').toLowerCase()}`);
+            });
+        } catch(e) { console.warn('Duplicate check failed:', e); }
+
+        for (let i = 0; i < stagedGames.length; i++) {
+            const g = stagedGames[i];
+            if (g.status !== 'pending') continue;
+
+            document.getElementById('progressText').textContent = `Submitting ${successCount + errorCount + skipCount + 1} of ${pending.length}…`;
+            document.getElementById('progressBar').style.width = Math.round((i / stagedGames.length) * 100) + '%';
+
+            const dupKey = `${g.date}|${g.home.toLowerCase()}|${g.away.toLowerCase()}`;
+            if (existingKeys.has(dupKey)) {
+                skipCount++;
+                stagedGames[i].status = 'skipped';
+                renderStagedTable();
+                continue;
+            }
+
+            try {
+                const fields = {
+                    'Date':      g.date,
+                    'Time':      g.time,
+                    'Home Team': g.home,
+                    'Away Team': g.away,
+                    'Age Group':  g.age,
+                    'Gender':     g.gender,
+                    'League':     league,
+                    'game_type':  g.gameType || 'Rec'
+                };
+                if (g.fieldId) {
+                    fields['Field'] = [g.fieldId];
+                    const fieldRec = allFields.find(f => f.id === g.fieldId);
+                    if (fieldRec?.numId) fields['Field ID'] = fieldRec.numId;
+                }
+                if (g.venueId) {
+                    const venueRec = allVenues.find(v => v.id === g.venueId);
+                    if (venueRec?.numId) fields['Venue ID'] = venueRec.numId;
+                }
+                if (g.notes)           fields['Notes']        = g.notes;
+                if (currentSubmitter)  fields['Uploaded By']  = currentSubmitter;
+                // Tournament mode: override game_type and use tournament label as Source Club
+                if (currentTournament) {
+                    fields['game_type']   = 'Tournament';
+                    fields['Source Club'] = currentTournament.label;
+                } else if (currentClubRecord) {
+                    fields['Source Club'] = currentClubRecord.fields['Club Name'] || '';
+                }
+
+                await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.GAMES, fields);
+                existingKeys.add(dupKey);
+                successCount++;
+                stagedGames[i].status = 'submitted';
+                renderStagedTable();
+            } catch(err) {
+                errorCount++;
+                stagedGames[i].status = 'error';
+                stagedGames[i].errorMsg = err.message || JSON.stringify(err) || 'Unknown error';
+                renderStagedTable();
+            }
+        }
+
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressText').textContent = 'Done!';
+
+        // Reload live Airtable games section so newly submitted games appear
+        // Small delay gives Airtable time to make the new record queryable
+        const submittedGames = stagedGames.filter(g => g.status === 'submitted');
+        if (submittedGames.length > 0) setTimeout(loadScheduledGames, 1500);
+
+        // Remove submitted and skipped games from the staging table — keep only failures
+        stagedGames = stagedGames.filter(g => g.status === 'error');
+        renderStagedTable();
+
+        const box = document.getElementById('summaryBox');
+        const parts = [];
+        if (successCount) parts.push(`${successCount} submitted`);
+        if (skipCount)    parts.push(`${skipCount} skipped (duplicates)`);
+        if (errorCount)   parts.push(`${errorCount} failed`);
+        box.textContent = parts.join(', ') + '.';
+        box.className = 'summary-box ' + (errorCount ? 'some-errors' : 'all-good');
+        box.style.display = 'block';
+        box.scrollIntoView({ behavior: 'smooth' });
+
+        document.getElementById('submitBtn').disabled     = false;
+        document.getElementById('createGameBtn').disabled = false;
+        updateCreateBtn();
+    });
+
+    // ── Scheduled Games (live from Airtable, week-grouped) ───────────────────
+    function resolveRef(val) {
+        if (!val) return '';
+        if (Array.isArray(val)) return val.map(id => refById[id] || id).filter(Boolean).join(', ');
+        return val; // already a plain name
+    }
+
+    // ── Game number helpers ───────────────────────────────────────────────────
+    function clubAbbr(teamName) {
+        const skip = new Set(['sc','fc','soccer','club','boys','girls','united','youth','the','of']);
+        const words = (teamName || '').split(/\s+/)
+            .filter(w => w.length > 1 && !skip.has(w.toLowerCase()));
+        if (words.length === 0) return '';
+        if (words.length === 1) return words[0].substring(0, 2).toUpperCase(); // Griswold → GR
+        return words.map(w => w[0].toUpperCase()).slice(0, 2).join('');         // East Haddam → EH
+    }
+    function seasonCode(dateStr) {
+        const m = parseInt((dateStr || '').split('-')[1]);
+        if (m >= 3 && m <= 6)  return 'SP';
+        if (m >= 7 && m <= 8)  return 'SU';
+        if (m >= 9 && m <= 11) return 'FA';
+        return 'WI';
+    }
+    function buildGameNumber(fields) {
+        const autoNum = fields['Auto Number'] || fields['Game Number'];
+        if (!autoNum) return null;
+        const club   = clubAbbr(fields['Source Club'] || fields['Home Team'] || '');
+        const season = seasonCode(fields['Date'] || '');
+        const year   = (fields['Date'] || '').slice(2, 4);
+        const seq    = String(autoNum).padStart(3, '0');
+        const type   = (fields['game_type'] || 'Rec').toUpperCase() === 'COMP' ? 'COMP' : 'REC';
+        return `${club}${season}${type}${seq}${year}`;
+    }
+
+    // Extract the most recent change request block from Notes
+    function extractResolvedTimestamp(notesText) {
+        if (!notesText) return null;
+        const matches = [...notesText.matchAll(/\[RESOLVED\s*[–-]\s*([^\]]+)\]/gi)];
+        return matches.length ? matches[matches.length - 1][1].trim() : null;
+    }
+
+    function extractLastChangeRequest(notesText) {
+        if (!notesText) return null;
+        const blocks = notesText.split(/\[CHANGE REQUEST/i);
+        if (blocks.length < 2) return null;
+        const last = '[CHANGE REQUEST' + blocks[blocks.length - 1];
+        return {
+            reqDate: (last.match(/Requested Date: (\S+)/))?.[1] || '',
+            reqTime: (last.match(/Requested Time: (\S+)/))?.[1] || '',
+            reason:  (last.match(/Reason: (.+)/))?.[1]           || '',
+            reqBy:   (last.match(/Requested by: (.+)/))?.[1]     || ''
+        };
+    }
+
+    function extractAssignorNote(notes) {
+        if (!notes) return null;
+        const matches = [...notes.matchAll(/\[ASSIGNOR NOTE\s*[–-]\s*([^\]]+)\]([\s\S]*?)(?=\[|$)/gi)];
+        if (!matches.length) return null;
+        const last = matches[matches.length - 1];
+        return { ts: last[1].trim(), message: last[2].trim() };
+    }
+
+    function markNotesSeen(pendingChanges) {
+        pendingChanges.forEach(r => {
+            const note = extractAssignorNote(r.fields['Notes'] || '');
+            if (note) localStorage.setItem(`assignor_note_seen_${r.id}`, note.ts);
+        });
+    }
+
+    function buildGameCard(r, opts = {}) {
+        const f          = r.fields;
+        const dateStr    = f['Date'] || '—';
+        const timeRaw    = (f['Time'] || '').substring(0, 5);
+        const timeDisp   = timeRaw ? formatTime(timeRaw) : '—';
+        const gameNum    = buildGameNumber(f);
+        const gameNumHtml = gameNum ? `<span style="font-size:0.68rem; font-weight:700; color:#aaa; letter-spacing:0.5px; margin-right:8px;">${gameNum}</span>` : '';
+        const center     = resolveRef(f['Center Referee']);
+        const ar1        = resolveRef(f['AR 1']);
+        const ar2        = resolveRef(f['AR 2']);
+        const refBadges  = [center && `<span class="ref-badge">⚽ ${center}</span>`,
+                            ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
+                            ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('&nbsp;');
+        const refsHtml   = refBadges
+            ? `<span class="game-refs-label">Refs:</span>${refBadges}`
+            : `<span style="color:#aaa; font-size:0.8rem; font-style:italic;">No refs assigned yet</span>`;
+        const venueNumId = parseFloat(f['Venue ID']);
+        const venueName  = !isNaN(venueNumId)
+            ? (allVenues.find(v => parseFloat(v.numId) === venueNumId)?.name || '—') : '—';
+        const submittedBy = f['Uploaded By'] || f['Submitted By'] || f['Club Admin'] || '';
+
+        if (opts.changeResolved) {
+            // Green "resolved" card — notification that the change was handled
+            const chgRes    = extractLastChangeRequest(f['Notes'] || '');
+            const resolvedAt = extractResolvedTimestamp(f['Notes'] || '');
+            const reasonHtml = chgRes?.reason
+                ? `<div style="margin-top:4px; font-size:0.78rem; color:#1e5e33;"><strong>Reason:</strong> ${chgRes.reason}</div>`
+                : '';
+            return `<div class="game-card change-done">
+                <div class="game-card-main">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:2px;">
+                        <div class="game-matchup" style="margin:0;">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                            ${resolvedAt ? `<span class="game-meta" style="margin:0; white-space:nowrap;">${resolvedAt}</span>` : ''}
+                            <span class="status-badge status-submitted" style="background:#d5f5e3; color:#1e8449; white-space:nowrap; font-size:0.72rem; padding:2px 10px;">✅ Resolved</span>
+                        </div>
+                    </div>
+                    <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
+                    <div class="game-refs">${refsHtml}</div>
+                    <div class="chg-req-detail" style="background:#d5f5e3; color:#1e5e33;">
+                        Change request resolved by assignor. The game above reflects the updated schedule.
+                        ${reasonHtml}
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        if (opts.changePending) {
+            // Amber "pending" card with request details and no "Request Change" button
+            const chg = extractLastChangeRequest(f['Notes'] || '');
+            const chgDetail = chg ? `<div class="chg-req-detail">
+                ${chg.reqDate || chg.reqTime ? `<div><strong>Requested reschedule:</strong> ${chg.reqDate || ''} ${chg.reqTime ? formatTime(chg.reqTime) : ''}</div>` : ''}
+                ${chg.reason  ? `<div><strong>Reason:</strong> ${chg.reason}</div>` : ''}
+                ${chg.reqBy   ? `<div><strong>Requested by:</strong> ${chg.reqBy}</div>` : ''}
+            </div>` : '';
+            const note = extractAssignorNote(f['Notes'] || '');
+            const seenTs = note ? localStorage.getItem(`assignor_note_seen_${r.id}`) : null;
+            const hasNewNote = note && note.ts !== seenTs;
+            const noteBadge = hasNewNote ? `<span style="display:inline-block; background:#dbeafe; border:1px solid #93c5fd; color:#1d4ed8; font-size:0.7rem; font-weight:800; padding:2px 9px; border-radius:20px; letter-spacing:0.4px; white-space:nowrap; animation:urgency-pulse 2s ease-in-out infinite;">🔔 New Message</span>` : '';
+            const noteHtml = note ? `<div style="background:#eaf3ff; border-left:3px solid #1a3a6b; border-radius:6px; padding:10px 14px; margin-top:8px; font-size:0.82rem;"><div style="font-size:0.72rem; color:#1a3a6b; margin-bottom:4px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;">💬 Message from Assignor · ${note.ts}</div><div style="color:#333; line-height:1.5;">${note.message}</div></div>` : '';
+            return `<div class="game-card change-req">
+                <div class="game-card-main">
+                    <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                    <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
+                    <div class="game-refs">${refsHtml}</div>
+                    ${chgDetail}
+                    ${noteHtml}
+                </div>
+                <div class="game-card-side">
+                    <span class="status-badge status-change-req">⚠ Pending</span>
+                    ${noteBadge}
+                    <span class="submitted-by-lbl" style="color:#935116; font-size:0.75rem;">Awaiting assignor</span>
+                </div>
+            </div>`;
+        }
+
+        if (opts.cancelled) {
+            return `<div class="game-card cancelled-game">
+                <div class="game-card-main">
+                    <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                    <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
+                    <div class="game-refs"><span style="color:#dc2626; font-size:0.78rem; font-style:italic;">Referee assignments cleared</span></div>
+                </div>
+                <div class="game-card-side">
+                    <span class="status-badge" style="background:#fee2e2; color:#991b1b; font-weight:800; letter-spacing:0.5px;">🚫 CANCELLED</span>
+                </div>
+            </div>`;
+        }
+
+        // Regular submitted/assigned game card
+        const isAssigned = !!(center || ar1 || ar2);
+        const canModify  = !isAssigned && isFutureWeek(dateStr);
+        const statusCls  = center ? 'status-assigned' : 'status-submitted';
+        const statusLbl  = center ? 'Assigned' : 'Submitted';
+
+        const modifyFormHtml = canModify ? `
+            <div class="modify-form" id="modForm_${r.id}">
+                <p style="font-size:0.82rem; font-weight:700; color:#1a5276; margin:0 0 8px;">Modify: <em>${f['Home Team'] || ''} vs ${f['Away Team'] || ''}</em></p>
+                <label>Date</label>
+                <input type="date" id="modDate_${r.id}" value="${dateStr !== '—' ? dateStr : ''}">
+                <label>Time</label>
+                <input type="time" id="modTime_${r.id}" value="${timeRaw}">
+                <label>Venue</label>
+                <select id="modVenue_${r.id}">
+                    <option value="">— Select Venue —</option>
+                    ${allVenues.map(v => `<option value="${v.numId}" ${parseFloat(f['Venue ID']) === parseFloat(v.numId) ? 'selected' : ''}>${v.name}</option>`).join('')}
+                </select>
+                <label>Age Group</label>
+                <select id="modAge_${r.id}">
+                    ${['U8','U10','U12','U13','U15','U16','U19'].map(a => `<option value="${a}" ${f['Age Group']===a?'selected':''}>${a}</option>`).join('')}
+                </select>
+                <label>Gender</label>
+                <select id="modGender_${r.id}">
+                    ${['Female','Male'].map(g => `<option value="${g}" ${f['Gender']===g?'selected':''}>${g}</option>`).join('')}
+                </select>
+                <div class="modify-form-btns">
+                    <button class="btn btn-primary" style="font-size:0.85rem; padding:7px 16px;" onclick="saveModifiedGame('${r.id}')">Save Changes</button>
+                    <button class="btn btn-outline" style="font-size:0.85rem; padding:7px 16px;" onclick="toggleModifyForm('${r.id}')">Cancel</button>
+                </div>
+                <p id="modMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
+            </div>` : '';
+
+        return `<div class="game-card">
+            <div class="game-card-main">
+                <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
+                <div class="game-refs">${refsHtml}</div>
+                <div class="change-form" id="chgForm_${r.id}" style="margin-top:10px;">
+                    <p style="font-size:0.82rem; font-weight:700; color:#935116; margin:0 0 8px;">Request a change for: <em>${f['Home Team'] || ''} vs ${f['Away Team'] || ''} (${dateStr})</em></p>
+                    <label>New Date (optional)</label>
+                    <input type="date" id="chgDate_${r.id}">
+                    <label>New Time (optional)</label>
+                    <input type="time" id="chgTime_${r.id}">
+                    <label>Reason <span style="color:#e74c3c">*</span></label>
+                    <textarea id="chgReason_${r.id}" placeholder="Explain the requested change…"></textarea>
+                    <div class="change-form-btns">
+                        <button class="btn btn-primary" style="font-size:0.85rem; padding:7px 16px;" onclick="submitChangeRequest('${r.id}')">Submit Request</button>
+                        <button class="btn btn-outline" style="font-size:0.85rem; padding:7px 16px;" onclick="toggleChangeForm('${r.id}')">Cancel</button>
+                    </div>
+                    <p id="chgMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
+                </div>
+                ${modifyFormHtml}
+            </div>
+            <div class="game-card-side">
+                <span class="status-badge ${statusCls}">${statusLbl}</span>
+                ${canModify ? `
+                    <button class="btn-cancel-game" onclick="cancelGame('${r.id}')">✕ Cancel Game</button>
+                    <button class="btn-modify-game" onclick="toggleModifyForm('${r.id}')">✏ Modify</button>
+                ` : `<button class="btn-change" onclick="toggleChangeForm('${r.id}')">Request Change</button>`}
+                ${submittedBy ? `<span class="submitted-by-lbl">by ${submittedBy}</span>` : ''}
+            </div>
+        </div>`;
+    }
+
+    async function loadScheduledGames() {
+        const section = document.getElementById('scheduledGamesSection');
+        const content = document.getElementById('scheduledGamesContent');
+        if (!currentClubRecord) return;
+        section.style.display = 'block';
+
+        const clubName = (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '').toLowerCase();
+        try {
+            const [games, refRecs, venueRecs] = await Promise.all([
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 200 })
+            ]);
+            refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
+            // Rebuild allVenues so venue names resolve correctly
+            allVenues = venueRecs.map(v => ({
+                id:    v.id,
+                numId: v.fields['Venue ID'] || null,
+                name:  v.fields['Venue Name'] || v.fields['Name'] || ''
+            }));
+
+
+            const clubGames = games
+                .filter(r => currentTournament
+                    ? (r.fields['game_type'] || '').toLowerCase() === 'tournament'
+                    : ((r.fields['Home Team'] || '').toLowerCase().includes(clubName) || (r.fields['Club'] || '').toLowerCase().includes(clubName) || (r.fields['Source Club'] || '').toLowerCase().includes(clubName)))
+                .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || '') || (a.fields['Time'] || '').localeCompare(b.fields['Time'] || ''));
+
+            if (clubGames.length === 0) {
+                content.innerHTML = '<p style="color:#888; font-size:0.85rem;">No games on file yet.</p>';
+                return;
+            }
+
+            // Classify into buckets
+            const pendingChanges  = [];
+            const resolvedChanges = [];
+            const cancelledGames  = [];
+            const regularGames    = [];
+            clubGames.forEach(r => {
+                const rawStatus = (r.fields['Game Status'] || '').trim();
+                if (rawStatus === 'Cancelled') {
+                    cancelledGames.push(r);
+                } else if (rawStatus === 'Change Requested') {
+                    pendingChanges.push(r);
+                } else if (rawStatus === 'Change Resolved') {
+                    resolvedChanges.push(r);
+                    regularGames.push(r); // also show in Submitted Games with current refs/date
+                } else {
+                    regularGames.push(r);
+                }
+            });
+
+            let html = '';
+
+            // ── Change Requests section (shown if any pending or recently resolved) ──
+            if (pendingChanges.length > 0 || resolvedChanges.length > 0) {
+                const pendingHtml = pendingChanges.map(r => buildGameCard(r, { changePending: true })).join('');
+                const currentWeekKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
+                const resolvedThisWeek = resolvedChanges.filter(r => {
+                    const ts = extractResolvedTimestamp(r.fields['Notes'] || '');
+                    if (!ts) return false;
+                    const d = new Date(ts);
+                    if (isNaN(d)) return false;
+                    const isoDate = d.toISOString().split('T')[0];
+                    return getWeekLabel(isoDate).key === currentWeekKey;
+                }).length;
+
+                // Store resolved data + state on window so inline onclick handlers can reach them
+                window._clubResolved = resolvedChanges.slice();
+                window._resolvedCollapsed = false;
+                window._resolvedSort = 'newest';
+
+                window._renderResolvedCards = function() {
+                    const container = document.getElementById('resolvedCardsContainer');
+                    if (!container) return;
+                    if (window._resolvedCollapsed) {
+                        container.style.display = 'none';
+                        return;
+                    }
+                    container.style.display = 'block';
+                    const sorted = [...window._clubResolved].sort((a, b) => {
+                        const tsA = new Date(extractResolvedTimestamp(a.fields['Notes'] || '') || 0);
+                        const tsB = new Date(extractResolvedTimestamp(b.fields['Notes'] || '') || 0);
+                        return window._resolvedSort === 'newest' ? tsB - tsA : tsA - tsB;
+                    });
+                    container.innerHTML = sorted.map(r => buildGameCard(r, { changeResolved: true })).join('');
+                };
+
+                window._toggleResolved = function() {
+                    window._resolvedCollapsed = !window._resolvedCollapsed;
+                    window._renderResolvedCards();
+                    const arrow = document.getElementById('resolvedArrow');
+                    if (arrow) arrow.textContent = window._resolvedCollapsed ? '▶' : '▼';
+                    const countBadge = document.getElementById('resolvedCountBadge');
+                    if (countBadge) countBadge.style.opacity = window._resolvedCollapsed ? '0.5' : '1';
+                };
+
+                window._setResolvedSort = function(sort) {
+                    window._resolvedSort = sort;
+                    ['newest','oldest'].forEach(s => {
+                        const btn = document.getElementById('resolvedSort_' + s);
+                        if (!btn) return;
+                        btn.style.background = s === sort ? '#09142a' : 'transparent';
+                        btn.style.color = s === sort ? '#fff' : '#09142a';
+                        btn.style.borderColor = '#09142a';
+                    });
+                    window._renderResolvedCards();
+                };
+
+                const sortBtnBase = 'cursor:pointer; font-size:0.72rem; font-weight:700; font-family:\'DM Sans\',sans-serif; padding:3px 10px; border-radius:8px; border:1px solid #09142a; transition:background 0.15s,color 0.15s;';
+
+                window._pendingCollapsed = localStorage.getItem('pendingChangesCollapsed') === 'true';
+                window._pendingChangesData = pendingChanges;
+
+                const hasAnyNewNote = pendingChanges.some(r => {
+                    const note = extractAssignorNote(r.fields['Notes'] || '');
+                    return note && note.ts !== localStorage.getItem(`assignor_note_seen_${r.id}`);
+                });
+                const showBadgeOnLoad = window._pendingCollapsed && hasAnyNewNote;
+
+                window._togglePending = function() {
+                    window._pendingCollapsed = !window._pendingCollapsed;
+                    localStorage.setItem('pendingChangesCollapsed', window._pendingCollapsed);
+                    const container = document.getElementById('pendingCardsContainer');
+                    const arrow     = document.getElementById('pendingArrow');
+                    const badge     = document.getElementById('pendingNewBadge');
+                    if (container) container.style.display = window._pendingCollapsed ? 'none' : 'block';
+                    if (arrow) arrow.textContent = window._pendingCollapsed ? '▶' : '▼';
+                    if (!window._pendingCollapsed) {
+                        // Expanding — they can see the cards now, mark notes seen + hide badge
+                        markNotesSeen(window._pendingChangesData);
+                        if (badge) badge.style.display = 'none';
+                    } else {
+                        // Collapsing — show badge if any note is still unread
+                        const stillNew = window._pendingChangesData.some(r => {
+                            const note = extractAssignorNote(r.fields['Notes'] || '');
+                            return note && note.ts !== localStorage.getItem(`assignor_note_seen_${r.id}`);
+                        });
+                        if (badge) badge.style.display = stillNew ? 'inline-block' : 'none';
+                    }
+                };
+
+                html += `<div style="margin-bottom:32px;">
+                    <div class="chg-section-hdr pending" style="justify-content:space-between; cursor:pointer; user-select:none;" onclick="window._togglePending()">
+                        <span style="display:flex; align-items:center; gap:7px;">
+                            <span id="pendingArrow" style="font-size:0.8rem; transition:transform 0.2s;">${window._pendingCollapsed ? '▶' : '▼'}</span>
+                            <span>⚠️ Open Change Requests</span>
+                            <span id="pendingNewBadge" style="display:${showBadgeOnLoad ? 'inline-block' : 'none'}; background:#dbeafe; border:1px solid #93c5fd; color:#1d4ed8; font-size:0.7rem; font-weight:800; padding:2px 9px; border-radius:20px; letter-spacing:0.4px; white-space:nowrap; animation:urgency-pulse 2s ease-in-out infinite;">🔔 New Message</span>
+                        </span>
+                        <span style="background:#fef3c7; color:#78350f; font-size:0.78rem; padding:2px 10px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif;">${pendingChanges.length}</span>
+                    </div>
+                    <div id="pendingCardsContainer" style="display:${window._pendingCollapsed ? 'none' : 'block'};">${pendingHtml}</div>
+                    ${resolvedChanges.length > 0 ? `
+                    <div class="chg-section-hdr resolved" style="margin-top:16px; justify-content:space-between; flex-wrap:wrap; gap:6px; align-items:center;">
+                        <span style="display:flex; align-items:center; gap:7px; cursor:pointer; user-select:none;" onclick="window._toggleResolved()">
+                            <span id="resolvedArrow" style="font-size:0.8rem; transition:transform 0.2s;">▼</span>
+                            <span>✅ Recently Resolved Change Requests</span>
+                            <span id="resolvedCountBadge" style="background:#dcfce7; color:#14532d; font-size:0.78rem; padding:2px 10px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif; transition:opacity 0.2s;">${resolvedThisWeek} this week</span>
+                        </span>
+                        <span style="display:flex; align-items:center; gap:5px;">
+                            <span style="font-size:0.72rem; color:#6b7280; font-family:'DM Sans',sans-serif;">Sort:</span>
+                            <button id="resolvedSort_newest" onclick="window._setResolvedSort('newest')" style="${sortBtnBase} background:#09142a; color:#fff;">Most Recent</button>
+                            <button id="resolvedSort_oldest" onclick="window._setResolvedSort('oldest')" style="${sortBtnBase} background:transparent; color:#09142a;">Oldest</button>
+                        </span>
+                    </div>
+                    <div id="resolvedCardsContainer"></div>` : ''}
+                </div>`;
+            }
+
+            // ── Submitted Games section ──
+            if (regularGames.length > 0) {
+                const weeks = {};
+                regularGames.forEach(r => {
+                    const dateStr = r.fields['Date'] || new Date().toISOString().split('T')[0];
+                    const { key, label } = getWeekLabel(dateStr);
+                    if (!weeks[key]) weeks[key] = { label, games: [] };
+                    weeks[key].games.push(r);
+                });
+                const currentWeekKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
+
+                // Track collapse state: past weeks start collapsed, current/future expanded
+                window._weekCollapsed = window._weekCollapsed || {};
+                Object.keys(weeks).forEach(key => {
+                    if (!(key in window._weekCollapsed)) {
+                        window._weekCollapsed[key] = key < currentWeekKey; // past = collapsed
+                    }
+                });
+
+                window._toggleWeek = function(key) {
+                    window._weekCollapsed[key] = !window._weekCollapsed[key];
+                    const container = document.getElementById('weekCards_' + key);
+                    const arrow = document.getElementById('weekArrow_' + key);
+                    if (container) container.style.display = window._weekCollapsed[key] ? 'none' : 'block';
+                    if (arrow) arrow.textContent = window._weekCollapsed[key] ? '▶' : '▼';
+                };
+
+                const weekBlocks = Object.entries(weeks).sort((a, b) => a[0].localeCompare(b[0]))
+                    .map(([key, { label, games: wGames }]) => {
+                        const isCurrent = key === currentWeekKey;
+                        const isPast = key < currentWeekKey;
+                        const collapsed = window._weekCollapsed[key];
+                        const borderColor = isCurrent ? '#00c853' : '#e2d9ce';
+                        const borderWidth = isCurrent ? '3px' : '1px';
+                        const hdrStyle = `font-family:"Barlow Condensed",sans-serif; font-size:1rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:${collapsed ? '0' : '8px'}; padding-bottom:5px; border-bottom:${borderWidth} solid ${borderColor}; display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; user-select:none;`;
+                        const arrow = `<span id="weekArrow_${key}" style="font-size:0.78rem; color:${isPast ? '#9ca3af' : '#09142a'}; flex-shrink:0; margin-right:2px;">${collapsed ? '▶' : '▼'}</span>`;
+                        const leftSide = `<span style="display:flex; align-items:center; gap:7px; flex:1; min-width:0;">
+                            ${arrow}
+                            <span style="font-weight:800; white-space:nowrap; color:${isPast ? '#6b7280' : '#09142a'};">${label}</span>
+                            <span style="background:${isPast ? '#e5e7eb' : '#09142a'}; color:${isPast ? '#6b7280' : '#fff'}; font-size:0.72rem; font-weight:700; padding:2px 10px; border-radius:8px; font-family:'DM Sans',sans-serif; min-width:22px; text-align:center; flex-shrink:0;">${wGames.length}</span>
+                        </span>`;
+                        const rightSide = isCurrent
+                            ? `<span style="background:#00c853; color:#09142a; font-size:0.6rem; font-weight:800; padding:2px 7px; border-radius:8px; letter-spacing:1px; font-family:'DM Sans',sans-serif; white-space:nowrap; flex-shrink:0;">CURRENT WEEK</span>`
+                            : isPast ? `<span style="font-size:0.68rem; color:#9ca3af; font-family:'DM Sans',sans-serif; font-weight:600; white-space:nowrap; flex-shrink:0;">PAST</span>` : '';
+                        return `<div style="margin-bottom:${collapsed ? '10px' : '22px'};">
+                            <div style="${hdrStyle}" onclick="window._toggleWeek('${key}')">${leftSide}${rightSide}</div>
+                            <div id="weekCards_${key}" style="display:${collapsed ? 'none' : 'block'};">
+                                ${wGames.map(r => buildGameCard(r)).join('')}
+                            </div>
+                        </div>`;
+                    }).join('');
+                html += `<div>
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; display:flex; align-items:center; gap:10px; border-bottom:2px solid #09142a; padding-bottom:8px; flex-wrap:wrap;">
+                        📋 Submitted Games
+                        <span style="background:#09142a; color:#fff; font-size:0.78rem; font-weight:700; padding:2px 12px; border-radius:10px; font-family:'DM Sans',sans-serif;">${regularGames.length}</span>
+                        <span style="background:#00c853; color:#09142a; font-size:0.72rem; font-weight:700; padding:2px 10px; border-radius:10px; font-family:'DM Sans',sans-serif; letter-spacing:0.3px;">${(() => { if (currentTournament) { const earliest = regularGames.map(g => g.fields['Date']).filter(Boolean).sort()[0]; return getCurrentSeason(earliest || null); } return getCurrentSeason(); })()}</span>
+                    </div>
+                    <p style="color:#6b7280; font-size:0.83rem; margin-bottom:14px;">Games on file with the assignor. Assigned referees appear once the assignor fills them in.</p>
+                    ${weekBlocks}
+                </div>`;
+
+                if (cancelledGames.length > 0) {
+                    window._cancelledCollapsed = true;
+                    window._toggleCancelled = function() {
+                        window._cancelledCollapsed = !window._cancelledCollapsed;
+                        const el = document.getElementById('cancelledCardsContainer');
+                        const arrow = document.getElementById('cancelledArrow');
+                        if (el) el.style.display = window._cancelledCollapsed ? 'none' : 'block';
+                        if (arrow) arrow.textContent = window._cancelledCollapsed ? '▶' : '▼';
+                    };
+                    html += `<div style="margin-top:28px;">
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; color:#991b1b; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #fca5a5; padding-bottom:6px; cursor:pointer; user-select:none;" onclick="window._toggleCancelled()">
+                            <span id="cancelledArrow" style="font-size:0.78rem;">▶</span>
+                            🚫 Cancelled Games
+                            <span style="background:#fee2e2; color:#991b1b; font-size:0.72rem; font-weight:700; padding:2px 10px; border-radius:8px; font-family:'DM Sans',sans-serif;">${cancelledGames.length}</span>
+                        </div>
+                        <div id="cancelledCardsContainer" style="display:none;">
+                            ${cancelledGames.map(r => buildGameCard(r, { cancelled: true })).join('')}
+                        </div>
+                    </div>`;
+                }
+            }
+
+            content.innerHTML = html;
+
+            // Mark notes seen only if pending section is visible — if collapsed, wait until they expand
+            if (!window._pendingCollapsed) markNotesSeen(pendingChanges);
+
+            // Update tab title with pending count
+            const baseTitle = 'Club Game Submission';
+            document.title = pendingChanges.length > 0 ? `(${pendingChanges.length} pending) ${baseTitle}` : baseTitle;
+
+            // Populate collapsible resolved section after DOM is ready
+            if (window._renderResolvedCards) window._renderResolvedCards();
+
+        } catch(err) {
+            content.innerHTML = `<p style="color:#e74c3c; font-size:0.85rem;">Could not load games: ${err.message}</p>`;
+        }
+    }
+
+    function toggleChangeForm(gameId) {
+        const form = document.getElementById('chgForm_' + gameId);
+        form.style.display = form.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function toggleModifyForm(gameId) {
+        const form = document.getElementById('modForm_' + gameId);
+        form.style.display = form.style.display === 'block' ? 'none' : 'block';
+    }
+
+    async function cancelGame(gameId) {
+        if (!confirm('Cancel this game?\n\nThis will permanently mark it as Cancelled and remove it from your schedule.')) return;
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': 'Cancelled' });
+            await loadScheduledGames();
+        } catch(err) {
+            alert('Could not cancel game: ' + err.message);
+        }
+    }
+
+    async function saveModifiedGame(gameId) {
+        const msgEl   = document.getElementById('modMsg_' + gameId);
+        const newDate = document.getElementById('modDate_' + gameId).value;
+        const newTime = document.getElementById('modTime_' + gameId).value;
+        const venueId = document.getElementById('modVenue_' + gameId).value;
+        const age     = document.getElementById('modAge_' + gameId).value;
+        const gender  = document.getElementById('modGender_' + gameId).value;
+
+        if (!newDate) { msgEl.textContent = 'Date is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
+        msgEl.textContent = 'Saving…'; msgEl.style.color = '#555'; msgEl.style.display = 'block';
+
+        const updates = { 'Date': newDate };
+        if (newTime)  updates['Time']      = newTime;
+        if (venueId)  updates['Venue ID']  = parseFloat(venueId);
+        if (age)      updates['Age Group'] = age;
+        if (gender)   updates['Gender']    = gender;
+
+        try {
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, updates);
+            msgEl.textContent = '✅ Game updated!';
+            msgEl.style.color = '#1e8449';
+            setTimeout(loadScheduledGames, 1000);
+        } catch(err) {
+            msgEl.textContent = '❌ ' + err.message;
+            msgEl.style.color = '#e74c3c';
+        }
+    }
+
+    async function submitChangeRequest(gameId) {
+        const reason  = (document.getElementById('chgReason_' + gameId).value || '').trim();
+        const newDate = document.getElementById('chgDate_' + gameId).value || '';
+        const newTime = document.getElementById('chgTime_' + gameId).value || '';
+        const msgEl   = document.getElementById('chgMsg_' + gameId);
+
+        if (!newDate) { msgEl.textContent = 'A requested date is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
+        if (!newTime) { msgEl.textContent = 'A requested time is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
+        if (!reason)  { msgEl.textContent = 'Please enter a reason.';        msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
+
+        msgEl.textContent = 'Submitting…'; msgEl.style.color = '#555'; msgEl.style.display = 'block';
+
+        const now     = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+        let noteText  = `\n\n[CHANGE REQUEST – ${now}]`;
+        if (newDate)  noteText += `\nRequested Date: ${newDate}`;
+        if (newTime)  noteText += `\nRequested Time: ${newTime}`;
+        noteText += `\nReason: ${reason}`;
+        if (currentSubmitter) noteText += `\nRequested by: ${currentSubmitter}`;
+
+        try {
+            // Get existing notes to append
+            const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { filterByFormula: `RECORD_ID()='${gameId}'`, maxRecords: 1 });
+            const prevNotes = existing[0]?.fields['Notes'] || '';
+
+            // Update Notes first — always works
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                'Notes': prevNotes + noteText
+            });
+
+            // Try Game Status separately — may fail if select option doesn't exist in Airtable yet
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                    'Game Status': 'Change Requested'
+                });
+            } catch(statusErr) {
+                console.warn('Could not update Game Status (add "Change Requested" option to Airtable select field):', statusErr.message);
+            }
+
+            msgEl.textContent = '✅ Change request submitted. The assignor will be in touch.';
+            msgEl.style.color = '#1e8449';
+            // Refresh the table after a moment
+            setTimeout(loadScheduledGames, 1500);
+        } catch(err) {
+            msgEl.textContent = '❌ Failed: ' + err.message;
+            msgEl.style.color = '#e74c3c';
+        }
+    }
+
+    // ── Idle session timeout (30 min) ─────────────────────────────────────────
+    let _idleTimer;
+    function _resetIdle() {
+        clearTimeout(_idleTimer);
+        if (!currentSubmitter) return;
+        _idleTimer = setTimeout(() => {
+            alert('Your session has expired due to inactivity. Please sign in again.');
+            resetDoorway();
+        }, 30 * 60 * 1000);
+    }
+    ['mousemove','keydown','click','touchstart'].forEach(ev =>
+        document.addEventListener(ev, _resetIdle, { passive: true })
+    );
+
+    // ── CSV Upload Tab ────────────────────────────────────────────────────────
+
+    function switchTab(tab) {
+        document.getElementById('tabEnter').style.display = tab === 'enter' ? 'block' : 'none';
+        document.getElementById('tabCSV').style.display   = tab === 'csv'   ? 'block' : 'none';
+        document.getElementById('tabBtnEnter').className  = 'tab-btn ' + (tab === 'enter' ? 'active' : 'inactive');
+        document.getElementById('tabBtnCSV').className    = 'tab-btn ' + (tab === 'csv'   ? 'active' : 'inactive');
+    }
+
+    document.getElementById('csvFormatSelect').addEventListener('change', function() {
+        const fmt = this.value;
+        const linkWrap   = document.getElementById('csvTemplateLink');
+        const linkAnchor = document.getElementById('csvTemplateLinkAnchor');
+        if (fmt === 'glast-rec') {
+            linkAnchor.href        = 'glastonbury-rec-template.csv';
+            linkAnchor.textContent = '⬇ Download Glastonbury Rec Sample';
+            linkWrap.style.display = '';
+        } else if (fmt === 'glast-travel') {
+            linkAnchor.href        = 'glastonbury-travel-template.csv';
+            linkAnchor.textContent = '⬇ Download Glastonbury Travel Sample';
+            linkWrap.style.display = '';
+        } else {
+            linkAnchor.href        = 'referee-tool-games-upload-template.csv';
+            linkAnchor.textContent = '⬇ Download Referee Tool Template';
+            linkWrap.style.display = '';
+        }
+        // Clear any loaded preview when format changes
+        csvParsedRows = [];
+        document.getElementById('csvFileInput').value = '';
+        document.getElementById('csvPreviewSection').style.display = 'none';
+        document.getElementById('csvAddResult').textContent = '';
+    });
+
+    let csvParsedRows = [];
+
+    function parseCSVLine(line) {
+        const result = []; let cur = ''; let inQ = false;
+        for (let i = 0; i < line.length; i++) {
+            if (line[i] === '"') { inQ = !inQ; }
+            else if (line[i] === ',' && !inQ) { result.push(cur); cur = ''; }
+            else { cur += line[i]; }
+        }
+        result.push(cur);
+        return result;
+    }
+
+    function parseCSV(text) {
+        const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+        const headers = parseCSVLine(lines[0]).map(h => h.trim());
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+            const vals = parseCSVLine(lines[i]);
+            const row = {};
+            headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+            rows.push(row);
+        }
+        return { headers, rows };
+    }
+
+    // Normalize time → HH:MM (24hr)
+    // Handles: "10:30 AM", "10:30am", "10am", "1030", "10:30:00", "14:30"
+    function normalizeTime(t) {
+        if (!t) return '';
+        t = t.trim();
+        // "1030" or "930" → insert colon
+        const compact = t.match(/^(\d{1,2})(\d{2})$/);
+        if (compact) t = compact[1] + ':' + compact[2];
+        // "10am" / "2pm"
+        const noColon = t.match(/^(\d{1,2})\s*(am|pm)$/i);
+        if (noColon) t = noColon[1] + ':00 ' + noColon[2];
+        // "H:MM AM/PM" or "H:MM:SS AM/PM"
+        const ampm = t.match(/^(\d{1,2}):(\d{2})(?::\d+)?\s*(am|pm)$/i);
+        if (ampm) {
+            let h = parseInt(ampm[1]);
+            const m = ampm[2], p = ampm[3].toUpperCase();
+            if (p === 'AM' && h === 12) h = 0;
+            if (p === 'PM' && h !== 12) h += 12;
+            return String(h).padStart(2,'0') + ':' + m;
+        }
+        // "H:MM" or "HH:MM"
+        const plain = t.match(/^(\d{1,2}):(\d{2})/);
+        if (plain) return String(parseInt(plain[1])).padStart(2,'0') + ':' + plain[2];
+        return null; // unrecognized
+    }
+
+    // Normalize date → YYYY-MM-DD
+    // Handles: "4/5/2026", "04/05/26", "4-5-2026", "April 5 2026", "Apr 5, 2026", "2026-04-05"
+    const MONTH_NAMES = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    function normalizeDate(d) {
+        if (!d) return null;
+        d = d.trim();
+        // Already YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+        // M/D/YYYY or M-D-YYYY (2 or 4 digit year)
+        const slash = d.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+        if (slash) {
+            let y = parseInt(slash[3]);
+            if (y < 100) y += 2000;
+            return `${y}-${slash[1].padStart(2,'0')}-${slash[2].padStart(2,'0')}`;
+        }
+        // "April 5, 2026" or "Apr 5 2026"
+        const named = d.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+        if (named) {
+            const mo = MONTH_NAMES[named[1].substring(0,3).toLowerCase()];
+            if (mo) return `${named[3]}-${String(mo).padStart(2,'0')}-${named[2].padStart(2,'0')}`;
+        }
+        return null; // unrecognized
+    }
+
+    const VALID_GENDERS = ['female','male','f','m'];
+
+    // Fuzzy match venue name → { id, numId, name } or null
+    function matchVenue(name) {
+        if (!name) return null;
+        const n = name.trim().toLowerCase();
+        return allVenues.find(v => v.name.toLowerCase() === n)
+            || allVenues.find(v => v.name.toLowerCase().includes(n) || n.includes(v.name.toLowerCase()))
+            || null;
+    }
+
+    // Fuzzy match field name within a venue → { id, numId, name } or null
+    function matchField(name, venueId) {
+        if (!name) return null;
+        const n = name.trim().toLowerCase();
+        const pool = venueId ? allFields.filter(f => f.venueId === venueId) : allFields;
+        return pool.find(f => f.name.toLowerCase() === n)
+            || pool.find(f => f.name.toLowerCase().includes(n) || n.includes(f.name.toLowerCase()))
+            || null;
+    }
+
+    function validateCSVRow(row) {
+        const errors = [], warnings = [];
+        // Required field checks
+        if (!row['Date'])      errors.push('Missing Date');
+        else if (!normalizeDate(row['Date'])) errors.push(`Unrecognized date format: "${row['Date']}"`);
+        if (!row['Time'])      errors.push('Missing Time');
+        else if (!normalizeTime(row['Time'])) errors.push(`Unrecognized time format: "${row['Time']}"`);
+        if (!row['Home Team']) errors.push('Missing Home Team');
+        if (!row['Away Team']) errors.push('Missing Away Team');
+        const age = (row['Age Group'] || '').trim().toUpperCase();
+        if (!age)                          errors.push('Missing Age Group');
+        else if (!/^U\d+(\s+\S.*)?$/.test(age)) errors.push(`Invalid Age Group "${row['Age Group']}" — use format: U8, U10, U12, or U12 Gold, etc.`);
+        const gender = (row['Gender'] || '').trim().toLowerCase();
+        if (!gender)                          errors.push('Missing Gender');
+        else if (!VALID_GENDERS.includes(gender)) errors.push(`Invalid Gender "${row['Gender']}" — use: Female or Male`);
+        if (!row['Venue'])  errors.push('Missing Venue');
+        if (!row['Field'])  errors.push('Missing Field');
+        const gameType = (row['Game Type'] || '').trim().toLowerCase();
+        if (!gameType)                              errors.push('Missing Game Type');
+        else if (!['rec','comp'].includes(gameType)) errors.push(`Invalid Game Type "${row['Game Type']}" — use: Rec or Comp`);
+
+        // Venue/field match warnings (not blocking — assignor can fix)
+        if (row['Venue'] && !errors.find(e => e.includes('Venue'))) {
+            const vm = matchVenue(row['Venue']);
+            if (!vm) warnings.push(`Venue "${row['Venue']}" not found in system`);
+            else if (row['Field']) {
+                const fm = matchField(row['Field'], vm.id);
+                if (!fm) warnings.push(`Field "${row['Field']}" not found under ${vm.name}`);
+            }
+        }
+        return { errors, warnings };
+    }
+
+    // ── Glastonbury format parsers ────────────────────────────────────────────
+
+    // Normalize game type → 'Rec' or 'Comp'
+    function normalizeGameType(val) {
+        const v = (val || '').trim().toLowerCase();
+        if (v === 'comp' || v === 'travel' || v === 'comp / travel') return 'Comp';
+        return 'Rec';
+    }
+
+    // Extract age group + gender from Glastonbury GROUPING field
+    function parseGlastGrouping(grouping, mode) {
+        const g = grouping || '';
+        let age = '', gender = '';
+        if (mode === 'rec') {
+            // e.g. "U10 Rec > RecBoysU10" or "U12 Rec > RecGirlsU12"
+            const m = g.match(/Rec(Boys|Girls)U(\d+)/i);
+            if (m) { age = 'U' + m[2]; gender = /boys/i.test(m[1]) ? 'Male' : 'Female'; }
+        } else {
+            // e.g. "25-26 Travel Teams > BOYS > BOYS U10"
+            const m = g.match(/(BOYS|GIRLS)\s+U(\d+)/i);
+            if (m) { age = 'U' + m[2]; gender = /boys/i.test(m[1]) ? 'Male' : 'Female'; }
+        }
+        return { age, gender };
+    }
+
+    // Rec team name → RECU10B / RECU12G
+    function parseGlastRecTeam(name) {
+        const m = (name || '').match(/REC-([BG])U(\d+)-/i);
+        if (m) return 'RECU' + m[2] + (m[1].toUpperCase() === 'B' ? 'B' : 'G');
+        return name;
+    }
+
+    // Travel team name → U10B Blue / U13G Red
+    function parseGlastTravelTeam(name) {
+        let n = (name || '').replace(/^Game\s+OPP-/i, '').trim();
+        // "BU10 - Blue" or "GU13 - Red" or "BU14/15 Red"
+        const m = n.match(/^([BG])U(\d+)(?:\/\d+)?\s*[-–]\s*(.+)$/i);
+        if (m) return 'U' + m[2] + (m[1].toUpperCase() === 'B' ? 'B' : 'G') + ' ' + m[3].trim();
+        return n;
+    }
+
+    // Transform a Glastonbury row → standard row object, or null to skip
+    function transformGlastRow(row, mode) {
+        const home = row['HOME TEAM'] || '';
+        const away = row['AWAY TEAM'] || '';
+        // Skip "No Ref" scrimmages
+        if (/no ref/i.test(home) || /no ref/i.test(away)) return null;
+        // Skip away travel games (LOCATION starts with "x-")
+        if (mode === 'travel' && /^x-/i.test((row['LOCATION'] || '').trim())) return null;
+        const { age, gender } = parseGlastGrouping(row['GROUPING'], mode);
+        return {
+            'Date':       row['DATE']     || '',
+            'Time':       row['TIME']     || '',
+            'Home Team':  mode === 'rec' ? parseGlastRecTeam(home) : parseGlastTravelTeam(home),
+            'Away Team':  mode === 'rec' ? parseGlastRecTeam(away) : parseGlastTravelTeam(away),
+            'Age Group':  age,
+            'Gender':     gender,
+            'Venue':      row['LOCATION'] || '',
+            'Field':      row['SURFACE']  || '',
+            'Game Type':  mode === 'rec' ? 'Rec' : 'Comp',
+            'Notes':      ''
+        };
+    }
+
+    // ── End Glastonbury parsers ───────────────────────────────────────────────
+
+    function handleCSVFile(file) {
+        if (!file.name.endsWith('.csv')) { alert('Please select a .csv file.'); return; }
+        const reader = new FileReader();
+        reader.onload = e => {
+            const { rows: rawRows } = parseCSV(e.target.result);
+            if (!rawRows.length) { alert('No data rows found in the CSV.'); return; }
+            const fmt = document.getElementById('csvFormatSelect').value;
+            let rows;
+            if (fmt === 'glast-rec' || fmt === 'glast-travel') {
+                const mode = fmt === 'glast-rec' ? 'rec' : 'travel';
+                rows = rawRows.map(r => transformGlastRow(r, mode)).filter(r => r !== null);
+                if (!rows.length) { alert('No importable rows found after applying Glastonbury filters (No Ref and away games removed).'); return; }
+            } else {
+                rows = rawRows;
+            }
+            csvParsedRows = rows;
+            renderCSVPreview(rows);
+        };
+        reader.readAsText(file);
+    }
+
+    function renderCSVPreview(rows) {
+        let valid = 0, warned = 0, invalid = 0;
+        let html = `<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Home Team</th><th>Away Team</th><th>Age</th><th>Gender</th><th>Type</th><th>Venue</th><th>Field</th><th>Notes</th><th>Status</th></tr></thead><tbody>`;
+        rows.forEach((row, i) => {
+            const { errors, warnings } = validateCSVRow(row);
+            const hasErrors = errors.length > 0, hasWarnings = warnings.length > 0;
+            if (hasErrors) invalid++;
+            else if (hasWarnings) warned++;
+            else valid++;
+            const rowClass = hasErrors ? 'csv-row-invalid' : '';
+            const statusHtml = hasErrors
+                ? `<span style="color:#991b1b;font-weight:700;font-size:0.72rem;">✗ ${errors[0]}</span>`
+                : hasWarnings
+                ? `<span style="color:#92400e;font-weight:700;font-size:0.72rem;">⚠ ${warnings[0]}</span>`
+                : `<span style="color:#14532d;font-weight:700;font-size:0.72rem;">✓ Ready</span>`;
+            html += `<tr class="${rowClass}">
+                <td>${i+1}</td>
+                <td>${row['Date']||''}</td><td>${row['Time']||''}</td>
+                <td>${row['Home Team']||''}</td><td>${row['Away Team']||''}</td>
+                <td>${row['Age Group']||''}</td><td>${row['Gender']||''}</td>
+                <td>${row['Game Type']||''}</td>
+                <td>${row['Venue']||''}</td><td>${row['Field']||''}</td>
+                <td>${row['Notes']||''}</td>
+                <td>${statusHtml}</td>
+            </tr>`;
+        });
+        html += '</tbody>';
+        document.getElementById('csvPreviewTable').innerHTML = html;
+        const countEl = document.getElementById('csvPreviewCount');
+        countEl.innerHTML =
+            `<strong>${rows.length}</strong> rows — ` +
+            `<span style="color:#14532d;font-weight:700;">${valid} ready</span>` +
+            (warned   ? ` &nbsp;·&nbsp; <span style="color:#92400e;font-weight:700;">${warned} venue warnings (will still add)</span>` : '') +
+            (invalid  ? ` &nbsp;·&nbsp; <span style="color:#991b1b;font-weight:700;">${invalid} errors (will be skipped)</span>` : '');
+        document.getElementById('csvPreviewSection').style.display = 'block';
+        document.getElementById('csvAddResult').textContent = '';
+    }
+
+    // Drop zone events
+    const csvDrop  = document.getElementById('csvDropZone');
+    const csvInput = document.getElementById('csvFileInput');
+    csvDrop.addEventListener('dragover',  e => { e.preventDefault(); csvDrop.classList.add('dragover'); });
+    csvDrop.addEventListener('dragleave', () => csvDrop.classList.remove('dragover'));
+    csvDrop.addEventListener('drop', e => {
+        e.preventDefault(); csvDrop.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) handleCSVFile(file);
+    });
+    csvInput.addEventListener('change', () => { if (csvInput.files[0]) handleCSVFile(csvInput.files[0]); });
+
+    document.getElementById('csvClearBtn').addEventListener('click', () => {
+        csvParsedRows = [];
+        csvInput.value = '';
+        document.getElementById('csvPreviewSection').style.display = 'none';
+        document.getElementById('csvAddResult').textContent = '';
+    });
+
+    document.getElementById('csvAddBtn').addEventListener('click', () => {
+        if (!csvParsedRows.length) return;
+        let added = 0, skipped = 0;
+        csvParsedRows.forEach(row => {
+            const { errors } = validateCSVRow(row);
+            if (errors.length) { skipped++; return; }
+            const age        = (row['Age Group'] || '').trim().toUpperCase();
+            const genderRaw  = (row['Gender'] || '').trim().toLowerCase();
+            const normGender = (genderRaw === 'f' || genderRaw === 'female') ? 'Female' : 'Male';
+            const gameType   = normalizeGameType(row['Game Type'] || '');
+            const venueMatch = matchVenue(row['Venue'] || '');
+            const fieldMatch = venueMatch ? matchField(row['Field'] || '', venueMatch.id) : matchField(row['Field'] || '', null);
+            stagedGames.push({
+                date:      normalizeDate(row['Date']),
+                time:      normalizeTime(row['Time']),
+                home:      row['Home Team'],
+                away:      row['Away Team'],
+                age,
+                gender:    normGender,
+                gameType,
+                venueId:   venueMatch ? venueMatch.id   : '',
+                venueName: venueMatch ? venueMatch.name : (row['Venue'] || ''),
+                fieldId:   fieldMatch ? fieldMatch.id   : '',
+                fieldName: fieldMatch ? fieldMatch.name : (row['Field'] || ''),
+                notes:     row['Notes'] || '',
+                status:    'pending'
+            });
+            added++;
+        });
+        renderStagedTable();
+        document.getElementById('csvAddResult').textContent =
+            `✓ ${added} game${added !== 1 ? 's' : ''} added to queue` + (skipped ? ` (${skipped} skipped)` : '');
+        if (added) {
+            csvParsedRows = [];
+            csvInput.value = '';
+            document.getElementById('csvPreviewSection').style.display = 'none';
+            switchTab('enter');
+        }
+    });
+
+    // ── End CSV Upload Tab ────────────────────────────────────────────────────
+
+    // Populate season badges in static headers
+    const _season = getCurrentSeason();
+    ['scheduledSeasonBadge','historySeasonBadge'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = _season;
+    });
+    </script>
+</body>
+</html>
