@@ -351,16 +351,35 @@
             const list = document.getElementById('leadsList');
             list.innerHTML = data.map(l => {
                 const ts = new Date(l.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
-                const newDot = !l.viewed ? `<span style="display:inline-block;width:8px;height:8px;background:#e94560;border-radius:50%;margin-right:6px;flex-shrink:0;"></span>` : '';
+                const newDot = !l.viewed ? `<span style="display:inline-block;width:8px;height:8px;background:#e94560;border-radius:50%;flex-shrink:0;margin-top:2px;"></span>` : '<span style="display:inline-block;width:8px;height:8px;flex-shrink:0;"></span>';
                 return `
-                <div style="border:1px solid #e2d9ce; border-radius:8px; overflow:hidden; background:#fff; display:flex; align-items:center; gap:10px; padding:12px 14px;">
-                    ${newDot}
-                    <div style="flex:1; min-width:0; cursor:pointer;" onclick="window.open('lead-detail.html?id=${l.id}','_blank')">
-                        <div style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1rem; color:#09142a; text-transform:uppercase; letter-spacing:0.5px;">${l.name}</div>
-                        <div style="font-size:0.8rem; color:#666;">${l.club} &nbsp;·&nbsp; ${l.email} &nbsp;·&nbsp; ${ts}</div>
+                <div id="lead-row-${l.id}" style="border:1px solid #e2d9ce; border-radius:8px; overflow:hidden; background:#fff;">
+                    <!-- Collapsed header row -->
+                    <div style="display:flex; align-items:center; gap:10px; padding:11px 14px; cursor:pointer;" onclick="toggleLead(${l.id})">
+                        ${newDot}
+                        <div style="flex:1; min-width:0;">
+                            <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:0.98rem; color:#09142a; text-transform:uppercase; letter-spacing:0.5px;">${l.name}</span>
+                            <span style="font-size:0.78rem; color:#888; margin-left:10px;">${l.club} · ${l.email} · ${ts}</span>
+                        </div>
+                        <span id="lead-chevron-${l.id}" style="font-size:0.75rem; color:#aaa; flex-shrink:0;">▼</span>
                     </div>
-                    <a href="lead-detail.html?id=${l.id}" target="_blank" style="background:#09142a; color:#fff; font-size:0.78rem; font-weight:700; padding:5px 12px; border-radius:6px; text-decoration:none; white-space:nowrap; flex-shrink:0;">Open ↗</a>
-                    <button onclick="archiveLead(${l.id}, this)" style="background:#fef3c7; color:#b45309; border:none; border-radius:6px; padding:4px 10px; font-size:0.75rem; font-weight:700; cursor:pointer; flex-shrink:0;">Archive</button>
+                    <!-- Expanded detail -->
+                    <div id="lead-detail-${l.id}" style="display:none; padding:14px 18px; border-top:1px solid #e2d9ce; font-size:0.85rem; color:#444; line-height:1.6;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; margin-bottom:10px;">
+                            <div><span style="font-weight:700; color:#09142a;">Phone:</span> ${l.phone || '—'}</div>
+                            <div><span style="font-weight:700; color:#09142a;">Role:</span> ${l.role || '—'}</div>
+                        </div>
+                        <div style="margin-bottom:10px;"><span style="font-weight:700; color:#09142a;">Message:</span><br>${l.message ? l.message.replace(/\n/g,'<br>') : '—'}</div>
+                        <div style="margin-bottom:6px; font-weight:700; color:#09142a; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.5px;">Your Notes</div>
+                        <textarea id="lead-notes-${l.id}" style="width:100%; box-sizing:border-box; font-family:'DM Sans',sans-serif; font-size:0.85rem; padding:8px 10px; border:2px solid #e2d9ce; border-radius:8px; resize:vertical; min-height:70px; outline:none;" onfocus="this.style.borderColor='#09142a'" onblur="this.style.borderColor='#e2d9ce'">${l.assignor_notes || ''}</textarea>
+                        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
+                            <button onclick="saveLead(${l.id})" style="background:#09142a; color:#fff; border:none; border-radius:6px; padding:6px 14px; font-family:'Barlow Condensed',sans-serif; font-size:0.88rem; font-weight:800; text-transform:uppercase; cursor:pointer;">Save Notes</button>
+                            <a href="mailto:${l.email}?subject=Re: Referee Tool Inquiry — ${l.club}" style="background:#00c853; color:#09142a; border-radius:6px; padding:6px 14px; font-family:'Barlow Condensed',sans-serif; font-size:0.88rem; font-weight:800; text-transform:uppercase; text-decoration:none;">Reply ↗</a>
+                            <a href="lead-detail.html?id=${l.id}" target="_blank" style="background:#f0ece6; color:#09142a; border:1px solid #e2d9ce; border-radius:6px; padding:6px 14px; font-family:'Barlow Condensed',sans-serif; font-size:0.88rem; font-weight:800; text-transform:uppercase; text-decoration:none;">Full Page ↗</a>
+                            <span id="lead-save-msg-${l.id}" style="display:none; font-size:0.8rem; font-weight:700; color:#00c853;">✓ Saved</span>
+                            <button onclick="archiveLead(${l.id}, this)" style="background:#fef3c7; color:#b45309; border:none; border-radius:6px; padding:6px 14px; font-family:'Barlow Condensed',sans-serif; font-size:0.88rem; font-weight:800; text-transform:uppercase; cursor:pointer; margin-left:auto;">Archive</button>
+                        </div>
+                    </div>
                 </div>`;
             }).join('');
 
@@ -369,16 +388,29 @@
             document.getElementById('leadsNewBadge').style.display = 'none';
         }
 
-        function toggleLead(id, row) {
-            const detail = document.getElementById('lead-detail-' + id);
-            detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
+        function toggleLead(id) {
+            const detail   = document.getElementById('lead-detail-' + id);
+            const chevron  = document.getElementById('lead-chevron-' + id);
+            const open     = detail.style.display === 'none';
+            detail.style.display  = open ? 'block' : 'none';
+            chevron.textContent   = open ? '▲' : '▼';
+        }
+
+        async function saveLead(id) {
+            const notes = document.getElementById('lead-notes-' + id).value.trim();
+            const { error } = await supabaseClient.client.from('leads').update({ assignor_notes: notes }).eq('id', id);
+            if (!error) {
+                const msg = document.getElementById('lead-save-msg-' + id);
+                msg.style.display = 'inline';
+                setTimeout(() => msg.style.display = 'none', 2500);
+            }
         }
 
         async function archiveLead(id, btn) {
             if (!confirm('Archive this lead?')) return;
             btn.disabled = true;
             await supabaseClient.client.from('leads').update({ archived: true }).eq('id', id);
-            btn.closest('div[style*="border:1px"]').remove();
+            document.getElementById('lead-row-' + id).remove();
             const remaining = document.getElementById('leadsList').children.length;
             if (remaining === 0) document.getElementById('leadsEmpty').style.display = 'block';
         }
