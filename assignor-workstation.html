@@ -1011,11 +1011,12 @@
 
         async function loadProfiles() {
             try {
-                const recs = await supabaseClient.getRecords('Assignors', { maxRecords: 10 });
+                const recs = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
                 allAssignorProfiles = recs.map(r => ({
-                    id:          r.id,
-                    name:        r.fields['Name'] || '',
-                    role:        (r.fields['Role'] || 'Assignor').trim(),
+                    id:           r.id,
+                    name:         r.fields['Name'] || '',
+                    role:         (r.fields['Role'] || 'Assignor').trim(),
+                    auth_user_id: r.fields['auth_user_id'] || null,
                     defaultView: (() => {
                         try {
                             const freq = JSON.parse(localStorage.getItem('assignorViewFreq_' + r.id) || '{}');
@@ -1024,13 +1025,27 @@
                     })()
                 })).filter(p => p.name);
 
+                // Filter dropdown to only show the logged-in user's profile
+                // Admin sees everyone; regular assignors see only themselves
+                const loggedInId = currentUserId();
+                const myProfile  = allAssignorProfiles.find(p => p.auth_user_id === loggedInId);
+                const visibleProfiles = (myProfile && myProfile.role !== 'Admin')
+                    ? [myProfile]
+                    : allAssignorProfiles;
+
                 const sel = document.getElementById('profileSelect');
-                allAssignorProfiles.forEach(p => {
+                visibleProfiles.forEach(p => {
                     const opt = document.createElement('option');
                     opt.value = p.id;
                     opt.textContent = p.name;
                     sel.appendChild(opt);
                 });
+
+                // Auto-select if only one profile visible
+                if (visibleProfiles.length === 1) {
+                    sel.value = visibleProfiles[0].id;
+                    sel.dispatchEvent(new Event('change'));
+                }
 
                 document.getElementById('profileLoading').style.display = 'none';
                 sel.style.display = 'block';
