@@ -1017,6 +1017,11 @@
                     name:         r.fields['Name'] || '',
                     role:         (r.fields['Role'] || 'Assignor').trim(),
                     auth_user_id: r.fields['auth_user_id'] || null,
+                    clubs:        (() => {
+                        const c = r.fields['Clubs'];
+                        if (!c) return null;
+                        return Array.isArray(c) ? c.filter(Boolean) : [c];
+                    })(),
                     defaultView: (() => {
                         try {
                             const freq = JSON.parse(localStorage.getItem('assignorViewFreq_' + r.id) || '{}');
@@ -1029,20 +1034,6 @@
                 // Admin sees everyone; regular assignors see only themselves
                 const loggedInId = currentUserId();
                 const myProfile  = allAssignorProfiles.find(p => p.auth_user_id === loggedInId);
-
-                // Fetch this user's club assignments from assignor_profiles
-                if (myProfile && myProfile.role !== 'Admin' && loggedInId) {
-                    try {
-                        const { data: ap } = await supabaseClient.client
-                            .from('assignor_profiles')
-                            .select('clubs')
-                            .eq('id', loggedInId)
-                            .maybeSingle();
-                        if (ap?.clubs && ap.clubs.length > 0) {
-                            myProfile.clubs = ap.clubs; // e.g. ['Plainfield']
-                        }
-                    } catch(e) { /* non-blocking */ }
-                }
 
                 const visibleProfiles = (myProfile && myProfile.role !== 'Admin')
                     ? [myProfile]
