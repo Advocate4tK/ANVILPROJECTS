@@ -1111,9 +1111,12 @@
 
             // Restrict club pills to this assignor's assigned clubs (non-Admin only)
             if (chosen.clubs && chosen.clubs.length > 0 && chosen.role !== 'Admin') {
-                clubsList     = chosen.clubs.slice().sort();
+                assignorClubRestriction = chosen.clubs.slice().sort();
+                clubsList     = assignorClubRestriction.slice();
                 selectedClubs = new Set(clubsList);
                 userHasFilteredClubs = false;
+            } else {
+                assignorClubRestriction = null;
             }
 
             document.getElementById('profileDoorway').style.display    = 'none';
@@ -4376,6 +4379,7 @@
         let clubsList     = KNOWN_CLUBS.slice(); // pre-seeded so pills render on page load
         let selectedClubs = new Set(clubsList); // default: all selected
         let userHasFilteredClubs = false; // true once user manually picks specific clubs
+        let assignorClubRestriction = null; // set when a non-Admin assignor logs in — limits visible clubs
         let selectedGame        = null; // currently focused game record
         let requestedChangeDate = null; // parsed from Notes when change request game is open
         let requestedChangeTime = null; // parsed from Notes when change request game is open
@@ -4606,7 +4610,9 @@
                     const { data: clubRecs, error } = await supabaseClient.client.from('clubs').select('"Club Name"').order('"Club Name"');
                     if (error) throw error;
                     const dbClubs = clubRecs.map(c => c['Club Name'] || '').filter(Boolean);
-                    clubsList = [...new Set([...KNOWN_CLUBS, ...dbClubs])].sort();
+                    let merged = [...new Set([...KNOWN_CLUBS, ...dbClubs])].sort();
+                    if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
+                    clubsList = merged;
                     if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);
                     const pillsWrap = document.getElementById('clubPills');
                     if (pillsWrap) { pillsWrap.innerHTML = ''; buildClubPills(); }
@@ -4966,7 +4972,9 @@
                 // Merge Airtable club names + Source Club game values into the known list
                 const sourceClubs  = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
                 const airtableClubs = clubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
-                clubsList = [...new Set([...KNOWN_CLUBS, ...airtableClubs, ...sourceClubs])].sort();
+                let mergedAll = [...new Set([...KNOWN_CLUBS, ...airtableClubs, ...sourceClubs])].sort();
+                if (assignorClubRestriction) mergedAll = mergedAll.filter(c => assignorClubRestriction.includes(c));
+                clubsList = mergedAll;
                 if (!userHasFilteredClubs) {
                     selectedClubs = new Set(clubsList);
                 } else {
