@@ -189,19 +189,13 @@
                 <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:40px;">
 
                     <!-- User Management -->
-                    <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #3b82f6; border-radius:10px; padding:14px 18px;">
-                        <div style="display:flex; align-items:center; gap:14px;">
-                            <div style="font-size:1.4rem; flex-shrink:0;">👥</div>
-                            <div style="flex:1;">
-                                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">User Management</div>
-                                <div style="font-size:0.85rem; color:#555;">View assignors, reset passwords, manage access.</div>
-                            </div>
-                            <button onclick="toggleUserManagement()" id="userMgmtBtn" style="background:#3b82f6; color:#fff; border:none; font-family:'DM Sans',sans-serif; font-size:0.82rem; font-weight:700; padding:7px 16px; border-radius:8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">Manage</button>
+                    <div style="display:flex; align-items:center; gap:14px; background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #3b82f6; border-radius:10px; padding:14px 18px;">
+                        <div style="font-size:1.4rem; flex-shrink:0;">👥</div>
+                        <div style="flex:1;">
+                            <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">User Management</div>
+                            <div style="font-size:0.85rem; color:#555;">View assignors, reset passwords, manage access.</div>
                         </div>
-                        <div id="userMgmtPanel" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid #e2d9ce;">
-                            <div id="userMgmtLoading" style="font-size:0.85rem; color:#888;">Loading users…</div>
-                            <div id="userMgmtList" style="display:flex; flex-direction:column; gap:10px;"></div>
-                        </div>
+                        <a href="users.html" style="background:#3b82f6; color:#fff; font-family:'DM Sans',sans-serif; font-size:0.82rem; font-weight:700; padding:7px 16px; border-radius:8px; text-decoration:none; white-space:nowrap; flex-shrink:0;">Open ↗</a>
                     </div>
 
                     <!-- Change Super Admin PIN -->
@@ -453,65 +447,6 @@
             localStorage.removeItem('seasonOverride');
             document.getElementById('seasonOverrideInput').value = '';
             document.getElementById('currentSeasonDisplay').textContent = getAutoSeason();
-        }
-
-        // ── User Management ───────────────────────────────────────────────────
-        let userMgmtLoaded = false;
-        async function toggleUserManagement() {
-            const panel = document.getElementById('userMgmtPanel');
-            const open  = panel.style.display === 'none';
-            panel.style.display = open ? 'block' : 'none';
-            document.getElementById('userMgmtBtn').textContent = open ? 'Close' : 'Manage';
-            if (open && !userMgmtLoaded) await loadUsers();
-        }
-
-        async function loadUsers() {
-            const { data, error } = await supabaseClient.client
-                .from('assignor_profiles')
-                .select('*')
-                .order('name');
-
-            document.getElementById('userMgmtLoading').style.display = 'none';
-
-            if (error || !data) {
-                document.getElementById('userMgmtLoading').textContent = 'Error: ' + (error?.message || 'No data returned');
-                document.getElementById('userMgmtLoading').style.display = 'block';
-                return;
-            }
-
-            userMgmtLoaded = true;
-            document.getElementById('userMgmtList').innerHTML = data.map(u => `
-                <div style="background:#fff; border:1px solid #e2d9ce; border-radius:8px; padding:12px 16px;">
-                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                        <div style="flex:1; min-width:0;">
-                            <div style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1rem; color:#09142a; text-transform:uppercase; letter-spacing:0.5px;">${u.name}</div>
-                            <div style="font-size:0.78rem; color:#888;">
-                                @${u.username || '—'} &nbsp;·&nbsp; ${u.email}
-                                ${u.clubs && u.clubs.length ? '&nbsp;·&nbsp; ' + u.clubs.join(', ') : ''}
-                            </div>
-                        </div>
-                        <button onclick="sendPasswordReset('${u.email}', this)" style="background:#f0ece6; color:#09142a; border:1px solid #e2d9ce; border-radius:6px; padding:5px 12px; font-size:0.78rem; font-weight:700; cursor:pointer; white-space:nowrap; flex-shrink:0;">Reset Password</button>
-                    </div>
-                    <div id="reset-msg-${u.id}" style="display:none; font-size:0.78rem; margin-top:6px; font-weight:600;"></div>
-                </div>
-            `).join('');
-        }
-
-        async function sendPasswordReset(email, btn) {
-            btn.disabled = true;
-            btn.textContent = 'Sending…';
-            const { error } = await supabaseClient.client.auth.resetPasswordForEmail(email, {
-                redirectTo: 'https://referee-tool.com/reset-password.html'
-            });
-            const msgEl = btn.closest('div[style*="background:#fff"]').querySelector('[id^="reset-msg"]');
-            if (error) {
-                btn.disabled = false;
-                btn.textContent = 'Reset Password';
-                if (msgEl) { msgEl.textContent = 'Error: ' + error.message; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; }
-            } else {
-                btn.textContent = '✓ Sent';
-                if (msgEl) { msgEl.textContent = 'Reset email sent to ' + email; msgEl.style.color = '#00c853'; msgEl.style.display = 'block'; }
-            }
         }
 
         // ── Utility ───────────────────────────────────────────────────────────

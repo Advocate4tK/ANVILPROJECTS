@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management — Referee Tool</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            background-color: #060e20 !important;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            ) !important;
+        }
+        .users-wrap { max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
+        .user-card {
+            background: #fff;
+            border: 1px solid #e2d9ce;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 10px;
+        }
+        .user-name {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #09142a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .user-meta { font-size: 0.82rem; color: #888; margin-top: 2px; margin-bottom: 12px; }
+        .user-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .btn-reset {
+            background: #09142a;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 7px 16px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .btn-reset:disabled { opacity: 0.6; cursor: default; }
+        .reset-msg { font-size: 0.82rem; font-weight: 700; display: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>User Management</h1>
+        <p class="subtitle">Assignor accounts — password resets &amp; access</p>
+    </header>
+
+    <main>
+        <div class="users-wrap">
+            <div style="margin-bottom:20px;">
+                <a href="superadmin.html" style="background:#00c853; color:#09142a; font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; text-transform:uppercase; padding:8px 18px; border-radius:8px; text-decoration:none;">← Back to Super Admin</a>
+            </div>
+
+            <div id="loadingState" style="color:rgba(255,255,255,0.4); text-align:center; padding:60px 0; font-size:0.9rem;">Loading users…</div>
+            <div id="errorState" style="display:none; color:#e74c3c; text-align:center; padding:40px 0; font-size:0.88rem;"></div>
+            <div id="usersList"></div>
+        </div>
+    </main>
+</div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-client.js?v=9"></script>
+<script>
+    async function loadUsers() {
+        const { data, error } = await supabaseClient.client
+            .from('assignor_profiles')
+            .select('*')
+            .order('name');
+
+        document.getElementById('loadingState').style.display = 'none';
+
+        if (error || !data) {
+            const err = document.getElementById('errorState');
+            err.textContent = 'Failed to load users: ' + (error?.message || 'Unknown error');
+            err.style.display = 'block';
+            return;
+        }
+
+        document.getElementById('usersList').innerHTML = data.map(u => `
+            <div class="user-card" id="user-card-${u.id}">
+                <div class="user-name">${u.name || '—'}</div>
+                <div class="user-meta">
+                    @${u.username || '—'} &nbsp;·&nbsp; ${u.email}
+                    ${u.clubs && u.clubs.length ? '&nbsp;·&nbsp; ' + (Array.isArray(u.clubs) ? u.clubs.join(', ') : u.clubs) : ''}
+                    ${u.tier ? '&nbsp;·&nbsp; ' + u.tier : ''}
+                </div>
+                <div class="user-actions">
+                    <button class="btn-reset" onclick="sendPasswordReset('${u.email}', '${u.id}', this)">
+                        Send Password Reset
+                    </button>
+                    <span class="reset-msg" id="reset-msg-${u.id}"></span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function sendPasswordReset(email, id, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+
+        const { error } = await supabaseClient.client.auth.resetPasswordForEmail(email, {
+            redirectTo: 'https://referee-tool.com/reset-password.html'
+        });
+
+        const msg = document.getElementById('reset-msg-' + id);
+        if (error) {
+            btn.disabled = false;
+            btn.textContent = 'Send Password Reset';
+            msg.textContent = 'Error: ' + error.message;
+            msg.style.color = '#e74c3c';
+            msg.style.display = 'inline';
+        } else {
+            btn.textContent = '✓ Email Sent';
+            msg.textContent = 'Reset link sent to ' + email;
+            msg.style.color = '#00c853';
+            msg.style.display = 'inline';
+        }
+    }
+
+    loadUsers();
+</script>
+</body>
+</html>
