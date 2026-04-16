@@ -31,6 +31,9 @@ const CONFIG = {
     // Supabase credentials
     SUPABASE_URL: 'https://kaniccdqieyesezpousu.supabase.co',
     SUPABASE_ANON_KEY: 'sb_publishable_pJX6Fsg4YrSNEhfNTHbkLA_tzFJmEUb',
+    // Service role key — used ONLY in superadmin pages for admin API calls (password force-set)
+    // Get from: Supabase Dashboard → Project Settings → API → service_role (secret)
+    SUPABASE_SERVICE_KEY: '',
 
 
     // Airtable — DEPRECATED. Migrated to Supabase 2026-03-24. Keys removed.

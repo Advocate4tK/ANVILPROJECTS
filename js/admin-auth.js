@@ -89,6 +89,20 @@ if (loginSection) {
                 loginError.style.display = 'block';
                 return;
             }
+
+            // Check if account is suspended
+            const { data: profile } = await supabaseClient.client
+                .from('assignor_profiles')
+                .select('suspended')
+                .eq('id', data.user.id)
+                .maybeSingle();
+            if (profile?.suspended) {
+                await supabaseClient.client.auth.signOut();
+                loginError.textContent = 'This account has been suspended. Contact your administrator.';
+                loginError.style.display = 'block';
+                return;
+            }
+
             loginError.style.display  = 'none';
             loginSection.style.display  = 'none';
             adminDashboard.style.display = 'block';

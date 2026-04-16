@@ -22,7 +22,14 @@
             border-radius: 10px;
             padding: 16px 20px;
             margin-bottom: 10px;
+            transition: border-color 0.2s;
         }
+        .user-card.is-suspended {
+            border-color: #fca5a5;
+            background: #fff8f8;
+        }
+        .user-top { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+        .user-name-wrap { flex: 1; min-width: 0; }
         .user-name {
             font-family: 'Barlow Condensed', sans-serif;
             font-size: 1.1rem;
@@ -31,35 +38,137 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        .user-meta { font-size: 0.82rem; color: #888; margin-top: 2px; margin-bottom: 12px; }
-        .user-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .user-meta { font-size: 0.82rem; color: #888; margin-top: 2px; }
+        .suspended-badge {
+            display: inline-block;
+            background: #e74c3c;
+            color: #fff;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 2px 9px;
+            border-radius: 20px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        .user-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
         .btn-reset {
             background: #09142a;
             color: #fff;
             border: none;
             border-radius: 6px;
-            padding: 7px 16px;
+            padding: 7px 14px;
             font-family: 'Barlow Condensed', sans-serif;
             font-size: 0.9rem;
             font-weight: 800;
             text-transform: uppercase;
             cursor: pointer;
         }
-        .btn-reset:disabled { opacity: 0.6; cursor: default; }
-        .reset-msg { font-size: 0.82rem; font-weight: 700; display: none; }
+        .btn-change-pw {
+            background: #f0ece6;
+            color: #09142a;
+            border: 1px solid #e2d9ce;
+            border-radius: 6px;
+            padding: 7px 14px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .btn-suspend {
+            border: none;
+            border-radius: 6px;
+            padding: 7px 14px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-left: auto;
+        }
+        .btn-suspend.active   { background: #fef3c7; color: #b45309; }
+        .btn-suspend.inactive { background: #d1fae5; color: #065f46; }
+        button:disabled { opacity: 0.6; cursor: default; }
+        .reset-msg { font-size: 0.82rem; font-weight: 700; }
+
+        /* Change password panel */
+        .change-pw-panel {
+            display: none;
+            margin-top: 12px;
+            padding: 14px 16px;
+            background: #f8f9fc;
+            border: 1.5px solid #dde3f0;
+            border-radius: 8px;
+        }
+        .change-pw-panel label {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #555;
+            display: block;
+            margin-bottom: 6px;
+        }
+        .pw-input-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .pw-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 8px 12px;
+            border: 1.5px solid #e2d9ce;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            color: #09142a;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .pw-input:focus { border-color: #09142a; }
+        .btn-set-pw {
+            background: #09142a;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .pw-msg { font-size: 0.82rem; font-weight: 700; display: none; }
+        .no-service-key {
+            background: #fef9c3;
+            border: 1px solid #fde047;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.82rem;
+            color: #713f12;
+            margin-bottom: 16px;
+            display: none;
+        }
     </style>
 </head>
 <body>
 <div class="container">
     <header>
         <h1>User Management</h1>
-        <p class="subtitle">Assignor accounts — password resets &amp; access</p>
+        <p class="subtitle">Assignor accounts — suspend, password reset &amp; force-set</p>
     </header>
 
     <main>
         <div class="users-wrap">
             <div style="margin-bottom:20px;">
                 <a href="superadmin.html" style="background:#00c853; color:#09142a; font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; text-transform:uppercase; padding:8px 18px; border-radius:8px; text-decoration:none;">← Back to Super Admin</a>
+            </div>
+
+            <div id="noServiceKeyWarning" class="no-service-key">
+                ⚠️ <strong>Service key not configured.</strong> The "Change Password" feature requires <code>SUPABASE_SERVICE_KEY</code> in config.js.
+                Get it from: Supabase Dashboard → Project Settings → API → service_role (secret).
             </div>
 
             <div id="loadingState" style="color:rgba(255,255,255,0.4); text-align:center; padding:60px 0; font-size:0.9rem;">Loading users…</div>
@@ -73,6 +182,14 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/supabase-client.js?v=9"></script>
 <script>
+    // Admin client — needed for force-setting passwords (service role bypasses auth restrictions)
+    let adminClient = null;
+    if (CONFIG.SUPABASE_SERVICE_KEY) {
+        adminClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_SERVICE_KEY);
+    } else {
+        document.getElementById('noServiceKeyWarning').style.display = 'block';
+    }
+
     async function loadUsers() {
         const { data, error } = await supabaseClient.client
             .from('assignor_profiles')
@@ -88,22 +205,47 @@
             return;
         }
 
-        document.getElementById('usersList').innerHTML = data.map(u => `
-            <div class="user-card" id="user-card-${u.id}">
-                <div class="user-name">${u.name || '—'}</div>
-                <div class="user-meta">
-                    @${u.username || '—'} &nbsp;·&nbsp; ${u.email}
-                    ${u.clubs && u.clubs.length ? '&nbsp;·&nbsp; ' + (Array.isArray(u.clubs) ? u.clubs.join(', ') : u.clubs) : ''}
-                    ${u.tier ? '&nbsp;·&nbsp; ' + u.tier : ''}
+        document.getElementById('usersList').innerHTML = data.map(u => {
+            const suspended = !!u.suspended;
+            return `
+            <div class="user-card ${suspended ? 'is-suspended' : ''}" id="user-card-${u.id}">
+                <div class="user-top">
+                    <div class="user-name-wrap">
+                        <span class="user-name">${u.name || '—'}</span>
+                        <span class="suspended-badge" id="suspended-badge-${u.id}" style="display:${suspended ? 'inline' : 'none'}">Suspended</span>
+                        <div class="user-meta">
+                            @${u.username || '—'} &nbsp;·&nbsp; ${u.email}
+                            ${u.clubs && u.clubs.length ? '&nbsp;·&nbsp; ' + (Array.isArray(u.clubs) ? u.clubs.join(', ') : u.clubs) : ''}
+                            ${u.tier ? '&nbsp;·&nbsp; ' + u.tier : ''}
+                        </div>
+                    </div>
                 </div>
+
                 <div class="user-actions">
                     <button class="btn-reset" onclick="sendPasswordReset('${u.email}', '${u.id}', this)">
                         Send Password Reset
                     </button>
+                    <button class="btn-change-pw" onclick="toggleChangePw('${u.id}')">
+                        Change Password
+                    </button>
                     <span class="reset-msg" id="reset-msg-${u.id}"></span>
+                    <button class="btn-suspend ${suspended ? 'inactive' : 'active'}" id="btn-suspend-${u.id}"
+                        onclick="toggleSuspend('${u.id}', this)">
+                        ${suspended ? 'Unsuspend' : 'Suspend'}
+                    </button>
                 </div>
-            </div>
-        `).join('');
+
+                <!-- Change password panel -->
+                <div class="change-pw-panel" id="change-pw-${u.id}">
+                    <label>Set New Password for ${u.name || u.email}</label>
+                    <div class="pw-input-row">
+                        <input class="pw-input" type="password" id="new-pw-${u.id}" placeholder="New password (min 8 characters)">
+                        <button class="btn-set-pw" onclick="changePassword('${u.id}', this)">Set Password</button>
+                    </div>
+                    <span class="pw-msg" id="pw-msg-${u.id}"></span>
+                </div>
+            </div>`;
+        }).join('');
     }
 
     async function sendPasswordReset(email, id, btn) {
@@ -126,6 +268,91 @@
             msg.textContent = 'Reset link sent to ' + email;
             msg.style.color = '#00c853';
             msg.style.display = 'inline';
+        }
+    }
+
+    function toggleChangePw(id) {
+        const panel = document.getElementById('change-pw-' + id);
+        const open = panel.style.display !== 'block';
+        panel.style.display = open ? 'block' : 'none';
+        if (open) document.getElementById('new-pw-' + id).focus();
+    }
+
+    async function changePassword(userId, btn) {
+        if (!adminClient) {
+            alert('Service key not configured. Add SUPABASE_SERVICE_KEY to config.js.');
+            return;
+        }
+        const input = document.getElementById('new-pw-' + userId);
+        const pw = input.value.trim();
+        const msg = document.getElementById('pw-msg-' + userId);
+
+        if (pw.length < 8) {
+            msg.textContent = 'Password must be at least 8 characters.';
+            msg.style.color = '#e74c3c';
+            msg.style.display = 'block';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Setting…';
+        msg.style.display = 'none';
+
+        const { error } = await adminClient.auth.admin.updateUserById(userId, { password: pw });
+
+        btn.disabled = false;
+        btn.textContent = 'Set Password';
+
+        if (error) {
+            msg.textContent = 'Error: ' + error.message;
+            msg.style.color = '#e74c3c';
+            msg.style.display = 'block';
+        } else {
+            input.value = '';
+            msg.textContent = '✓ Password updated';
+            msg.style.color = '#00c853';
+            msg.style.display = 'block';
+            setTimeout(() => {
+                msg.style.display = 'none';
+                document.getElementById('change-pw-' + userId).style.display = 'none';
+            }, 2500);
+        }
+    }
+
+    async function toggleSuspend(userId, btn) {
+        const suspending = btn.classList.contains('active'); // active = "Suspend" = about to suspend
+        const label = suspending ? 'Suspend' : 'Unsuspend';
+
+        if (!confirm((suspending ? 'Suspend' : 'Unsuspend') + ' this account?')) return;
+
+        btn.disabled = true;
+
+        const { error } = await supabaseClient.client
+            .from('assignor_profiles')
+            .update({ suspended: suspending })
+            .eq('id', userId);
+
+        btn.disabled = false;
+
+        if (error) {
+            alert('Error: ' + error.message);
+            return;
+        }
+
+        // Update UI
+        const card  = document.getElementById('user-card-' + userId);
+        const badge = document.getElementById('suspended-badge-' + userId);
+
+        if (suspending) {
+            btn.classList.replace('active', 'inactive');
+            btn.textContent = 'Unsuspend';
+            card.classList.add('is-suspended');
+            badge.style.display = 'inline';
+        } else {
+            btn.classList.replace('inactive', 'active');
+            btn.textContent = 'Suspend';
+            card.classList.remove('is-suspended');
+            badge.style.display = 'none';
         }
     }
 
