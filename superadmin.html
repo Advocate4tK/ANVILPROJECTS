@@ -245,15 +245,15 @@
                 </div>
 
                 <!-- ── Leads ── -->
-                <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:#aaa; margin-bottom:8px;">
-                    Demo Inquiries — Leads
-                    <span id="leadsNewBadge" style="display:none; margin-left:8px; background:#e94560; color:#fff; font-size:0.7rem; padding:2px 8px; border-radius:20px; vertical-align:middle;"></span>
-                </div>
-                <div style="margin-bottom:40px;">
-                    <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #e94560; border-radius:10px; padding:14px 18px;">
-                        <div id="leadsLoading" style="color:#888; font-size:0.85rem; text-align:center; padding:10px 0;">Loading…</div>
-                        <div id="leadsEmpty" style="display:none; color:#888; font-size:0.85rem; text-align:center; padding:10px 0;">No inquiries yet.</div>
-                        <div id="leadsList" style="display:flex; flex-direction:column; gap:10px;"></div>
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:#aaa; margin-bottom:8px;">Leads &amp; Sales</div>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:28px;">
+                    <div style="display:flex; align-items:center; gap:14px; background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #e94560; border-radius:10px; padding:14px 18px;">
+                        <div style="font-size:1.4rem; flex-shrink:0;">📋</div>
+                        <div style="flex:1;">
+                            <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Demo Inquiries</div>
+                            <div style="font-size:0.85rem; color:#555;">View, respond to, and manage leads from the referee-tool.com demo page.</div>
+                        </div>
+                        <a href="leads.html" style="background:#e94560; color:#fff; font-family:'DM Sans',sans-serif; font-size:0.82rem; font-weight:700; padding:7px 16px; border-radius:8px; text-decoration:none; white-space:nowrap; flex-shrink:0;">Open ↗</a>
                     </div>
                 </div>
 
@@ -324,95 +324,6 @@
             if (pinOverride)  document.getElementById('pinReminderDisplay').textContent = pinOverride;
             if (passOverride) document.getElementById('adminPassDisplay').textContent   = passOverride;
             loadAppVersion();
-            loadLeads();
-        }
-
-        async function loadLeads() {
-            const { data, error } = await supabaseClient.client
-                .from('leads')
-                .select('*')
-                .eq('archived', false)
-                .order('created_at', { ascending: false });
-
-            document.getElementById('leadsLoading').style.display = 'none';
-
-            if (error || !data || data.length === 0) {
-                document.getElementById('leadsEmpty').style.display = 'block';
-                return;
-            }
-
-            const unviewed = data.filter(l => !l.viewed).length;
-            if (unviewed > 0) {
-                const badge = document.getElementById('leadsNewBadge');
-                badge.textContent = unviewed + ' new';
-                badge.style.display = 'inline';
-            }
-
-            const list = document.getElementById('leadsList');
-            list.innerHTML = data.map(l => {
-                const ts = new Date(l.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
-                const newDot = !l.viewed ? `<span style="display:inline-block;width:8px;height:8px;background:#e94560;border-radius:50%;flex-shrink:0;margin-top:2px;"></span>` : '<span style="display:inline-block;width:8px;height:8px;flex-shrink:0;"></span>';
-                return `
-                <div id="lead-row-${l.id}" style="border:1px solid #e2d9ce; border-radius:8px; overflow:hidden; background:#fff;">
-                    <!-- Collapsed header row -->
-                    <div style="display:flex; align-items:center; gap:10px; padding:11px 14px; cursor:pointer;" onclick="toggleLead(${l.id})">
-                        ${newDot}
-                        <div style="flex:1; min-width:0;">
-                            <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:0.98rem; color:#09142a; text-transform:uppercase; letter-spacing:0.5px;">${l.name}</span>
-                            <span style="font-size:0.78rem; color:#888; margin-left:10px;">${l.club} · ${l.email} · ${ts}</span>
-                        </div>
-                        <span id="lead-chevron-${l.id}" style="font-size:0.75rem; color:#aaa; flex-shrink:0;">▼</span>
-                    </div>
-                    <!-- Expanded detail -->
-                    <div id="lead-detail-${l.id}" style="display:none; padding:14px 18px; border-top:1px solid #e2d9ce; font-size:0.85rem; color:#444; line-height:1.6;">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; margin-bottom:10px;">
-                            <div><span style="font-weight:700; color:#09142a;">Phone:</span> ${l.phone || '—'}</div>
-                            <div><span style="font-weight:700; color:#09142a;">Role:</span> ${l.role || '—'}</div>
-                        </div>
-                        <div style="margin-bottom:10px;"><span style="font-weight:700; color:#09142a;">Message:</span><br>${l.message ? l.message.replace(/\n/g,'<br>') : '—'}</div>
-                        <div style="margin-bottom:6px; font-weight:700; color:#09142a; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.5px;">Your Notes</div>
-                        <textarea id="lead-notes-${l.id}" style="width:100%; box-sizing:border-box; font-family:'DM Sans',sans-serif; font-size:0.85rem; padding:8px 10px; border:2px solid #e2d9ce; border-radius:8px; resize:vertical; min-height:70px; outline:none;" onfocus="this.style.borderColor='#09142a'" onblur="this.style.borderColor='#e2d9ce'">${l.assignor_notes || ''}</textarea>
-                        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
-                            <button onclick="saveLead(${l.id})" style="background:#09142a; color:#fff; border:none; border-radius:6px; padding:6px 14px; font-family:'Barlow Condensed',sans-serif; font-size:0.88rem; font-weight:800; text-transform:uppercase; cursor:pointer;">Save Notes</button>
-                            <a href="mailto:${l.email}?subject=Re: Referee Tool Inquiry — ${l.club}" style="background:#00c853; color:#09142a; border-radius:6px; padding:6px 14px; font-family:'Barlow Condensed',sans-serif; font-size:0.88rem; font-weight:800; text-transform:uppercase; text-decoration:none;">Reply ↗</a>
-                            <a href="lead-detail.html?id=${l.id}" target="_blank" style="background:#f0ece6; color:#09142a; border:1px solid #e2d9ce; border-radius:6px; padding:6px 14px; font-family:'Barlow Condensed',sans-serif; font-size:0.88rem; font-weight:800; text-transform:uppercase; text-decoration:none;">Full Page ↗</a>
-                            <span id="lead-save-msg-${l.id}" style="display:none; font-size:0.8rem; font-weight:700; color:#00c853;">✓ Saved</span>
-                            <button onclick="archiveLead(${l.id}, this)" style="background:#fef3c7; color:#b45309; border:none; border-radius:6px; padding:6px 14px; font-family:'Barlow Condensed',sans-serif; font-size:0.88rem; font-weight:800; text-transform:uppercase; cursor:pointer; margin-left:auto;">Archive</button>
-                        </div>
-                    </div>
-                </div>`;
-            }).join('');
-
-            // Mark all as viewed
-            await supabaseClient.client.from('leads').update({ viewed: true }).eq('viewed', false);
-            document.getElementById('leadsNewBadge').style.display = 'none';
-        }
-
-        function toggleLead(id) {
-            const detail   = document.getElementById('lead-detail-' + id);
-            const chevron  = document.getElementById('lead-chevron-' + id);
-            const open     = detail.style.display === 'none';
-            detail.style.display  = open ? 'block' : 'none';
-            chevron.textContent   = open ? '▲' : '▼';
-        }
-
-        async function saveLead(id) {
-            const notes = document.getElementById('lead-notes-' + id).value.trim();
-            const { error } = await supabaseClient.client.from('leads').update({ assignor_notes: notes }).eq('id', id);
-            if (!error) {
-                const msg = document.getElementById('lead-save-msg-' + id);
-                msg.style.display = 'inline';
-                setTimeout(() => msg.style.display = 'none', 2500);
-            }
-        }
-
-        async function archiveLead(id, btn) {
-            if (!confirm('Archive this lead?')) return;
-            btn.disabled = true;
-            await supabaseClient.client.from('leads').update({ archived: true }).eq('id', id);
-            document.getElementById('lead-row-' + id).remove();
-            const remaining = document.getElementById('leadsList').children.length;
-            if (remaining === 0) document.getElementById('leadsEmpty').style.display = 'block';
         }
 
         function getAutoSeason() {
