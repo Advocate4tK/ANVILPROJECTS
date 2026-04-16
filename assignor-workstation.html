@@ -1029,6 +1029,21 @@
                 // Admin sees everyone; regular assignors see only themselves
                 const loggedInId = currentUserId();
                 const myProfile  = allAssignorProfiles.find(p => p.auth_user_id === loggedInId);
+
+                // Fetch this user's club assignments from assignor_profiles
+                if (myProfile && myProfile.role !== 'Admin' && loggedInId) {
+                    try {
+                        const { data: ap } = await supabaseClient.client
+                            .from('assignor_profiles')
+                            .select('clubs')
+                            .eq('id', loggedInId)
+                            .maybeSingle();
+                        if (ap?.clubs && ap.clubs.length > 0) {
+                            myProfile.clubs = ap.clubs; // e.g. ['Plainfield']
+                        }
+                    } catch(e) { /* non-blocking */ }
+                }
+
                 const visibleProfiles = (myProfile && myProfile.role !== 'Admin')
                     ? [myProfile]
                     : allAssignorProfiles;
@@ -1093,6 +1108,14 @@
             }
 
             currentAssignor = chosen;
+
+            // Restrict club pills to this assignor's assigned clubs (non-Admin only)
+            if (chosen.clubs && chosen.clubs.length > 0 && chosen.role !== 'Admin') {
+                clubsList     = chosen.clubs.slice().sort();
+                selectedClubs = new Set(clubsList);
+                userHasFilteredClubs = false;
+            }
+
             document.getElementById('profileDoorway').style.display    = 'none';
             document.getElementById('profileBadge').style.display      = 'flex';
             document.getElementById('profileBadgeName').textContent    = chosen.viewingAs
