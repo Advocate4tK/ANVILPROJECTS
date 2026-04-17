@@ -1183,15 +1183,18 @@
                 });
 
                 // Build club ID → venue count + numeric Venue ID → club ID map
+                // Primary: use club_name field on venue record (most reliable)
+                // Fallback: Airtable venue ID linkage on clubs record
                 const venueCountByClubId  = {};
                 const numericVenueIdToClubId = {};
                 allVenues.forEach(v => {
                     const numVenueId = parseInt(v.fields['Venue ID']);
-                    if (!numVenueId) return;
-                    const cid = venueAirtableIdToClubId[numVenueId];
+                    const cn = v.fields['club_name'] || v.fields['Club Name'] || '';
+                    const clubRec = cn ? clubRecordByName[cn] : null;
+                    const cid = clubRec ? clubRec.id : (numVenueId ? venueAirtableIdToClubId[numVenueId] : null);
                     if (cid) {
                         venueCountByClubId[cid] = (venueCountByClubId[cid] || 0) + 1;
-                        numericVenueIdToClubId[numVenueId] = cid;
+                        if (numVenueId) numericVenueIdToClubId[numVenueId] = cid;
                     }
                 });
 
