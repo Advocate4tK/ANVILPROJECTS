@@ -107,16 +107,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Send confirmation email (non-blocking — availability already saved)
             try {
+                console.log('[EmailJS] emailReady:', emailReady(), '| SERVICE_ID:', CONFIG?.EMAILJS?.SERVICE_ID, '| TEMPLATE_ID:', CONFIG?.EMAILJS?.TEMPLATE_ID, '| PUBLIC_KEY:', CONFIG?.EMAILJS?.PUBLIC_KEY);
                 await sendConfirmationEmail();
+                console.log('[EmailJS] Confirmation email sent OK');
             } catch(emailErr) {
-                console.warn('Confirmation email not sent:', emailErr.message);
+                console.error('[EmailJS] Confirmation email FAILED:', emailErr);
             }
 
             // Send parent/guardian email if referee is under 18
             try {
                 await sendParentEmail();
+                console.log('[EmailJS] Parent email sent OK');
             } catch(parentErr) {
-                console.warn('Parent email not sent:', parentErr.message);
+                console.error('[EmailJS] Parent email FAILED:', parentErr);
             }
 
             // Store session so returning to the form skips name/email step
