@@ -203,6 +203,21 @@
     <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="js/supabase-client.js?v=11"></script>
+    <script src="js/admin-auth.js"></script>
+    <script>
+        // Admin-only page — redirect non-authenticated and non-Admin users
+        (async function() {
+            if (!isLoggedIn()) { window.location.href = 'admin.html'; return; }
+            const uid = currentUserId();
+            if (uid) {
+                const recs  = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
+                const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
+                if (myRec && (myRec.fields['Role'] || '').trim() !== 'Admin') {
+                    window.location.href = 'admin.html';
+                }
+            }
+        })();
+    </script>
     <script>var airtableClient = supabaseClient;</script>
     <script>
         // Accessible to all assignors — no hard login gate
