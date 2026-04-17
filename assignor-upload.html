@@ -109,12 +109,28 @@
     <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="js/supabase-client.js?v=11"></script>
+    <script src="js/admin-auth.js"></script>
     <script>
         var airtableClient = supabaseClient;
+
+        // Redirect to admin login if not authenticated
+        if (!isLoggedIn()) { window.location.href = 'admin.html'; }
 
         async function init() {
             if (!airtableClient) { document.getElementById('selectorHint').textContent = 'Not connected'; return; }
             try {
+                // Resolve club restriction for current user
+                let allowedClubs = null; // null = no restriction (Admin)
+                const uid = currentUserId();
+                if (uid) {
+                    const assignorRecs = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
+                    const myRec = assignorRecs.find(r => r.fields['auth_user_id'] === uid);
+                    if (myRec && (myRec.fields['Role'] || '').trim() !== 'Admin') {
+                        const c = myRec.fields['Clubs'];
+                        if (c) allowedClubs = Array.isArray(c) ? c.filter(Boolean) : [c];
+                    }
+                }
+
                 const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
                 clubs.sort((a, b) => {
                     const na = a.fields['Club Name'] || a.fields['Name'] || '';
@@ -127,6 +143,7 @@
                     const name = c.fields['Club Name'] || c.fields['Name'] || '';
                     const url  = c.fields['Club Game Upload'] || '';
                     if (!name || !url) return;
+                    if (allowedClubs && !allowedClubs.includes(name)) return;
                     const opt = document.createElement('option');
                     opt.value = url;
                     opt.textContent = name;
