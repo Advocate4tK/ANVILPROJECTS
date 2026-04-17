@@ -143,6 +143,23 @@
     <script src="js/supabase-client.js?v=11"></script>
     <script>var airtableClient = supabaseClient;</script>
     <script>
+        // ── Club restriction — load assignor's clubs at init ──────────────────
+        let allowedClubs = null; // null = unrestricted (Admin)
+
+        (async function initClubRestriction() {
+            try {
+                const uid = currentUserId();
+                if (!uid) return;
+                const recs  = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
+                const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
+                if (!myRec) return;
+                const role = (myRec.fields['Role'] || 'Assignor').trim();
+                if (role === 'Admin') return; // unrestricted
+                const c = myRec.fields['Clubs'];
+                if (c) allowedClubs = Array.isArray(c) ? c.filter(Boolean) : [c];
+            } catch(e) { /* non-critical */ }
+        })();
+
         // ── Year selector ──────────────────────────────────────────────────────
         const yearSelect = document.getElementById('seasonYear');
         const currentYear = new Date().getFullYear();
@@ -224,9 +241,14 @@
                     }
                 });
 
+                // Apply club restriction
+                const clubGames = allowedClubs
+                    ? games.filter(g => allowedClubs.includes(g.fields['Source Club'] || ''))
+                    : games;
+
                 // Apply game type filter
                 const srGameType = document.querySelector('input[name="srGameType"]:checked')?.value || 'all';
-                const filteredGames = srGameType === 'all' ? games : games.filter(r => {
+                const filteredGames = srGameType === 'all' ? clubGames : clubGames.filter(r => {
                     return (r.fields['game_type'] || 'Rec') === srGameType;
                 });
 
@@ -243,9 +265,9 @@
                     });
                 });
 
-                // Rec/Comp breakdown counts (always from full game list)
-                const recCount  = games.filter(r => (r.fields['game_type'] || 'Rec') === 'Rec').length;
-                const compCount = games.filter(r => (r.fields['game_type'] || 'Rec') === 'Comp').length;
+                // Rec/Comp breakdown counts (scoped to club)
+                const recCount  = clubGames.filter(r => (r.fields['game_type'] || 'Rec') === 'Rec').length;
+                const compCount = clubGames.filter(r => (r.fields['game_type'] || 'Rec') === 'Comp').length;
 
                 reportData = Object.entries(counts)
                     .sort((a, b) => b[1] - a[1])
