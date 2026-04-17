@@ -118,6 +118,9 @@
         </header>
 
         <main>
+            <div style="margin-bottom:16px;">
+                <a href="admin.html" class="btn-back">← Back to Portal</a>
+            </div>
             <div style="margin-bottom:20px;">
                 <a href="admin.html" class="btn-back">← Admin Portal</a>
             </div>
@@ -206,6 +209,32 @@
 
     let tourneysLoaded = false;
     let archiveOpen    = false;
+    let allowedClubs   = null; // null = unrestricted (Admin)
+
+    // ── Club restriction init ─────────────────────────────────────────────────
+    (async function initClubRestriction() {
+        try {
+            const uid = currentUserId();
+            if (!uid) return;
+            const recs  = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
+            const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
+            if (!myRec) return;
+            const role = (myRec.fields['Role'] || 'Assignor').trim();
+            if (role === 'Admin') return;
+            const c = myRec.fields['Clubs'];
+            if (c) {
+                allowedClubs = Array.isArray(c) ? c.filter(Boolean) : [c];
+                // Pre-fill and lock the club field
+                const clubInput = document.getElementById('newTClub');
+                if (clubInput) {
+                    clubInput.value    = allowedClubs[0];
+                    clubInput.readOnly = true;
+                    clubInput.style.background = '#f5f5f5';
+                    clubInput.style.color      = '#888';
+                }
+            }
+        } catch(e) { /* non-critical */ }
+    })();
 
     function showNewTournament() {
         document.getElementById('newTournamentPanel').style.display = 'block';
@@ -247,7 +276,7 @@
         // Bump dates +1 year
         const bumpYear = d => d ? d.replace(/^\d{4}/, nextYear) : '';
         document.getElementById('newTName').value  = tourneyName.replace(priorYear, nextYear);
-        document.getElementById('newTClub').value  = club;
+        document.getElementById('newTClub').value  = allowedClubs ? allowedClubs[0] : club;
         document.getElementById('newTFrom').value  = bumpYear(firstName);
         document.getElementById('newTTo').value    = bumpYear(lastName);
         const panel = document.getElementById('newTournamentPanel');
@@ -290,7 +319,7 @@
 
         // Build unified list — tournaments table is authoritative; games fill in the rest
         const tourneyMap = {};
-        (tRows || []).forEach(t => {
+        (tRows || []).filter(t => !allowedClubs || allowedClubs.some(c => (t.club || '').toLowerCase() === c.toLowerCase())).forEach(t => {
             tourneyMap[t.key] = { key: t.key, name: t.name, club: t.club, fromDate: t.from_date, toDate: t.to_date };
         });
         // Add game-derived entries for any key not already in the table (legacy)
@@ -298,6 +327,8 @@
             if (!tourneyMap[key]) {
                 const firstGame = gamesByKey[key].games[0] || {};
                 const club = firstGame['Source Club'] || 'Unknown';
+                // Skip if club not in allowedClubs
+                if (allowedClubs && !allowedClubs.some(c => c.toLowerCase() === club.toLowerCase())) return;
                 const year = (gamesByKey[key].dates[0] || '').slice(0, 4);
                 tourneyMap[key] = { key, name: `${club} Spring Warmup ${year}`, club, fromDate: null, toDate: null };
             }
