@@ -1188,7 +1188,18 @@
                     if (cid) fieldCountByClubId[cid] = (fieldCountByClubId[cid] || 0) + 1;
                 });
 
-                const totalGames = allGames.length;
+                // Scope games to this assignor's clubs (null adminUserClubs = Admin, sees all)
+                const scopedGames = adminUserClubs
+                    ? allGames.filter(g => {
+                        const src = g.fields['Source Club'];
+                        if (src && adminUserClubs.includes(src)) return true;
+                        const linked = g.fields['Club'];
+                        const ids = Array.isArray(linked) ? linked : (linked ? [linked] : []);
+                        return ids.some(id => adminUserClubs.includes(clubLookup[id] || ''));
+                    })
+                    : allGames;
+
+                const totalGames = scopedGames.length;
                 const activeReferees = allReferees.filter(r => !r.fields['Status'] || r.fields['Status'] === 'Active').length;
 
                 const now = new Date();
@@ -1214,7 +1225,7 @@
                 const lastUploadByClubId = {}; // club record ID → { time, uploader }
                 const urgent = [];
 
-                allGames.forEach(rec => {
+                scopedGames.forEach(rec => {
                     const f = rec.fields;
                     const gameDate = new Date(f['Date']);
                     const isUnassigned = !f['Center Referee'] || (Array.isArray(f['Center Referee']) && f['Center Referee'].length === 0);
@@ -1287,10 +1298,10 @@
                 const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
                 const in72Hours = new Date(now.getTime() + 72 * 60 * 60 * 1000);
 
-                const has7h  = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in7Hours && u; });
-                const has24h = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in24Hours && u; });
-                const has48h = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in48Hours && u; });
-                const has72h = allGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in72Hours && u; });
+                const has7h  = scopedGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in7Hours && u; });
+                const has24h = scopedGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in24Hours && u; });
+                const has48h = scopedGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in48Hours && u; });
+                const has72h = scopedGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in72Hours && u; });
 
                 let heatColor, heatLabel, heatMsg;
                 if (has7h) {
