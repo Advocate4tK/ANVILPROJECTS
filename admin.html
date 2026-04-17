@@ -628,17 +628,22 @@
             const wrap = document.getElementById('bannerEditorClubPicker');
             if (!wrap) return;
             const allMode   = _editingClubs.length === 0;
-            const clubNames = personSearchClubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean).sort();
+            const clubNames = personSearchClubs
+                .map(c => c.fields['Name'] || c.fields['Club Name'] || '')
+                .filter(n => n && (!adminUserClubs || adminUserClubs.includes(n)))
+                .sort();
+            // Restricted assignors can only target their own clubs — no "All Clubs" option
+            const showAllOption = !adminUserClubs;
             wrap.innerHTML = `
-                <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+                ${showAllOption ? `<div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
                     <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; cursor:pointer; font-weight:600;">
                         <input type="radio" name="editorTarget" value="all" ${allMode ? 'checked' : ''} onchange="setEditorTargetAll(true)"> All Clubs
                     </label>
                     <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; cursor:pointer; font-weight:600;">
                         <input type="radio" name="editorTarget" value="selected" ${!allMode ? 'checked' : ''} onchange="setEditorTargetAll(false)"> Selected Clubs
                     </label>
-                </div>
-                <div id="editorClubChecks" style="display:${allMode ? 'none' : 'flex'}; flex-wrap:wrap; gap:8px 16px; padding:10px 12px; background:#fff; border:1px solid #e2d9ce; border-radius:8px;">
+                </div>` : ''}
+                <div id="editorClubChecks" style="display:flex; flex-wrap:wrap; gap:8px 16px; padding:10px 12px; background:#fff; border:1px solid #e2d9ce; border-radius:8px;">
                     ${clubNames.map(name => `
                         <label style="display:flex; align-items:center; gap:5px; font-size:0.82rem; cursor:pointer;">
                             <input type="checkbox" value="${name}" ${_editingClubs.includes(name) ? 'checked' : ''}
