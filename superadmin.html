@@ -155,6 +155,38 @@
                     </div>
                 </div>
 
+                <!-- ── Backups ── -->
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:#aaa; margin-bottom:8px;">Backups</div>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:28px;">
+
+                    <!-- Create Backup -->
+                    <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #00c853; border-radius:10px; padding:14px 18px;">
+                        <div style="display:flex; align-items:center; gap:14px;">
+                            <div style="font-size:1.4rem; flex-shrink:0;">💾</div>
+                            <div style="flex:1;">
+                                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Create Backup</div>
+                                <div style="font-size:0.85rem; color:#555;">Dumps games, referees, and availability to a <code style="background:#f0ece6; padding:1px 5px; border-radius:4px; font-size:0.8rem;">.bak</code> file. Saves to Supabase storage + downloads locally. Last 7 backups kept.</div>
+                            </div>
+                            <button onclick="createBackup()" id="createBackupBtn" style="background:#00c853; color:#09142a; border:none; font-family:'DM Sans',sans-serif; font-size:0.82rem; font-weight:700; padding:7px 16px; border-radius:8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">Back Up Now</button>
+                        </div>
+                        <div id="backupStatus" style="display:none; margin-top:12px; padding-top:12px; border-top:1px solid #e2d9ce; font-size:0.83rem;"></div>
+                    </div>
+
+                    <!-- Restore -->
+                    <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #3b82f6; border-radius:10px; padding:14px 18px;">
+                        <div style="display:flex; align-items:center; gap:14px;">
+                            <div style="font-size:1.4rem; flex-shrink:0;">♻️</div>
+                            <div style="flex:1;">
+                                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Restore from Backup</div>
+                                <div style="font-size:0.85rem; color:#555;">List and restore from stored backups. Re-inserts rows that were deleted — does not overwrite existing data.</div>
+                            </div>
+                            <button onclick="loadBackupList()" id="loadBackupsBtn" style="background:#3b82f6; color:#fff; border:none; font-family:'DM Sans',sans-serif; font-size:0.82rem; font-weight:700; padding:7px 16px; border-radius:8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">List Backups</button>
+                        </div>
+                        <div id="backupList" style="display:none; margin-top:12px; padding-top:12px; border-top:1px solid #e2d9ce; font-size:0.83rem;"></div>
+                    </div>
+
+                </div>
+
                 <!-- ── System Info ── -->
                 <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:#aaa; margin-bottom:8px;">System Info</div>
                 <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:28px;">
@@ -449,6 +481,161 @@
             localStorage.removeItem('seasonOverride');
             document.getElementById('seasonOverrideInput').value = '';
             document.getElementById('currentSeasonDisplay').textContent = getAutoSeason();
+        }
+
+        // ── Backups ───────────────────────────────────────────────────────────
+        const BACKUP_BUCKET = 'backups';
+        const MAX_BACKUPS   = 7;
+
+        async function getServiceClient() {
+            return window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_SERVICE_KEY);
+        }
+
+        async function createBackup() {
+            const btn    = document.getElementById('createBackupBtn');
+            const status = document.getElementById('backupStatus');
+            btn.disabled = true; btn.textContent = 'Backing up…';
+            status.style.display = 'block';
+            status.innerHTML = '<span style="color:#888;">Fetching data…</span>';
+
+            try {
+                const svc = await getServiceClient();
+
+                // Fetch all three tables
+                status.innerHTML = '<span style="color:#888;">Fetching games, referees, availability…</span>';
+                const [gamesRes, refsRes, availRes] = await Promise.all([
+                    svc.from('Games').select('*'),
+                    svc.from('Referees').select('*'),
+                    svc.from('Availability').select('*'),
+                ]);
+
+                const payload = {
+                    created_at: new Date().toISOString(),
+                    tables: {
+                        games:        gamesRes.data  || [],
+                        referees:     refsRes.data   || [],
+                        availability: availRes.data  || [],
+                    }
+                };
+
+                const json     = JSON.stringify(payload, null, 2);
+                const ts       = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                const filename = `backup-${ts}.bak`;
+
+                // Upload to Supabase storage
+                status.innerHTML = '<span style="color:#888;">Uploading to storage…</span>';
+                const { error: uploadErr } = await svc.storage
+                    .from(BACKUP_BUCKET)
+                    .upload(filename, new Blob([json], { type: 'application/json' }), { upsert: false });
+
+                if (uploadErr) throw new Error('Storage upload failed: ' + uploadErr.message);
+
+                // Prune old backups — keep only the most recent MAX_BACKUPS
+                const { data: files } = await svc.storage.from(BACKUP_BUCKET).list('', { sortBy: { column: 'created_at', order: 'asc' } });
+                if (files && files.length > MAX_BACKUPS) {
+                    const toDelete = files.slice(0, files.length - MAX_BACKUPS).map(f => f.name);
+                    await svc.storage.from(BACKUP_BUCKET).remove(toDelete);
+                }
+
+                // Also download locally
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([json], { type: 'application/octet-stream' }));
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(a.href);
+
+                const counts = payload.tables;
+                status.innerHTML = `<span style="color:#00c853; font-weight:600;">✓ Backup complete — ${counts.games.length} games, ${counts.referees.length} refs, ${counts.availability.length} availability records. Saved to storage + downloaded as <code>${filename}</code></span>`;
+            } catch(e) {
+                status.innerHTML = `<span style="color:#e74c3c;">✗ Backup failed: ${e.message}</span>`;
+            }
+            btn.disabled = false; btn.textContent = 'Back Up Now';
+        }
+
+        async function loadBackupList() {
+            const btn  = document.getElementById('loadBackupsBtn');
+            const list = document.getElementById('backupList');
+            btn.disabled = true; btn.textContent = 'Loading…';
+            list.style.display = 'block';
+            list.innerHTML = '<span style="color:#888;">Fetching backup list…</span>';
+
+            try {
+                const svc = await getServiceClient();
+                const { data: files, error } = await svc.storage
+                    .from(BACKUP_BUCKET)
+                    .list('', { sortBy: { column: 'created_at', order: 'desc' } });
+
+                if (error) throw new Error(error.message);
+                if (!files || !files.length) {
+                    list.innerHTML = '<span style="color:#888;">No backups found.</span>';
+                    btn.disabled = false; btn.textContent = 'List Backups';
+                    return;
+                }
+
+                list.innerHTML = files.map(f => {
+                    const ts = f.created_at ? new Date(f.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' }) : f.name;
+                    const size = f.metadata?.size ? (f.metadata.size / 1024).toFixed(1) + ' KB' : '';
+                    return `<div style="display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid #f0ece6; flex-wrap:wrap;">
+                        <span style="font-family:'JetBrains Mono',monospace; font-size:0.8rem; color:#09142a; flex:1; min-width:200px;">${f.name}</span>
+                        <span style="font-size:0.8rem; color:#888;">${ts}</span>
+                        ${size ? `<span style="font-size:0.78rem; color:#aaa;">${size}</span>` : ''}
+                        <button onclick="downloadBackup('${f.name}')" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; font-size:0.78rem; font-weight:700; padding:4px 12px; border-radius:6px; cursor:pointer;">Download</button>
+                        <button onclick="restoreBackup('${f.name}', this)" style="background:#3b82f6; color:#fff; border:none; font-size:0.78rem; font-weight:700; padding:4px 12px; border-radius:6px; cursor:pointer;">Restore</button>
+                    </div>`;
+                }).join('') + '<div id="restoreMsg" style="margin-top:8px; display:none;"></div>';
+            } catch(e) {
+                list.innerHTML = `<span style="color:#e74c3c;">Error: ${e.message}</span>`;
+            }
+            btn.disabled = false; btn.textContent = 'List Backups';
+        }
+
+        async function downloadBackup(filename) {
+            try {
+                const svc = await getServiceClient();
+                const { data, error } = await svc.storage.from(BACKUP_BUCKET).download(filename);
+                if (error) throw new Error(error.message);
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(data);
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            } catch(e) {
+                alert('Download failed: ' + e.message);
+            }
+        }
+
+        async function restoreBackup(filename, btn) {
+            if (!confirm(`Restore from ${filename}?\n\nThis will re-insert rows that are missing from each table. Existing rows will NOT be overwritten.`)) return;
+            btn.disabled = true; btn.textContent = 'Restoring…';
+            const msg = document.getElementById('restoreMsg');
+            msg.style.display = 'block';
+            msg.innerHTML = '<span style="color:#888;">Downloading backup…</span>';
+
+            try {
+                const svc = await getServiceClient();
+                const { data: blob, error: dlErr } = await svc.storage.from(BACKUP_BUCKET).download(filename);
+                if (dlErr) throw new Error(dlErr.message);
+
+                const text    = await blob.text();
+                const payload = JSON.parse(text);
+                const tables  = payload.tables;
+
+                const results = [];
+
+                // Restore each table — upsert by id so existing rows are not clobbered
+                for (const [name, tbl] of [['Games', tables.games], ['Referees', tables.referees], ['Availability', tables.availability]]) {
+                    if (!tbl || !tbl.length) { results.push(`${name}: 0 rows`); continue; }
+                    const { error, count } = await svc.from(name).upsert(tbl, { onConflict: 'id', ignoreDuplicates: true });
+                    if (error) throw new Error(`${name}: ${error.message}`);
+                    results.push(`${name}: ${tbl.length} rows processed`);
+                    msg.innerHTML = `<span style="color:#888;">Restoring ${name}…</span>`;
+                }
+
+                msg.innerHTML = `<span style="color:#00c853; font-weight:600;">✓ Restore complete — ${results.join(' · ')}</span>`;
+            } catch(e) {
+                msg.innerHTML = `<span style="color:#e74c3c;">✗ Restore failed: ${e.message}</span>`;
+            }
+            btn.disabled = false; btn.textContent = 'Restore';
         }
 
         // ── Utility ───────────────────────────────────────────────────────────
