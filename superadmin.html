@@ -522,22 +522,7 @@
                 const ts       = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
                 const filename = `backup-${ts}.bak`;
 
-                // Upload to Supabase storage
-                status.innerHTML = '<span style="color:#888;">Uploading to storage…</span>';
-                const { error: uploadErr } = await svc.storage
-                    .from(BACKUP_BUCKET)
-                    .upload(filename, new Blob([json], { type: 'application/json' }), { upsert: false });
-
-                if (uploadErr) throw new Error('Storage upload failed: ' + uploadErr.message);
-
-                // Prune old backups — keep only the most recent MAX_BACKUPS
-                const { data: files } = await svc.storage.from(BACKUP_BUCKET).list('', { sortBy: { column: 'created_at', order: 'asc' } });
-                if (files && files.length > MAX_BACKUPS) {
-                    const toDelete = files.slice(0, files.length - MAX_BACKUPS).map(f => f.name);
-                    await svc.storage.from(BACKUP_BUCKET).remove(toDelete);
-                }
-
-                // Also download locally
+                // Download locally
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(new Blob([json], { type: 'application/octet-stream' }));
                 a.download = filename;
@@ -545,7 +530,7 @@
                 URL.revokeObjectURL(a.href);
 
                 const counts = payload.tables;
-                status.innerHTML = `<span style="color:#00c853; font-weight:600;">✓ Backup complete — ${counts.games.length} games, ${counts.referees.length} refs, ${counts.availability.length} availability records. Saved to storage + downloaded as <code>${filename}</code></span>`;
+                status.innerHTML = `<span style="color:#00c853; font-weight:600;">✓ Backup complete — ${counts.games.length} games, ${counts.referees.length} refs, ${counts.availability.length} availability records. Downloaded as <code>${filename}</code></span>`;
             } catch(e) {
                 status.innerHTML = `<span style="color:#e74c3c;">✗ Backup failed: ${e.message}</span>`;
             }
