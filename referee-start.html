@@ -38,7 +38,7 @@
             background: #152d55;
             border: 1px solid rgba(255,255,255,0.08);
             border-radius: 14px;
-            overflow: visible;
+            overflow: hidden;
             box-shadow: 0 24px 80px rgba(0,0,0,0.55), 0 4px 16px rgba(0,0,0,0.25);
             position: relative;
         }
@@ -167,21 +167,19 @@
             transform: rotate(180deg);
         }
 
-        .custom-select-dropdown {
+        #selectDropdown {
             display: none;
-            position: absolute;
-            top: calc(100% + 4px);
-            left: 0; right: 0;
+            position: fixed;
             background: #09142a;
             border: 1.5px solid rgba(255,255,255,0.18);
             border-radius: 8px;
             overflow-y: auto;
             max-height: 320px;
-            z-index: 100;
+            z-index: 9999;
             box-shadow: 0 8px 32px rgba(0,0,0,0.5);
         }
 
-        .custom-select.open .custom-select-dropdown {
+        #selectDropdown.open {
             display: block;
         }
 
@@ -447,22 +445,46 @@
     <script>
         var selectedValue = '';
         var btn = document.getElementById('goBtn');
+        var dropdown = document.getElementById('selectDropdown');
+
+        // Move dropdown to body so it escapes overflow:hidden on the card
+        document.body.appendChild(dropdown);
+
+        function positionDropdown() {
+            var trigger = document.getElementById('selectTrigger');
+            var rect = trigger.getBoundingClientRect();
+            dropdown.style.top  = (rect.bottom + 4) + 'px';
+            dropdown.style.left = rect.left + 'px';
+            dropdown.style.width = rect.width + 'px';
+        }
 
         function toggleDropdown() {
-            document.getElementById('customSelect').classList.toggle('open');
+            var isOpen = dropdown.classList.contains('open');
+            if (isOpen) {
+                dropdown.classList.remove('open');
+            } else {
+                positionDropdown();
+                dropdown.classList.add('open');
+            }
         }
 
         function selectOption(val, label) {
             selectedValue = val;
             document.getElementById('selectLabel').textContent = label;
             document.getElementById('selectTrigger').classList.add('has-value');
-            document.getElementById('customSelect').classList.remove('open');
+            dropdown.classList.remove('open');
             btn.disabled = false;
         }
 
         document.addEventListener('click', function(e) {
-            var cs = document.getElementById('customSelect');
-            if (!cs.contains(e.target)) cs.classList.remove('open');
+            var trigger = document.getElementById('selectTrigger');
+            if (!trigger.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.classList.remove('open');
+            }
+        });
+
+        window.addEventListener('resize', function() {
+            if (dropdown.classList.contains('open')) positionDropdown();
         });
 
         function goToForm() {
