@@ -1135,6 +1135,19 @@
                     (payRows || []).forEach(r => { clubPayMap[String(r.id)] = r; });
                 } catch(e) { /* non-critical */ }
 
+                // Fetch pay rates indexed by club_id
+                const payRatesByClubId = {};
+                try {
+                    const { data: prRows } = await supabaseClient.client
+                        .from('pay_rates')
+                        .select('club_id, age_group, center, ar, solo')
+                        .order('age_group');
+                    (prRows || []).forEach(r => {
+                        if (!payRatesByClubId[r.club_id]) payRatesByClubId[r.club_id] = [];
+                        payRatesByClubId[r.club_id].push(r);
+                    });
+                } catch(e) { /* non-critical */ }
+
                 // ── Schedule Change Alert ─────────────────────────────────────
                 const changeGames = allGames.filter(r => {
                     if ((r.fields['Game Status'] || '').toLowerCase() !== 'change requested') return false;
@@ -1660,6 +1673,29 @@
                                 <div style="font-size:1.6rem; font-weight:800; color:#09142a; line-height:1;">${totalGames}</div>
                             </div>
                         </div>
+                        ${(payRatesByClubId[cid] || []).length > 0 ? `
+                        <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px; margin-bottom:10px;">
+                            <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:8px;">Pay Rates</div>
+                            <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align:left; padding:4px 8px; color:#888; font-weight:600; border-bottom:1px solid #eee;">Age Group</th>
+                                        <th style="text-align:center; padding:4px 8px; color:#888; font-weight:600; border-bottom:1px solid #eee;">CR</th>
+                                        <th style="text-align:center; padding:4px 8px; color:#888; font-weight:600; border-bottom:1px solid #eee;">AR</th>
+                                        <th style="text-align:center; padding:4px 8px; color:#888; font-weight:600; border-bottom:1px solid #eee;">Solo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${(payRatesByClubId[cid] || []).map(r => `
+                                    <tr>
+                                        <td style="padding:4px 8px; font-weight:600; color:#09142a;">${r.age_group}</td>
+                                        <td style="padding:4px 8px; text-align:center; color:#09142a;">$${r.center}</td>
+                                        <td style="padding:4px 8px; text-align:center; color:#555;">${r.ar != null ? '$' + r.ar : '—'}</td>
+                                        <td style="padding:4px 8px; text-align:center; color:#555;">${r.solo != null ? '$' + r.solo : '—'}</td>
+                                    </tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>` : ''}
                         <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
                             <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:8px;">Game Submission Information</div>
                             <div style="margin-bottom:${submitUrl ? '12px' : '0'};">
