@@ -616,6 +616,8 @@
     <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="js/supabase-client.js?v=11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script>emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);</script>
     <script>
         var airtableClient = supabaseClient;
     </script>
@@ -1413,6 +1415,23 @@
         document.getElementById('submitBtn').disabled     = false;
         document.getElementById('createGameBtn').disabled = false;
         updateCreateBtn();
+
+        // Notify assignor of club game submission
+        if (successCount > 0) {
+            try {
+                const clubDisplay = currentClubRecord
+                    ? (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || 'Unknown Club')
+                    : 'Unknown Club';
+                const gameList = submittedGames
+                    .map((g, i) => `${i + 1}. ${g.date || ''} ${g.time || ''} — ${g.homeTeam || ''} vs ${g.awayTeam || ''} (${g.ageGroup || ''})`)
+                    .join('\n');
+                emailjs.send(CONFIG.EMAILJS.SERVICE_ID, 'template_e6za6ab', {
+                    club_name:  clubDisplay,
+                    game_count: successCount,
+                    game_list:  gameList || `${successCount} game(s) submitted`,
+                });
+            } catch(e) { console.warn('Upload notification failed:', e); }
+        }
     });
 
     // ── Scheduled Games (live from Airtable, week-grouped) ───────────────────
