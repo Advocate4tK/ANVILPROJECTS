@@ -19,7 +19,6 @@ const FIELD_MAP = {
     'Away Team':      'Away Team',
     'Age Group':      'Age Group',
     'Gender':         'Gender',
-    'League':         'League',
     'Division':       'Division',
     'Game Status':    'Game Status',
     'Notes':          'Notes'
@@ -294,15 +293,6 @@ function buildFields(row) {
             fields[airtableField] = value;
         }
     });
-
-    // Auto-fill League from Club column if League is blank
-    if (!fields['League'] && row['Club'] && row['Club'].trim() !== '') {
-        const clubKey = row['Club'].trim().toLowerCase();
-        const league = clubLeagueMap[clubKey]
-            || Object.entries(clubLeagueMap).find(([k]) => k.includes(clubKey) || clubKey.includes(k))?.[1]
-            || 21;
-        fields['League'] = league;
-    }
 
     // Write field name text directly to games.field column
     const fieldCol = (row['Field'] || '').trim();
