@@ -507,6 +507,60 @@
             </div>
         </div>
 
+        <!-- Club Contacts Editor -->
+        <div id="contactsSection" style="display:none; margin-top:32px;">
+            <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #3b82f6;">
+                <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">👤 Edit Club Contacts</h2>
+                <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Update president, club admin, payment coordinator, and assignor info for any club.</p>
+
+                <div class="fg" style="max-width:380px; margin-bottom:24px;">
+                    <label>Select Club</label>
+                    <select id="contactsClubSelect" onchange="loadContactsForClub()">
+                        <option value="">— Select a club —</option>
+                    </select>
+                </div>
+
+                <div id="contactsForm" style="display:none;">
+                    <!-- President -->
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">President</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:20px;">
+                        <div class="fg" style="margin:0;"><label>Name</label><input type="text" id="cPresName" placeholder="First Last"></div>
+                        <div class="fg" style="margin:0;"><label>Email</label><input type="email" id="cPresEmail" placeholder="email@club.org"></div>
+                        <div class="fg" style="margin:0;"><label>Phone</label><input type="tel" id="cPresPhone" placeholder="(860) 555-1234"></div>
+                    </div>
+
+                    <!-- Club Admin -->
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">Club Admin (Scheduling Contact)</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:20px;">
+                        <div class="fg" style="margin:0;"><label>Name</label><input type="text" id="cAdminName" placeholder="First Last"></div>
+                        <div class="fg" style="margin:0;"><label>Email</label><input type="email" id="cAdminEmail" placeholder="admin@club.org"></div>
+                        <div class="fg" style="margin:0;"><label>Phone</label><input type="tel" id="cAdminPhone" placeholder="(860) 555-1234"></div>
+                    </div>
+
+                    <!-- Payment Coordinator -->
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">Payment Coordinator</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px;">
+                        <div class="fg" style="margin:0;"><label>Name</label><input type="text" id="cPayCoordName" placeholder="First Last"></div>
+                        <div class="fg" style="margin:0;"><label>Email</label><input type="email" id="cPayCoordEmail" placeholder="pay@club.org"></div>
+                    </div>
+
+                    <!-- Assignor -->
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">Assignor</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:24px;">
+                        <div class="fg" style="margin:0;"><label>Name</label><input type="text" id="cAssignorName" placeholder="First Last"></div>
+                        <div class="fg" style="margin:0;"><label>Email</label><input type="email" id="cAssignorEmail" placeholder="assignor@email.com"></div>
+                        <div class="fg" style="margin:0;"><label>Phone</label><input type="tel" id="cAssignorPhone" placeholder="(860) 555-1234"></div>
+                    </div>
+
+                    <button onclick="saveContacts()" id="saveContactsBtn"
+                        style="background:#3b82f6; color:#fff; border:none; padding:11px 32px; border-radius:8px; font-weight:800; font-size:1rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">
+                        Save Contacts ↗
+                    </button>
+                    <div id="contactsSaveMsg" style="display:none; margin-top:12px; font-size:0.88rem; font-weight:600;"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Remove Club Section -->
         <div id="removeSection" style="display:none; margin-top:32px;">
             <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #e74c3c;">
@@ -584,10 +638,11 @@
     function unlock() {
         document.getElementById('pinGate').style.display       = 'none';
         document.getElementById('wizardContent').style.display = 'block';
-        document.getElementById('editSection').style.display   = 'block';
-        document.getElementById('removeSection').style.display = 'block';
+        document.getElementById('editSection').style.display    = 'block';
+        document.getElementById('contactsSection').style.display = 'block';
+        document.getElementById('removeSection').style.display  = 'block';
         if (venueCount === 0) addVenue(); // seed first venue
-        loadClubsForRemove(); // also populates editClubSelect
+        loadClubsForRemove(); // also populates editClubSelect + contactsClubSelect
     }
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -906,13 +961,13 @@
                 .sort((a, b) => a.name.localeCompare(b.name));
             const opts = '<option value="">— Select a club —</option>'
                 + allClubRecords.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            document.getElementById('removeClubSelect').innerHTML = opts;
-            document.getElementById('editClubSelect').innerHTML   = opts;
+            document.getElementById('removeClubSelect').innerHTML   = opts;
+            document.getElementById('editClubSelect').innerHTML     = opts;
+            document.getElementById('contactsClubSelect').innerHTML = opts;
         } catch(e) {
-            document.getElementById('removeClubSelect').innerHTML =
-                '<option value="">⚠ Could not load clubs</option>';
-            document.getElementById('editClubSelect').innerHTML =
-                '<option value="">⚠ Could not load clubs</option>';
+            document.getElementById('removeClubSelect').innerHTML   = '<option value="">⚠ Could not load clubs</option>';
+            document.getElementById('editClubSelect').innerHTML     = '<option value="">⚠ Could not load clubs</option>';
+            document.getElementById('contactsClubSelect').innerHTML = '<option value="">⚠ Could not load clubs</option>';
         }
     }
 
@@ -1214,6 +1269,82 @@
     function removeEditField(id) {
         const el = document.getElementById('edit-field-' + id);
         if (el) el.remove();
+    }
+
+    // ── Club Contacts Editor ──────────────────────────────────────────────────
+    async function loadContactsForClub() {
+        const clubId = document.getElementById('contactsClubSelect').value;
+        const form   = document.getElementById('contactsForm');
+        const msg    = document.getElementById('contactsSaveMsg');
+        msg.style.display = 'none';
+        if (!clubId) { form.style.display = 'none'; return; }
+
+        try {
+            const { data, error } = await supabaseClient.client
+                .from('clubs')
+                .select('president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, assignor, "Assignor Email", "Assignor Phone"')
+                .eq('id', clubId)
+                .single();
+            if (error) throw new Error(error.message);
+
+            document.getElementById('cPresName').value      = data.president || '';
+            document.getElementById('cPresEmail').value     = data['President Email'] || '';
+            document.getElementById('cPresPhone').value     = data['President Phone'] || '';
+            document.getElementById('cAdminName').value     = data['Club Admin'] || '';
+            document.getElementById('cAdminEmail').value    = data['Club Admin Email'] || '';
+            document.getElementById('cAdminPhone').value    = data['Club Admin Phone'] || '';
+            document.getElementById('cPayCoordName').value  = data.payment_coordinator || '';
+            document.getElementById('cPayCoordEmail').value = data.payment_coordinator_email || '';
+            document.getElementById('cAssignorName').value  = data.assignor || '';
+            document.getElementById('cAssignorEmail').value = data['Assignor Email'] || '';
+            document.getElementById('cAssignorPhone').value = data['Assignor Phone'] || '';
+
+            form.style.display = 'block';
+        } catch(e) {
+            alert('Could not load club contacts: ' + e.message);
+        }
+    }
+
+    async function saveContacts() {
+        const clubId = document.getElementById('contactsClubSelect').value;
+        if (!clubId) { alert('Select a club first.'); return; }
+
+        const btn = document.getElementById('saveContactsBtn');
+        const msg = document.getElementById('contactsSaveMsg');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        msg.style.display = 'none';
+
+        try {
+            const { error } = await supabaseClient.client
+                .from('clubs')
+                .update({
+                    president:                  document.getElementById('cPresName').value.trim(),
+                    'President Email':          document.getElementById('cPresEmail').value.trim(),
+                    'President Phone':          document.getElementById('cPresPhone').value.trim(),
+                    'Club Admin':               document.getElementById('cAdminName').value.trim(),
+                    'Club Admin Email':         document.getElementById('cAdminEmail').value.trim(),
+                    'Club Admin Phone':         document.getElementById('cAdminPhone').value.trim(),
+                    payment_coordinator:        document.getElementById('cPayCoordName').value.trim(),
+                    payment_coordinator_email:  document.getElementById('cPayCoordEmail').value.trim(),
+                    assignor:                   document.getElementById('cAssignorName').value.trim(),
+                    'Assignor Email':           document.getElementById('cAssignorEmail').value.trim(),
+                    'Assignor Phone':           document.getElementById('cAssignorPhone').value.trim(),
+                })
+                .eq('id', clubId);
+            if (error) throw new Error(error.message);
+
+            msg.style.display = 'block';
+            msg.style.color   = '#15803d';
+            msg.textContent   = '✅ Contacts saved.';
+        } catch(e) {
+            msg.style.display = 'block';
+            msg.style.color   = '#dc2626';
+            msg.textContent   = '✗ Save failed: ' + e.message;
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Save Contacts ↗';
+        }
     }
 
     async function saveEditVenues() {
