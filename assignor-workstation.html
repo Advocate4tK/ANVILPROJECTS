@@ -5886,13 +5886,18 @@
                 if (genderFilter && r.fields['Gender'] !== genderFilter) return false;
                 const refName = (r.fields['Name'] || '').trim().toLowerCase();
 
-                // Club scoping: if assignor has restricted clubs, only show refs who prefer those clubs (or have no preference)
+                // Club scoping: restricted assignors only see refs who (a) prefer their clubs AND (b) submitted availability for the loaded dates
                 if (assignorClubRestriction && !showAllRefs && !query) {
                     const refPrefs = parsePreferences(r.fields['Club Preference'] || '');
                     if (refPrefs.length > 0) {
                         const matchesClub = refPrefs.some(p => assignorClubRestriction.some(c => c.toLowerCase() === p.toLowerCase()));
                         if (!matchesClub) return false;
                     }
+                    // Must have submitted availability in the loaded date range
+                    const refDates = availByName[refName];
+                    if (!refDates) return false;
+                    const hasDateInRange = [...refDates].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo));
+                    if (!hasDateInRange) return false;
                 }
 
                 // When searching by name or Override is on, skip availability filters
