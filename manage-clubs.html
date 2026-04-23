@@ -615,8 +615,17 @@
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/supabase-client.js?v=11"></script>
+<script src="js/admin-auth.js"></script>
 <script>var airtableClient = supabaseClient;</script>
 <script>
+    // Admin-only page — kick non-admins back to admin portal
+    (async () => {
+        const client = supabaseClient.client;
+        const { data: { session } } = await client.auth.getSession();
+        if (!session) { window.location.href = 'admin.html'; return; }
+        const { data: rec } = await client.from('assignors').select('role').eq('auth_user_id', session.user.id).single();
+        if (!rec || rec.role !== 'Admin') { window.location.href = 'admin.html'; }
+    })();
     const SUPER_ADMIN_PIN = '8625';
     let venueCount = 0;
     let fieldCounts = {}; // venueIndex → field count
