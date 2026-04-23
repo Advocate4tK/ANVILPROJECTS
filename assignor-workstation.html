@@ -4390,6 +4390,8 @@
         let assignedAt    = {}; // refId → Map<'date|time', Set<gameId>>
         const cancelledGameIds = new Set(); // belt-and-suspenders for cancelled state
         let availByName   = {}; // ref name → Set<date>
+        let loadedDateFrom = '';
+        let loadedDateTo   = '';
         let availTimeByName = {}; // ref name → { date → { start, end } }
         const KNOWN_CLUBS = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
         let clubsList     = KNOWN_CLUBS.slice(); // pre-seeded so pills render on page load
@@ -4980,6 +4982,8 @@
         async function loadAll() {
             const dateFrom = document.getElementById('dateFrom').value;
             const dateTo   = document.getElementById('dateTo').value;
+            loadedDateFrom = dateFrom;
+            loadedDateTo   = dateTo;
             const btn      = document.getElementById('loadBtn');
 
             btn.disabled = true;
@@ -5916,7 +5920,11 @@
             // Classify: 0=available+prefers, 1=available, 2=conflict, 3=no-avail
             const classify = r => {
                 const name = (r.fields['Name'] || '').trim().toLowerCase();
-                const hasAvail = gameDate ? availByName[name]?.has(gameDate) : true;
+                const hasAvail = gameDate
+                    ? availByName[name]?.has(gameDate)
+                    : availByName[name]
+                        ? [...availByName[name]].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo))
+                        : false;
                 const hasConflict = gameDT && assignedAt[r.id] ?
                     [...(assignedAt[r.id].get(gameDT) || [])].filter(gid => !selectedGame || gid !== selectedGame.id).length > 0
                     : false;
