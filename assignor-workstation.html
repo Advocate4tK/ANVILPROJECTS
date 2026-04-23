@@ -694,12 +694,15 @@
             </div>
 
             <!-- Filters toggle bar -->
-            <div id="filterToggleBar" onclick="toggleFiltersPanel()" style="display:none; align-items:center; justify-content:space-between; background:#0f3460; color:white; padding:7px 16px; border-radius:8px; margin-bottom:6px; cursor:pointer; user-select:none; font-family:inherit;">
-                <div style="display:flex; align-items:center; gap:10px; font-size:0.8rem;">
+            <div id="filterToggleBar" style="display:none; align-items:center; justify-content:space-between; background:#0f3460; color:white; padding:7px 16px; border-radius:8px; margin-bottom:6px; user-select:none; font-family:inherit;">
+                <div onclick="toggleFiltersPanel()" style="display:flex; align-items:center; gap:10px; font-size:0.8rem; cursor:pointer; flex:1;">
                     <span style="opacity:0.6; font-size:0.7rem; letter-spacing:0.05em; font-weight:600; text-transform:uppercase;">Filters</span>
                     <span id="filtersSummary" style="color:rgba(255,255,255,0.9); font-weight:600;"></span>
                 </div>
-                <span id="filterToggleArrow" style="font-size:0.75rem; opacity:0.7;">▼ expand</span>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <button onclick="event.stopPropagation(); generateEmailBody();" style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.35); color:white; font-size:0.72rem; font-weight:700; padding:4px 12px; border-radius:6px; cursor:pointer; font-family:inherit; white-space:nowrap;">✉ Generate Email Body</button>
+                    <span id="filterToggleArrow" onclick="toggleFiltersPanel()" style="font-size:0.75rem; opacity:0.7; cursor:pointer;">▼ expand</span>
+                </div>
             </div>
 
             <!-- Filters -->
@@ -4726,8 +4729,11 @@
             let clubIdByName = {};
             if (clubNames.length) {
                 const { data: clubRecs } = await supabaseClient.client
-                    .from('clubs').select('id, "Name"').in('"Name"', clubNames);
-                if (clubRecs) clubRecs.forEach(c => { clubIdByName[c['Name']] = c.id; });
+                    .from('clubs').select('id, "Name", "Club Name"');
+                if (clubRecs) clubRecs.forEach(c => {
+                    if (clubNames.includes(c['Name']))         clubIdByName[c['Name']]         = c.id;
+                    if (clubNames.includes(c['Club Name']))    clubIdByName[c['Club Name']]    = c.id;
+                });
             }
 
             let payRatesByClubId = {};
