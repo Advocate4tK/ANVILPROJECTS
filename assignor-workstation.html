@@ -665,6 +665,21 @@
                 <div id="profileError" style="display:none; color:#e74c3c; font-size:0.85rem; margin-top:10px;"></div>
             </div>
 
+            <!-- Email Body Modal -->
+            <div id="emailBodyModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center;">
+                <div style="background:white; border-radius:12px; padding:28px; width:90%; max-width:680px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,0.3);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                        <strong style="font-size:1rem; color:#0f3460;">CA Blast Email Body</strong>
+                        <button onclick="document.getElementById('emailBodyModal').style.display='none'" style="background:none; border:none; font-size:1.3rem; cursor:pointer; color:#888;">✕</button>
+                    </div>
+                    <textarea id="emailBodyText" style="flex:1; min-height:420px; font-family:'Courier New',monospace; font-size:0.82rem; border:1px solid #ddd; border-radius:8px; padding:12px; resize:vertical; line-height:1.5;"></textarea>
+                    <div style="display:flex; gap:10px; margin-top:14px;">
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('emailBodyText').value).then(()=>{this.textContent='✓ Copied!'; setTimeout(()=>this.textContent='Copy to Clipboard',1800)})" style="background:#0f3460; color:white; border:none; border-radius:7px; padding:8px 18px; font-size:0.85rem; font-weight:700; cursor:pointer;">Copy to Clipboard</button>
+                        <span style="font-size:0.78rem; color:#aaa; align-self:center;">Edit week number before pasting into CA</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Main workstation content (hidden until profile selected) -->
             <div id="workstationContent" style="display:none;">
 
@@ -731,6 +746,10 @@
                     <div class="club-pills" id="clubPills"></div>
                 </div>
                 <div id="availHeatmap" style="display:none; margin-top:16px; padding-top:14px; border-top:1px solid #e5e7eb;"></div>
+                <div style="margin-top:14px; padding-top:12px; border-top:1px solid #e5e7eb; display:flex; align-items:center; gap:10px;">
+                    <button onclick="generateEmailBody()" style="background:#0f3460; color:white; border:none; border-radius:7px; padding:7px 16px; font-size:0.82rem; font-weight:700; cursor:pointer; font-family:inherit;">✉ Generate Email Body</button>
+                    <span style="font-size:0.78rem; color:#aaa;">Generates CA blast for loaded games</span>
+                </div>
             </div>
 
             <!-- Change Request Focus Banner -->
@@ -4682,6 +4701,96 @@
             const open = body.style.display !== 'none';
             body.style.display = open ? 'none' : 'block';
             arrow.textContent = open ? '▸' : '▾';
+        }
+
+        async function generateEmailBody() {
+            if (!allGames.length) { alert('Load games first.'); return; }
+
+            // Use currently selected clubs (or all if all selected)
+            const isAllClubs = selectedClubs.size === clubsList.length;
+            const targetClubs = isAllClubs ? [...clubsList] : [...selectedClubs];
+
+            // Only unassigned CR games from current loaded set
+            const openGames = allGames.filter(g => {
+                const cr = g.fields['Center Referee'];
+                const hasNoCR = !cr || (Array.isArray(cr) && cr.length === 0);
+                if (!hasNoCR) return false;
+                if (!isAllClubs && !selectedClubs.has(g.fields['Source Club'])) return false;
+                return true;
+            });
+
+            if (!openGames.length) { alert('No unassigned games in current view.'); return; }
+
+            // Fetch club IDs by name, then pay rates
+            const clubNames = [...new Set(openGames.map(g => g.fields['Source Club']).filter(Boolean))];
+            let clubIdByName = {};
+            if (clubNames.length) {
+                const { data: clubRecs } = await supabaseClient.client
+                    .from('clubs').select('id, "Club Name"').in('"Club Name"', clubNames);
+                if (clubRecs) clubRecs.forEach(c => { clubIdByName[c['Club Name']] = c.id; });
+            }
+
+            let payRatesByClubId = {};
+            const clubIds = Object.values(clubIdByName);
+            if (clubIds.length) {
+                const { data: rates } = await supabaseClient.client
+                    .from('pay_rates').select('club_id, age_group, center, ar').in('club_id', clubIds);
+                if (rates) rates.forEach(r => {
+                    if (!payRatesByClubId[r.club_id]) payRatesByClubId[r.club_id] = [];
+                    payRatesByClubId[r.club_id].push(r);
+                });
+            }
+
+            const fmtDate = iso => {
+                const d = new Date(iso + 'T12:00:00');
+                const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                return `${days[d.getDay()]} ${d.getDate()}-${months[d.getMonth()]}`;
+            };
+            const fmtTime = t => {
+                if (!t) return '';
+                // Expects "HH:MM:SS" or "HH:MM" or "H:MM AM"
+                if (t.includes('AM') || t.includes('PM')) return t.replace(' ', '');
+                const [h, m] = t.split(':').map(Number);
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                const h12 = h % 12 || 12;
+                return `${h12}:${String(m).padStart(2,'0')}${ampm}`;
+            };
+
+            // Build one block per club
+            const blocks = [];
+            for (const club of targetClubs) {
+                const games = openGames.filter(g => g.fields['Source Club'] === club)
+                    .sort((a,b) => (a.fields['Date']||'').localeCompare(b.fields['Date']||'') || (a.fields['Time']||'').localeCompare(b.fields['Time']||''));
+                if (!games.length) continue;
+
+                const clubId = clubIdByName[club];
+                const rates = clubId ? (payRatesByClubId[clubId] || []) : [];
+
+                const gameLines = games.map(g => {
+                    const f = g.fields;
+                    const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
+                    const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
+                    const age = f['Age Group'] || '';
+                    const gender = f['Gender'] || '';
+                    return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age} ${gender}    ${vName}      Center Ref`;
+                }).join('\n');
+
+                const openCount = games.length;
+                const intro = `We still have ${openCount === 1 ? 'one center opening' : `${openCount} center openings`}.  LMK if you wanna work!`;
+
+                const rateLines = rates.length
+                    ? rates.sort((a,b) => a.age_group.localeCompare(b.age_group))
+                           .map(r => r.ar ? `${r.age_group} | C $${r.center} | AR $${r.ar} |` : `${r.age_group} | C $${r.center} |`)
+                           .join('\n')
+                    : '(no pay rates on file for this club)';
+
+                blocks.push(`Week [#]  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\nhttps://form.jotform.com/251825994555168\n\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\nTodLSmith\nnectassignor@gmail.com\n203 465 9877`);
+            }
+
+            document.getElementById('emailBodyText').value = blocks.join('\n\n' + '─'.repeat(60) + '\n\n');
+            const modal = document.getElementById('emailBodyModal');
+            modal.style.display = 'flex';
         }
 
         let _filtersPanelOpen = true;
