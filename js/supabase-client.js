@@ -57,6 +57,7 @@ class SupabaseClientWrapper {
             'Key':    'key',
             'Active': 'active',
             'Clubs':  'clubs',
+            'Field':  'field',
             // NOTE: All multi-word columns (Home Team, Center Referee, AR 1, etc.)
             // are stored with spaces in Supabase — they pass through as-is (no mapping needed)
         };

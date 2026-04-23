@@ -304,13 +304,9 @@ function buildFields(row) {
         fields['League'] = league;
     }
 
-    // Resolve Field linked record from Venue + Field columns
-    const venueCol = (row['Venue'] || '').trim().toLowerCase();
-    const fieldCol = (row['Field'] || '').trim().toLowerCase();
-    if (fieldCol) {
-        const fieldId = fieldLookup[`${venueCol}|${fieldCol}`] || fieldLookup[`|${fieldCol}`];
-        if (fieldId) fields['Field'] = [fieldId];
-    }
+    // Write field name text directly to games.field column
+    const fieldCol = (row['Field'] || '').trim();
+    if (fieldCol) fields['Field'] = fieldCol;
 
     return fields;
 }
