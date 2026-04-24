@@ -159,11 +159,28 @@ document.getElementById('dateFrom').addEventListener('change', function() {
 async function loadClubCheckboxes() {
     if (!airtableClient) return;
     try {
+        // Scope clubs to this assignor's assigned clubs (Admin sees all)
+        let allowedClubs = null;
+        const uid = currentUserId();
+        if (uid) {
+            const assignorRecs = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
+            const myRec = assignorRecs.find(r => r.fields['auth_user_id'] === uid);
+            if (myRec && (myRec.fields['Role'] || '').trim() !== 'Admin') {
+                const c = myRec.fields['Clubs'];
+                allowedClubs = c ? (Array.isArray(c) ? c.filter(Boolean) : [c]) : null;
+            }
+        }
+
         const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
-        const names = clubs
+        let names = clubs
             .map(c => c.fields['Club Name'] || c.fields['club_name'] || c.fields['Name'] || c.fields['name'] || '')
             .filter(Boolean)
             .sort();
+
+        if (allowedClubs && allowedClubs.length > 0) {
+            names = names.filter(n => allowedClubs.includes(n));
+        }
+
         const wrap = document.getElementById('clubCheckboxes');
         if (!names.length) {
             wrap.innerHTML = '<span style="color:#e67e22; font-size:13px;">No clubs found — check clubs table.</span>';
