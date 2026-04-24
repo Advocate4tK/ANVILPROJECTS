@@ -2394,11 +2394,12 @@
             document.addEventListener('mouseup',   onUp);
         }
 
+        const SHEET3_CACHE_KEY = 'sheet3StagedRefsCache_v2';
         function sheet3CacheStagedRefs() {
-            try { localStorage.setItem('sheet3StagedRefsCache', JSON.stringify(sheet3StagedRefs)); } catch(e) {}
+            try { localStorage.setItem(SHEET3_CACHE_KEY, JSON.stringify(sheet3StagedRefs)); } catch(e) {}
         }
         function sheet3LoadStagedRefsCache() {
-            try { return JSON.parse(localStorage.getItem('sheet3StagedRefsCache') || '{}'); } catch(e) { return {}; }
+            try { return JSON.parse(localStorage.getItem(SHEET3_CACHE_KEY) || '{}'); } catch(e) { return {}; }
         }
 
         async function sheet3FetchStaging() {
@@ -2452,7 +2453,9 @@
                         if (n && n !== '—') assignedAtSlot.add(n.trim().toLowerCase());
                     });
                 });
-                // Collect unique available ref names for this date — skip already-assigned refs
+                // Collect unique available ref names for this date — skip already-assigned refs,
+                // and only include refs whose club preference matches this game's club
+                const gameClubLower = (g.fields['Source Club'] || '').toLowerCase();
                 const seen = new Set();
                 const names = [];
                 allAvail.forEach(a => {
@@ -2460,6 +2463,11 @@
                     const name = (a.fields['Referee Name'] || '').trim();
                     if (!name || seen.has(name.toLowerCase())) return;
                     if (assignedAtSlot.has(name.toLowerCase())) return;
+                    if (gameClubLower) {
+                        const ref = refLookupByName[name.toLowerCase()];
+                        const prefs = parsePreferences(ref?.fields['Club Preference'] || '');
+                        if (prefs.length > 0 && !prefs.some(p => p.toLowerCase() === gameClubLower)) return;
+                    }
                     seen.add(name.toLowerCase());
                     names.push(name);
                 });
