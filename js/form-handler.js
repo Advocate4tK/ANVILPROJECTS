@@ -97,6 +97,21 @@ document.addEventListener('DOMContentLoaded', function() {
             const dayRows = document.querySelectorAll('.day-row');
             if (!dayRows.length) throw new Error('No availability dates found — please add at least one date before submitting.');
 
+            // Delete existing records only for the specific dates being submitted
+            // (leaves other dates untouched — upsert behavior per-date)
+            const firstName = document.getElementById('refereeFirstName').value.trim();
+            const lastName  = document.getElementById('refereeLastName').value.trim();
+            const submittedDates = Array.from(dayRows)
+                .map(row => row.querySelector('input[name="availableDate[]"]').value)
+                .filter(Boolean);
+            if (submittedDates.length > 0) {
+                const existing = await airtableClient.getUpcomingAvailability(`${firstName} ${lastName}`);
+                const toDelete = existing.filter(r => submittedDates.includes(r.fields['Date'] || r.fields['date']));
+                for (const rec of toDelete) {
+                    await airtableClient.deleteRecord('Availability', rec.id);
+                }
+            }
+
             // Create one availability record per day
             const submissions = [];
             dayRows.forEach(row => {
