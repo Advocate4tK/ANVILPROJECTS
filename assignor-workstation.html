@@ -2244,6 +2244,7 @@
         let sheet3LastFiltered    = null;
         let sheet3SeedOrder       = 'exp-asc'; // 'exp-asc' | 'exp-desc'
         let sheet3MaxQueueLen     = 6;
+        let sheet3StagingLoaded   = false; // true after first fetch; prevents re-fetch on every renderGames
         let sheet3AgeFilter       = null; // null = all, or an age group string
         let sheet3ClubFilter      = null; // null = all, or a club name string
         let sheet3DateFilter      = null; // null = all, or a date string
@@ -2394,7 +2395,7 @@
             document.addEventListener('mouseup',   onUp);
         }
 
-        const SHEET3_CACHE_KEY = 'sheet3StagedRefsCache_v2';
+        const SHEET3_CACHE_KEY = 'sheet3StagedRefsCache_v3';
         function sheet3CacheStagedRefs() {
             try { localStorage.setItem(SHEET3_CACHE_KEY, JSON.stringify(sheet3StagedRefs)); } catch(e) {}
         }
@@ -2425,7 +2426,8 @@
                 sheet3AutoSeed();
                 // Compute max queue length
                 sheet3MaxQueueLen = Math.max(6, ...Object.values(sheet3StagedRefs).map(q => (q || []).filter(Boolean).length));
-            } catch(e) { sheet3StagedRefs = sheet3LoadStagedRefsCache(); sheet3AutoSeed(); }
+                sheet3StagingLoaded = true;
+            } catch(e) { sheet3StagedRefs = sheet3LoadStagedRefsCache(); sheet3AutoSeed(); sheet3StagingLoaded = true; }
         }
 
         function sheet3AutoSeed() {
@@ -5040,6 +5042,7 @@
 
         // ── Load all data ─────────────────────────────────────────────────────
         async function loadAll() {
+            sheet3StagingLoaded = false; // force re-fetch staging on next sheet3 render
             const dateFrom = document.getElementById('dateFrom').value;
             const dateTo   = document.getElementById('dateTo').value;
             loadedDateFrom = dateFrom;
@@ -5517,12 +5520,11 @@
                 return;
             }
             if (viewMode === 'sheet3') {
-                sheet3FetchStaging().then(() => renderSheet3View(filtered));
+                if (sheet3StagingLoaded) { renderSheet3View(filtered); } else { sheet3FetchStaging().then(() => renderSheet3View(filtered)); }
                 return;
             }
             if (viewMode === 'tournament') {
-                // Tournament view — uses sheet3 staging + render for now; will diverge
-                sheet3FetchStaging().then(() => renderSheet3View(filtered));
+                if (sheet3StagingLoaded) { renderSheet3View(filtered); } else { sheet3FetchStaging().then(() => renderSheet3View(filtered)); }
                 return;
             }
 
