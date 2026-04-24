@@ -74,6 +74,7 @@ let venueNameMap       = {}; // Supabase record ID → venue name (legacy fallba
 let fieldNameMap       = {}; // Supabase record ID → field name (legacy fallback)
 let numericVenueToName = {}; // numeric Venue ID → venue name (primary)
 let numericFieldToName = {}; // numeric Field ID → field name (primary)
+let clubLeagueMap      = {}; // club name → CA league ID
 
 // ── Export history (localStorage) ────────────────────────────────────────────
 const EXPORT_HISTORY_KEY = 'ca_export_history';
@@ -235,13 +236,14 @@ loadBtn.addEventListener('click', async () => {
         const options = { maxRecords: 500 };
         if (filter) options.filterByFormula = filter;
 
-        // Load games, referee CA IDs, venues, and fields in parallel
+        // Load games, referee CA IDs, venues, fields, and clubs in parallel
         progressText.textContent = 'Loading games, referees, venues, and fields...';
-        const [records, referees, venues, fieldRecs] = await Promise.all([
+        const [records, referees, venues, fieldRecs, clubRecs] = await Promise.all([
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    options),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 500 }),
-            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 500 })
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 500 }),
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,    { maxRecords: 200 })
         ]);
 
         // Build lookup: record ID or name → Central Assign numeric ID
@@ -282,6 +284,14 @@ loadBtn.addEventListener('click', async () => {
             const venueName = venueNumId ? (numericVenueToName[venueNumId] || '') : '';
             if (venueName)  venueNameMap[f.id] = venueName;
             if (venueNumId) venueCAId[f.id]    = venueNumId;
+        });
+
+        // Build club → CA league ID lookup
+        clubLeagueMap = {};
+        clubRecs.forEach(c => {
+            const clubName = c.fields['name'] || c.fields['Club Name'] || c.fields['Name'] || '';
+            const leagueId = c.fields['ca_league_id'];
+            if (clubName && leagueId) clubLeagueMap[clubName] = parseInt(leagueId);
         });
 
         progressBar.style.width = '100%';
@@ -580,7 +590,7 @@ exportBtn.addEventListener('click', () => {
             gameGender,
             venueId || venueName,
             fieldName,
-            f['League'] || DEFAULTS.league,
+            clubLeagueMap[f['Source Club']] || DEFAULTS.league,
             refId, ar1Id, ar2Id, 0, 0,
             DEFAULTS.diagSysCtl,
             DEFAULTS.refRate,
