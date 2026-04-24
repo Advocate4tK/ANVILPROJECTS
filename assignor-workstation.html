@@ -2399,7 +2399,8 @@
                 const gameIds = allGames.map(g => g.id);
                 if (!gameIds.length) return;
                 const { data, error } = await supabaseClient.client.from('staging').select('*').in('game_id', gameIds);
-                if (error) { console.error('staging fetch:', error); return; }
+                if (error) { console.error('staging fetch ERROR:', error); return; }
+                console.log('staging fetch: got', (data||[]).length, 'rows', data);
                 sheet3StagedRefs = {};
                 (data || []).forEach(row => {
                     const gid = String(row.game_id);
@@ -2726,15 +2727,17 @@
         async function sheet3UpsertSlot(gid, slot, name) {
             try {
                 if (name) {
-                    const { error } = await supabaseClient.client.from('staging').upsert(
+                    const { error, data } = await supabaseClient.client.from('staging').upsert(
                         { game_id: parseInt(gid), slot: slot, ref_name: name },
                         { onConflict: 'game_id,slot' }
                     );
-                    if (error) console.error('sheet3UpsertSlot upsert:', error);
+                    if (error) console.error('sheet3UpsertSlot upsert ERROR:', error);
+                    else console.log('sheet3UpsertSlot upsert OK: gid', gid, 'slot', slot, 'name', name);
                 } else {
                     const { error } = await supabaseClient.client.from('staging').delete()
                         .eq('game_id', parseInt(gid)).eq('slot', slot);
-                    if (error) console.error('sheet3UpsertSlot delete:', error);
+                    if (error) console.error('sheet3UpsertSlot delete ERROR:', error);
+                    else console.log('sheet3UpsertSlot delete OK: gid', gid, 'slot', slot);
                 }
             } catch(e) { console.error('sheet3UpsertSlot:', e); }
         }
