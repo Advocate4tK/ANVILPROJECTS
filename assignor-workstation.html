@@ -2704,6 +2704,39 @@
             renderSheet3View(sheet3LastFiltered);
         }
 
+        // ── Standard ref panel — availability notes only tooltip ──────────────
+        let _availNotesTimer = null;
+        function showAvailNotes(name, el, evt) {
+            clearTimeout(_availNotesTimer);
+            _availNotesTimer = setTimeout(() => {
+                const nameLower = name.trim().toLowerCase();
+                const _sessionLabel = /^(friday|saturday|sunday)\s+(morning|afternoon|night|evening)/i;
+                const notes = [...new Set(
+                    (allAvail || [])
+                        .filter(a => (a.fields['Referee Name'] || '').trim().toLowerCase() === nameLower
+                            && (a.fields['Notes'] || '').trim()
+                            && !_sessionLabel.test((a.fields['Notes'] || '').trim()))
+                        .map(a => a.fields['Notes'].trim())
+                )];
+                if (!notes.length) return;
+                const tip = document.getElementById('s3RefTooltip');
+                tip.innerHTML = notes.map(n => `<div style="font-style:italic; color:#333;">💬 ${n}</div>`).join('');
+                tip.style.display = 'block';
+                const tipW = 260;
+                const mx = evt ? evt.clientX : el.getBoundingClientRect().right;
+                const my = evt ? evt.clientY : el.getBoundingClientRect().top;
+                let left = mx + 14;
+                if (left + tipW > window.innerWidth - 10) left = mx - tipW - 14;
+                tip.style.left = `${left}px`;
+                tip.style.top  = `${Math.min(my - 10, window.innerHeight - 160)}px`;
+            }, 800);
+        }
+        function hideAvailNotes() {
+            clearTimeout(_availNotesTimer);
+            const tip = document.getElementById('s3RefTooltip');
+            if (tip) tip.style.display = 'none';
+        }
+
         // ── Sheet 3 ref hover tooltip ─────────────────────────────────────────
         let _refTooltipTimer = null;
         function showRefTooltip(name, el, evt) {
@@ -6219,8 +6252,8 @@
                     data-ref-id="${rid}" data-ref-name="${name}"
                     ${expColor ? `style="border-left-color:${expColor};"` : ''}
                     ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}');"
-                    onmouseenter="showRefTooltip('${name.replace(/'/g,"\\'")}', this, event)"
-                    onmouseleave="hideRefTooltip()">
+                    onmouseenter="showAvailNotes('${name.replace(/'/g,"\\'")}', this, event)"
+                    onmouseleave="hideAvailNotes()">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
                         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; min-width:0;">
                             <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${genderDot}${years ? `<span style="font-size:0.68rem;font-weight:700;color:${expColor||'#aaa'};flex-shrink:0;">${years}</span>` : ''}${distBadge}${posBadge}${ghostBadge}</div>
