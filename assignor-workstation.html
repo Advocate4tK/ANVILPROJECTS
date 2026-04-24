@@ -5084,6 +5084,33 @@
                     if (!availTimeByName[name][date]) availTimeByName[name][date] = { start: a.fields['Start Time'] || '', end: a.fields['End Time'] || '' };
                 });
 
+                // Ghost refs: names that appear in availability but have no referee record.
+                // Sheet 3 already shows them (reads allAvail directly). This ensures Standard
+                // template can see them too, with at minimum their preferred locations from avail.
+                const ghostAdded = new Set();
+                avail.forEach(a => {
+                    const rawName = (a.fields['Referee Name'] || '').trim();
+                    if (!rawName) return;
+                    const key = rawName.toLowerCase();
+                    if (refLookupByName[key] || ghostAdded.has(key)) return;
+                    ghostAdded.add(key);
+                    const ghost = {
+                        id: `ghost_${key}`,
+                        fields: {
+                            'Name': rawName,
+                            'Email': '',
+                            'Club Preference': a.fields['Preferred Locations'] || '',
+                            'Years Reffing': '',
+                            'Certification Level': '',
+                            'Age': null,
+                            'Gender': '',
+                            '_ghost': true
+                        }
+                    };
+                    refs.push(ghost);
+                    refLookupByName[key] = ghost;
+                });
+
                 allGames = games.sort((a, b) => {
                     const da = `${a.fields['Date']}|${a.fields['Time'] || ''}`;
                     const db = `${b.fields['Date']}|${b.fields['Time'] || ''}`;
@@ -6093,6 +6120,9 @@
                 const posBadge = posPref === 'AR Only'     ? `<span style="font-size:0.6rem;font-weight:800;background:#e67e22;color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;">AR</span>`
                                : posPref === 'Center Only' ? `<span style="font-size:0.6rem;font-weight:800;background:#8e44ad;color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;">CR</span>`
                                : '';
+                const ghostBadge = r.fields['_ghost']
+                    ? `<span style="font-size:0.6rem;font-weight:800;background:#e67e22;color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;" title="New referee — add to roster in Airtable">NEW</span>`
+                    : '';
 
                 html += `<div class="ref-card ${cardClass}" draggable="${cls !== 2}"
                     data-ref-id="${rid}" data-ref-name="${name}"
@@ -6100,7 +6130,7 @@
                     ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}')">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
                         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; min-width:0;">
-                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${genderDot}${years ? `<span style="font-size:0.68rem;font-weight:700;color:${expColor||'#aaa'};flex-shrink:0;">${years}</span>` : ''}${distBadge}${posBadge}</div>
+                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${genderDot}${years ? `<span style="font-size:0.68rem;font-weight:700;color:${expColor||'#aaa'};flex-shrink:0;">${years}</span>` : ''}${distBadge}${posBadge}${ghostBadge}</div>
                         </div>
                         <span id="rtri-${rid}" onclick="event.stopPropagation(); toggleRefCardWS('${rid}')" style="cursor:pointer; font-size:0.7rem; color:${cls === 2 ? '#e74c3c' : '#aaa'}; padding:2px 4px; flex-shrink:0; font-weight:${cls === 2 ? '900' : 'normal'};">▶</span>
                     </div>
