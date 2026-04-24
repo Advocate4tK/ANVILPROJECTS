@@ -297,8 +297,11 @@ loadBtn.addEventListener('click', async () => {
         progressBar.style.width = '100%';
         progressText.textContent = 'Done!';
 
+        // Strip cancelled games — never export these
+        const active = records.filter(r => (r.fields['Game Status'] || '').toLowerCase() !== 'cancelled');
+
         // Club filter — exact match on Source Club field
-        const byClub = selectedClubs.length === 0 ? records : records.filter(r => {
+        const byClub = selectedClubs.length === 0 ? active : active.filter(r => {
             return selectedClubs.some(c => r.fields['Source Club'] === c);
         });
 
@@ -439,8 +442,9 @@ function renderGamesTable(records) {
         <th style="width:24px;">#</th>
         ${sortHdr('date','Date','85px')}
         <th style="width:65px;">Time</th>
-        <th style="width:20%;">Home</th>
-        <th style="width:20%;">Away</th>
+        <th style="width:10%;">Club</th>
+        <th style="width:18%;">Home</th>
+        <th style="width:18%;">Away</th>
         ${sortHdr('age','Age','44px')}
         <th style="width:36px;">M/F</th>
         <th style="width:18%;">Venue / Field</th>
@@ -464,6 +468,7 @@ function renderGamesTable(records) {
             <td style="color:#999;padding:5px 4px;">${i + 1}</td>
             <td style="white-space:nowrap;">${formatDate(f['Date'] || '')}</td>
             <td style="white-space:nowrap;">${fmtTime(f['Time'] || '')}</td>
+            <td style="font-size:11px;color:#555;">${f['Source Club'] || ''}</td>
             <td style="word-break:break-word;">${f['Home Team'] || ''}</td>
             <td style="word-break:break-word;">${f['Away Team'] || ''}</td>
             <td style="text-align:center;">${f['Age Group'] || ''}</td>
