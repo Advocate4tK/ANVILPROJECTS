@@ -597,7 +597,7 @@ exportBtn.addEventListener('click', () => {
             fieldName,
             clubLeagueMap[f['Source Club']] || DEFAULTS.league,
             refId, ar1Id, ar2Id, 0, 0,
-            DEFAULTS.diagSysCtl,
+            ageGroup === 'U8' ? 1 : 3,
             DEFAULTS.refRate,
             DEFAULTS.arRate,
             DEFAULTS.fourthRate,
