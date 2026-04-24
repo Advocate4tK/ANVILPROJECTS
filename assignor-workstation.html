@@ -5078,12 +5078,16 @@
                     gameOpts.excludeEq = [{ col: 'game_type', val: 'Tournament' }];
                 }
 
-                // Filter availability by the same date range as games so we don't hit the 2000-row limit
-                // and miss recent submissions. Without ORDER BY, Supabase returns rows in heap order —
-                // newest records get cut off once the table exceeds the limit.
-                const availOpts = filter
-                    ? { maxRecords: 2000, filterByFormula: filter }
-                    : { maxRecords: 2000 };
+                // Always filter availability by date — the table exceeds 2000 rows and Supabase returns
+                // rows in heap order without ORDER BY, so newest submissions get cut off.
+                // Past records are never useful for assigning future games.
+                const availFromDate = dateFrom || new Date().toISOString().split('T')[0];
+                const availFilter = dateTo
+                    ? `AND(NOT(IS_BEFORE({Date}, '${availFromDate}')), NOT(IS_AFTER({Date}, '${dateTo}')))`
+                    : `NOT(IS_BEFORE({Date}, '${availFromDate}'))`;
+                const availOpts = window.tournamentMode
+                    ? (filter ? { maxRecords: 2000, filterByFormula: filter } : { maxRecords: 2000 })
+                    : { maxRecords: 2000, filterByFormula: availFilter };
 
                 const refOpts = { maxRecords: 1000 };
                 if (window.tournamentMode?.sourceClub) {
