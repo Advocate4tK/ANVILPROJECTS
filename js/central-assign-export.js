@@ -11,16 +11,20 @@
 (async function checkCAExportAccess() {
     const uid = currentUserId();
     if (!uid) { window.location.href = 'admin.html'; return; }
+
+    // Read email directly from the stored session token — no DB call, no race condition
+    const session = _getSupabaseSession();
+    const sessionEmail = (session?.user?.email || '').toLowerCase();
+    if (sessionEmail === 'nectassignor@gmail.com') return; // Tod — always allowed
+
+    // For everyone else check Admin role — fail open so Admin isn't locked out by a query error
     try {
         const recs  = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
         const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
         const role  = myRec ? (myRec.fields['Role'] || '').trim() : '';
-        const email = myRec ? (myRec.fields['Email'] || '').toLowerCase() : '';
-        if (role !== 'Admin' && email !== 'nectassignor@gmail.com') {
-            window.location.href = 'admin.html';
-        }
+        if (role !== 'Admin') window.location.href = 'admin.html';
     } catch(e) {
-        window.location.href = 'admin.html';
+        console.warn('CA Export role check failed:', e.message);
     }
 })();
 
