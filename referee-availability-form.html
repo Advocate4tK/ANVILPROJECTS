@@ -586,14 +586,14 @@
             return options;
         }
 
-        function createDayRow(index) {
+        function createDayRow(index, forceRemove) {
             const div = document.createElement('div');
             div.className = 'day-row';
             div.style.cssText = 'border:1px solid #ddd; border-radius:8px; padding:15px; margin-bottom:15px; background:#fafafa;';
             div.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <strong>Day ${index}</strong>
-                    ${index > 1 ? '<button type="button" class="btn btn-outline remove-day-btn" style="padding:4px 10px; font-size:12px;">Remove</button>' : ''}
+                    ${(index > 1 || forceRemove) ? '<button type="button" class="btn btn-outline remove-day-btn" style="padding:4px 10px; font-size:12px;">Remove</button>' : ''}
                 </div>
                 <div class="form-group">
                     <label>Date Available <span class="required">*</span></label>
@@ -651,7 +651,21 @@
         document.addEventListener('DOMContentLoaded', function() {
             const container = document.getElementById('availabilityDays');
 
-            container.appendChild(createDayRow(1));
+            // Pre-fill dates from ?dates=2026-05-09,2026-05-10 URL param
+            const urlDates = new URLSearchParams(window.location.search).get('dates');
+            const presetDates = urlDates
+                ? urlDates.split(',').map(d => d.trim()).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d))
+                : [];
+
+            if (presetDates.length > 0) {
+                presetDates.forEach((date, i) => {
+                    const row = createDayRow(i + 1, presetDates.length > 1);
+                    row.querySelector('input[name="availableDate[]"]').value = date;
+                    container.appendChild(row);
+                });
+            } else {
+                container.appendChild(createDayRow(1));
+            }
 
             // Show/hide Griswold payment section when checkbox toggled
             const griswoldCb = document.querySelector('input[name="locations"][value="Griswold"]');
