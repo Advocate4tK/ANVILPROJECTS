@@ -54,6 +54,33 @@ let fieldNameMap       = {}; // Supabase record ID → field name (legacy fallba
 let numericVenueToName = {}; // numeric Venue ID → venue name (primary)
 let numericFieldToName = {}; // numeric Field ID → field name (primary)
 
+// ── Export history (localStorage) ────────────────────────────────────────────
+const EXPORT_HISTORY_KEY = 'ca_export_history';
+
+function getExportHistory() {
+    try { return JSON.parse(localStorage.getItem(EXPORT_HISTORY_KEY) || '{}'); } catch(e) { return {}; }
+}
+
+function gameExportKey(f) {
+    return `${f['Date']}|${f['Home Team']}|${f['Away Team']}|${f['Time']}`;
+}
+
+function getExportedAt(f) {
+    return getExportHistory()[gameExportKey(f)] || null;
+}
+
+function markAsExported(games) {
+    const history = getExportHistory();
+    const now = new Date().toISOString();
+    games.forEach(rec => { history[gameExportKey(rec.fields)] = now; });
+    localStorage.setItem(EXPORT_HISTORY_KEY, JSON.stringify(history));
+}
+
+function fmtExportDate(isoStr) {
+    if (!isoStr) return '';
+    return new Date(isoStr).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
 // ── Mode toggle — show only the selected filter panel ─────────────────────────
 document.querySelectorAll('input[name="filterMode"]').forEach(radio => {
     radio.addEventListener('change', function() {
@@ -352,11 +379,18 @@ function renderGamesTable(records) {
         <th style="width:52px;">CR</th>
         <th style="width:52px;">AR1</th>
         <th style="width:52px;">AR2</th>
+        <th style="width:80px;" title="Previously exported to CA">Prior</th>
     </tr></thead><tbody>`;
 
     records.forEach((rec, i) => {
         const f = rec.fields;
-        const rowBg = i % 2 === 0 ? 'background:rgba(15,52,96,0.28);' : '';
+        const exportedAt = getExportedAt(f);
+        const priorBadge = exportedAt
+            ? `<span style="color:#e67e22;font-size:11px;white-space:nowrap;font-weight:600;" title="Exported ${fmtExportDate(exportedAt)}">⚠ ${fmtExportDate(exportedAt)}</span>`
+            : `<span style="color:#aaa;font-size:11px;">—</span>`;
+        const rowBg = exportedAt
+            ? 'background:rgba(230,126,34,0.08);'
+            : (i % 2 === 0 ? 'background:rgba(15,52,96,0.28);' : '');
         html += `<tr style="font-size:0.78rem;${rowBg}">
             <td style="padding:5px 4px;"><input type="checkbox" class="game-check" data-index="${i}" checked></td>
             <td style="color:#999;padding:5px 4px;">${i + 1}</td>
@@ -369,6 +403,7 @@ function renderGamesTable(records) {
             <td>${refBadge(f['Center Referee'])}</td>
             <td>${refBadge(f['AR 1'])}</td>
             <td>${refBadge(f['AR 2'])}</td>
+            <td>${priorBadge}</td>
         </tr>`;
     });
 
@@ -414,6 +449,21 @@ exportBtn.addEventListener('click', () => {
         return;
     }
 
+    const gamesOnly = document.getElementById('gamesOnly').checked;
+
+    // Duplicate check — warn before allowing re-export
+    const priorExports = selected.filter(rec => getExportedAt(rec.fields));
+    if (priorExports.length > 0) {
+        const lines = priorExports.map(rec => {
+            const f = rec.fields;
+            return `  • ${formatDate(f['Date'])} ${fmtTime(f['Time'])} — ${f['Home Team']} vs ${f['Away Team']}\n    (exported ${fmtExportDate(getExportedAt(f))})`;
+        }).join('\n');
+        const proceed = confirm(
+            `⚠️ ${priorExports.length} game${priorExports.length > 1 ? 's' : ''} in this selection ${priorExports.length > 1 ? 'were' : 'was'} already exported:\n\n${lines}\n\nExporting again may create duplicates in Central Assign. Continue anyway?`
+        );
+        if (!proceed) return;
+    }
+
     // Headers matched exactly to CA template
     const headers = [
         'Home Team', 'Visiting Team', 'Duration', 'Duration Time',
@@ -427,9 +477,16 @@ exportBtn.addEventListener('click', () => {
         const f = rec.fields;
         const { name: venueName, caId: venueId, fieldName } = resolveVenue(f);
 
-        // Resolve Center Referee → Central Assign numeric ID
-        const crRaw = extractRefVal(f['Center Referee']);
-        let refId = crRaw ? (resolveRefCA(crRaw) || 0) : 0;
+        // Resolve refs — blank everything if gamesOnly is checked
+        let refId = 0, ar1Id = 0, ar2Id = 0;
+        if (!gamesOnly) {
+            const crRaw  = extractRefVal(f['Center Referee']);
+            const ar1Raw = extractRefVal(f['AR 1']);
+            const ar2Raw = extractRefVal(f['AR 2']);
+            refId = crRaw  ? (resolveRefCA(crRaw)  || 0) : 0;
+            ar1Id = ar1Raw ? (resolveRefCA(ar1Raw) || 0) : 0;
+            ar2Id = ar2Raw ? (resolveRefCA(ar2Raw) || 0) : 0;
+        }
 
         // Map Airtable Gender field to CA format (M/F), fall back to default
         const gameGender = f['Gender'] === 'Male' ? 'M' : f['Gender'] === 'Female' ? 'F' : DEFAULTS.gender;
@@ -450,7 +507,7 @@ exportBtn.addEventListener('click', () => {
             venueId || venueName,
             fieldName,
             f['League'] || DEFAULTS.league,
-            refId, 0, 0, 0, 0,
+            refId, ar1Id, ar2Id, 0, 0,
             DEFAULTS.diagSysCtl,
             DEFAULTS.refRate,
             DEFAULTS.arRate,
@@ -468,6 +525,10 @@ exportBtn.addEventListener('click', () => {
     a.download = `central-assign-export-${new Date().toISOString().split('T')[0]}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+
+    // Mark all exported games with timestamp, then refresh table badges
+    markAsExported(selected);
+    renderGamesTable(loadedGames);
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
