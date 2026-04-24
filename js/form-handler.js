@@ -146,14 +146,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const firstName = document.getElementById('refereeFirstName').value.trim();
         const lastName  = document.getElementById('refereeLastName').value.trim();
 
+        const locations = Array.from(document.querySelectorAll('input[name="locations"]:checked')).map(cb => cb.value);
         const formData = {
-            'Referee Name': `${firstName} ${lastName}`,
-            'Date':         dayRow.querySelector('input[name="availableDate[]"]').value,
-            'Start Time':   dayRow.querySelector('[name="startTime[]"]').value,
-            'End Time':     dayRow.querySelector('[name="endTime[]"]').value,
-            'Max Games':    dayRow.querySelector('input[name="maxGames[]"]').value || '1',
-            'Notes':        document.getElementById('notes').value.trim(),
-            'Status':       'New'
+            'Referee Name':       `${firstName} ${lastName}`,
+            'Date':               dayRow.querySelector('input[name="availableDate[]"]').value,
+            'Start Time':         dayRow.querySelector('[name="startTime[]"]').value,
+            'End Time':           dayRow.querySelector('[name="endTime[]"]').value,
+            'Max Games':          dayRow.querySelector('input[name="maxGames[]"]').value || '1',
+            'Notes':              document.getElementById('notes').value.trim(),
+            'Status':             'New',
+            'Preferred Locations': locations.join(', ')
         };
 
         return formData;
