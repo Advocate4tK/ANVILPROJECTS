@@ -5400,8 +5400,18 @@
                 if (focusGameId) return String(g.id) === String(focusGameId);
                 // In normal workstation view, hide change-requested games (handled by schedule-changes page)
                 if ((g.fields['Game Status'] || '') === 'Change Requested') return false;
-                // Cancelled games always show regardless of any filter
-                if (cancelledGameIds.has(g.id) || g.fields['Game Status'] === 'Cancelled') return true;
+                // Cancelled games bypass most filters but still respect the club pill selection
+                const isCancelledGame = cancelledGameIds.has(g.id) || g.fields['Game Status'] === 'Cancelled';
+                if (isCancelledGame) {
+                    const clubFilterActive = assignorClubRestriction
+                        ? true
+                        : (selectedClubs.size > 0 && selectedClubs.size < clubsList.length);
+                    if (clubFilterActive) {
+                        const club = resolveGameClub(g.fields);
+                        if (!club || !selectedClubs.has(club)) return false;
+                    }
+                    return true;
+                }
                 if (gameDateF  && g.fields['Date'] !== gameDateF) return false;
                 if (gameTimeF  && (g.fields['Time'] || '') !== gameTimeF) return false;
                 if (gameAgeF   && (g.fields['Age Group'] || '').toUpperCase() !== gameAgeF.toUpperCase()) return false;
