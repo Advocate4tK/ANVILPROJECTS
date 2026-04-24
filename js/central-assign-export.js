@@ -368,10 +368,21 @@ function refBadge(val) {
 }
 
 function venueBadge(f) {
-    const { name, caId } = resolveVenue(f);
+    const { name, caId, fieldName } = resolveVenue(f);
+    const fieldPart = fieldName
+        ? `<br><span style="color:#555;font-size:11px;">⛳ ${fieldName}</span>`
+        : `<br><span style="color:#aaa;font-size:11px;">field —</span>`;
     return caId
-        ? `<span style="color:#1a7a40;font-weight:600;" title="CA ID: ${caId}">✓ ${name || caId}</span>`
-        : `<span style="color:#c0392b;font-weight:600;" title="${name || 'Unknown'}">⚠ ${name || 'No Venue ID'}</span>`;
+        ? `<span style="color:#1a7a40;font-weight:600;" title="CA ID: ${caId}">✓ ${name || caId}</span>${fieldPart}`
+        : `<span style="color:#c0392b;font-weight:600;" title="${name || 'Unknown'}">⚠ ${name || 'No Venue ID'}</span>${fieldPart}`;
+}
+
+function genderBadge(val) {
+    const g = (val || '').trim();
+    if (['Boys','Male'].includes(g))    return `<span style="color:#1a7a40;font-weight:600;">M</span>`;
+    if (['Girls','Female'].includes(g)) return `<span style="color:#1a7a40;font-weight:600;">F</span>`;
+    if (g === 'Coed')                   return `<span style="color:#1a7a40;font-weight:600;">Co</span>`;
+    return `<span style="color:#c0392b;font-weight:600;" title="Gender not set — will default to F in export">⚠</span>`;
 }
 
 function fmtTime(t) {
@@ -383,18 +394,26 @@ function fmtTime(t) {
 
 function renderGamesTable(records) {
     // Summary counts
-    let venueOk = 0, refOk = 0;
+    let venueOk = 0, refOk = 0, genderOk = 0, fieldOk = 0;
     records.forEach(rec => {
         const f = rec.fields;
-        if (resolveVenue(f).caId) venueOk++;
+        const v = resolveVenue(f);
+        if (v.caId)      venueOk++;
+        if (v.fieldName) fieldOk++;
         const cr = extractRefVal(f['Center Referee']);
         if (cr && resolveRefCA(cr)) refOk++;
+        const g = (f['Gender'] || '').trim();
+        if (['Boys','Male','Girls','Female','Coed'].includes(g)) genderOk++;
     });
     const total = records.length;
     gameCount.innerHTML = `
         <span style="font-weight:700;">${total} game${total !== 1 ? 's' : ''}</span>
         &nbsp;|&nbsp;
         <span style="color:${venueOk===total?'#27ae60':'#e67e22'}">Venues: ${venueOk}/${total} ✓</span>
+        &nbsp;|&nbsp;
+        <span style="color:${genderOk===total?'#27ae60':'#c0392b'}">Gender: ${genderOk}/${total} ✓</span>
+        &nbsp;|&nbsp;
+        <span style="color:${fieldOk===total?'#27ae60':'#aaa'}">Field: ${fieldOk}/${total}</span>
         &nbsp;|&nbsp;
         <span style="color:${refOk===total?'#27ae60':'#e67e22'}">Refs: ${refOk}/${total} ✓</span>`;
 
@@ -413,7 +432,8 @@ function renderGamesTable(records) {
         <th style="width:20%;">Home</th>
         <th style="width:20%;">Away</th>
         ${sortHdr('age','Age','44px')}
-        <th style="width:18%;">Venue</th>
+        <th style="width:36px;">M/F</th>
+        <th style="width:18%;">Venue / Field</th>
         <th style="width:52px;">CR</th>
         <th style="width:52px;">AR1</th>
         <th style="width:52px;">AR2</th>
@@ -437,6 +457,7 @@ function renderGamesTable(records) {
             <td style="word-break:break-word;">${f['Home Team'] || ''}</td>
             <td style="word-break:break-word;">${f['Away Team'] || ''}</td>
             <td style="text-align:center;">${f['Age Group'] || ''}</td>
+            <td style="text-align:center;">${genderBadge(f['Gender'])}</td>
             <td>${venueBadge(f)}</td>
             <td>${refBadge(f['Center Referee'])}</td>
             <td>${refBadge(f['AR 1'])}</td>
@@ -488,6 +509,20 @@ exportBtn.addEventListener('click', () => {
     }
 
     const gamesOnly = document.getElementById('gamesOnly').checked;
+
+    // Gender check — block export if any selected game is missing gender
+    const missingGender = selected.filter(rec => {
+        const g = (rec.fields['Gender'] || '').trim();
+        return !['Boys','Male','Girls','Female','Coed'].includes(g);
+    });
+    if (missingGender.length > 0) {
+        const lines = missingGender.map(rec => {
+            const f = rec.fields;
+            return `  • ${formatDate(f['Date'])} ${fmtTime(f['Time'])} — ${f['Home Team']} vs ${f['Away Team']}`;
+        }).join('\n');
+        alert(`⚠️ ${missingGender.length} game${missingGender.length > 1 ? 's are' : ' is'} missing a Gender value and cannot be exported:\n\n${lines}\n\nFix the Gender field in the database before exporting.`);
+        return;
+    }
 
     // Duplicate check — warn before allowing re-export
     const priorExports = selected.filter(rec => getExportedAt(rec.fields));
