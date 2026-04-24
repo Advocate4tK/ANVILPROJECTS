@@ -1373,7 +1373,9 @@
                     if (!hasDate) return false;
                     if (gameClubLower) {
                         const prefs = parsePreferences(r.fields['Club Preference'] || '');
-                        if (prefs.length > 0 && !prefs.some(p => p.toLowerCase() === gameClubLower)) return false;
+                        const availClubs = availTimeByName[name.toLowerCase()]?.[gameDate]?.clubs || [];
+                        const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availClubs])];
+                        if (merged.length > 0 && !merged.some(p => p === gameClubLower)) return false;
                     }
                     return true;
                 });
@@ -1495,7 +1497,9 @@
                     if (!hasDate) return false;
                     if (gameClubLower) {
                         const prefs = parsePreferences(r.fields['Club Preference'] || '');
-                        if (prefs.length > 0 && !prefs.some(p => p.toLowerCase() === gameClubLower)) return false;
+                        const availClubs = availTimeByName[name.toLowerCase()]?.[gameDate]?.clubs || [];
+                        const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availClubs])];
+                        if (merged.length > 0 && !merged.some(p => p === gameClubLower)) return false;
                     }
                     return true;
                 });
@@ -3299,6 +3303,9 @@
                     // Parse club preference — may be stored as JSON array string
                     let club = ref ? (ref.fields['Club Preference'] || '') : '';
                     try { const parsed = JSON.parse(club); if (Array.isArray(parsed)) club = parsed.join(', '); } catch {}
+                    // Merge in what the ref put on their availability form for this date
+                    const availFormClubs = (availTimeByName[name.toLowerCase()]?.[date]?.clubs || []).join(', ');
+                    if (availFormClubs) club = club ? `${club}, ${availFormClubs}` : availFormClubs;
                     const exp  = ref ? (ref.fields['Years Reffing'] || '') : '';
                     const rawNote = (a.fields['Notes'] || '').trim();
                     const notes = sessionLabel.test(rawNote) ? '' : rawNote;
@@ -5143,7 +5150,7 @@
                     if (!availByName[name]) availByName[name] = new Set();
                     availByName[name].add(date);
                     if (!availTimeByName[name]) availTimeByName[name] = {};
-                    if (!availTimeByName[name][date]) availTimeByName[name][date] = { start: a.fields['Start Time'] || '', end: a.fields['End Time'] || '' };
+                    if (!availTimeByName[name][date]) availTimeByName[name][date] = { start: a.fields['Start Time'] || '', end: a.fields['End Time'] || '', clubs: (a.fields['Preferred Locations'] || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean) };
                 });
 
                 // Ghost refs: names that appear in availability but have no referee record.
@@ -5972,9 +5979,12 @@
                 if (query && !name.includes(query) && !email.includes(query)) return false;
                 // Club preference gate: only show refs who listed a matching club.
                 // Refs with no preference set are hidden — use "Show all refs" to override.
+                // Also check what the ref put on their availability form (Preferred Locations).
                 if (!showAllRefs && focusClubs.length > 0 && !query) {
                     const prefs = parsePreferences(r.fields['Club Preference']);
-                    if (!prefs.some(p => focusClubs.includes(p.toLowerCase()))) return false;
+                    const availFormClubs = Object.values(availTimeByName[name] || {}).flatMap(slot => slot.clubs || []);
+                    const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availFormClubs])];
+                    if (!merged.some(p => focusClubs.includes(p))) return false;
                 }
                 if (yearsFilter !== 'any') {
                     const yrs = parseYrs(r.fields['Years Reffing'], -1);
