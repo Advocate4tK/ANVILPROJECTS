@@ -8,17 +8,17 @@
 // from the Airtable Venues table (Venue ID field) at load time.
 
 // ── Feature gate — Admin + Tod only until general release ────────────────────
-const TOD_UID = '1bcef3cd-9457-40fc-abdc-28ebc8bd8828';
-
 (async function checkCAExportAccess() {
     const uid = currentUserId();
     if (!uid) { window.location.href = 'admin.html'; return; }
-    if (uid === TOD_UID) return; // Tod always allowed
     try {
         const recs  = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
         const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
         const role  = myRec ? (myRec.fields['Role'] || '').trim() : '';
-        if (role !== 'Admin') window.location.href = 'admin.html';
+        const email = myRec ? (myRec.fields['Email'] || '').toLowerCase() : '';
+        if (role !== 'Admin' && email !== 'nectassignor@gmail.com') {
+            window.location.href = 'admin.html';
+        }
     } catch(e) {
         window.location.href = 'admin.html';
     }
