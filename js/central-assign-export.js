@@ -561,7 +561,10 @@ exportBtn.addEventListener('click', () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `central-assign-export-${new Date().toISOString().split('T')[0]}.txt`;
+    const ts = new Date();
+    const datePart = ts.toISOString().split('T')[0];
+    const timePart = `${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}`;
+    a.download = `central-assign-export-${datePart}-${timePart}.txt`;
     a.click();
     URL.revokeObjectURL(url);
 
