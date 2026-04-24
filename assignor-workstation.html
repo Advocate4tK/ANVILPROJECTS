@@ -2725,12 +2725,16 @@
 
         async function sheet3UpsertSlot(gid, slot, name) {
             try {
-                // Delete first (avoids upsert conflict/RLS UPDATE issues), then insert if name provided
-                await supabaseClient.client.from('staging')
-                    .delete().eq('game_id', parseInt(gid)).eq('slot', slot);
                 if (name) {
-                    await supabaseClient.client.from('staging')
-                        .insert({ game_id: parseInt(gid), slot: slot, ref_name: name });
+                    const { error } = await supabaseClient.client.from('staging').upsert(
+                        { game_id: parseInt(gid), slot: slot, ref_name: name },
+                        { onConflict: 'game_id,slot' }
+                    );
+                    if (error) console.error('sheet3UpsertSlot upsert:', error);
+                } else {
+                    const { error } = await supabaseClient.client.from('staging').delete()
+                        .eq('game_id', parseInt(gid)).eq('slot', slot);
+                    if (error) console.error('sheet3UpsertSlot delete:', error);
                 }
             } catch(e) { console.error('sheet3UpsertSlot:', e); }
         }
