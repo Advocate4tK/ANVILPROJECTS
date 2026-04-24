@@ -2469,8 +2469,6 @@
                     return sheet3SeedOrder === 'exp-asc' ? diff : -diff;
                 });
                 sheet3StagedRefs[gid] = names;
-                // Fire background writes — don't block render
-                names.forEach((name, slot) => sheet3UpsertSlot(gid, slot, name));
             });
             sheet3CacheStagedRefs();
         }
@@ -3264,7 +3262,7 @@
 
                 } else {
                 // ── Club ref pane: Date / Name / Exp / Club Preference / Start / End ──
-                const refRows = [];
+                let refRows = [];
                 const _seenRefDate = new Set(); // deduplicate ref+date (multiple submissions)
                 const sessionLabel = /^(friday|saturday|sunday)\s+(morning|afternoon|night|evening)/i;
                 allAvail.forEach(a => {
@@ -3289,6 +3287,14 @@
                     refRows.push({ name, date, club, start, end, exp, notes });
                 });
                 refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+                // Filter by selected club when user has narrowed pills to specific clubs
+                if (selectedClubs.size > 0 && selectedClubs.size < clubsList.length) {
+                    const focusClubsLower = [...selectedClubs].map(c => c.toLowerCase());
+                    refRows = refRows.filter(r => {
+                        const prefs = (r.club || '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
+                        return prefs.some(p => focusClubsLower.includes(p));
+                    });
+                }
                 sheet3CachedRefRows = refRows;
                 if (sheet3RefSort.col === 'exp') {
                     sheet3CachedRefRows.sort((a, b) => (expVal(a) - expVal(b)) * sheet3RefSort.dir);
