@@ -18,6 +18,49 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
+    // ── Live required-field gate ──────────────────────────────────────────────
+    function checkFormReady() {
+        const missing = [];
+
+        if (!document.getElementById('yearsReffing')?.value)        missing.push('Years Reffing');
+        if (!document.getElementById('certificationLevel')?.value)  missing.push('Certification Level');
+        if (!document.getElementById('refereeGender')?.value)       missing.push('Gender');
+        if (!document.querySelectorAll('input[name="locations"]:checked').length)  missing.push('Preferred Locations (at least one)');
+        if (!document.querySelectorAll('input[name="ageGroups"]:checked').length)  missing.push('Preferred Age Groups (at least one)');
+        if (!document.getElementById('arOnly')?.value)              missing.push('AR Only preference');
+
+        const dayRows = document.querySelectorAll('.day-row');
+        if (!dayRows.length) {
+            missing.push('At least one availability date');
+        } else {
+            dayRows.forEach((row, i) => {
+                const n = i + 1;
+                if (!row.querySelector('input[name="availableDate[]"]')?.value) missing.push(`Day ${n}: Date`);
+                if (!row.querySelector('[name="startTime[]"]')?.value)          missing.push(`Day ${n}: Start Time`);
+                if (!row.querySelector('[name="endTime[]"]')?.value)            missing.push(`Day ${n}: End Time`);
+                if (!row.querySelector('input[name="maxGames[]"]')?.value)      missing.push(`Day ${n}: Max Games`);
+            });
+        }
+
+        const prompt = document.getElementById('missingFieldsPrompt');
+        if (missing.length) {
+            submitBtn.disabled = true;
+            if (prompt) {
+                prompt.style.display = 'block';
+                prompt.innerHTML = '<strong>Please complete the following before submitting:</strong><br>• ' + missing.join('<br>• ');
+            }
+        } else {
+            submitBtn.disabled = false;
+            if (prompt) prompt.style.display = 'none';
+        }
+    }
+
+    // Run on every input/change — catches dynamic day rows too via delegation
+    form.addEventListener('change', checkFormReady);
+    form.addEventListener('input',  checkFormReady);
+    // Expose globally so unlockAvailability() can trigger it on section reveal
+    window.checkFormReady = checkFormReady;
+
     // Form submission handler
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
