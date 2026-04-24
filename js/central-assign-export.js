@@ -526,8 +526,9 @@ exportBtn.addEventListener('click', () => {
             ar2Id = ar2Raw ? (resolveRefCA(ar2Raw) || 0) : 0;
         }
 
-        // Map Airtable Gender field to CA format (M/F), fall back to default
-        const gameGender = f['Gender'] === 'Male' ? 'M' : f['Gender'] === 'Female' ? 'F' : DEFAULTS.gender;
+        // Map Gender field to CA format (M/F) — handles both legacy "Male/Female" and form "Boys/Girls"
+        const gRaw = (f['Gender'] || '').trim();
+        const gameGender = ['Male','Boys'].includes(gRaw) ? 'M' : ['Female','Girls'].includes(gRaw) ? 'F' : DEFAULTS.gender;
 
         // Period length by age group
         const ageGroup = f['Age Group'] || '';
