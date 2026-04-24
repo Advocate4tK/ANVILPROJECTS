@@ -2817,10 +2817,12 @@
             let _s3Date   = null; // tracks date changes for all-days date dividers
             // refCountBadge is defined as a top-level function below renderSheet3View
             const gameRowsHtml = displayGames.length ? displayGames.map((g, i) => {
-                const f        = g.fields;
-                const gid      = String(g.id);
-                const rowBg    = i % 2 === 0 ? '#ffffff' : '#f6f8fa';
-                const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
+                const f           = g.fields;
+                const gid         = String(g.id);
+                const isCancelled = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
+                const rowBg       = i % 2 === 0 ? '#ffffff' : '#f6f8fa';
+                const cancelCell  = isCancelled ? `${cell} text-decoration:line-through; color:#c0392b;` : cell;
+                const venueObj    = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                 const fieldObj = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
                 const cRefRaw  = resolveRefName(f['Center Referee']) || '—';
                 const ar1Raw   = resolveRefName(f['AR 1']) || '—';
@@ -2863,18 +2865,18 @@
                 const fmtGameTime = t => { if (!t) return '—'; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
                 const fmtGameDate = d => { if (!d) return '—'; const [,m,day] = d.split('-'); const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]; return `${mo} ${parseInt(day)}`; };
                 const colRenderers = {
-                    date:     () => `<td style="${cell}">${fmtGameDate(f['Date'])}</td>`,
-                    time:     () => `<td style="${cell}">${fmtGameTime(f['Time'])}</td>`,
-                    club:     () => `<td style="${cell}">${f['Source Club'] || '—'}</td>`,
-                    ageGroup: () => `<td style="${cell}">${f['Age Group'] || '—'}</td>`,
-                    gender:   () => `<td style="${cell}">${f['Gender'] || '—'}</td>`,
-                    homeTeam: () => `<td style="${cell}">${f['Home Team'] || '—'}</td>`,
-                    awayTeam: () => `<td style="${cell}">${f['Away Team'] || '—'}</td>`,
+                    date:     () => `<td style="${cancelCell}">${fmtGameDate(f['Date'])}</td>`,
+                    time:     () => `<td style="${cancelCell}">${fmtGameTime(f['Time'])}</td>`,
+                    club:     () => `<td style="${cancelCell}">${f['Source Club'] || '—'}</td>`,
+                    ageGroup: () => `<td style="${cancelCell}">${f['Age Group'] || '—'}</td>`,
+                    gender:   () => `<td style="${cancelCell}">${f['Gender'] || '—'}</td>`,
+                    homeTeam: () => `<td style="${cancelCell}">${f['Home Team'] || '—'}</td>`,
+                    awayTeam: () => `<td style="${cancelCell}">${f['Away Team'] || '—'}</td>`,
                     venue:    () => {
                         const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
                         if (window.tournamentMode && venueObj && window.tournamentSiteLookup) {
                             const sn = window.tournamentSiteLookup[venueObj.name];
-                            return `<td style="${cell} min-width:160px;">${sn ? `<span style="font-weight:800;color:#6c3483;">Site ${sn}</span> — ${venueObj.name}` : vName}</td>`;
+                            return `<td style="${cancelCell} min-width:160px;">${sn ? `<span style="font-weight:800;color:#6c3483;">Site ${sn}</span> — ${venueObj.name}` : vName}</td>`;
                         }
                         // Tournament: no venue — show inline site picker
                         if (window.tournamentMode && !venueObj) {
@@ -2884,18 +2886,18 @@
                                 .sort((a, b) => (sl[a.name] || 99) - (sl[b.name] || 99))
                                 .map(v => `<option value="${v.id}">Site ${sl[v.name]} — ${v.name}</option>`)
                                 .join('');
-                            return `<td style="${cell} min-width:180px;" onclick="event.stopPropagation()">
+                            return `<td style="${cancelCell} min-width:180px;" onclick="event.stopPropagation()">
                                 <select class="vf-select" onchange="tmOnVenueChange('${gid}',this)" style="width:100%;font-size:0.72rem;">
                                     <option value="">— Pick site —</option>${tmVenueOpts}
                                 </select>
                             </td>`;
                         }
-                        return `<td style="${cell}">${vName}</td>`;
+                        return `<td style="${cancelCell}">${vName}</td>`;
                     },
                     field:    () => {
                         // Tournament: no venue — show cascading field picker (populated by tmOnVenueChange)
                         if (window.tournamentMode && !venueObj) {
-                            return `<td style="${cell}" onclick="event.stopPropagation()">
+                            return `<td style="${cancelCell}" onclick="event.stopPropagation()">
                                 <select class="vf-select" id="tmFieldSel-${gid}" onchange="tmOnFieldChange('${gid}',this)" style="width:100%;font-size:0.72rem;" disabled>
                                     <option value="">Field…</option>
                                 </select>
@@ -2906,7 +2908,7 @@
                                  : (f['Field ID'] || '—');
                         // Normalize "Field #N" → "Field N" for consistent display in tournament mode
                         if (window.tournamentMode) name = String(name || '').replace(/^Field\s*#\s*(\d+)$/i, 'Field $1');
-                        return `<td style="${cell}">${name}</td>`;
+                        return `<td style="${cancelCell}">${name}</td>`;
                     },
                     center:   () => assignedTd('center', cRefRaw),
                     ar1:      () => assignedTd('ar1', ar1Raw),
