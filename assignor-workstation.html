@@ -5160,23 +5160,6 @@
                     if (n) refLookupByName[n] = r;
                 });
 
-                // Build assignedAt: refId → Map<'date|time', Set<gameId>>
-                assignedAt = {};
-                games.forEach(g => {
-                    const dt = `${g.fields['Date']}|${g.fields['Time'] || ''}`;
-                    ['Center Referee', 'AR 1', 'AR 2'].forEach(pos => {
-                        const linked = g.fields[pos];
-                        const name = resolveRefName(linked);
-                        if (!name) return;
-                        const ref = refLookupByName[name.trim().toLowerCase()];
-                        if (!ref) return;
-                        const refId = ref.id;
-                        if (!assignedAt[refId]) assignedAt[refId] = new Map();
-                        if (!assignedAt[refId].has(dt)) assignedAt[refId].set(dt, new Set());
-                        assignedAt[refId].get(dt).add(String(g.id));
-                    });
-                });
-
                 // Build availability by referee name
                 availByName = {};
                 availTimeByName = {};
@@ -5194,6 +5177,7 @@
                 // Ghost refs: names that appear in availability but have no referee record.
                 // Sheet 3 already shows them (reads allAvail directly). This ensures Standard
                 // template can see them too, with at minimum their preferred locations from avail.
+                // Must run BEFORE assignedAt so ghost refIds are in refLookupByName when games scan.
                 const ghostAdded = new Set();
                 avail.forEach(a => {
                     const rawName = (a.fields['Referee Name'] || '').trim().replace(/\s+/g, ' ');
@@ -5216,6 +5200,24 @@
                     };
                     refs.push(ghost);
                     refLookupByName[key] = ghost;
+                });
+
+                // Build assignedAt: refId → Map<'date|time', Set<gameId>>
+                // Runs after ghost injection so ghost refs are in refLookupByName.
+                assignedAt = {};
+                games.forEach(g => {
+                    const dt = `${g.fields['Date']}|${g.fields['Time'] || ''}`;
+                    ['Center Referee', 'AR 1', 'AR 2'].forEach(pos => {
+                        const linked = g.fields[pos];
+                        const name = resolveRefName(linked);
+                        if (!name) return;
+                        const ref = refLookupByName[name.trim().toLowerCase()];
+                        if (!ref) return;
+                        const refId = ref.id;
+                        if (!assignedAt[refId]) assignedAt[refId] = new Map();
+                        if (!assignedAt[refId].has(dt)) assignedAt[refId].set(dt, new Set());
+                        assignedAt[refId].get(dt).add(String(g.id));
+                    });
                 });
 
                 allGames = games.sort((a, b) => {
