@@ -389,11 +389,14 @@ class SupabaseClientWrapper {
      */
     async createAvailability(availabilityData) {
         try {
-            const { error } = await this.client
+            const { data, error } = await this.client
                 .from('availability')
-                .insert(this._normalizeFields(availabilityData));
+                .insert(this._normalizeFields(availabilityData))
+                .select('id')
+                .single();
             if (error) throw new Error(error.message);
-            return { id: null };
+            if (!data?.id) throw new Error('Availability record was not created — no id returned.');
+            return { id: data.id };
         } catch (error) {
             console.error('SupabaseClient createAvailability error:', error);
             throw error;
