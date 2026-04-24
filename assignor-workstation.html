@@ -2394,26 +2394,37 @@
             document.addEventListener('mouseup',   onUp);
         }
 
+        function sheet3CacheStagedRefs() {
+            try { localStorage.setItem('sheet3StagedRefsCache', JSON.stringify(sheet3StagedRefs)); } catch(e) {}
+        }
+        function sheet3LoadStagedRefsCache() {
+            try { return JSON.parse(localStorage.getItem('sheet3StagedRefsCache') || '{}'); } catch(e) { return {}; }
+        }
+
         async function sheet3FetchStaging() {
             try {
                 const gameIds = allGames.map(g => g.id);
                 if (!gameIds.length) return;
                 const { data, error } = await supabaseClient.client.from('staging').select('*').in('game_id', gameIds);
-                if (error) { console.error('staging fetch ERROR:', error); return; }
-                console.log('staging fetch: got', (data||[]).length, 'rows', data);
-                sheet3StagedRefs = {};
-                (data || []).forEach(row => {
-                    const gid = String(row.game_id);
-                    if (!sheet3StagedRefs[gid]) sheet3StagedRefs[gid] = [];
-                    // Ensure array is long enough
-                    while (sheet3StagedRefs[gid].length <= row.slot) sheet3StagedRefs[gid].push(null);
-                    sheet3StagedRefs[gid][row.slot] = row.ref_name || null;
-                });
+                if (!error && data && data.length > 0) {
+                    // DB has data — use it and refresh cache
+                    sheet3StagedRefs = {};
+                    data.forEach(row => {
+                        const gid = String(row.game_id);
+                        if (!sheet3StagedRefs[gid]) sheet3StagedRefs[gid] = [];
+                        while (sheet3StagedRefs[gid].length <= row.slot) sheet3StagedRefs[gid].push(null);
+                        sheet3StagedRefs[gid][row.slot] = row.ref_name || null;
+                    });
+                    sheet3CacheStagedRefs();
+                } else {
+                    // DB unavailable or empty — fall back to localStorage cache
+                    sheet3StagedRefs = sheet3LoadStagedRefsCache();
+                }
                 // Auto-seed any games that have no staging rows yet
                 sheet3AutoSeed();
                 // Compute max queue length
                 sheet3MaxQueueLen = Math.max(6, ...Object.values(sheet3StagedRefs).map(q => (q || []).filter(Boolean).length));
-            } catch(e) { console.error('sheet3FetchStaging:', e); }
+            } catch(e) { sheet3StagedRefs = sheet3LoadStagedRefsCache(); sheet3AutoSeed(); }
         }
 
         function sheet3AutoSeed() {
@@ -2461,6 +2472,7 @@
                 // Fire background writes — don't block render
                 names.forEach((name, slot) => sheet3UpsertSlot(gid, slot, name));
             });
+            sheet3CacheStagedRefs();
         }
 
         function sheet3SlideQueue(gid, removedSlot) {
@@ -2468,6 +2480,7 @@
             const oldLen = queue.length;
             queue.splice(removedSlot, 1);
             sheet3StagedRefs[gid] = queue;
+            sheet3CacheStagedRefs();
             // Slide roles left
             const newRoles = {};
             Object.keys(sheet3OptRoles).forEach(key => {
@@ -3470,6 +3483,7 @@
                 sheet3ClearAssignedCell(fromGid, fromField);
                 sheet3UpsertSlot(toGid, toSlot, name);
             }
+            sheet3CacheStagedRefs();
         }
 
         function sheet3OptClear(e, gid, slot) {
