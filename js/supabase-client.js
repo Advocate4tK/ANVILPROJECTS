@@ -233,6 +233,12 @@ class SupabaseClientWrapper {
                 }
             }
 
+            // For availability: always sort newest submissions first so new records are
+            // never cut off by the row limit when the table grows past maxRecords.
+            if (tbl === 'availability') {
+                query = query.order('created_at', { ascending: false });
+            }
+
             if (options.maxRecords) {
                 query = query.limit(options.maxRecords);
             }
