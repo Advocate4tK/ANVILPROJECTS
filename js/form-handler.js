@@ -248,13 +248,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
 
-            if (startTime && endTime) {
-                const start = new Date(`2000-01-01T${startTime}`);
-                const end = new Date(`2000-01-01T${endTime}`);
-                if (end <= start) {
-                    showMessage('error', `Day ${dayNum}: End time must be after start time.`);
-                    return false;
-                }
+            if (!startTime) {
+                showMessage('error', `Day ${dayNum}: Please select a start time.`);
+                return false;
+            }
+            if (!endTime) {
+                showMessage('error', `Day ${dayNum}: Please select an end time.`);
+                return false;
+            }
+            const start = new Date(`2000-01-01T${startTime}`);
+            const end = new Date(`2000-01-01T${endTime}`);
+            if (end <= start) {
+                showMessage('error', `Day ${dayNum}: End time must be after start time.`);
+                return false;
             }
         }
 
