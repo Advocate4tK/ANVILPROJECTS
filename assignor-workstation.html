@@ -2326,6 +2326,12 @@
             renderSheet3View(sheet3LastFiltered);
         }
 
+        function sheet3RefShowCol(key) {
+            sheet3RefHiddenCols = sheet3RefHiddenCols.filter(k => k !== key);
+            sheet3SaveLocalState();
+            renderSheet3View(sheet3LastFiltered);
+        }
+
         function sheet3RefShowAllCols() {
             sheet3RefHiddenCols = [];
             sheet3SaveLocalState();
@@ -2756,6 +2762,8 @@
             const fmt  = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
             const cell = 'border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; color:#1f2328; white-space:nowrap;';
             const hdr  = 'border:1px solid #d0d7de; padding:5px 8px; font-size:0.73rem; font-weight:700; color:#1f2328; background:#f0f3f6; text-align:left; white-space:nowrap;';
+            const refStubTd = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:0; background:#eef0f3;';
+            const refStubTh = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:4px 2px; background:#e8eaed; cursor:pointer; text-align:center; font-size:0.65rem; color:#888;';
 
             // Build dynamic opt columns based on current max queue length
             const optKeys = Array.from({ length: sheet3MaxQueueLen }, (_, i) => `opt${i}`);
@@ -3207,28 +3215,29 @@
                             onmouseenter="showRefTooltip('${safeName}', this, event)"
                             onmouseleave="hideRefTooltip()">
                             <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's schedule">${r.name}${countBadge}</td>
-                            ${sheet3RefHiddenCols.includes('refPref')     ? '' : `<td style="${cell} text-align:center;">${posLabel(r.position)}</td>`}
-                            ${sheet3RefHiddenCols.includes('refExp')      ? '' : `<td style="${cell} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">${certYrToExp(r.exp, true)}</td>`}
-                            ${sheet3RefHiddenCols.includes('refAgeCap')   ? '' : `<td style="${cell} font-size:0.72rem;">${ageCapLabel(r.ageCap)}</td>`}
-                            ${sheet3RefHiddenCols.includes('refSitePref') ? '' : `<td style="${cell} font-size:0.72rem;">${siteDisplay}</td>`}
-                            ${sheet3RefHiddenCols.includes('refNotes')    ? '' : `<td style="${cell} font-size:0.72rem; white-space:nowrap; cursor:${r.notes && r.notes.length > 30 ? 'pointer' : 'default'};" onclick="if(this.querySelector('.tm-notes-full')){const d=this.querySelector('.tm-notes-full');d.style.display=d.style.display==='none'?'block':'none';}">
+                            ${sheet3RefHiddenCols.includes('refPref')     ? `<td style="${refStubTd}"></td>` : `<td style="${cell} text-align:center;">${posLabel(r.position)}</td>`}
+                            ${sheet3RefHiddenCols.includes('refExp')      ? `<td style="${refStubTd}"></td>` : `<td style="${cell} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">${certYrToExp(r.exp, true)}</td>`}
+                            ${sheet3RefHiddenCols.includes('refAgeCap')   ? `<td style="${refStubTd}"></td>` : `<td style="${cell} font-size:0.72rem;">${ageCapLabel(r.ageCap)}</td>`}
+                            ${sheet3RefHiddenCols.includes('refSitePref') ? `<td style="${refStubTd}"></td>` : `<td style="${cell} font-size:0.72rem;">${siteDisplay}</td>`}
+                            ${sheet3RefHiddenCols.includes('refNotes')    ? `<td style="${refStubTd}"></td>` : `<td style="${cell} font-size:0.72rem; white-space:nowrap; cursor:${r.notes && r.notes.length > 30 ? 'pointer' : 'default'};" onclick="if(this.querySelector('.tm-notes-full')){const d=this.querySelector('.tm-notes-full');d.style.display=d.style.display==='none'?'block':'none';}">
                                 ${r.notes ? (r.notes.length <= 30
                                     ? `<span style="color:#856404;">${r.notes}</span>`
                                     : `<span style="color:#856404;">${r.notes.slice(0,30)}…</span><div class="tm-notes-full" style="display:none; white-space:normal; color:#856404; max-width:260px; margin-top:4px; font-size:0.71rem;">${r.notes}</div>`)
                                 : ''}</td>`}
-                            ${tmDays.map(d => sheet3RefHiddenCols.includes('refDay_' + d.date) ? '' : `<td style="${cell}">${fmtAvailSlots(r.avail[d.date])}</td>`).join('')}
+                            ${tmDays.map(d => sheet3RefHiddenCols.includes('refDay_' + d.date) ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${fmtAvailSlots(r.avail[d.date])}</td>`).join('')}
                         </tr>`;
                     }).join('') : `<tr><td colspan="${5 + tmDays.length}" style="${cell} color:#888;">No refs loaded.</td></tr>`;
 
                     const rHideX = key => `<span onclick="event.stopPropagation();sheet3RefHideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>`;
+                    const rShowStubTh = (key, label) => `<th style="${refStubTh}" onclick="sheet3RefShowCol('${key}')" title="Show ${label}">▶</th>`;
                     refsHeader = `<tr>
                         <th style="${hdr}">Name</th>
-                        ${sheet3RefHiddenCols.includes('refPref')     ? '' : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Pref Assignment${rHideX('refPref')}</span></th>`}
-                        ${sheet3RefHiddenCols.includes('refExp')      ? '' : `<th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}${rHideX('refExp')}</span></th>`}
-                        ${sheet3RefHiddenCols.includes('refAgeCap')   ? '' : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Age Cap${rHideX('refAgeCap')}</span></th>`}
-                        ${sheet3RefHiddenCols.includes('refSitePref') ? '' : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Site Pref${rHideX('refSitePref')}</span></th>`}
-                        ${sheet3RefHiddenCols.includes('refNotes')    ? '' : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Notes${rHideX('refNotes')}</span></th>`}
-                        ${tmDays.map(d => sheet3RefHiddenCols.includes('refDay_' + d.date) ? '' : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">${d.label.split(' ').slice(0,2).join(' ')}${rHideX('refDay_' + d.date)}</span></th>`).join('')}
+                        ${sheet3RefHiddenCols.includes('refPref')     ? rShowStubTh('refPref','Pref Assignment') : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Pref Assignment${rHideX('refPref')}</span></th>`}
+                        ${sheet3RefHiddenCols.includes('refExp')      ? rShowStubTh('refExp','Ref Exp')          : `<th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}${rHideX('refExp')}</span></th>`}
+                        ${sheet3RefHiddenCols.includes('refAgeCap')   ? rShowStubTh('refAgeCap','Age Cap')       : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Age Cap${rHideX('refAgeCap')}</span></th>`}
+                        ${sheet3RefHiddenCols.includes('refSitePref') ? rShowStubTh('refSitePref','Site Pref')   : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Site Pref${rHideX('refSitePref')}</span></th>`}
+                        ${sheet3RefHiddenCols.includes('refNotes')    ? rShowStubTh('refNotes','Notes')          : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Notes${rHideX('refNotes')}</span></th>`}
+                        ${tmDays.map(d => sheet3RefHiddenCols.includes('refDay_' + d.date) ? rShowStubTh('refDay_'+d.date, d.label.split(' ').slice(0,2).join(' ')) : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">${d.label.split(' ').slice(0,2).join(' ')}${rHideX('refDay_' + d.date)}</span></th>`).join('')}
                     </tr>`;
                     refsFooter = `${sheet3CachedRefRows.length} refs`;
 
@@ -3281,27 +3290,30 @@
                         ondragstart="sheet3RefDragStart(event,'${safeName}')"
                         onmouseenter="showRefTooltip('${safeName}', this, event)"
                         onmouseleave="hideRefTooltip()">
-                        ${sheet3RefHiddenCols.includes('clubDate')  ? '' : `<td style="${cell}">${r.date}</td>`}
+                        ${sheet3RefHiddenCols.includes('clubDate')  ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${r.date}</td>`}
                         <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's assignments">${r.name}${countBadge}</td>
-                        ${sheet3RefHiddenCols.includes('clubExp')   ? '' : `<td style="${cell}">${fmtExp(r.exp, true)}</td>`}
-                        ${sheet3RefHiddenCols.includes('clubClub')  ? '' : `<td style="${cell}">${r.club}</td>`}
-                        ${sheet3RefHiddenCols.includes('clubStart') ? '' : `<td style="${cell}">${fmt(r.start)}</td>`}
-                        ${sheet3RefHiddenCols.includes('clubEnd')   ? '' : `<td style="${cell}">${fmt(r.end)}</td>`}
-                        ${sheet3RefHiddenCols.includes('clubNotes') ? '' : `<td style="${cell} font-size:0.72rem; color:#856404; width:220px; white-space:nowrap;">${r.notes && !shownNoteFor.has(r.name) ? (shownNoteFor.add(r.name), r.notes) : ''}</td>`}
+                        ${sheet3RefHiddenCols.includes('clubExp')   ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${fmtExp(r.exp, true)}</td>`}
+                        ${sheet3RefHiddenCols.includes('clubClub')  ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${r.club}</td>`}
+                        ${sheet3RefHiddenCols.includes('clubStart') ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${fmt(r.start)}</td>`}
+                        ${sheet3RefHiddenCols.includes('clubEnd')   ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${fmt(r.end)}</td>`}
+                        ${sheet3RefHiddenCols.includes('clubNotes') ? `<td style="${refStubTd}"></td>` : `<td style="${cell} font-size:0.72rem; color:#856404; width:220px; white-space:nowrap;">${r.notes && !shownNoteFor.has(r.name) ? (shownNoteFor.add(r.name), r.notes) : ''}</td>`}
                     </tr>`;
                 }).join('') : `<tr><td colspan="6" style="${cell} color:#888;">No availability submitted.</td></tr>`;
                 const displayRefRows = sheet3RefClubFilter ? refRows.filter(r => r.club === sheet3RefClubFilter) : refRows;
                 refRowsHtml = buildRefRowsHtml(displayRefRows);
                 const cHideX = key => `<span onclick="event.stopPropagation();sheet3RefHideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>`;
-                const clubColHeader = sheet3RefHiddenCols.includes('clubClub') ? '' : `<th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3CycleRefClubFilter()" title="Click to filter by club preference"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Club Preference <span style="background:${sheet3RefClubFilter?'#e3f0ff':'#f0ece6'};color:${sheet3RefClubFilter?'#0f3460':'#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${sheet3RefClubFilter||'All'}</span>${cHideX('clubClub')}</span></th>`;
+                const cShowStubTh = (key, label) => `<th style="${refStubTh}" onclick="sheet3RefShowCol('${key}')" title="Show ${label}">▶</th>`;
+                const clubColHeader = sheet3RefHiddenCols.includes('clubClub')
+                    ? cShowStubTh('clubClub', 'Club Preference')
+                    : `<th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3CycleRefClubFilter()" title="Click to filter by club preference"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Club Preference <span style="background:${sheet3RefClubFilter?'#e3f0ff':'#f0ece6'};color:${sheet3RefClubFilter?'#0f3460':'#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${sheet3RefClubFilter||'All'}</span>${cHideX('clubClub')}</span></th>`;
                 refsHeader = `<tr>
-                    ${sheet3RefHiddenCols.includes('clubDate')  ? '' : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Date${cHideX('clubDate')}</span></th>`}
+                    ${sheet3RefHiddenCols.includes('clubDate')  ? cShowStubTh('clubDate','Date')   : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Date${cHideX('clubDate')}</span></th>`}
                     <th style="${hdr}">Name</th>
-                    ${sheet3RefHiddenCols.includes('clubExp')   ? '' : `<th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}${cHideX('clubExp')}</span></th>`}
+                    ${sheet3RefHiddenCols.includes('clubExp')   ? cShowStubTh('clubExp','Ref Exp') : `<th style="${hdr} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}${cHideX('clubExp')}</span></th>`}
                     ${clubColHeader}
-                    ${sheet3RefHiddenCols.includes('clubStart') ? '' : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Start${cHideX('clubStart')}</span></th>`}
-                    ${sheet3RefHiddenCols.includes('clubEnd')   ? '' : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">End${cHideX('clubEnd')}</span></th>`}
-                    ${sheet3RefHiddenCols.includes('clubNotes') ? '' : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Notes${cHideX('clubNotes')}</span></th>`}
+                    ${sheet3RefHiddenCols.includes('clubStart') ? cShowStubTh('clubStart','Start') : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Start${cHideX('clubStart')}</span></th>`}
+                    ${sheet3RefHiddenCols.includes('clubEnd')   ? cShowStubTh('clubEnd','End')     : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">End${cHideX('clubEnd')}</span></th>`}
+                    ${sheet3RefHiddenCols.includes('clubNotes') ? cShowStubTh('clubNotes','Notes') : `<th style="${hdr}"><span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Notes${cHideX('clubNotes')}</span></th>`}
                 </tr>`;
                 refsFooter = `${displayRefRows.length}${displayRefRows.length !== refRows.length ? ` of ${refRows.length}` : ''} records`;
                 } // end club ref pane
