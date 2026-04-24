@@ -2454,8 +2454,10 @@
                     });
                 });
                 // Collect unique available ref names for this date — skip already-assigned refs,
-                // and only include refs whose club preference matches this game's club
+                // only include refs whose club preference matches this game's club,
+                // and whose availability window covers the game time
                 const gameClubLower = (g.fields['Source Club'] || '').toLowerCase();
+                const gameTime = g.fields['Time'] || '';
                 const seen = new Set();
                 const names = [];
                 allAvail.forEach(a => {
@@ -2467,6 +2469,12 @@
                         const ref = refLookupByName[name.toLowerCase()];
                         const prefs = parsePreferences(ref?.fields['Club Preference'] || '');
                         if (!prefs.some(p => p.toLowerCase() === gameClubLower)) return;
+                    }
+                    if (gameTime) {
+                        const slot = availTimeByName[name.toLowerCase()]?.[gameDate];
+                        if (slot && slot.start && slot.end) {
+                            if (gameTime < slot.start || gameTime > slot.end) return;
+                        }
                     }
                     seen.add(name.toLowerCase());
                     names.push(name);
