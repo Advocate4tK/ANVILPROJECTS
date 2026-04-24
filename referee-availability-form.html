@@ -171,6 +171,16 @@
                         <button type="button" id="notMeBtn" style="margin-top:10px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:white; border-radius:8px; padding:4px 12px; font-size:0.8rem; cursor:pointer;">Not me?</button>
                     </div>
 
+                    <!-- Prior availability panel — shown when ref has existing submissions -->
+                    <div id="priorAvailPanel" style="display:none; background:#fff; border:2px solid #0f3460; border-radius:12px; padding:20px 25px; margin-bottom:20px;">
+                        <div style="font-size:1rem; font-weight:700; color:#0f3460; margin-bottom:12px;">📋 You already have availability on file:</div>
+                        <div id="priorAvailList" style="font-size:0.9rem; color:#333; line-height:2; margin-bottom:16px;"></div>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                            <button type="button" id="priorUpdateBtn" style="background:#0f3460; color:white; border:none; border-radius:8px; padding:9px 22px; font-size:0.9rem; font-weight:700; cursor:pointer;">Update My Availability</button>
+                            <button type="button" id="priorDoneBtn" style="background:#00c853; color:#09142a; border:none; border-radius:8px; padding:9px 22px; font-size:0.9rem; font-weight:700; cursor:pointer;">That's Correct — I'm Done ✓</button>
+                        </div>
+                    </div>
+
                     <!-- Option 2: New referee — no profile found -->
                     <div id="newRefWelcome" style="display:none; background:#fff8e1; border:2px solid #f1c40f; border-radius:12px; padding:20px 25px; margin-bottom:20px;">
                         <div style="font-size:1.1rem; font-weight:700; color:#0f3460;">👋 Welcome! You're not in our system yet.</div>
@@ -749,6 +759,53 @@
                 container.appendChild(createDayRow(count));
             });
 
+            // Check for prior availability — show panel if found, go straight to form if not
+            async function showPriorAvailability(refName) {
+                const records = await supabaseClient.getUpcomingAvailability(refName);
+                if (records.length === 0) {
+                    unlockAvailability();
+                    return;
+                }
+
+                const fmtDate = iso => {
+                    const d = new Date(iso + 'T12:00:00');
+                    return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+                };
+                const fmtTime = t => {
+                    if (!t) return '';
+                    const [h, m] = t.split(':').map(Number);
+                    const ampm = h >= 12 ? 'PM' : 'AM';
+                    return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`;
+                };
+
+                // De-dupe by date, show one row per date
+                const seen = new Set();
+                const lines = records
+                    .filter(r => { const d = r.fields['Date'] || r.fields['date']; if (seen.has(d)) return false; seen.add(d); return !!d; })
+                    .map(r => {
+                        const d    = r.fields['Date'] || r.fields['date'];
+                        const st   = fmtTime(r.fields['Start Time'] || '');
+                        const et   = fmtTime(r.fields['End Time'] || '');
+                        const club = r.fields['Preferred Locations'] || '';
+                        return `<div style="padding:4px 0; border-bottom:1px solid #eee;">📅 <strong>${fmtDate(d)}</strong> &nbsp;·&nbsp; ${st}${et ? ' – ' + et : ''}${club ? ' &nbsp;·&nbsp; ' + club : ''}</div>`;
+                    });
+
+                document.getElementById('priorAvailList').innerHTML = lines.join('');
+                document.getElementById('priorAvailPanel').style.display = 'block';
+
+                document.getElementById('priorDoneBtn').onclick = () => {
+                    window.location.href = 'submitted.html';
+                };
+                document.getElementById('priorUpdateBtn').onclick = async () => {
+                    // Delete all existing future availability for this ref, then open form
+                    document.getElementById('priorAvailPanel').style.display = 'none';
+                    for (const rec of records) {
+                        await supabaseClient.deleteRecord('Availability', rec.id);
+                    }
+                    unlockAvailability();
+                };
+            }
+
             // Reveal the availability section with a fade
             function unlockAvailability() {
                 const sec = document.getElementById('availabilitySection');
@@ -970,11 +1027,11 @@
                             document.getElementById('availabilitySection').style.display = 'none';
                             document.getElementById('availabilitySection').style.opacity = '0';
                         } else {
-                            // Complete profile — skip contact step, go straight to availability
+                            // Complete profile — check for prior availability first
                             document.getElementById('welcomeName').textContent    = `🎉 Welcome back, ${fullName}!`;
                             document.getElementById('welcomeSubtitle').textContent = '✅ We found your profile — your personal information has been confirmed and pre-filled. Just fill in your availability below.';
                             document.getElementById('contactSection').style.display = 'none';
-                            unlockAvailability();
+                            await showPriorAvailability(fullName);
                         }
 
                     } else {
