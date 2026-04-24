@@ -15,7 +15,6 @@
     // Read email directly from the stored session token — no DB call, no race condition
     const session = _getSupabaseSession();
     const sessionEmail = (session?.user?.email || '').toLowerCase();
-    console.log('CA gate — session email:', sessionEmail);
     if (sessionEmail === 'nectassignor@gmail.com') return; // Tod — always allowed
 
     // For everyone else check Admin role — fail open so Admin isn't locked out by a query error
