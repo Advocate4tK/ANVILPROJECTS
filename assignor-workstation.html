@@ -5856,7 +5856,15 @@
         function parsePreferences(raw) {
             if (!raw) return [];
             if (Array.isArray(raw)) return raw.map(s => s.trim()).filter(Boolean);
-            return String(raw).split(',').map(s => s.trim()).filter(Boolean);
+            const s = String(raw).trim();
+            // Handle JSON array notation e.g. '["Griswold"]' stored as text in Airtable
+            if (s.startsWith('[')) {
+                try {
+                    const parsed = JSON.parse(s);
+                    if (Array.isArray(parsed)) return parsed.map(x => String(x).trim()).filter(Boolean);
+                } catch(e) {}
+            }
+            return s.split(',').map(x => x.trim()).filter(Boolean);
         }
 
         function renderRefs(query) {
@@ -5886,21 +5894,9 @@
             const timeFilter   = document.getElementById('timeFilter').value || gameTimeFilter;
             const genderFilter = document.getElementById('genderFilter').value;
 
-            if (window._connorDebug !== 'done') {
-                window._connorDebug = 'done';
-                console.log('[Connor debug] assignorClubRestriction:', assignorClubRestriction);
-                console.log('[Connor debug] showAllRefs:', showAllRefs);
-                console.log('[Connor debug] visibleGameDates:', [...visibleGameDates]);
-                console.log('[Connor debug] loadedDateFrom:', loadedDateFrom, 'loadedDateTo:', loadedDateTo);
-                const ck = [...Object.keys(availByName)].filter(k => k.includes('connor'));
-                console.log('[Connor debug] availByName connor keys:', ck, ck.map(k => [...availByName[k]]));
-                const rk = [...Object.keys(refLookupByName)].filter(k => k.includes('connor'));
-                console.log('[Connor debug] refLookupByName connor keys:', rk);
-            }
             const filtered = allRefs.filter(r => {
                 const name  = (r.fields['Name']  || '').trim().replace(/\s+/g, ' ').toLowerCase();
                 const email = (r.fields['Email'] || '').toLowerCase();
-                if (name.includes('connor')) console.log('[Connor filter]', name, '| query:', query, '| passes name?', !query || name.includes(query));
                 if (query && !name.includes(query) && !email.includes(query)) return false;
                 // Club preference gate: only show refs who listed a matching club.
                 // Refs with no preference set are hidden — use "Show all refs" to override.
@@ -5934,15 +5930,12 @@
                     const refPrefs = parsePreferences(r.fields['Club Preference'] || '');
                     if (refPrefs.length > 0) {
                         const matchesClub = refPrefs.some(p => assignorClubRestriction.some(c => c.toLowerCase() === p.toLowerCase()));
-                        if (name.includes('connor')) console.log('[Connor] club pref fail:', refPrefs, 'vs', assignorClubRestriction, 'match:', matchesClub);
                         if (!matchesClub) return false;
                     }
                     const refDates = availByName[refName];
-                    if (name.includes('connor')) console.log('[Connor] refDates:', refDates ? [...refDates] : null);
-                    if (!refDates) { if (name.includes('connor')) console.log('[Connor] FILTERED: no refDates'); return false; }
+                    if (!refDates) return false;
                     const hasDateInRange = [...refDates].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo));
-                    if (name.includes('connor')) console.log('[Connor] hasDateInRange:', hasDateInRange);
-                    if (!hasDateInRange) { if (name.includes('connor')) console.log('[Connor] FILTERED: date out of range'); return false; }
+                    if (!hasDateInRange) return false;
                 }
 
                 // When searching by name or Override is on, skip availability filters
@@ -5961,11 +5954,9 @@
                         // skip when a specific game is selected (classify() handles coloring)
                         // skip when assignorClubRestriction already gated on date range above
                         const refDates = availByName[refName];
-                        if (name.includes('connor')) console.log('[Connor] visibleDates path | refDates:', refDates ? [...refDates] : null, '| visibleGameDates:', [...visibleGameDates]);
-                        if (!refDates || refDates.size === 0) { if (name.includes('connor')) console.log('[Connor] FILTERED: no refDates (visibleDates path)'); return false; }
+                        if (!refDates || refDates.size === 0) return false;
                         const matchingDates = [...visibleGameDates].filter(d => refDates.has(d));
-                        if (name.includes('connor')) console.log('[Connor] matchingDates:', matchingDates);
-                        if (matchingDates.length === 0) { if (name.includes('connor')) console.log('[Connor] FILTERED: no matching dates'); return false; }
+                        if (matchingDates.length === 0) return false;
                         if (timeFilter) {
                             const hasTime = matchingDates.some(d => {
                                 const slot = availTimeByName[refName]?.[d];
