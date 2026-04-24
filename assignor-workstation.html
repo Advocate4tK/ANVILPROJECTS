@@ -5147,7 +5147,6 @@
                 avail.forEach(a => {
                     const name = normName(a.fields['Referee Name']);
                     const date = a.fields['Date'];
-                    if (name.includes('tod')) console.log('[AVAIL BUILD] key:', JSON.stringify(name), 'date:', JSON.stringify(date), 'rawName:', JSON.stringify(a.fields['Referee Name']));
                     if (!name || !date) return;
                     if (!availByName[name]) availByName[name] = new Set();
                     availByName[name].add(date);
@@ -5217,7 +5216,6 @@
                     changeLink.style.display = 'inline-block';
                 }
                 allRefs   = refs;
-                console.log('[DEBUG] allRefs count:', allRefs.length, '| Tod in allRefs:', allRefs.some(r => (r.fields['Name']||'').toLowerCase().includes('tod')), '| Tod avail:', avail.some(a => (a.fields['Referee Name']||'').toLowerCase().includes('tod')));
                 allAvail  = avail;
                 allVenues = venues
                     .map(v => {
@@ -5979,8 +5977,7 @@
             const filtered = allRefs.filter(r => {
                 const name  = (r.fields['Name']  || '').trim().replace(/\s+/g, ' ').toLowerCase();
                 const email = (r.fields['Email'] || '').toLowerCase();
-                const _isTod = name.includes('tod smith');
-                if (query && !name.includes(query) && !email.includes(query)) { if(_isTod) console.log('[TOD] filtered by query'); return false; }
+                if (query && !name.includes(query) && !email.includes(query)) return false;
                 // Club preference gate: only show refs who listed a matching club.
                 // Refs with no preference set are hidden — use "Show all refs" to override.
                 // Also check what the ref put on their availability form (Preferred Locations).
@@ -5988,7 +5985,7 @@
                     const prefs = parsePreferences(r.fields['Club Preference']);
                     const availFormClubs = Object.values(availTimeByName[name] || {}).flatMap(slot => slot.clubs || []);
                     const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availFormClubs])];
-                    if (!merged.some(p => focusClubs.includes(p))) { if(_isTod) console.log('[TOD] filtered by club. prefs:', prefs, 'availFormClubs:', availFormClubs, 'focusClubs:', focusClubs); return false; }
+                    if (!merged.some(p => focusClubs.includes(p))) return false;
                 }
                 if (yearsFilter !== 'any') {
                     const yrs = parseYrs(r.fields['Years Reffing'], -1);
@@ -6007,7 +6004,7 @@
                     if (ageFilter === '26-35' && (age < 26 || age > 35)) return false;
                     if (ageFilter === '36+'   && age < 36)              return false;
                 }
-                if (genderFilter && r.fields['Gender'] !== genderFilter) { if(_isTod) console.log('[TOD] filtered by gender. genderFilter:', genderFilter, 'his gender:', r.fields['Gender']); return false; }
+                if (genderFilter && r.fields['Gender'] !== genderFilter) return false;
                 const refName = (r.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
                 // Club scoping: restricted assignors only see refs who (a) prefer their clubs AND (b) submitted availability for the loaded dates
@@ -6062,7 +6059,6 @@
                     : availByName[name]
                         ? [...availByName[name]].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo))
                         : false;
-                if (name.includes('tod smith')) console.log('[CLASSIFY] name:', JSON.stringify(name), '| gameDate:', gameDate, '| availByName key exists:', !!availByName[name], '| availByName keys with tod:', Object.keys(availByName).filter(k => k.includes('tod')), '| hasAvail:', hasAvail);
                 const hasConflict = gameDT && assignedAt[r.id] ?
                     [...(assignedAt[r.id].get(gameDT) || [])].filter(gid => !selectedGame || gid !== selectedGame.id).length > 0
                     : false;
@@ -6115,9 +6111,6 @@
 
             // Hide no-availability refs entirely unless override is on
             const displayRefs = showAllRefs ? filtered : filtered.filter(r => classify(r) !== 3);
-            const todInFiltered = filtered.some(r => (r.fields['Name']||'').toLowerCase().includes('tod smith'));
-            const todInDisplay  = displayRefs.some(r => (r.fields['Name']||'').toLowerCase().includes('tod smith'));
-            if (todInFiltered || todInDisplay) console.log('[TOD] filtered:', todInFiltered, '| display:', todInDisplay, '| showAllRefs:', showAllRefs, '| classify:', todInFiltered ? classify(filtered.find(r=>(r.fields['Name']||'').toLowerCase().includes('tod smith'))) : 'n/a', '| gameDate:', gameDate, '| visibleDates:', [...visibleGameDates]);
 
             if (!displayRefs.length) {
                 wrap.innerHTML = showAllRefs

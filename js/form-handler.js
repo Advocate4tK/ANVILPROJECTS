@@ -95,6 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const dayRows = document.querySelectorAll('.day-row');
+            if (!dayRows.length) throw new Error('No availability dates found — please add at least one date before submitting.');
 
             // Create one availability record per day
             const submissions = [];
