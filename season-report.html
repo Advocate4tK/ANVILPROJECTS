@@ -144,6 +144,17 @@
         </footer>
     </div>
 
+    <!-- Ref game detail modal -->
+    <div id="refModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:#fff; border-radius:12px; width:100%; max-width:760px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,0.3);">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #e0e0e0;">
+                <h3 id="refModalName" style="margin:0; color:#0f3460; font-size:1rem;"></h3>
+                <button onclick="document.getElementById('refModal').style.display='none'" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:#888; line-height:1;">✕</button>
+            </div>
+            <div id="refModalBody" style="overflow-y:auto; padding:16px 20px;"></div>
+        </div>
+    </div>
+
     <script src="config.js"></script>
     <script src="js/admin-auth.js"></script>
     <script>checkAdminAccess();</script>
@@ -236,6 +247,7 @@
 
         // ── Generate report ────────────────────────────────────────────────────
         let reportData = [];
+        let lastFilteredGames = [];
 
         document.getElementById('runBtn').addEventListener('click', async () => {
             if (!airtableClient) { alert('Database not connected.'); return; }
@@ -327,10 +339,12 @@
 
                 document.getElementById('progressBar').style.width = '100%';
 
+                lastFilteredGames = filteredGames;
+
                 if (reportData.length === 0) {
                     document.getElementById('noDataMsg').style.display = 'block';
                 } else {
-                    renderReport(range.label, filteredGames.length, reportData, recCount, compCount, crCounts, ar1Counts, ar2Counts);
+                    renderReport(range.label, filteredGames.length, reportData, recCount, compCount, refLookup);
                     document.getElementById('reportSection').style.display = 'block';
                 }
 
@@ -345,8 +359,7 @@
         });
 
         // ── Render ─────────────────────────────────────────────────────────────
-        function renderReport(label, totalGames, rows, recCount, compCount) {
-            // signature accepts extra args but ignores them — breakdown is on each row object
+        function renderReport(label, totalGames, rows, recCount, compCount, refLookup) {
             document.getElementById('reportTitle').textContent = `${label} — Referee Game Counts`;
 
             const summaryRow = document.getElementById('summaryRow');
@@ -388,7 +401,7 @@
                 const barWidth = Math.round((total / rows[0].total) * 100);
                 html += `<tr>
                     <td><span class="rank-badge ${badgeClass}">${rank}</span></td>
-                    <td style="font-weight:600;">${name}</td>
+                    <td style="font-weight:600;"><span style="color:#0f3460; cursor:pointer; text-decoration:underline dotted;" onclick="showRefGames('${name.replace(/'/g,"\\'")}')">${name}</span></td>
                     <td>
                         <span class="stat-pill" style="background:#e8f4fd; color:#0f3460;">${total}</span>
                         <div style="background:#e0e0e0; border-radius:4px; height:6px; margin-top:5px; width:120px;">
@@ -404,6 +417,67 @@
 
             html += '</tbody>';
             document.getElementById('reportTable').innerHTML = html;
+        }
+
+        // ── Ref game detail modal ─────────────────────────────────────────────
+        function showRefGames(name) {
+            const nameLower = name.trim().toLowerCase();
+            const fmtDate = d => { const dt = new Date(d + 'T12:00:00'); return dt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }); };
+            const fmtTime = t => { if (!t) return '—'; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+
+            const rows = [];
+            lastFilteredGames.forEach(g => {
+                const f = g.fields;
+                [['Center Referee','CR'], ['AR 1','AR1'], ['AR 2','AR2']].forEach(([col, posLabel]) => {
+                    const val = f[col];
+                    if (!val) return;
+                    const vals = Array.isArray(val) ? val : [val];
+                    vals.forEach(v => {
+                        const refName = (typeof v === 'string' ? v : '').trim();
+                        if (refName.toLowerCase() !== nameLower) return;
+                        rows.push({
+                            date:  f['Date'] || '',
+                            time:  f['Time'] || '',
+                            home:  f['Home Team'] || '—',
+                            away:  f['Away Team'] || '—',
+                            age:   f['Age Group'] || f['age_group'] || '—',
+                            club:  f['Source Club'] || '—',
+                            pos:   posLabel
+                        });
+                    });
+                });
+            });
+
+            rows.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+
+            const posColor = p => p === 'CR' ? '#0f3460' : p === 'AR1' ? '#e74c3c' : '#27ae60';
+
+            let tableHtml = `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead><tr style="background:#0f3460; color:#fff;">
+                    <th style="padding:8px 10px; text-align:left;">Date</th>
+                    <th style="padding:8px 10px; text-align:left;">Time</th>
+                    <th style="padding:8px 10px; text-align:left;">Match</th>
+                    <th style="padding:8px 10px; text-align:left;">Age</th>
+                    <th style="padding:8px 10px; text-align:left;">Club</th>
+                    <th style="padding:8px 10px; text-align:center;">Role</th>
+                </tr></thead><tbody>`;
+
+            rows.forEach((r, i) => {
+                tableHtml += `<tr style="background:${i%2===0?'#fff':'#f5f7fa'};">
+                    <td style="padding:7px 10px;">${r.date ? fmtDate(r.date) : '—'}</td>
+                    <td style="padding:7px 10px;">${fmtTime(r.time)}</td>
+                    <td style="padding:7px 10px; font-weight:600;">${r.home} vs ${r.away}</td>
+                    <td style="padding:7px 10px;">${r.age}</td>
+                    <td style="padding:7px 10px;">${r.club}</td>
+                    <td style="padding:7px 10px; text-align:center;"><span style="background:${posColor(r.pos)}; color:#fff; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:700;">${r.pos}</span></td>
+                </tr>`;
+            });
+
+            tableHtml += '</tbody></table>';
+
+            document.getElementById('refModalName').textContent = `${name} — ${rows.length} game${rows.length !== 1 ? 's' : ''}`;
+            document.getElementById('refModalBody').innerHTML = rows.length ? tableHtml : '<p style="color:#888; text-align:center; padding:20px;">No games found.</p>';
+            document.getElementById('refModal').style.display = 'flex';
         }
 
         // ── Download CSV ───────────────────────────────────────────────────────
