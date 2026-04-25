@@ -1359,7 +1359,9 @@
                 updateWorkstationCard(totalWeekendGames, totalAssigned, totalUnassigned, urgent);
 
 
-                // Heat meter — parse dates as local time (T00:00:00) to avoid UTC midnight offset
+                // Heat meter — compare against start-of-today so games with no time
+                // (parsed as midnight) aren't falsely excluded by d >= now.
+                const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                 const in7Hours  = new Date(now.getTime() + 7  * 60 * 60 * 1000);
                 const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
                 const in72Hours = new Date(now.getTime() + 72 * 60 * 60 * 1000);
@@ -1368,11 +1370,11 @@
                 const isUnassignedGame = r => !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0);
                 const gameDate = r => new Date((r.fields['Date'] || '') + 'T00:00:00');
 
-                const has7h  = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in7Hours  && isUnassignedGame(r); });
-                const has24h = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in24Hours && isUnassignedGame(r); });
-                const has48h = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in48Hours && isUnassignedGame(r); });
-                const has72h = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in72Hours && isUnassignedGame(r); });
-                const has7d  = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in7Days   && isUnassignedGame(r); });
+                const has7h  = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in7Hours  && isUnassignedGame(r); });
+                const has24h = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in24Hours && isUnassignedGame(r); });
+                const has48h = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in48Hours && isUnassignedGame(r); });
+                const has72h = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in72Hours && isUnassignedGame(r); });
+                const has7d  = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in7Days   && isUnassignedGame(r); });
 
                 let heatColor, heatLabel, heatMsg;
                 if (has7h) {
