@@ -252,16 +252,23 @@
                     return (r.fields['game_type'] || 'Rec') === srGameType;
                 });
 
-                // Count games per referee (from filtered set)
+                // Count games per referee across all positions (CR, AR1, AR2)
                 const counts = {};
+                const crCounts  = {};
+                const ar1Counts = {};
+                const ar2Counts = {};
                 filteredGames.forEach(rec => {
                     const f = rec.fields;
-                    const centerRef = f['Center Referee'];
-                    if (!centerRef) return;
-                    const vals = Array.isArray(centerRef) ? centerRef : [centerRef];
-                    vals.forEach(val => {
-                        const name = refLookup[val] || refLookup[(val || '').toLowerCase()] || val;
-                        if (name) counts[name] = (counts[name] || 0) + 1;
+                    [['Center Referee', crCounts], ['AR 1', ar1Counts], ['AR 2', ar2Counts]].forEach(([pos, posMap]) => {
+                        const val = f[pos];
+                        if (!val) return;
+                        const vals = Array.isArray(val) ? val : [val];
+                        vals.forEach(v => {
+                            const name = refLookup[v] || refLookup[(v || '').toLowerCase()] || v;
+                            if (!name) return;
+                            counts[name]  = (counts[name]  || 0) + 1;
+                            posMap[name]  = (posMap[name]  || 0) + 1;
+                        });
                     });
                 });
 
@@ -271,14 +278,19 @@
 
                 reportData = Object.entries(counts)
                     .sort((a, b) => b[1] - a[1])
-                    .map(([name, total], i) => ({ rank: i + 1, name, total }));
+                    .map(([name, total], i) => ({
+                        rank: i + 1, name, total,
+                        cr:  crCounts[name]  || 0,
+                        ar1: ar1Counts[name] || 0,
+                        ar2: ar2Counts[name] || 0
+                    }));
 
                 document.getElementById('progressBar').style.width = '100%';
 
                 if (reportData.length === 0) {
                     document.getElementById('noDataMsg').style.display = 'block';
                 } else {
-                    renderReport(range.label, filteredGames.length, reportData, recCount, compCount);
+                    renderReport(range.label, filteredGames.length, reportData, recCount, compCount, crCounts, ar1Counts, ar2Counts);
                     document.getElementById('reportSection').style.display = 'block';
                 }
 
@@ -294,6 +306,7 @@
 
         // ── Render ─────────────────────────────────────────────────────────────
         function renderReport(label, totalGames, rows, recCount, compCount) {
+            // signature accepts extra args but ignores them — breakdown is on each row object
             document.getElementById('reportTitle').textContent = `${label} — Referee Game Counts`;
 
             const summaryRow = document.getElementById('summaryRow');
@@ -322,11 +335,14 @@
             let html = `<thead><tr>
                 <th>Rank</th>
                 <th>Referee</th>
-                <th>Games Worked</th>
+                <th>Total</th>
+                <th>CR</th>
+                <th>AR1</th>
+                <th>AR2</th>
                 <th>Share</th>
             </tr></thead><tbody>`;
 
-            rows.forEach(({ rank, name, total }) => {
+            rows.forEach(({ rank, name, total, cr, ar1, ar2 }) => {
                 const pct = ((total / totalGames) * 100).toFixed(1);
                 const badgeClass = rank <= 3 ? `rank-${rank}` : '';
                 const barWidth = Math.round((total / rows[0].total) * 100);
@@ -339,6 +355,9 @@
                             <div style="background:#e94560; height:6px; border-radius:4px; width:${barWidth}%;"></div>
                         </div>
                     </td>
+                    <td style="color:#555; font-size:13px;">${cr || '—'}</td>
+                    <td style="color:#555; font-size:13px;">${ar1 || '—'}</td>
+                    <td style="color:#555; font-size:13px;">${ar2 || '—'}</td>
                     <td style="color:#888; font-size:13px;">${pct}%</td>
                 </tr>`;
             });
@@ -351,9 +370,9 @@
         document.getElementById('downloadBtn').addEventListener('click', () => {
             if (!reportData.length) return;
             const label = document.getElementById('reportTitle').textContent.replace(' — Referee Game Counts', '');
-            let csv = 'Rank,Referee,Games Worked\n';
-            reportData.forEach(({ rank, name, total }) => {
-                csv += `${rank},"${name}",${total}\n`;
+            let csv = 'Rank,Referee,Total,CR,AR1,AR2\n';
+            reportData.forEach(({ rank, name, total, cr, ar1, ar2 }) => {
+                csv += `${rank},"${name}",${total},${cr},${ar1},${ar2}\n`;
             });
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
