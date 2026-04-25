@@ -93,6 +93,14 @@
                         </div>
                     </div>
 
+                    <!-- Club filter — assignors locked to their clubs; admins get selector -->
+                    <div class="form-group" id="clubFilterRow" style="display:none;">
+                        <label for="clubFilter" style="font-weight:600;">Club</label>
+                        <select id="clubFilter">
+                            <option value="">— All my clubs —</option>
+                        </select>
+                    </div>
+
                     <!-- Game type filter -->
                     <div class="form-group" style="margin-top:4px;">
                         <label style="font-weight:600; display:block; margin-bottom:6px;">Game Type</label>
@@ -144,7 +152,7 @@
     <script>var airtableClient = supabaseClient;</script>
     <script>
         // ── Club restriction — load assignor's clubs at init ──────────────────
-        let allowedClubs = null; // null = unrestricted (Admin)
+        let allowedClubs = null; // null = show club selector with no default filter
 
         (async function initClubRestriction() {
             try {
@@ -154,9 +162,37 @@
                 const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
                 if (!myRec) return;
                 const role = (myRec.fields['Role'] || 'Assignor').trim();
-                if (role === 'Admin') return; // unrestricted
                 const c = myRec.fields['Clubs'];
-                if (c) allowedClubs = Array.isArray(c) ? c.filter(Boolean) : [c];
+                const myClubs = c ? (Array.isArray(c) ? c.filter(Boolean) : [c]) : [];
+
+                // Populate club filter dropdown
+                const sel = document.getElementById('clubFilter');
+                const row = document.getElementById('clubFilterRow');
+
+                if (role === 'Admin') {
+                    // Admin sees all clubs — show selector so they can scope the report
+                    // Fetch distinct source clubs from games table
+                    const allGames = await supabaseClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 100 });
+                    const clubs = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))].sort();
+                    clubs.forEach(cl => {
+                        const opt = document.createElement('option');
+                        opt.value = cl; opt.textContent = cl;
+                        sel.appendChild(opt);
+                    });
+                    row.style.display = '';
+                } else {
+                    // Assignor — locked to their clubs, show selector to pick one or all
+                    allowedClubs = myClubs;
+                    if (myClubs.length > 1) {
+                        myClubs.forEach(cl => {
+                            const opt = document.createElement('option');
+                            opt.value = cl; opt.textContent = cl;
+                            sel.appendChild(opt);
+                        });
+                        row.style.display = '';
+                    }
+                    // Single club — no selector needed, filter applied silently
+                }
             } catch(e) { /* non-critical */ }
         })();
 
@@ -241,9 +277,13 @@
                     }
                 });
 
-                // Apply club restriction
-                const clubGames = allowedClubs
-                    ? games.filter(g => allowedClubs.includes(g.fields['Source Club'] || ''))
+                // Apply club restriction — dropdown selection takes priority
+                const selectedClub = document.getElementById('clubFilter')?.value;
+                const effectiveClubs = selectedClub
+                    ? [selectedClub]
+                    : allowedClubs;   // null = no restriction (admin with no selection)
+                const clubGames = effectiveClubs
+                    ? games.filter(g => effectiveClubs.includes(g.fields['Source Club'] || ''))
                     : games;
 
                 // Apply game type filter
