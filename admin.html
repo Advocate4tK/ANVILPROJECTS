@@ -1359,15 +1359,20 @@
                 updateWorkstationCard(totalWeekendGames, totalAssigned, totalUnassigned, urgent);
 
 
-                // Heat meter
+                // Heat meter — parse dates as local time (T00:00:00) to avoid UTC midnight offset
                 const in7Hours  = new Date(now.getTime() + 7  * 60 * 60 * 1000);
                 const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
                 const in72Hours = new Date(now.getTime() + 72 * 60 * 60 * 1000);
+                const in7Days   = new Date(now.getTime() + 7  * 24 * 60 * 60 * 1000);
 
-                const has7h  = scopedGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in7Hours && u; });
-                const has24h = scopedGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in24Hours && u; });
-                const has48h = scopedGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in48Hours && u; });
-                const has72h = scopedGames.some(r => { const d = new Date(r.fields['Date']); const u = !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0); return d >= now && d <= in72Hours && u; });
+                const isUnassignedGame = r => !r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0);
+                const gameDate = r => new Date((r.fields['Date'] || '') + 'T00:00:00');
+
+                const has7h  = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in7Hours  && isUnassignedGame(r); });
+                const has24h = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in24Hours && isUnassignedGame(r); });
+                const has48h = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in48Hours && isUnassignedGame(r); });
+                const has72h = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in72Hours && isUnassignedGame(r); });
+                const has7d  = scopedGames.some(r => { const d = gameDate(r); return d >= now && d <= in7Days   && isUnassignedGame(r); });
 
                 let heatColor, heatLabel, heatMsg;
                 if (has7h) {
@@ -1382,9 +1387,12 @@
                 } else if (has72h) {
                     heatColor = '#f1c40f'; heatLabel = '🟡 ATTENTION';
                     heatMsg = 'Unassigned games within the next 72 hours.';
+                } else if (has7d) {
+                    heatColor = '#3498db'; heatLabel = '🔵 PLAN AHEAD';
+                    heatMsg = 'Unassigned games coming up this week — get refs assigned.';
                 } else {
                     heatColor = '#27ae60'; heatLabel = '🟢 ALL CLEAR';
-                    heatMsg = 'No unassigned games in the next 72 hours.';
+                    heatMsg = 'No unassigned games in the next 7 days.';
                 }
 
                 const throbClass = (has7h || has24h) ? 'heat-throb' : '';
@@ -1782,7 +1790,11 @@
                     const sa = document.getElementById('cardSuperAdmin');
                     if (sa) sa.style.display = 'none';
                 }
-                if (role === 'Admin') return; // Admin sees everything (except Super Admin above)
+                if (role === 'Admin') {
+                    // Admin still scopes to their listed clubs if they have any
+                    if (clubs && clubs.length) adminUserClubs = clubs;
+                    return;
+                }
                 // Restrict non-Admin assignors
                 adminUserClubs = clubs;
                 const isEric = (myRec.fields['Email'] || '').toLowerCase() === 'ct.ref.assignor@gmail.com';
