@@ -985,26 +985,29 @@
         try {
             const clubName = allClubRecords.find(c => c.id === clubId)?.name || 'Unknown';
 
-            // Load venues linked to this club
-            const venues = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, {
-                filterByFormula: `FIND("${clubId}", ARRAYJOIN({Clubs}))`,
-                maxRecords: 200
-            });
+            // Load venues linked to this club (via club_name text column)
+            const { data: venueData, error: venueErr } = await supabaseClient.client
+                .from('venues').select('*').eq('club_name', clubName);
+            if (venueErr) throw new Error(venueErr.message);
+            const venues = venueData || [];
 
-            // Load fields linked to each venue
+            // Load fields linked to each venue (via shared CA Venue ID float)
             let totalFields = 0;
             const venueDetails = [];
             for (const v of venues) {
-                const fields = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, {
-                    filterByFormula: `FIND("${v.id}", ARRAYJOIN({Venue}))`,
-                    maxRecords: 200
-                });
+                let fields = [];
+                if (v['Venue ID']) {
+                    const { data: fieldData } = await supabaseClient.client
+                        .from('fields').select('id, "Field Name"')
+                        .filter('"Venue ID"', 'eq', v['Venue ID']);
+                    fields = fieldData || [];
+                }
                 totalFields += fields.length;
                 venueDetails.push({
                     id: v.id,
-                    name: v.fields['Venue Name'] || '(unnamed)',
+                    name: v['Venue Name'] || '(unnamed)',
                     fieldIds: fields.map(f => f.id),
-                    fieldNames: fields.map(f => f.fields['Field Name'] || '(unnamed)')
+                    fieldNames: fields.map(f => f['Field Name'] || '(unnamed)')
                 });
             }
 
@@ -1130,22 +1133,26 @@
         currentEl.style.display = 'block';
         document.getElementById('editCurrentVenuesList').innerHTML = 'Loading…';
         try {
-            const venues = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, {
-                filterByFormula: `FIND("${clubId}", ARRAYJOIN({Clubs}))`,
-                maxRecords: 200
-            });
+            const clubName = allClubRecords.find(c => c.id === clubId)?.name || '';
+            const { data: venueData, error: venueErr } = await supabaseClient.client
+                .from('venues').select('*').eq('club_name', clubName);
+            if (venueErr) throw new Error(venueErr.message);
+            const venues = venueData || [];
             if (venues.length === 0) {
                 document.getElementById('editCurrentVenuesList').innerHTML =
                     '<span style="color:#aaa; font-style:italic;">No venues linked yet.</span>';
             } else {
                 const rows = [];
                 for (const v of venues) {
-                    const fields = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, {
-                        filterByFormula: `FIND("${v.id}", ARRAYJOIN({Venue}))`,
-                        maxRecords: 200
-                    });
-                    const fNames = fields.map(f => f.fields['Field Name'] || '(unnamed)').join(', ') || 'no fields';
-                    rows.push(`<div style="margin-bottom:4px;">📍 <strong>${v.fields['Venue Name'] || '(unnamed)'}</strong> — ${fNames}</div>`);
+                    let fNames = 'no fields';
+                    if (v['Venue ID']) {
+                        const { data: fieldData } = await supabaseClient.client
+                            .from('fields').select('"Field Name"')
+                            .filter('"Venue ID"', 'eq', v['Venue ID']);
+                        const fList = (fieldData || []).map(f => f['Field Name'] || '(unnamed)');
+                        if (fList.length) fNames = fList.join(', ');
+                    }
+                    rows.push(`<div style="margin-bottom:4px;">📍 <strong>${v['Venue Name'] || '(unnamed)'}</strong> — ${fNames}</div>`);
                 }
                 document.getElementById('editCurrentVenuesList').innerHTML = rows.join('');
             }
