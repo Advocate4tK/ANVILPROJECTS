@@ -105,6 +105,24 @@
         }
         .unassign-btn:hover { color: #c0392b; }
 
+        /* ── Standard 2 ── */
+        .s2-slot.occupied .s2-unassign { opacity: 0; transition: opacity 0.15s; }
+        .s2-slot.occupied:hover .s2-unassign { opacity: 1; }
+        .s2-conf-btn {
+            position: absolute; bottom: 4px; right: 4px;
+            background: none; border: 1px solid #ccc; border-radius: 4px;
+            font-size: 0.62rem; font-weight: 700; cursor: pointer; padding: 1px 5px;
+            color: #999; line-height: 1.4; white-space: nowrap;
+        }
+        .s2-conf-btn:hover { border-color: #1e8449; color: #1e8449; }
+        .s2-conf-done { border-color: #1e8449 !important; color: #1e8449 !important; background: #e8f8ef !important; }
+        .s2-compact-row {
+            display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+            background: #f5fdf8; border: 1px solid #b7e4c7; border-radius: 8px;
+            margin-bottom: 5px; cursor: pointer; flex-wrap: wrap;
+        }
+        .s2-compact-row:hover { background: #eaf9f0; }
+
         /* ── Ref Cards ── */
         .ref-search { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.85rem; font-family: inherit; margin-bottom: 10px; }
         .ref-search:focus { outline: none; border-color: #e94560; }
@@ -809,6 +827,7 @@
                                     <option value="sheet"    style="color:#1a1a1a; background:white;">Sheet</option>
                                     <option value="sheet2"   style="color:#1a1a1a; background:white;">Sheet 2</option>
                                     <option value="sheet3"   style="color:#1a1a1a; background:white;">Sheet 3</option>
+                                    <option value="standard2"    style="color:#1a1a1a; background:white;">Standard 2</option>
                                     <option value="tournament"   style="color:#1a1a1a; background:white; display:none;">Tournament</option>
                                 </select></div>
                             </div>
@@ -4586,6 +4605,10 @@
         let dragSourceGameId    = null; // set when drag starts from a slot
         let dragSourcePosition  = null;
 
+        // ── Standard 2 — CA confirmed state ──────────────────────────────────
+        let caConfirmedMap  = {}; // gameId (string) → Set<position string>
+        let s2ExpandedGames = new Set(); // confirmed games manually expanded
+
         // ── Date quick-pick helpers ───────────────────────────────────────────
         function getWeekendDates(weeksAhead) {
             const today = new Date();
@@ -5225,6 +5248,7 @@
                     const db = `${b.fields['Date']}|${b.fields['Time'] || ''}`;
                     return da.localeCompare(db);
                 });
+                buildCAConfirmedMap();
                 // Merge Airtable club names + Source Club game values into the known list
                 const sourceClubs  = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
                 const airtableClubs = clubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
@@ -5574,6 +5598,10 @@
                 if (sheet3StagingLoaded) { renderSheet3View(filtered); } else { sheet3FetchStaging().then(() => renderSheet3View(filtered)); }
                 return;
             }
+            if (viewMode === 'standard2') {
+                renderStandard2View(filtered);
+                return;
+            }
 
             if (!filtered.length) {
                 wrap.innerHTML = '<p class="hint">No games for selected clubs/dates.</p>';
@@ -5792,6 +5820,274 @@
                     dragSourcePosition = null;
                 });
             });
+        }
+
+        // ── Standard 2 — CA Confirmed State ──────────────────────────────────────
+
+        function buildCAConfirmedMap() {
+            caConfirmedMap = {};
+            allGames.forEach(g => {
+                const pos = g.fields['ca_confirmed_positions'] || '';
+                const lsPos = (() => { try { return localStorage.getItem('caConf_' + g.id) || ''; } catch { return ''; } })();
+                const raw = pos || lsPos;
+                if (raw) caConfirmedMap[String(g.id)] = new Set(raw.split(',').map(p => p.trim()).filter(Boolean));
+            });
+        }
+
+        async function saveCAConfirmed(gameId) {
+            const positions = [...(caConfirmedMap[String(gameId)] || [])].join(',');
+            // Try DB first; fall back to localStorage if column not yet created
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'ca_confirmed_positions': positions });
+                const game = allGames.find(g => String(g.id) === String(gameId));
+                if (game) game.fields['ca_confirmed_positions'] = positions;
+            } catch {
+                try { localStorage.setItem('caConf_' + gameId, positions); } catch {}
+            }
+        }
+
+        async function toggleCAConfirmed(gameId, position, event) {
+            if (event) event.stopPropagation();
+            const gid = String(gameId);
+            if (!caConfirmedMap[gid]) caConfirmedMap[gid] = new Set();
+            const s = caConfirmedMap[gid];
+            if (s.has(position)) s.delete(position); else s.add(position);
+            await saveCAConfirmed(gid);
+            renderGames();
+        }
+
+        async function confirmAllCA(gameId, occupiedPositions, event) {
+            if (event) event.stopPropagation();
+            const gid = String(gameId);
+            if (!caConfirmedMap[gid]) caConfirmedMap[gid] = new Set();
+            occupiedPositions.forEach(p => caConfirmedMap[gid].add(p));
+            await saveCAConfirmed(gid);
+            renderGames();
+        }
+
+        async function unconfirmAllCA(gameId, event) {
+            if (event) event.stopPropagation();
+            const gid = String(gameId);
+            caConfirmedMap[gid] = new Set();
+            await saveCAConfirmed(gid);
+            renderGames();
+        }
+
+        function s2ToggleExpand(gameId, event) {
+            if (event) event.stopPropagation();
+            const gid = String(gameId);
+            if (s2ExpandedGames.has(gid)) s2ExpandedGames.delete(gid);
+            else s2ExpandedGames.add(gid);
+            renderGames();
+        }
+
+        function makeSlot2(gameId, position, label, refName, linkedIds) {
+            const confirmed = !!(caConfirmedMap[String(gameId)]?.has(position));
+            if (refName) {
+                const refId = typeof linkedIds === 'string'
+                    ? (refLookupByName[(refName || '').toLowerCase()]?.id || '')
+                    : (Array.isArray(linkedIds) && linkedIds.length > 0 ? linkedIds[0] : '');
+                const safeName = refName.replace(/'/g, "\\'");
+                const ref = refLookup[refId] || refLookupByName[(refName || '').toLowerCase()];
+                const yrsNum = ref ? parseYrs(ref.fields['Years Reffing'], 0) : 0;
+                const expColor = yrsNum === 0 ? '#e74c3c' : yrsNum === 1 ? '#27ae60' : yrsNum <= 3 ? '#f1c40f' : yrsNum <= 10 ? '#2980b9' : '#8e44ad';
+                const borderColor = confirmed ? '#1e8449' : expColor;
+                const borderStyle = `border-color:${borderColor};`;
+                const labelColor  = `color:${borderColor};`;
+                const confirmBg   = confirmed ? 'background:#e8f8ef;' : '';
+                const confirmBtn  = confirmed
+                    ? `<button class="s2-conf-btn s2-conf-done" onclick="toggleCAConfirmed('${gameId}','${position}',event)" title="Mark as NOT in CA">✓ CA</button>`
+                    : `<button class="s2-conf-btn" onclick="toggleCAConfirmed('${gameId}','${position}',event)" title="Mark as entered in CA">○ CA</button>`;
+                return `<div class="slot occupied s2-slot" draggable="true" data-game-id="${gameId}" data-position="${position}"
+                    style="${borderStyle} ${confirmBg}"
+                    ondragstart="onSlotDragStart(event, '${gameId}', '${position}', '${refId}', '${safeName}')"
+                    onmouseenter="showRefTooltip('${safeName}', this, event)"
+                    onmouseleave="hideRefTooltip()">
+                    <span class="slot-label" style="${labelColor}">${label}</span>
+                    <span style="display:flex;align-items:center;gap:5px;font-size:0.8rem;">${assignedCountBadge(refId)}${refName}</span>
+                    ${confirmBtn}
+                    <button class="unassign-btn s2-unassign" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
+                </div>`;
+            }
+            return `<div class="slot s2-slot" data-game-id="${gameId}" data-position="${position}">
+                <span class="slot-label">${label}</span>
+                <span>Drop ref here</span>
+            </div>`;
+        }
+
+        function renderStandard2View(games) {
+            const wrap = document.getElementById('gamesListWrap');
+            if (!games.length) { wrap.innerHTML = '<p class="hint">No games for selected clubs/dates.</p>'; return; }
+
+            // Progress summary
+            let totalGames = 0, confirmed = 0, planned = 0, unassigned = 0;
+            games.forEach(g => {
+                if (cancelledGameIds.has(g.id) || g.fields['Game Status'] === 'Cancelled') return;
+                totalGames++;
+                const f   = g.fields;
+                const age = f['Age Group'] || '';
+                const cRef = resolveRefName(f['Center Referee']);
+                const ar1  = resolveRefName(f['AR 1']);
+                const ar2  = resolveRefName(f['AR 2']);
+                const isU8 = age === 'U8';
+                const hideARs = (hideU8Games && isU8) || (hideU10Games && (age || '').startsWith('U10'));
+                const full = cRef && (hideARs || (ar1 && ar2));
+                const gid  = String(g.id);
+                const conf = caConfirmedMap[gid] || new Set();
+                const allConfirmed = full && (hideARs ? conf.has('Center Referee') : conf.has('Center Referee') && conf.has('AR 1') && conf.has('AR 2'));
+                if (allConfirmed) confirmed++;
+                else if (full) planned++;
+                else unassigned++;
+            });
+
+            const summaryBar = `<div style="position:sticky;top:0;z-index:20;background:#152d55;color:white;
+                padding:8px 14px;border-radius:8px;margin-bottom:12px;font-size:0.78rem;font-weight:700;
+                display:flex;gap:18px;align-items:center;flex-wrap:wrap;letter-spacing:0.3px;box-shadow:0 2px 8px rgba(0,0,0,0.2);">
+                <span style="opacity:0.7;">${totalGames} games</span>
+                <span style="color:#5dbd7d;">✓ ${confirmed} confirmed in CA</span>
+                <span style="color:#7eb8f7;">◉ ${planned} assigned — not yet in CA</span>
+                <span style="color:#f08080;">○ ${unassigned} unassigned</span>
+            </div>`;
+
+            // Render game cards grouped by date
+            let html = summaryBar;
+            let lastDate = null;
+
+            games.forEach(g => {
+                const f    = g.fields;
+                const gid  = String(g.id);
+                const date = f['Date'] || '';
+                const age  = f['Age Group'] || '';
+                const isCancelled = cancelledGameIds.has(g.id) || f['Game Status'] === 'Cancelled';
+                const isChangeReq = (f['Game Status'] || '') === 'Change Requested';
+                const cRef = resolveRefName(f['Center Referee']);
+                const ar1  = resolveRefName(f['AR 1']);
+                const ar2  = resolveRefName(f['AR 2']);
+                const hideARs = (hideU8Games && age === 'U8') || (hideU10Games && (age || '').startsWith('U10'));
+                const full = !isCancelled && cRef && (hideARs || (ar1 && ar2));
+                const conf = caConfirmedMap[gid] || new Set();
+                const posConfirmed = pos => conf.has(pos);
+                const allConf = full && (hideARs
+                    ? posConfirmed('Center Referee')
+                    : posConfirmed('Center Referee') && posConfirmed('AR 1') && posConfirmed('AR 2'));
+                const isExpanded = s2ExpandedGames.has(gid);
+
+                // Date divider
+                if (date !== lastDate && !isCancelled) {
+                    lastDate = date;
+                    if (date) {
+                        const [,m,d] = date.split('-');
+                        const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1];
+                        const dn = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(date + 'T12:00:00').getDay()];
+                        html += `<div style="background:#152d55;color:white;font-size:0.72rem;font-weight:800;
+                            letter-spacing:1.5px;padding:6px 12px;border-radius:6px;margin:10px 0 6px;
+                            text-transform:uppercase;">${dn} &nbsp;·&nbsp; ${mo} ${parseInt(d)}</div>`;
+                    }
+                }
+
+                // Compact confirmed row
+                if (allConf && !isExpanded) {
+                    const gn   = buildGameNumber(f) || '';
+                    const home = f['Home Team'] || '?';
+                    const away = f['Away Team'] || '?';
+                    const time = f['Time'] ? '@ ' + formatTime(f['Time']) : '';
+                    const club = resolveGameClub(f);
+                    html += `<div class="s2-compact-row" onclick="s2ToggleExpand('${gid}', event)">
+                        <span style="color:#1e8449;font-weight:900;font-size:0.85rem;flex-shrink:0;">✓</span>
+                        ${gn ? `<span style="font-size:0.62rem;color:#aaa;letter-spacing:0.4px;flex-shrink:0;">${gn}</span>` : ''}
+                        <span style="font-weight:700;font-size:0.82rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${home} vs ${away}</span>
+                        <span style="font-size:0.72rem;color:#666;flex-shrink:0;">${new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} ${time}</span>
+                        ${club ? `<span class="game-badge" style="flex-shrink:0;font-size:0.68rem;">${club}</span>` : ''}
+                        <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
+                            ${cRef ? `<span style="background:#e8f8ef;border:1px solid #1e8449;border-radius:4px;padding:1px 6px;font-size:0.68rem;color:#1e8449;font-weight:700;">CR: ${cRef.split(' ')[0]}</span>` : ''}
+                            ${ar1 && !hideARs ? `<span style="background:#eaf3ff;border:1px solid #2980b9;border-radius:4px;padding:1px 6px;font-size:0.68rem;color:#2980b9;font-weight:700;">AR1: ${ar1.split(' ')[0]}</span>` : ''}
+                            ${ar2 && !hideARs ? `<span style="background:#eaf3ff;border:1px solid #2980b9;border-radius:4px;padding:1px 6px;font-size:0.68rem;color:#2980b9;font-weight:700;">AR2: ${ar2.split(' ')[0]}</span>` : ''}
+                        </div>
+                        <button onclick="unconfirmAllCA('${gid}',event)" style="font-size:0.68rem;background:none;border:1px solid #ccc;border-radius:4px;padding:1px 6px;cursor:pointer;color:#888;flex-shrink:0;" title="Remove CA confirmation">↺</button>
+                        <span style="color:#aaa;font-size:0.75rem;flex-shrink:0;">▾ expand</span>
+                    </div>`;
+                    return;
+                }
+
+                // Full game card
+                const selected   = selectedGame && selectedGame.id === g.id;
+                const occupiedPositions = [
+                    ...(cRef ? ['Center Referee'] : []),
+                    ...(ar1 && !hideARs ? ['AR 1'] : []),
+                    ...(ar2 && !hideARs ? ['AR 2'] : [])
+                ];
+                const allInCABtn = occupiedPositions.length > 0
+                    ? `<button onclick="confirmAllCA('${gid}',[${occupiedPositions.map(p=>`'${p}'`).join(',')}],event)"
+                        style="background:#1e8449;color:white;border:none;border-radius:6px;padding:2px 9px;font-size:0.75rem;
+                        cursor:pointer;font-weight:700;line-height:1.5;white-space:nowrap;">✓ All in CA</button>`
+                    : '';
+                const collapseBtn = allConf
+                    ? `<button onclick="s2ToggleExpand('${gid}',event)" style="background:none;border:1px solid #ccc;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;color:#555;">▲ collapse</button>`
+                    : '';
+                const confirmedBorder = allConf ? 'border-left:4px solid #1e8449;' : full ? 'border-left:4px solid #2980b9;' : '';
+
+                html += `<div class="game-card ${full ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}"
+                    onclick="selectGame('${gid}')" id="card-${gid}" style="${confirmedBorder}">
+                    ${isCancelled ? '<div class="cancelled-stamp">CANCELLED</div>' : ''}
+                    ${isChangeReq ? '<div style="font-size:0.72rem;font-weight:700;color:#935116;background:#fdebd0;border-radius:4px;padding:2px 8px;margin-bottom:6px;display:inline-block;">⚠ Change Requested</div>' : ''}
+                    <div class="game-header">
+                        <div>
+                            ${buildGameNumber(f) ? `<span style="font-size:0.65rem;font-weight:700;color:#aaa;letter-spacing:0.5px;margin-right:6px;">${buildGameNumber(f)}</span>` : ''}
+                            <span class="game-title">${f['Home Team']||'?'} vs ${f['Away Team']||'?'}</span>
+                            <span class="game-meta">&nbsp;— ${date ? new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) : '—'} ${f['Time'] ? '@ ' + formatTime(f['Time']) : ''}</span>
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                            ${age ? `<span class="game-badge">${age}${f['Gender']==='Female'?' · F':f['Gender']==='Male'?' · M':''}</span>` : ''}
+                            ${resolveGameClub(f) ? `<span class="game-badge" style="background:#f0f0f0;">${resolveGameClub(f)}</span>` : ''}
+                            ${allInCABtn}
+                            ${collapseBtn}
+                            <button onclick="event.stopPropagation(); toggleGameEdit('${gid}')" style="background:none;border:1px solid #ccc;border-radius:6px;padding:2px 7px;font-size:0.78rem;cursor:pointer;color:#555;line-height:1.4;">✏️</button>
+                        </div>
+                    </div>
+                    <div class="slots" style="${hideARs ? 'grid-template-columns:1fr;' : ''}">
+                        ${makeSlot2(gid, 'Center Referee', 'Center', cRef, f['Center Referee'])}
+                        ${hideARs ? '' : makeSlot2(gid, 'AR 1', 'AR 1', ar1, f['AR 1'])}
+                        ${hideARs ? '' : makeSlot2(gid, 'AR 2', 'AR 2', ar2, f['AR 2'])}
+                    </div>
+                    <div class="venue-field-row" onclick="event.stopPropagation()">
+                        <span style="font-size:0.72rem;color:#888;">📍</span>
+                        <select class="vf-select" onchange="onVenueChange('${gid}', this)" style="flex:2;">
+                            <option value="">Venue…</option>${(() => {
+                                const curVenueId = f['Venue ID'] || '';
+                                const gameClubLower = (resolveGameClub(f)||'').toLowerCase();
+                                return allVenues.filter(v => !gameClubLower || v.clubs.some(c => c.includes(gameClubLower)||gameClubLower.includes(c)))
+                                    .map(v=>`<option value="${v.id}" ${v.id==curVenueId?'selected':''}>${v.name}</option>`).join('');
+                            })()}
+                        </select>
+                        <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;" ${!f['Venue ID'] ? 'disabled' : ''}>
+                            <option value="">Field…</option>${(() => {
+                                if (!f['Venue ID']) return '';
+                                const takenFieldIds = new Set(allGames.filter(og=>og.id!==g.id&&og.fields['Field ID']&&gamesOverlap(g,og)).map(og=>String(og.fields['Field ID'])));
+                                return allFields.filter(fi=>fi.venueId==f['Venue ID']).map(fi=>{
+                                    const taken=takenFieldIds.has(String(fi.fieldId));
+                                    return `<option value="${fi.fieldId}" ${fi.fieldId==f['Field ID']?'selected':''} ${taken?'disabled style="color:#bbb;"':''}>${fi.name}${taken?' — in use':''}</option>`;
+                                }).join('');
+                            })()}
+                        </select>
+                    </div>
+                    <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
+                        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
+                            <div><label>Date</label><input type="date" id="editDate-${gid}" value="${f['Date']||''}"></div>
+                            <div><label>Time</label><input type="time" id="editTime-${gid}" value="${f['Time']||''}"></div>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
+                            <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
+                            ${cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled'
+                                ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
+                                : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`}
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            wrap.innerHTML = html;
+            wireSlotDragDrop();
         }
 
         function makeSlot(gameId, position, label, refName, linkedIds) {
