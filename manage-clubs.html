@@ -1479,11 +1479,13 @@
     // ── Editable Venue Cards ──────────────────────────────────────────────────
     const EV_INP = 'width:100%; padding:6px 10px; border:1.5px solid #e2d9ce; border-radius:7px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; background:#fff; box-sizing:border-box;';
 
+    const CA_INP = 'width:88px; padding:8px 10px; border:1.5px solid #ddd; border-radius:6px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; box-sizing:border-box; text-align:right;';
+
     function buildEVCard(v, idx, fieldsByVenueId) {
-        const venueId  = v.id;
+        const venueId   = v.id;
         const venueCAId = v['Venue ID'];
         const venueName = v['Venue Name'] || v.name || '';
-        const fields   = (venueCAId && fieldsByVenueId[venueCAId]) ? fieldsByVenueId[venueCAId] : [];
+        const fields    = (venueCAId && fieldsByVenueId[venueCAId]) ? fieldsByVenueId[venueCAId] : [];
 
         const card = document.createElement('div');
         card.className = 'venue-block';
@@ -1491,28 +1493,27 @@
         card.dataset.venueId   = venueId;
         card.dataset.venueCAId = venueCAId || '';
 
-        const caTag = venueCAId
-            ? `<span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; background:#09142a; color:#00c853; padding:2px 8px; border-radius:5px; margin-left:8px;">CA #${venueCAId}</span>`
-            : `<span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; background:#f0ece6; color:#aaa; padding:2px 8px; border-radius:5px; margin-left:8px;">No CA ID</span>`;
-
         const fieldsHtml = fields.map(f => {
-            const fname = (f['Field Name'] || f.name || '').replace(/"/g, '&quot;');
-            const caField = f['Field ID']
-                ? `<span style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#aaa; white-space:nowrap;">CA #${f['Field ID']}</span>`
-                : '';
-            return `<div class="field-row" data-field-id="${f.id}">
-                <input type="text" class="field-name-input ev-field-name" value="${fname}" placeholder="Field name" style="${EV_INP}">
-                ${caField}
+            const fname  = (f['Field Name'] || f.name || '').replace(/"/g, '&quot;');
+            const fca    = f['Field ID'] != null ? f['Field ID'] : '';
+            return `<div class="field-row" data-field-id="${f.id}" style="align-items:center;">
+                <input type="text" class="field-name-input ev-field-name" value="${fname}" placeholder="Field name" style="${EV_INP} flex:1;">
+                <input type="number" class="ev-field-ca" value="${fca}" placeholder="CA #" title="CA Field ID" style="${CA_INP}">
                 <button class="btn-remove-field" onclick="evRemoveField(this)" title="Remove">×</button>
             </div>`;
         }).join('');
 
         card.innerHTML = `
-            <div class="venue-block-header" style="margin-bottom:10px;">
-                <div style="flex:1;">
-                    <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; font-family:'DM Sans',sans-serif; margin-bottom:4px;">Venue Name ${caTag}</div>
+            <div style="display:grid; grid-template-columns:1fr 140px; gap:12px; margin-bottom:14px;">
+                <div>
+                    <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; font-family:'DM Sans',sans-serif; margin-bottom:4px;">Venue Name</div>
                     <input type="text" class="ev-venue-name" value="${venueName.replace(/"/g, '&quot;')}" placeholder="Venue name"
                         style="${EV_INP} font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px;">
+                </div>
+                <div>
+                    <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; font-family:'DM Sans',sans-serif; margin-bottom:4px;">CA Venue ID</div>
+                    <input type="number" class="ev-venue-ca" value="${venueCAId != null ? venueCAId : ''}" placeholder="e.g. 352"
+                        style="${CA_INP} width:100%;">
                 </div>
             </div>
             <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; font-family:'DM Sans',sans-serif; margin-bottom:6px;">Fields</div>
@@ -1534,7 +1535,8 @@
         row.className = 'field-row';
         row.dataset.fieldId = '';
         row.innerHTML = `
-            <input type="text" class="field-name-input ev-field-name" placeholder="Field name" style="${EV_INP}">
+            <input type="text" class="field-name-input ev-field-name" placeholder="Field name" style="${EV_INP} flex:1;">
+            <input type="number" class="ev-field-ca" placeholder="CA #" title="CA Field ID" style="${CA_INP}">
             <button class="btn-remove-field" onclick="evRemoveField(this)" title="Remove">×</button>`;
         container.appendChild(row);
     }
@@ -1561,27 +1563,29 @@
     }
 
     async function evSaveCard(cardIdx) {
-        const card   = document.getElementById(`evcard-${cardIdx}`);
+        const card      = document.getElementById(`evcard-${cardIdx}`);
         const venueId   = parseInt(card.dataset.venueId);
-        const venueCAId = parseFloat(card.dataset.venueCAId) || null;
         const venueName = card.querySelector('.ev-venue-name').value.trim();
-        const msgEl  = document.getElementById(`ev-msg-${cardIdx}`);
-        const btn    = card.querySelector('button[onclick*="evSaveCard"]');
+        const venueCAVal   = card.querySelector('.ev-venue-ca')?.value.trim();
+        const newVenueCAId = (venueCAVal !== '' && venueCAVal != null) ? parseFloat(venueCAVal) : null;
+        const msgEl     = document.getElementById(`ev-msg-${cardIdx}`);
+        const btn       = card.querySelector('button[onclick*="evSaveCard"]');
         btn.disabled = true; btn.textContent = 'Saving…'; msgEl.style.display = 'none';
 
         try {
-            // Update venue name
-            if (venueName) {
-                const { error } = await supabaseClient.client
-                    .from('venues').update({ 'Venue Name': venueName }).eq('id', venueId);
-                if (error) throw new Error(error.message);
-            }
+            // Update venue name + CA Venue ID
+            const { error: vErr } = await supabaseClient.client
+                .from('venues').update({ 'Venue Name': venueName, 'Venue ID': newVenueCAId }).eq('id', venueId);
+            if (vErr) throw new Error(vErr.message);
+            card.dataset.venueCAId = newVenueCAId != null ? newVenueCAId : '';
 
             // Process field rows
             for (const row of card.querySelectorAll('.field-row')) {
-                const fieldId  = row.dataset.fieldId ? parseInt(row.dataset.fieldId) : null;
-                const deleted  = row.dataset.deleted === 'true';
-                const fieldName = row.querySelector('.ev-field-name')?.value.trim() || '';
+                const fieldId    = row.dataset.fieldId ? parseInt(row.dataset.fieldId) : null;
+                const deleted    = row.dataset.deleted === 'true';
+                const fieldName  = row.querySelector('.ev-field-name')?.value.trim() || '';
+                const fieldCAVal = row.querySelector('.ev-field-ca')?.value.trim();
+                const fieldCAId  = (fieldCAVal !== '' && fieldCAVal != null) ? parseFloat(fieldCAVal) : null;
 
                 if (deleted && fieldId) {
                     const { error } = await supabaseClient.client
@@ -1590,11 +1594,11 @@
                     row.remove();
                 } else if (!deleted && fieldId && fieldName) {
                     const { error } = await supabaseClient.client
-                        .from('fields').update({ 'Field Name': fieldName }).eq('id', fieldId);
+                        .from('fields').update({ 'Field Name': fieldName, 'Field ID': fieldCAId }).eq('id', fieldId);
                     if (error) throw new Error(error.message);
                 } else if (!deleted && !fieldId && fieldName) {
-                    const insertData = { 'Field Name': fieldName };
-                    if (venueCAId) insertData['Venue ID'] = venueCAId;
+                    const insertData = { 'Field Name': fieldName, 'Field ID': fieldCAId };
+                    if (newVenueCAId != null) insertData['Venue ID'] = newVenueCAId;
                     const { data: nr, error } = await supabaseClient.client
                         .from('fields').insert(insertData).select('id').single();
                     if (error) throw new Error(error.message);
