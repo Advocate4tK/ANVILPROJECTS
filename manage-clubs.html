@@ -1171,14 +1171,15 @@
             document.getElementById('editDisplayNameWrap').style.display = 'block';
         }
 
-        // Show current venues/fields
+        // Show editable venues/fields
         currentEl.style.display = 'block';
-        document.getElementById('editCurrentVenuesList').innerHTML = 'Loading…';
+        const listEl = document.getElementById('editCurrentVenuesList');
+        listEl.style.cssText = 'background:transparent; border:none; padding:0;';
+        listEl.innerHTML = '<span style="color:#aaa; font-family:\'DM Sans\',sans-serif; font-size:0.85rem;">Loading…</span>';
         try {
             const clubName = allClubRecords.find(c => String(c.id) === String(clubId))?.name || '';
             if (!clubName) {
-                document.getElementById('editCurrentVenuesList').innerHTML =
-                    '<span style="color:#aaa; font-style:italic;">No venues linked yet.</span>';
+                listEl.innerHTML = '<span style="color:#aaa; font-style:italic; font-family:\'DM Sans\',sans-serif;">No venues linked yet. Use "Add New Venues" below.</span>';
                 return;
             }
             const { data: venueData, error: venueErr } = await supabaseClient.client
@@ -1186,32 +1187,23 @@
             if (venueErr) throw new Error(venueErr.message);
             const venues = venueData || [];
             if (venues.length === 0) {
-                document.getElementById('editCurrentVenuesList').innerHTML =
-                    '<span style="color:#aaa; font-style:italic;">No venues linked yet.</span>';
+                listEl.innerHTML = '<span style="color:#aaa; font-style:italic; font-family:\'DM Sans\',sans-serif;">No venues linked yet. Use "Add New Venues" below.</span>';
             } else {
-                // Fetch all fields once, filter client-side by Venue ID
                 const { data: allFieldRows } = await supabaseClient.client
-                    .from('fields').select('id, name, "Field Name", "Venue ID"');
+                    .from('fields').select('id, name, "Field Name", "Field ID", "Venue ID"');
                 const fieldsByVenueId = {};
                 (allFieldRows || []).forEach(f => {
                     const vid = f['Venue ID'];
                     if (vid != null) {
                         if (!fieldsByVenueId[vid]) fieldsByVenueId[vid] = [];
-                        fieldsByVenueId[vid].push(f['Field Name'] || f.name || '(unnamed)');
+                        fieldsByVenueId[vid].push(f);
                     }
                 });
-                const rows = venues.map(v => {
-                    const vid = v['Venue ID'];
-                    const fNames = (vid && fieldsByVenueId[vid]?.length)
-                        ? fieldsByVenueId[vid].join(', ')
-                        : 'no fields';
-                    return `<div style="margin-bottom:4px;">📍 <strong>${v['Venue Name'] || v.name || '(unnamed)'}</strong> — ${fNames}</div>`;
-                });
-                document.getElementById('editCurrentVenuesList').innerHTML = rows.join('');
+                listEl.innerHTML = '';
+                venues.forEach((v, idx) => buildEVCard(v, idx, fieldsByVenueId));
             }
         } catch(e) {
-            document.getElementById('editCurrentVenuesList').innerHTML =
-                `<span style="color:#e74c3c;">Could not load: ${e.message}</span>`;
+            listEl.innerHTML = `<span style="color:#e74c3c; font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</span>`;
         }
 
         // Reset and show venue builder
@@ -1481,6 +1473,145 @@
             msg.style.color = '#dc2626'; msg.style.display = 'block';
         } finally {
             btn.disabled = false; btn.textContent = 'Save Pay Rates ↗';
+        }
+    }
+
+    // ── Editable Venue Cards ──────────────────────────────────────────────────
+    const EV_INP = 'width:100%; padding:6px 10px; border:1.5px solid #e2d9ce; border-radius:7px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; background:#fff; box-sizing:border-box;';
+
+    function buildEVCard(v, idx, fieldsByVenueId) {
+        const venueId  = v.id;
+        const venueCAId = v['Venue ID'];
+        const venueName = v['Venue Name'] || v.name || '';
+        const fields   = (venueCAId && fieldsByVenueId[venueCAId]) ? fieldsByVenueId[venueCAId] : [];
+
+        const card = document.createElement('div');
+        card.className = 'venue-block';
+        card.id = `evcard-${idx}`;
+        card.dataset.venueId   = venueId;
+        card.dataset.venueCAId = venueCAId || '';
+
+        const caTag = venueCAId
+            ? `<span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; background:#09142a; color:#00c853; padding:2px 8px; border-radius:5px; margin-left:8px;">CA #${venueCAId}</span>`
+            : `<span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; background:#f0ece6; color:#aaa; padding:2px 8px; border-radius:5px; margin-left:8px;">No CA ID</span>`;
+
+        const fieldsHtml = fields.map(f => {
+            const fname = (f['Field Name'] || f.name || '').replace(/"/g, '&quot;');
+            const caField = f['Field ID']
+                ? `<span style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#aaa; white-space:nowrap;">CA #${f['Field ID']}</span>`
+                : '';
+            return `<div class="field-row" data-field-id="${f.id}">
+                <input type="text" class="field-name-input ev-field-name" value="${fname}" placeholder="Field name" style="${EV_INP}">
+                ${caField}
+                <button class="btn-remove-field" onclick="evRemoveField(this)" title="Remove">×</button>
+            </div>`;
+        }).join('');
+
+        card.innerHTML = `
+            <div class="venue-block-header" style="margin-bottom:10px;">
+                <div style="flex:1;">
+                    <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; font-family:'DM Sans',sans-serif; margin-bottom:4px;">Venue Name ${caTag}</div>
+                    <input type="text" class="ev-venue-name" value="${venueName.replace(/"/g, '&quot;')}" placeholder="Venue name"
+                        style="${EV_INP} font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px;">
+                </div>
+            </div>
+            <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; font-family:'DM Sans',sans-serif; margin-bottom:6px;">Fields</div>
+            <div class="fields-list" id="ev-fields-${idx}">${fieldsHtml}</div>
+            <button class="btn-add-field" onclick="evAddField(${idx})" style="margin-bottom:14px;">+ Add Field</button>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <button onclick="evSaveCard(${idx})"
+                    style="background:#f59e0b; color:#09142a; border:none; padding:8px 22px; border-radius:7px; font-weight:800; font-size:0.88rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">
+                    Save ↗
+                </button>
+                <span id="ev-msg-${idx}" style="display:none; font-size:0.82rem; font-weight:600;"></span>
+            </div>`;
+        document.getElementById('editCurrentVenuesList').appendChild(card);
+    }
+
+    function evAddField(cardIdx) {
+        const container = document.getElementById(`ev-fields-${cardIdx}`);
+        const row = document.createElement('div');
+        row.className = 'field-row';
+        row.dataset.fieldId = '';
+        row.innerHTML = `
+            <input type="text" class="field-name-input ev-field-name" placeholder="Field name" style="${EV_INP}">
+            <button class="btn-remove-field" onclick="evRemoveField(this)" title="Remove">×</button>`;
+        container.appendChild(row);
+    }
+
+    function evRemoveField(btn) {
+        const row = btn.closest('.field-row');
+        const fieldId = row.dataset.fieldId;
+        if (fieldId) {
+            const del = row.dataset.deleted === 'true';
+            if (del) {
+                row.style.opacity = '';
+                row.querySelectorAll('input').forEach(i => { i.style.textDecoration = ''; i.disabled = false; });
+                row.dataset.deleted = '';
+                btn.textContent = '×';
+            } else {
+                row.style.opacity = '0.45';
+                row.querySelectorAll('input').forEach(i => { i.style.textDecoration = 'line-through'; i.disabled = true; });
+                row.dataset.deleted = 'true';
+                btn.textContent = '↩';
+            }
+        } else {
+            row.remove();
+        }
+    }
+
+    async function evSaveCard(cardIdx) {
+        const card   = document.getElementById(`evcard-${cardIdx}`);
+        const venueId   = parseInt(card.dataset.venueId);
+        const venueCAId = parseFloat(card.dataset.venueCAId) || null;
+        const venueName = card.querySelector('.ev-venue-name').value.trim();
+        const msgEl  = document.getElementById(`ev-msg-${cardIdx}`);
+        const btn    = card.querySelector('button[onclick*="evSaveCard"]');
+        btn.disabled = true; btn.textContent = 'Saving…'; msgEl.style.display = 'none';
+
+        try {
+            // Update venue name
+            if (venueName) {
+                const { error } = await supabaseClient.client
+                    .from('venues').update({ 'Venue Name': venueName }).eq('id', venueId);
+                if (error) throw new Error(error.message);
+            }
+
+            // Process field rows
+            for (const row of card.querySelectorAll('.field-row')) {
+                const fieldId  = row.dataset.fieldId ? parseInt(row.dataset.fieldId) : null;
+                const deleted  = row.dataset.deleted === 'true';
+                const fieldName = row.querySelector('.ev-field-name')?.value.trim() || '';
+
+                if (deleted && fieldId) {
+                    const { error } = await supabaseClient.client
+                        .from('fields').delete().eq('id', fieldId);
+                    if (error) throw new Error(error.message);
+                    row.remove();
+                } else if (!deleted && fieldId && fieldName) {
+                    const { error } = await supabaseClient.client
+                        .from('fields').update({ 'Field Name': fieldName }).eq('id', fieldId);
+                    if (error) throw new Error(error.message);
+                } else if (!deleted && !fieldId && fieldName) {
+                    const insertData = { 'Field Name': fieldName };
+                    if (venueCAId) insertData['Venue ID'] = venueCAId;
+                    const { data: nr, error } = await supabaseClient.client
+                        .from('fields').insert(insertData).select('id').single();
+                    if (error) throw new Error(error.message);
+                    if (nr) row.dataset.fieldId = nr.id;
+                }
+            }
+
+            msgEl.textContent = '✓ Saved';
+            msgEl.style.color = '#15803d';
+            msgEl.style.display = 'inline';
+            setTimeout(() => { msgEl.style.display = 'none'; }, 2500);
+        } catch(e) {
+            msgEl.textContent = '✗ ' + e.message;
+            msgEl.style.color = '#dc2626';
+            msgEl.style.display = 'inline';
+        } finally {
+            btn.disabled = false; btn.textContent = 'Save ↗';
         }
     }
 
