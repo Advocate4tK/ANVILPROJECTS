@@ -1028,23 +1028,28 @@
             if (venueErr) throw new Error(venueErr.message);
             const venues = venueData || [];
 
-            // Load fields linked to each venue (via shared CA Venue ID float)
+            // Load fields — fetch all, group by Venue ID client-side
+            const { data: allFieldRows2 } = await supabaseClient.client
+                .from('fields').select('id, name, "Field Name", "Venue ID"');
+            const fieldsByVid = {};
+            (allFieldRows2 || []).forEach(f => {
+                const vid = f['Venue ID'];
+                if (vid != null) {
+                    if (!fieldsByVid[vid]) fieldsByVid[vid] = [];
+                    fieldsByVid[vid].push(f);
+                }
+            });
+
             let totalFields = 0;
             const venueDetails = [];
             for (const v of venues) {
-                let fields = [];
-                if (v['Venue ID']) {
-                    const { data: fieldData } = await supabaseClient.client
-                        .from('fields').select('id, "Field Name"')
-                        .filter('"Venue ID"', 'eq', v['Venue ID']);
-                    fields = fieldData || [];
-                }
+                const fields = (v['Venue ID'] && fieldsByVid[v['Venue ID']]) ? fieldsByVid[v['Venue ID']] : [];
                 totalFields += fields.length;
                 venueDetails.push({
                     id: v.id,
-                    name: v['Venue Name'] || '(unnamed)',
+                    name: v['Venue Name'] || v.name || '(unnamed)',
                     fieldIds: fields.map(f => f.id),
-                    fieldNames: fields.map(f => f['Field Name'] || '(unnamed)')
+                    fieldNames: fields.map(f => f['Field Name'] || f.name || '(unnamed)')
                 });
             }
 
@@ -1184,18 +1189,24 @@
                 document.getElementById('editCurrentVenuesList').innerHTML =
                     '<span style="color:#aaa; font-style:italic;">No venues linked yet.</span>';
             } else {
-                const rows = [];
-                for (const v of venues) {
-                    let fNames = 'no fields';
-                    if (v['Venue ID']) {
-                        const { data: fieldData } = await supabaseClient.client
-                            .from('fields').select('"Field Name"')
-                            .filter('"Venue ID"', 'eq', v['Venue ID']);
-                        const fList = (fieldData || []).map(f => f['Field Name'] || '(unnamed)');
-                        if (fList.length) fNames = fList.join(', ');
+                // Fetch all fields once, filter client-side by Venue ID
+                const { data: allFieldRows } = await supabaseClient.client
+                    .from('fields').select('id, name, "Field Name", "Venue ID"');
+                const fieldsByVenueId = {};
+                (allFieldRows || []).forEach(f => {
+                    const vid = f['Venue ID'];
+                    if (vid != null) {
+                        if (!fieldsByVenueId[vid]) fieldsByVenueId[vid] = [];
+                        fieldsByVenueId[vid].push(f['Field Name'] || f.name || '(unnamed)');
                     }
-                    rows.push(`<div style="margin-bottom:4px;">📍 <strong>${v['Venue Name'] || '(unnamed)'}</strong> — ${fNames}</div>`);
-                }
+                });
+                const rows = venues.map(v => {
+                    const vid = v['Venue ID'];
+                    const fNames = (vid && fieldsByVenueId[vid]?.length)
+                        ? fieldsByVenueId[vid].join(', ')
+                        : 'no fields';
+                    return `<div style="margin-bottom:4px;">📍 <strong>${v['Venue Name'] || v.name || '(unnamed)'}</strong> — ${fNames}</div>`;
+                });
                 document.getElementById('editCurrentVenuesList').innerHTML = rows.join('');
             }
         } catch(e) {
