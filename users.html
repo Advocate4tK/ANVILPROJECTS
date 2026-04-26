@@ -66,6 +66,24 @@
         }
         .status-pill.active   { background: #d1fae5; color: #065f46; }
         .status-pill.suspended { background: #fee2e2; color: #b91c1c; }
+        .admin-badge {
+            display: inline-block;
+            background: #09142a;
+            color: #f59e0b;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            padding: 2px 9px;
+            border-radius: 20px;
+            margin-left: 8px;
+            vertical-align: middle;
+            border: 1px solid #f59e0b;
+        }
+        .user-card.is-admin {
+            border-top: 3px solid #f59e0b;
+        }
         .user-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
         .btn-reset {
             background: #09142a;
@@ -242,18 +260,20 @@
 
         document.getElementById('usersList').innerHTML = data.map(u => {
             const suspended = !!u.suspended;
+            const isAdmin   = (u.tier || '').toLowerCase() === 'admin';
+            const cardClass = [isAdmin ? 'is-admin' : '', suspended ? 'is-suspended' : ''].filter(Boolean).join(' ');
             return `
-            <div class="user-card ${suspended ? 'is-suspended' : ''}" id="user-card-${u.id}">
+            <div class="user-card ${cardClass}" id="user-card-${u.id}">
                 <div class="user-top">
                     <div class="user-name-wrap">
                         <span class="user-name">${u.name || '—'}</span>
+                        ${isAdmin ? '<span class="admin-badge">Admin</span>' : ''}
                         <span class="status-pill ${suspended ? 'suspended' : 'active'}" id="status-pill-${u.id}">
                             ${suspended ? 'Suspended' : 'Active'}
                         </span>
                         <div class="user-meta">
                             @${u.username || '—'} &nbsp;·&nbsp; ${u.email}
                             ${u.clubs && u.clubs.length ? '&nbsp;·&nbsp; ' + (Array.isArray(u.clubs) ? u.clubs.join(', ') : u.clubs) : ''}
-                            ${u.tier ? '&nbsp;·&nbsp; ' + u.tier : ''}
                         </div>
                     </div>
                 </div>
@@ -266,10 +286,13 @@
                         Change Password
                     </button>
                     <span class="reset-msg" id="reset-msg-${u.id}"></span>
-                    <button class="btn-suspend ${suspended ? 'inactive' : 'active'}" id="btn-suspend-${u.id}"
-                        onclick="toggleSuspend('${u.id}', this)">
-                        ${suspended ? 'Unsuspend' : 'Suspend'}
-                    </button>
+                    ${isAdmin
+                        ? `<button class="btn-suspend active" style="margin-left:auto; opacity:0.35; cursor:default;" disabled title="Admin account cannot be suspended">Suspend</button>`
+                        : `<button class="btn-suspend ${suspended ? 'inactive' : 'active'}" id="btn-suspend-${u.id}"
+                            onclick="toggleSuspend('${u.id}', this)">
+                            ${suspended ? 'Unsuspend' : 'Suspend'}
+                        </button>`
+                    }
                 </div>
 
                 <!-- Change password panel -->
