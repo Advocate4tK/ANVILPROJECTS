@@ -58,6 +58,7 @@ class SupabaseClientWrapper {
             'Active': 'active',
             'Clubs':  'clubs',
             'Field':  'field',
+            'Venue':  'venue',
             // NOTE: All multi-word columns (Home Team, Center Referee, AR 1, etc.)
             // are stored with spaces in Supabase — they pass through as-is (no mapping needed)
         };
@@ -216,6 +217,13 @@ class SupabaseClientWrapper {
                 const orSameMatch = formula.match(/^OR\(IS_SAME\(\{Date\},'(.+?)','day'\),\s*IS_SAME\(\{Date\},'(.+?)','day'\)\)$/i);
                 if (orSameMatch) {
                     query = query.in('date', [orSameMatch[1], orSameMatch[2]]);
+                }
+
+                // FIND("value", ARRAYJOIN({Col})) → array contains
+                const findArrayJoinMatch = formula.match(/^FIND\("(.+?)",\s*ARRAYJOIN\(\{(.+?)\}\)\)$/i);
+                if (findArrayJoinMatch) {
+                    const col = this._col(findArrayJoinMatch[2]);
+                    query = query.contains(col, [findArrayJoinMatch[1]]);
                 }
             }
 
