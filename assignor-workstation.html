@@ -5745,8 +5745,8 @@
                     const targetPosition = slot.dataset.position;
                     if ((!dragRefId && !dragRefName) || !targetGameId || !targetPosition) return;
 
-                    // Position preference check
-                    const _dragRef  = allRefs.find(r => r.id === dragRefId);
+                    // Position preference check — fall back to name lookup for Supabase refs (refId may be '')
+                    const _dragRef  = allRefs.find(r => r.id === dragRefId) || refLookupByName[(dragRefName || '').trim().toLowerCase()];
                     const _posPref  = (_dragRef?.fields['Position Preference'] || '').trim();
                     const _isCR     = targetPosition === 'Center Referee';
                     const _isAR     = targetPosition === 'AR 1' || targetPosition === 'AR 2';
@@ -5797,7 +5797,9 @@
         function makeSlot(gameId, position, label, refName, linkedIds) {
             if (refName) {
                 // Supabase: name is stored directly; Airtable: array of record IDs
-                const refId = typeof linkedIds === 'string' ? '' : (Array.isArray(linkedIds) && linkedIds.length > 0 ? linkedIds[0] : '');
+                const refId = typeof linkedIds === 'string'
+                    ? (refLookupByName[(refName || '').toLowerCase()]?.id || '')
+                    : (Array.isArray(linkedIds) && linkedIds.length > 0 ? linkedIds[0] : '');
                 const safeName = refName.replace(/'/g, "\\'");
                 // Use the same experience color scale as the ref panel cards
                 // For Supabase games, ref name is stored as a string — look up by name if no ID
@@ -6361,11 +6363,21 @@
                 _autoScrollHRaf = requestAnimationFrame(step);
             }
         });
-        document.addEventListener('dragend', () => { cancelAnimationFrame(_autoScrollRaf); cancelAnimationFrame(_autoScrollHRaf); });
+        document.addEventListener('dragend', () => {
+            cancelAnimationFrame(_autoScrollRaf);
+            cancelAnimationFrame(_autoScrollHRaf);
+            dragSourceGameId   = null;
+            dragSourcePosition = null;
+        });
         document.addEventListener('drop',    () => { cancelAnimationFrame(_autoScrollRaf); cancelAnimationFrame(_autoScrollHRaf); });
 
         // ── Assign ref to slot ────────────────────────────────────────────────
         async function assignRef(gameId, position, refId, refName) {
+            // Supabase games store ref names as strings — refId may arrive as ''; resolve from name
+            if (!refId && refName) {
+                const _r = refLookupByName[(refName || '').trim().toLowerCase()];
+                if (_r) refId = _r.id;
+            }
             const targetGame = allGames.find(g => String(g.id) === String(gameId));
             if (targetGame) {
                 const gameDate = targetGame.fields['Date'];
