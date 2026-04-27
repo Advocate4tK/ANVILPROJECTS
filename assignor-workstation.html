@@ -153,6 +153,8 @@
         .ref-card.throb     { animation: throb     2.2s ease-in-out infinite; }
         .ref-card.throb-med { animation: throb-med 1.6s ease-in-out infinite; }
         .ref-card.throb-hot { animation: throb-hot 1.1s ease-in-out infinite; }
+        .ref-card.struck { background:#f0f0f0 !important; opacity:0.45; cursor:default; border-left-color:#ccc !important; animation:none !important; }
+        .ref-card.struck .ref-name { text-decoration:line-through; color:#aaa !important; }
 
         /* ── Change Complete Modal ── */
         #changeCompleteOverlay {
@@ -4608,6 +4610,7 @@
         // ── Standard 2 — CA confirmed state ──────────────────────────────────
         let caConfirmedMap  = {}; // gameId (string) → Set<position string>
         let s2ExpandedGames = new Set(); // confirmed games manually expanded
+        let s2StrikedRefs   = new Set(JSON.parse(localStorage.getItem('s2StrikedRefs') || '[]'));
 
         // ── Date quick-pick helpers ───────────────────────────────────────────
         function getWeekendDates(weeksAhead) {
@@ -6458,8 +6461,12 @@
                 filtered.sort((a, b) => (b.fields['Name'] || '').localeCompare(a.fields['Name'] || ''));
             }
 
-            // Hide no-availability refs entirely unless override is on
-            const displayRefs = showAllRefs ? filtered : filtered.filter(r => classify(r) !== 3);
+            // Hide no-availability refs entirely unless override is on; sink struck refs to bottom
+            const displayRefs = (showAllRefs ? filtered : filtered.filter(r => classify(r) !== 3))
+                .sort((a, b) => {
+                    const as = s2StrikedRefs.has(String(a.id)), bs = s2StrikedRefs.has(String(b.id));
+                    return as === bs ? 0 : as ? 1 : -1;
+                });
 
             if (!displayRefs.length) {
                 wrap.innerHTML = showAllRefs
@@ -6511,7 +6518,8 @@
                     if (stars >= 4) score += 1;                         // high assignor rating
                     throbClass = score >= 4 ? ' throb-hot' : score >= 2 ? ' throb-med' : ' throb';
                 }
-                const cardClass = (cls <= 1 ? (cls === 0 ? 'available prefers' : 'available') : cls === 2 ? 'conflict' : 'no-avail') + throbClass;
+                const isStruck  = s2StrikedRefs.has(String(rid));
+                const cardClass = (cls <= 1 ? (cls === 0 ? 'available prefers' : 'available') : cls === 2 ? 'conflict' : 'no-avail') + throbClass + (isStruck ? ' struck' : '');
                 const badgeLabel = singleDay || workDate ? 'this day' : 'this period';
                 const assignedBadge = assignedCount > 0
                     ? `<span style="font-size:0.72rem; color:#0f3460; font-weight:700;">📋 ${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}</span>`
@@ -6563,11 +6571,12 @@
                                : '';
                 const ghostBadge = '';
 
-                html += `<div class="ref-card ${cardClass}" draggable="${cls !== 2}"
+                html += `<div class="ref-card ${cardClass}" draggable="${cls !== 2 && !isStruck}"
                     data-ref-id="${rid}" data-ref-name="${name}"
-                    ${expColor ? `style="border-left-color:${expColor};"` : ''}
-                    ondragstart="if(${cls === 2}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}');"
+                    ${expColor && !isStruck ? `style="border-left-color:${expColor};"` : ''}
+                    ondragstart="if(${cls === 2} || ${isStruck}) { event.preventDefault(); return; } onRefDragStart(event, '${rid}', '${name.replace(/'/g,"\\'")}');"
                     onmouseenter="showAvailNotes('${name.replace(/'/g,"\\'")}', this, event)"
+                    oncontextmenu="s2ShowRefCtx(event,'${rid}'); return false;"
                     onmouseleave="hideAvailNotes()">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
                         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; min-width:0;">
@@ -6611,6 +6620,39 @@
             wrap.innerHTML = html;
             const titleEl = document.getElementById('refsPanelTitle');
             if (titleEl) titleEl.textContent = `👤 Referees (${displayRefs.length})`;
+        }
+
+        // ── Ref card strike-out (right-click → mark unavailable) ─────────────
+        function s2ShowRefCtx(e, rid) {
+            e.preventDefault();
+            e.stopPropagation();
+            let menu = document.getElementById('s2RefCtxMenu');
+            if (!menu) {
+                menu = document.createElement('div');
+                menu.id = 's2RefCtxMenu';
+                menu.style.cssText = 'position:fixed;background:#fff;border:1px solid #d0d7de;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:sans-serif;font-size:0.82rem;z-index:9999;min-width:170px;overflow:hidden;';
+                document.body.appendChild(menu);
+            }
+            const struck = s2StrikedRefs.has(String(rid));
+            menu.innerHTML = `<div style="padding:6px 0;">
+                <div onclick="s2ToggleStrike('${rid}'); document.getElementById('s2RefCtxMenu').style.display='none';"
+                     style="padding:8px 16px; cursor:pointer; font-weight:600; color:${struck ? '#27ae60' : '#c0392b'};"
+                     onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
+                    ${struck ? '✓ Restore ref' : '☒ Mark unavailable'}
+                </div>
+            </div>`;
+            menu.style.left    = Math.min(e.clientX, window.innerWidth  - 190) + 'px';
+            menu.style.top     = Math.min(e.clientY, window.innerHeight - 80)  + 'px';
+            menu.style.display = 'block';
+            setTimeout(() => document.addEventListener('click', () => { menu.style.display = 'none'; }, { once: true }), 0);
+        }
+
+        function s2ToggleStrike(rid) {
+            const key = String(rid);
+            if (s2StrikedRefs.has(key)) s2StrikedRefs.delete(key);
+            else s2StrikedRefs.add(key);
+            localStorage.setItem('s2StrikedRefs', JSON.stringify([...s2StrikedRefs]));
+            renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
         }
 
         // ── Drag ─────────────────────────────────────────────────────────────
