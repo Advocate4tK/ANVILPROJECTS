@@ -111,9 +111,9 @@
             const ts = new Date(l.created_at).toLocaleString('en-US', {
                 weekday:'short', month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'
             });
-            const dot = !l.viewed
-                ? `<span class="new-dot"></span>`
-                : `<span class="empty-dot"></span>`;
+            const dot = !l.acknowledged
+                ? `<span class="new-dot" id="lead-dot-${l.id}"></span>`
+                : `<span class="empty-dot" id="lead-dot-${l.id}"></span>`;
             return `
             <div class="lead-row" id="lead-row-${l.id}">
                 <div class="lead-row-header" onclick="toggleLead(${l.id})">
@@ -173,6 +173,8 @@
         await supabaseClient.client.from('leads').update({ acknowledged: true }).eq('id', id);
         const btn = document.querySelector(`button[onclick="acknowledgeLead(${id})"]`);
         if (btn) btn.outerHTML = `<span style="font-size:0.78rem; font-weight:700; color:#27ae60;">✓ Acknowledged</span>`;
+        const dot = document.getElementById('lead-dot-' + id);
+        if (dot) { dot.className = 'empty-dot'; }
         // Signal admin.html to hide the dot on next load
         const { count } = await supabaseClient.client.from('leads').select('id', { count: 'exact', head: true }).eq('acknowledged', false).eq('archived', false);
         if (count === 0) localStorage.setItem('leadsAllClear', '1');
