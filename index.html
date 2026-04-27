@@ -790,11 +790,15 @@
             });
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script>
         emailjs.init('p0JPOZ4XKJ86egvTB');
 
-        document.getElementById('interestBtn').addEventListener('click', function() {
+        const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+
+        document.getElementById('interestBtn').addEventListener('click', async function() {
             const name  = document.getElementById('iName').value.trim();
             const club  = document.getElementById('iClub').value.trim();
             const email = document.getElementById('iEmail').value.trim();
@@ -810,21 +814,26 @@
             this.disabled = true;
             this.textContent = 'Sending…';
 
-            const body = `New Reff Tool inquiry:\n\nName: ${name}\nClub: ${club}\nEmail: ${email}\nPhone: ${phone || '—'}\nRole: ${role || '—'}\n\nMessage:\n${msg || '—'}`;
-
-            emailjs.send('nectassignor@gmail.com', 'template_e6a6ab', {
-                from_name:  name,
-                club:       club,
-                reply_to:   email,
-                message:    body
-            }).then(() => {
-                document.getElementById('successMsg').style.display = 'block';
-                this.style.display = 'none';
-            }).catch(() => {
-                window.location.href = `mailto:nectassignor@gmail.com,anvilmanager@gmail.com?subject=Reff Tool Inquiry — ${club}&body=${encodeURIComponent(body)}`;
-                document.getElementById('successMsg').style.display = 'block';
-                this.style.display = 'none';
+            // Write to leads table
+            await _sb.from('leads').insert({
+                name, club, email,
+                phone:   phone || null,
+                role:    role  || null,
+                message: msg   || null,
+                acknowledged: false,
+                archived:     false,
+                viewed:       false,
+                status:       'open'
             });
+
+            // Send email notification
+            const body = `New Referee Tool inquiry:\n\nName: ${name}\nClub: ${club}\nEmail: ${email}\nPhone: ${phone || '—'}\nRole: ${role || '—'}\n\nMessage:\n${msg || '—'}`;
+            emailjs.send('nectassignor@gmail.com', 'template_e6a6ab', {
+                from_name: name, club, reply_to: email, message: body
+            }).catch(() => {});
+
+            document.getElementById('successMsg').style.display = 'block';
+            this.style.display = 'none';
         });
     </script>
 </body>
