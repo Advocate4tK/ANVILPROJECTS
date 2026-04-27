@@ -3394,13 +3394,18 @@
                     const countBadge = assignedCount
                         ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;margin-left:5px;vertical-align:middle;">${assignedCount}</span>`
                         : '';
-                    return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
-                        draggable="true"
-                        ondragstart="sheet3RefDragStart(event,'${safeName}')"
-                        onmouseenter="showRefTooltip('${safeName}', this, event)"
-                        onmouseleave="hideRefTooltip()">
+                    const s3refObj   = refLookupByName[r.name.trim().toLowerCase()];
+                    const s3unavail  = s3refObj?.fields['unavailable'] === true;
+                    const s3rowBg    = s3unavail ? 'background:#f0f0f0;opacity:0.55;' : `background:${i%2===0?'#ffffff':'#f6f8fa'};`;
+                    const s3ctxMenu  = s3refObj ? `oncontextmenu="s2ShowRefCtx(event,'${s3refObj.id}'); return false;"` : '';
+                    return `<tr style="${s3rowBg} cursor:${s3unavail?'default':'grab'};"
+                        draggable="${!s3unavail}"
+                        ${s3ctxMenu}
+                        ondragstart="${s3unavail ? 'event.preventDefault();' : `sheet3RefDragStart(event,'${safeName}')`}"
+                        onmouseenter="${s3unavail && s3refObj ? `s2ShowStrikeTooltip(event,'${s3refObj.id}')` : `showRefTooltip('${safeName}', this, event)`}"
+                        onmouseleave="hideRefTooltip(); hideAvailNotes();">
                         ${sheet3RefHiddenCols.includes('clubDate')  ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${r.date}</td>`}
-                        <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's assignments">${r.name}${countBadge}</td>
+                        <td style="${cell} cursor:pointer; ${s3unavail?'text-decoration:line-through;color:#aaa;':'color:#0f3460;text-decoration:underline dotted;'}" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's assignments">${r.name}${s3unavail?'<span style=\"font-size:0.65rem;font-weight:700;color:#c0392b;margin-left:4px;\">⚠</span>':''}${countBadge}</td>
                         ${sheet3RefHiddenCols.includes('clubExp')   ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${fmtExp(r.exp, true)}</td>`}
                         ${sheet3RefHiddenCols.includes('clubClub')  ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${r.club}</td>`}
                         ${sheet3RefHiddenCols.includes('clubStart') ? `<td style="${refStubTd}"></td>` : `<td style="${cell}">${fmt(r.start)}</td>`}
@@ -4610,7 +4615,7 @@
         // ── Standard 2 — CA confirmed state ──────────────────────────────────
         let caConfirmedMap  = {}; // gameId (string) → Set<position string>
         let s2ExpandedGames = new Set(); // confirmed games manually expanded
-        let s2StrikedRefs   = new Set(JSON.parse(localStorage.getItem('s2StrikedRefs') || '[]'));
+
 
         // ── Date quick-pick helpers ───────────────────────────────────────────
         function getWeekendDates(weeksAhead) {
@@ -6464,7 +6469,7 @@
             // Hide no-availability refs entirely unless override is on; sink struck refs to bottom
             const displayRefs = (showAllRefs ? filtered : filtered.filter(r => classify(r) !== 3))
                 .sort((a, b) => {
-                    const as = s2StrikedRefs.has(String(a.id)), bs = s2StrikedRefs.has(String(b.id));
+                    const as = a.fields['unavailable'] === true, bs = b.fields['unavailable'] === true;
                     return as === bs ? 0 : as ? 1 : -1;
                 });
 
@@ -6518,7 +6523,7 @@
                     if (stars >= 4) score += 1;                         // high assignor rating
                     throbClass = score >= 4 ? ' throb-hot' : score >= 2 ? ' throb-med' : ' throb';
                 }
-                const isStruck  = s2StrikedRefs.has(String(rid));
+                const isStruck  = r.fields['unavailable'] === true;
                 const cardClass = (cls <= 1 ? (cls === 0 ? 'available prefers' : 'available') : cls === 2 ? 'conflict' : 'no-avail') + throbClass + (isStruck ? ' struck' : '');
                 const badgeLabel = singleDay || workDate ? 'this day' : 'this period';
                 const assignedBadge = assignedCount > 0
@@ -6622,37 +6627,98 @@
             if (titleEl) titleEl.textContent = `👤 Referees (${displayRefs.length})`;
         }
 
-        // ── Ref card strike-out (right-click → mark unavailable) ─────────────
+        // ── Ref unavailability — Supabase-backed, shared across all views ────────
         function s2ShowRefCtx(e, rid) {
             e.preventDefault();
             e.stopPropagation();
+            const ref = allRefs.find(r => r.id == rid);
             let menu = document.getElementById('s2RefCtxMenu');
             if (!menu) {
                 menu = document.createElement('div');
                 menu.id = 's2RefCtxMenu';
-                menu.style.cssText = 'position:fixed;background:#fff;border:1px solid #d0d7de;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:sans-serif;font-size:0.82rem;z-index:9999;min-width:170px;overflow:hidden;';
+                menu.style.cssText = 'position:fixed;background:#fff;border:1px solid #d0d7de;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:sans-serif;font-size:0.82rem;z-index:9999;min-width:220px;overflow:hidden;';
                 document.body.appendChild(menu);
             }
-            const struck = s2StrikedRefs.has(String(rid));
-            menu.innerHTML = `<div style="padding:6px 0;">
-                <div onclick="s2ToggleStrike('${rid}'); document.getElementById('s2RefCtxMenu').style.display='none';"
-                     style="padding:8px 16px; cursor:pointer; font-weight:600; color:${struck ? '#27ae60' : '#c0392b'};"
-                     onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
-                    ${struck ? '✓ Restore ref' : '☒ Mark unavailable'}
-                </div>
-            </div>`;
-            menu.style.left    = Math.min(e.clientX, window.innerWidth  - 190) + 'px';
-            menu.style.top     = Math.min(e.clientY, window.innerHeight - 80)  + 'px';
+            const struck = ref?.fields['unavailable'] === true;
+            if (struck) {
+                const since  = ref.fields['unavailable_since']
+                    ? new Date(ref.fields['unavailable_since']).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+                    : '';
+                const by     = ref.fields['unavailable_by'] || '';
+                const reason = ref.fields['unavailable_reason'] || '';
+                menu.innerHTML = `<div style="padding:8px 14px 8px;">
+                    <div style="font-size:0.78rem;color:#c0392b;font-weight:700;margin-bottom:2px;">⚠ Marked unavailable</div>
+                    ${since ? `<div style="font-size:0.75rem;color:#888;margin-bottom:2px;">${since}${by ? ' by ' + by : ''}</div>` : ''}
+                    ${reason ? `<div style="font-size:0.8rem;color:#444;font-style:italic;margin-bottom:6px;">"${reason}"</div>` : ''}
+                    <div onclick="refToggleUnavailable('${rid}'); document.getElementById('s2RefCtxMenu').style.display='none';"
+                         style="margin-top:4px;padding:6px 10px;cursor:pointer;font-weight:600;color:#27ae60;background:#f0fdf4;border-radius:5px;text-align:center;"
+                         onmouseover="this.style.filter='brightness(0.95)';" onmouseout="this.style.filter='';">
+                        ✓ Mark available again
+                    </div>
+                </div>`;
+            } else {
+                const inputId = 's2UnavailReason_' + rid;
+                menu.innerHTML = `<div style="padding:8px 14px 8px;">
+                    <div style="font-size:0.75rem;font-weight:700;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.5px;">Mark unavailable</div>
+                    <input id="${inputId}" type="text" placeholder="Reason (optional)" maxlength="120"
+                        style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:7px;"
+                        onkeydown="if(event.key==='Enter'){ refToggleUnavailable('${rid}', this.value.trim()); document.getElementById('s2RefCtxMenu').style.display='none'; event.stopPropagation(); }">
+                    <div onclick="refToggleUnavailable('${rid}', document.getElementById('${inputId}').value.trim()); document.getElementById('s2RefCtxMenu').style.display='none';"
+                         style="padding:6px 10px;cursor:pointer;font-weight:600;color:#fff;background:#c0392b;border-radius:5px;text-align:center;"
+                         onmouseover="this.style.filter='brightness(0.9)';" onmouseout="this.style.filter='';">
+                        ☒ Mark unavailable
+                    </div>
+                </div>`;
+                setTimeout(() => document.getElementById(inputId)?.focus(), 50);
+            }
+            menu.style.left    = Math.min(e.clientX, window.innerWidth  - 240) + 'px';
+            menu.style.top     = Math.min(e.clientY, window.innerHeight - 150) + 'px';
             menu.style.display = 'block';
-            setTimeout(() => document.addEventListener('click', () => { menu.style.display = 'none'; }, { once: true }), 0);
+            setTimeout(() => document.addEventListener('click', ev => {
+                if (!menu.contains(ev.target)) menu.style.display = 'none';
+            }, { once: true }), 0);
         }
 
-        function s2ToggleStrike(rid) {
-            const key = String(rid);
-            if (s2StrikedRefs.has(key)) s2StrikedRefs.delete(key);
-            else s2StrikedRefs.add(key);
-            localStorage.setItem('s2StrikedRefs', JSON.stringify([...s2StrikedRefs]));
-            renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
+        async function refToggleUnavailable(rid, reason) {
+            const ref = allRefs.find(r => r.id == rid);
+            if (!ref) return;
+            const markUnavail  = !(ref.fields['unavailable'] === true);
+            const assignorName = currentAssignor?.name || currentAssignor?.fields?.['Name'] || 'assignor';
+            const updates = markUnavail
+                ? { unavailable: true, unavailable_reason: reason || null, unavailable_since: new Date().toISOString(), unavailable_by: assignorName }
+                : { unavailable: false, unavailable_reason: null, unavailable_since: null, unavailable_by: null };
+            try {
+                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rid, updates);
+                Object.assign(ref.fields, updates);
+                renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
+            } catch(err) {
+                console.error('refToggleUnavailable error:', err);
+                alert('Failed to save: ' + err.message);
+            }
+        }
+
+        function s2ShowStrikeTooltip(e, rid) {
+            clearTimeout(window._availNotesTimer);
+            window._availNotesTimer = setTimeout(() => {
+                const ref = allRefs.find(r => r.id == rid);
+                if (!ref || ref.fields['unavailable'] !== true) return;
+                const since  = ref.fields['unavailable_since']
+                    ? new Date(ref.fields['unavailable_since']).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+                    : '';
+                const by     = ref.fields['unavailable_by'] || '';
+                const reason = ref.fields['unavailable_reason'] || '';
+                const tip = document.getElementById('s3RefTooltip');
+                if (!tip) return;
+                tip.innerHTML = `<div style="color:#c0392b;font-weight:700;">⚠ Marked unavailable</div>`
+                    + (since ? `<div style="font-size:0.78rem;color:#888;margin-top:2px;">${since}${by ? ' by ' + by : ''}</div>` : '')
+                    + (reason ? `<div style="font-style:italic;color:#444;margin-top:3px;">"${reason}"</div>` : '');
+                tip.style.display = 'block';
+                const tipW = 270;
+                let left = e.clientX + 14;
+                if (left + tipW > window.innerWidth - 10) left = e.clientX - tipW - 14;
+                tip.style.left = left + 'px';
+                tip.style.top  = Math.min(e.clientY - 10, window.innerHeight - 110) + 'px';
+            }, 400);
         }
 
         // ── Drag ─────────────────────────────────────────────────────────────
