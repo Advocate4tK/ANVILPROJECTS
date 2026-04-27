@@ -75,6 +75,19 @@ let fieldNameMap       = {}; // Supabase record ID → field name (legacy fallba
 let numericVenueToName = {}; // numeric Venue ID → venue name (primary)
 let numericFieldToName = {}; // numeric Field ID → field name (primary)
 let clubLeagueMap      = {}; // club name → CA league ID
+let clubIdMap          = {}; // club name → clubs.id (int PK)
+let payRateByClubId    = {}; // club_id → ageBand → {center, ar}
+
+// ── Age group → pay_rates band ───────────────────────────────────────────────
+function ageBand(ageGroup) {
+    const ag = (ageGroup || '').replace(/\s/g, '').toUpperCase();
+    if (ag === 'U8')  return 'U8';
+    if (['U9','U10'].includes(ag))        return 'U9-U10';
+    if (['U11','U12'].includes(ag))       return 'U11-U12';
+    if (['U13','U14','U15'].includes(ag)) return 'U13-U15';
+    if (['U16','U17','U18','U19'].includes(ag)) return 'U18-U19';
+    return null;
+}
 
 // ── Export history (localStorage) ────────────────────────────────────────────
 const EXPORT_HISTORY_KEY = 'ca_export_history';
@@ -236,14 +249,15 @@ loadBtn.addEventListener('click', async () => {
         const options = { maxRecords: 500 };
         if (filter) options.filterByFormula = filter;
 
-        // Load games, referee CA IDs, venues, fields, and clubs in parallel
+        // Load games, referee CA IDs, venues, fields, clubs, and pay rates in parallel
         progressText.textContent = 'Loading games, referees, venues, and fields...';
-        const [records, referees, venues, fieldRecs, clubRecs] = await Promise.all([
+        const [records, referees, venues, fieldRecs, clubRecs, payRatesResult] = await Promise.all([
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    options),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 500 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 500 }),
-            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,    { maxRecords: 200 })
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,    { maxRecords: 200 }),
+            supabaseClient.client.from('pay_rates').select('*').then(r => r.data || [])
         ]);
 
         // Build lookup: record ID or name → Central Assign numeric ID
@@ -286,12 +300,21 @@ loadBtn.addEventListener('click', async () => {
             if (venueNumId) venueCAId[f.id]    = venueNumId;
         });
 
-        // Build club → CA league ID lookup
+        // Build club → CA league ID lookup + club name → integer id
         clubLeagueMap = {};
+        clubIdMap     = {};
         clubRecs.forEach(c => {
             const clubName = c.fields['name'] || c.fields['Club Name'] || c.fields['Name'] || '';
             const leagueId = c.fields['ca_league_id'];
             if (clubName && leagueId) clubLeagueMap[clubName] = parseInt(leagueId);
+            if (clubName) clubIdMap[clubName] = parseInt(c.id);
+        });
+
+        // Build pay rate lookup: club_id → age band → {center, ar}
+        payRateByClubId = {};
+        (payRatesResult || []).forEach(pr => {
+            if (!payRateByClubId[pr.club_id]) payRateByClubId[pr.club_id] = {};
+            payRateByClubId[pr.club_id][pr.age_group] = { center: pr.center, ar: pr.ar };
         });
 
         progressBar.style.width = '100%';
@@ -598,8 +621,18 @@ exportBtn.addEventListener('click', () => {
             clubLeagueMap[f['Source Club']] || DEFAULTS.league,
             refId, ar1Id, ar2Id, 0, 0,
             ageGroup === 'U8' ? 1 : 3,
-            DEFAULTS.refRate,
-            DEFAULTS.arRate,
+            (() => {
+                const band   = ageBand(ageGroup);
+                const clubId = clubIdMap[f['Source Club']];
+                const rates  = (clubId && band) ? (payRateByClubId[clubId]?.[band] || null) : null;
+                return rates ? rates.center : DEFAULTS.refRate;
+            })(),
+            (() => {
+                const band   = ageBand(ageGroup);
+                const clubId = clubIdMap[f['Source Club']];
+                const rates  = (clubId && band) ? (payRateByClubId[clubId]?.[band] || null) : null;
+                return (rates && rates.ar != null) ? rates.ar : DEFAULTS.arRate;
+            })(),
             DEFAULTS.fourthRate,
             DEFAULTS.assessorRate,
             ''  // External Game Id — blank, CA assigns on import
