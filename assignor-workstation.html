@@ -4837,12 +4837,17 @@
             const isAllClubs = selectedClubs.size === clubsList.length;
             const targetClubs = isAllClubs ? [...clubsList] : [...selectedClubs];
 
-            // Only unassigned CR games from current loaded set
+            // Only games with at least one open slot
             const openGames = allGames.filter(g => {
-                const cr = g.fields['Center Referee'];
-                const hasNoCR = !cr || (Array.isArray(cr) && cr.length === 0);
-                if (!hasNoCR) return false;
-                if (!isAllClubs && !selectedClubs.has(g.fields['Source Club'])) return false;
+                const f   = g.fields;
+                const age = f['Age Group'] || '';
+                const cr  = resolveRefName(f['Center Referee']);
+                const ar1 = resolveRefName(f['AR 1']);
+                const ar2 = resolveRefName(f['AR 2']);
+                const isU8 = age === 'U8';
+                const fullyAssigned = isU8 ? !!cr : (!!cr && !!ar1 && !!ar2);
+                if (fullyAssigned) return false;
+                if (!isAllClubs && !selectedClubs.has(f['Source Club'])) return false;
                 return true;
             });
 
