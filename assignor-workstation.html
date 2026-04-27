@@ -5773,47 +5773,54 @@
                     const targetPosition = slot.dataset.position;
                     if ((!dragRefId && !dragRefName) || !targetGameId || !targetPosition) return;
 
+                    // Capture these before any awaits — renderGames() fires inside assignRef
+                    // and can reset the module-level vars mid-async
+                    const srcGameId   = dragSourceGameId;
+                    const srcPosition = dragSourcePosition;
+                    const srcRefId    = dragRefId;
+                    const srcRefName  = dragRefName;
+
                     // Position preference check — fall back to name lookup for Supabase refs (refId may be '')
-                    const _dragRef  = allRefs.find(r => r.id === dragRefId) || refLookupByName[(dragRefName || '').trim().toLowerCase()];
+                    const _dragRef  = allRefs.find(r => r.id === srcRefId) || refLookupByName[(srcRefName || '').trim().toLowerCase()];
                     const _posPref  = (_dragRef?.fields['Position Preference'] || '').trim();
                     const _isCR     = targetPosition === 'Center Referee';
                     const _isAR     = targetPosition === 'AR 1' || targetPosition === 'AR 2';
                     if (_posPref === 'AR Only' && _isCR) {
-                        alert(`${dragRefName} prefers AR positions only and cannot be assigned as Center Referee.`);
+                        alert(`${srcRefName} prefers AR positions only and cannot be assigned as Center Referee.`);
                         return;
                     }
                     if (_posPref === 'Center Only' && _isAR) {
-                        alert(`${dragRefName} prefers Center Referee only and cannot be assigned to an AR slot.`);
+                        alert(`${srcRefName} prefers Center Referee only and cannot be assigned to an AR slot.`);
                         return;
                     }
 
-                    if (dragSourceGameId && dragSourcePosition &&
-                        (dragSourceGameId !== targetGameId || dragSourcePosition !== targetPosition)) {
+                    if (srcGameId && srcPosition &&
+                        (srcGameId !== targetGameId || srcPosition !== targetPosition)) {
                         const targetGame    = allGames.find(g => String(g.id) === String(targetGameId));
                         const targetLinked  = targetGame ? targetGame.fields[targetPosition] : null;
                         const targetRefName = resolveRefName(targetLinked) || null;
                         const targetRefObj  = targetRefName ? refLookupByName[targetRefName.trim().toLowerCase()] : null;
                         const targetRefId   = targetRefObj ? targetRefObj.id : null;
                         if (targetRefName) {
-                            if (dragSourceGameId === targetGameId && dragRefName === targetRefName) {
-                                alert(`${dragRefName} is already assigned to this game in another position.`);
+                            if (srcGameId === targetGameId && srcRefName === targetRefName) {
+                                alert(`${srcRefName} is already assigned to this game in another position.`);
                             } else {
-                                await assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
-                                await assignRef(dragSourceGameId, dragSourcePosition, targetRefId || '', targetRefName);
+                                await assignRef(targetGameId, targetPosition, srcRefId, srcRefName);
+                                await assignRef(srcGameId, srcPosition, targetRefId || '', targetRefName);
                             }
                         } else {
-                            await assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
-                            await unassignRef(dragSourceGameId, dragSourcePosition);
+                            await assignRef(targetGameId, targetPosition, srcRefId, srcRefName);
+                            await unassignRef(srcGameId, srcPosition);
                         }
-                    } else if (!dragSourceGameId) {
+                    } else if (!srcGameId) {
                         const targetGame    = allGames.find(g => String(g.id) === String(targetGameId));
                         const alreadyOnGame = targetGame && ['Center Referee','AR 1','AR 2'].some(pos => {
-                            return resolveRefName(targetGame.fields[pos]) === dragRefName;
+                            return resolveRefName(targetGame.fields[pos]) === srcRefName;
                         });
                         if (alreadyOnGame) {
-                            alert(`${dragRefName} is already assigned to this game in another position.`);
+                            alert(`${srcRefName} is already assigned to this game in another position.`);
                         } else {
-                            await assignRef(targetGameId, targetPosition, dragRefId, dragRefName);
+                            await assignRef(targetGameId, targetPosition, srcRefId, srcRefName);
                         }
                     }
                     dragSourceGameId   = null;
