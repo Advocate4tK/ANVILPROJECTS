@@ -6691,7 +6691,20 @@
             try {
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rid, updates);
                 Object.assign(ref.fields, updates);
+                // When marking unavailable: purge this ref from all Sheet 3 Opt staging slots
+                if (markUnavail) {
+                    const refName = (ref.fields['Name'] || '').trim();
+                    // Remove from Supabase staging
+                    await supabaseClient.client.from('staging').delete().eq('ref_name', refName);
+                    // Remove from in-memory sheet3StagedRefs
+                    for (const gid of Object.keys(sheet3StagedRefs)) {
+                        if (!sheet3StagedRefs[gid]) continue;
+                        sheet3StagedRefs[gid] = sheet3StagedRefs[gid].map(n => (n === refName ? null : n));
+                    }
+                }
                 renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
+                // Re-render Sheet 3 if it's the active view
+                if (document.getElementById('sheet3View')?.style.display !== 'none') renderSheet3View(sheet3LastFiltered);
             } catch(err) {
                 console.error('refToggleUnavailable error:', err);
                 alert('Failed to save: ' + err.message);
