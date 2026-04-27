@@ -1767,13 +1767,14 @@
         // ── New leads notification dot — Tod only ─────────────────────────────
         async function checkNewLeads() {
             try {
-                const { count, error } = await supabaseClient.client
+                const { data, error } = await supabaseClient.client
                     .from('leads')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('acknowledged', false)
+                    .select('id, acknowledged, archived')
+                    .or('acknowledged.is.null,acknowledged.eq.false')
                     .eq('archived', false);
-                console.log('[leads dot] count:', count, 'error:', error);
+                console.log('[leads dot] unacked rows:', data, 'error:', error);
                 if (error) { console.error('[leads dot] error detail:', error); return; }
+                const count = data ? data.length : 0;
                 document.getElementById('leadNotifDot').style.display = count > 0 ? 'block' : 'none';
             } catch (e) { console.error('[leads dot] exception:', e); }
         }
