@@ -153,6 +153,16 @@ if (loginSection) {
         forgotMsg.textContent = error ? 'Error: ' + error.message : 'Recovery email sent — check your inbox.';
     });
 
+    // Switch — sign out and return to login form
+    const switchBtn = document.getElementById('switchBtn');
+    switchBtn && switchBtn.addEventListener('click', async function(e) {
+        e.preventDefault();
+        await supabaseClient.client.auth.signOut();
+        adminDashboard.style.display = 'none';
+        loginSection.style.display  = 'block';
+        showSessionBadge(false);
+    });
+
     // Logout
     logoutBtn && logoutBtn.addEventListener('click', async function() {
         await supabaseClient.client.auth.signOut();
