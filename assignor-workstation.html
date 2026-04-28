@@ -5238,7 +5238,20 @@
                     // Email fallback — if the avail record's email matches a real ref, link by email
                     const availEmail = (a.fields['Referee Email'] || '').trim().toLowerCase();
                     if (availEmail && refLookupByEmail[availEmail]) {
-                        refLookupByName[key] = refLookupByEmail[availEmail];
+                        const realRef = refLookupByEmail[availEmail];
+                        refLookupByName[key] = realRef;
+                        // Merge availability from alias name into canonical name so the ref stays visible
+                        const canonKey = (realRef.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
+                        if (key !== canonKey) {
+                            if (availByName[key]) {
+                                if (!availByName[canonKey]) availByName[canonKey] = new Set();
+                                availByName[key].forEach(d => availByName[canonKey].add(d));
+                            }
+                            if (availTimeByName[key]) {
+                                if (!availTimeByName[canonKey]) availTimeByName[canonKey] = {};
+                                Object.assign(availTimeByName[canonKey], availTimeByName[key]);
+                            }
+                        }
                         return;
                     }
                     ghostAdded.add(key);
