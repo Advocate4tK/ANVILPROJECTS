@@ -1098,6 +1098,15 @@
                     return;
                 }
 
+                // Restore last session — skip doorway if saved profile is still in the list
+                const savedId = localStorage.getItem('lastAssignorProfileId');
+                if (savedId && visibleProfiles.find(p => String(p.id) === String(savedId))) {
+                    sel.value = savedId;
+                    sel.dispatchEvent(new Event('change'));
+                    openWorkstation();
+                    return;
+                }
+
                 document.getElementById('profileLoading').style.display = 'none';
                 sel.style.display = 'block';
                 document.getElementById('openWorkstationBtn').style.display = 'block';
@@ -1144,6 +1153,7 @@
             }
 
             currentAssignor = chosen;
+            localStorage.setItem('lastAssignorProfileId', String(chosen.id));
 
             // Restrict club pills to this assignor's assigned clubs (non-Admin only)
             if (chosen.clubs && chosen.clubs.length > 0 && chosen.role !== 'Admin') {
@@ -4684,6 +4694,12 @@
 
         // ── Init ─────────────────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
+            // If returning from another page with a saved profile, hide doorway immediately
+            // so there's no flash — loadProfiles() will auto-open once it resolves
+            if (localStorage.getItem('lastAssignorProfileId')) {
+                const doorway = document.getElementById('profileDoorway');
+                if (doorway) doorway.style.display = 'none';
+            }
             loadProfiles();
 
             const focusGameId = new URLSearchParams(window.location.search).get('game');
