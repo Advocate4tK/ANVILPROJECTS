@@ -4391,7 +4391,8 @@
         let allFields     = []; // { fieldId, name, venueId }
         let clubLookup    = {}; // airtable record ID → club name
         let refLookup     = {}; // airtable record ID → ref object
-        let refLookupByName = {}; // lowercase name → ref object (for Supabase string refs)
+        let refLookupByName  = {}; // lowercase name → ref object (for Supabase string refs)
+        let refLookupByEmail = {}; // lowercase email → ref object (for email-based ghost resolution)
         let venueZipMap     = {}; // Airtable field record ID → venue zip string
         let clubVenueZipMap = {}; // club name (lowercase) → representative venue zip
 
@@ -5192,13 +5193,19 @@
                     clubLookup[c.id] = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || c.id;
                 });
 
-                // Build ref lookup by ID and by name
+                // Build ref lookup by ID, name, email, and aliases
                 refLookup = {};
-                refLookupByName = {};
+                refLookupByName  = {};
+                refLookupByEmail = {};
                 refs.forEach(r => {
                     refLookup[r.id] = r;
                     const n = (r.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
                     if (n) refLookupByName[n] = r;
+                    // Register email(s) — primary + Email 2 — for ghost resolution
+                    [r.fields['email'] || r.fields['Email'], r.fields['Email 2']].forEach(e => {
+                        const em = (e || '').trim().toLowerCase();
+                        if (em) refLookupByEmail[em] = r;
+                    });
                     // Register aliases — alternate names (e.g. "TJ" for "Timothy") resolve to real record
                     (r.fields['aliases'] || '').split(',').map(a => a.trim().toLowerCase()).filter(Boolean)
                         .forEach(alias => { if (!refLookupByName[alias]) refLookupByName[alias] = r; });
@@ -5228,6 +5235,12 @@
                     if (!rawName) return;
                     const key = rawName.toLowerCase();
                     if (refLookupByName[key] || ghostAdded.has(key)) return;
+                    // Email fallback — if the avail record's email matches a real ref, link by email
+                    const availEmail = (a.fields['Referee Email'] || '').trim().toLowerCase();
+                    if (availEmail && refLookupByEmail[availEmail]) {
+                        refLookupByName[key] = refLookupByEmail[availEmail];
+                        return;
+                    }
                     ghostAdded.add(key);
                     const ghost = {
                         id: `ghost_${key}`,
