@@ -5215,14 +5215,27 @@
                 availByName = {};
                 availTimeByName = {};
                 const normName = s => (s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+                const _registerAvail = (key, date, slot) => {
+                    if (!availByName[key]) availByName[key] = new Set();
+                    availByName[key].add(date);
+                    if (!availTimeByName[key]) availTimeByName[key] = {};
+                    if (!availTimeByName[key][date]) availTimeByName[key][date] = slot;
+                };
                 avail.forEach(a => {
                     const name = normName(a.fields['Referee Name']);
                     const date = a.fields['Date'];
                     if (!name || !date) return;
-                    if (!availByName[name]) availByName[name] = new Set();
-                    availByName[name].add(date);
-                    if (!availTimeByName[name]) availTimeByName[name] = {};
-                    if (!availTimeByName[name][date]) availTimeByName[name][date] = { start: a.fields['Start Time'] || '', end: a.fields['End Time'] || '', clubs: (a.fields['Preferred Locations'] || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean) };
+                    const slot = { start: a.fields['Start Time'] || '', end: a.fields['End Time'] || '', clubs: (a.fields['Preferred Locations'] || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean) };
+                    _registerAvail(name, date, slot);
+                    // If this name resolves to a real ref via alias or email, also register under canonical name
+                    const realRef = refLookupByName[name] || (() => {
+                        const em = (a.fields['Referee Email'] || '').trim().toLowerCase();
+                        return em ? refLookupByEmail[em] : null;
+                    })();
+                    if (realRef) {
+                        const canonKey = (realRef.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
+                        if (canonKey && canonKey !== name) _registerAvail(canonKey, date, slot);
+                    }
                 });
 
                 // Ghost refs: names that appear in availability but have no referee record.
@@ -5238,20 +5251,7 @@
                     // Email fallback — if the avail record's email matches a real ref, link by email
                     const availEmail = (a.fields['Referee Email'] || '').trim().toLowerCase();
                     if (availEmail && refLookupByEmail[availEmail]) {
-                        const realRef = refLookupByEmail[availEmail];
-                        refLookupByName[key] = realRef;
-                        // Merge availability from alias name into canonical name so the ref stays visible
-                        const canonKey = (realRef.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
-                        if (key !== canonKey) {
-                            if (availByName[key]) {
-                                if (!availByName[canonKey]) availByName[canonKey] = new Set();
-                                availByName[key].forEach(d => availByName[canonKey].add(d));
-                            }
-                            if (availTimeByName[key]) {
-                                if (!availTimeByName[canonKey]) availTimeByName[canonKey] = {};
-                                Object.assign(availTimeByName[canonKey], availTimeByName[key]);
-                            }
-                        }
+                        refLookupByName[key] = refLookupByEmail[availEmail];
                         return;
                     }
                     ghostAdded.add(key);
