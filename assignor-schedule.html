@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule View</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            background-color: #060e20 !important;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            ) !important;
+        }
+        body { margin: 0; font-family: 'DM Sans', sans-serif; }
+        .top-bar {
+            background: #09142a;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: nowrap;
+        }
+        .top-bar a {
+            color: rgba(255,255,255,0.55);
+            text-decoration: none;
+            font-size: 0.78rem;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .top-bar a:hover { color: white; }
+        .top-bar .title {
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: white;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .top-bar .divider {
+            color: rgba(255,255,255,0.2);
+            flex-shrink: 0;
+        }
+        .top-bar label {
+            color: rgba(255,255,255,0.65);
+            font-size: 0.8rem;
+            font-weight: 700;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .top-bar select {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.85rem;
+            padding: 5px 12px;
+            border: 1.5px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            cursor: pointer;
+            min-width: 220px;
+            flex-shrink: 0;
+        }
+        .top-bar select option { background: #09142a; color: white; }
+        .top-bar .hint {
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.35);
+            white-space: nowrap;
+        }
+        #clubFrame {
+            width: 100%;
+            border: none;
+            display: block;
+            height: calc(100vh - 46px);
+        }
+        #noClubMsg {
+            text-align: center;
+            padding: 80px 20px;
+            color: #888;
+            font-size: 1rem;
+        }
+        #noClubMsg strong { display: block; font-size: 1.4rem; color: #09142a; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <a id="backLink" href="assignor-workstation.html" class="btn-back">← Workstation</a>
+        <span class="divider">|</span>
+        <span class="title">📅 Schedule View</span>
+        <span class="divider">|</span>
+        <label for="clubSelect">Club:</label>
+        <select id="clubSelect" onchange="loadClub()">
+            <option value="">— Select a club —</option>
+        </select>
+        <span class="hint" id="selectorHint">Loading…</span>
+    </div>
+
+    <div id="noClubMsg">
+        <strong>Select a club above</strong>
+        Choose a club to view their submitted game schedule.
+    </div>
+
+    <iframe id="clubFrame" style="display:none;" title="Club Schedule View"></iframe>
+
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/supabase-client.js?v=12"></script>
+    <script src="js/admin-auth.js"></script>
+    <script>
+        var airtableClient = supabaseClient;
+
+        if (!isLoggedIn()) { window.location.href = 'admin.html'; }
+
+        // If coming from workstation, back link already set correctly
+        const _from = new URLSearchParams(window.location.search).get('from');
+        if (_from === 'workstation') {
+            document.getElementById('backLink').href = 'assignor-workstation.html';
+            document.getElementById('backLink').textContent = '← Workstation';
+        }
+
+        async function init() {
+            if (!airtableClient) { document.getElementById('selectorHint').textContent = 'Not connected'; return; }
+            try {
+                let allowedClubs = null;
+                const uid = currentUserId();
+                if (uid) {
+                    const assignorRecs = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
+                    const myRec = assignorRecs.find(r => r.fields['auth_user_id'] === uid);
+                    if (myRec && (myRec.fields['Role'] || '').trim() !== 'Admin') {
+                        const c = myRec.fields['Clubs'];
+                        if (c) allowedClubs = Array.isArray(c) ? c.filter(Boolean) : [c];
+                    }
+                }
+
+                const clubs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 });
+                clubs.sort((a, b) => {
+                    const na = a.fields['Club Name'] || a.fields['Name'] || '';
+                    const nb = b.fields['Club Name'] || b.fields['Name'] || '';
+                    return na.localeCompare(nb);
+                });
+
+                const sel = document.getElementById('clubSelect');
+                clubs.forEach(c => {
+                    const name = c.fields['Club Name'] || c.fields['Name'] || '';
+                    const url  = c.fields['Club Game Upload'] || '';
+                    if (!name || !url) return;
+                    if (allowedClubs && !allowedClubs.includes(name)) return;
+                    const opt = document.createElement('option');
+                    opt.value = url;
+                    opt.textContent = name;
+                    sel.appendChild(opt);
+                });
+
+                document.getElementById('selectorHint').textContent = `${sel.options.length - 1} clubs`;
+            } catch (err) {
+                document.getElementById('selectorHint').textContent = 'Failed to load';
+                console.error(err);
+            }
+        }
+
+        function loadClub() {
+            const url   = document.getElementById('clubSelect').value;
+            const frame = document.getElementById('clubFrame');
+            const msg   = document.getElementById('noClubMsg');
+            if (!url) {
+                frame.style.display = 'none';
+                msg.style.display   = 'block';
+                frame.src = '';
+                return;
+            }
+            const rel = url.replace(/^https?:\/\/[^/]+/, '');
+            const sep = rel.includes('?') ? '&' : '?';
+            frame.src = rel + sep + 'assignor=true&view=schedule';
+            frame.style.display = 'block';
+            msg.style.display   = 'none';
+        }
+
+        init();
+    </script>
+</body>
+</html>
