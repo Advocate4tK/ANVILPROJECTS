@@ -1090,22 +1090,16 @@
                     sel.appendChild(opt);
                 });
 
-                // Auto-open if only one profile visible (skip picker entirely)
-                if (visibleProfiles.length === 1) {
-                    sel.value = visibleProfiles[0].id;
+                // Non-admin: auth session IS the profile — auto-open, never show doorway
+                if (myProfile && myProfile.role !== 'Admin') {
+                    sel.value = myProfile.id;
                     sel.dispatchEvent(new Event('change'));
                     openWorkstation();
                     return;
                 }
 
-                // Restore last session — skip doorway if saved profile is still in the list
-                const savedId = localStorage.getItem('lastAssignorProfileId');
-                if (savedId && visibleProfiles.find(p => String(p.id) === String(savedId))) {
-                    sel.value = savedId;
-                    sel.dispatchEvent(new Event('change'));
-                    openWorkstation();
-                    return;
-                }
+                // Admin: show the full profile picker
+                document.getElementById('profileDoorway').style.display = 'block';
 
                 document.getElementById('profileLoading').style.display = 'none';
                 sel.style.display = 'block';
@@ -4694,12 +4688,10 @@
 
         // ── Init ─────────────────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
-            // If returning from another page with a saved profile, hide doorway immediately
-            // so there's no flash — loadProfiles() will auto-open once it resolves
-            if (localStorage.getItem('lastAssignorProfileId')) {
-                const doorway = document.getElementById('profileDoorway');
-                if (doorway) doorway.style.display = 'none';
-            }
+            // Auth drives the profile — hide doorway immediately for non-admin users.
+            // loadProfiles() will auto-open from the auth session. Only Admin sees the picker.
+            const doorway = document.getElementById('profileDoorway');
+            if (doorway) doorway.style.display = 'none';
             loadProfiles();
 
             const focusGameId = new URLSearchParams(window.location.search).get('game');
