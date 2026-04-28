@@ -105,6 +105,7 @@
             white-space: nowrap;
         }
         .badge-completed { background: #d5f5e3; color: #1e8449; }
+        .badge-recent    { background: #d5f5e3; color: #1e8449; }
         .badge-pending   { background: #fef9e7; color: #7d6608; }
         .badge-active    { background: #d6eaf8; color: #1a5276; }
         .loading-msg { text-align: center; color: #888; font-size: 0.9rem; padding: 20px; }
@@ -361,10 +362,13 @@
             const lastDate  = t.toDate   || dates[dates.length - 1] || '';
 
             let status, statusLabel;
-            if (!firstDate)              { status = 'pending';   statusLabel = 'Upcoming'; }
-            else if (lastDate < today)   { status = 'completed'; statusLabel = 'Completed'; }
-            else if (firstDate <= today) { status = 'active';    statusLabel = 'In Progress'; }
-            else                         { status = 'pending';   statusLabel = 'Upcoming'; }
+            const sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            const recentlyEnded = lastDate && lastDate >= sevenDaysAgo.toISOString().slice(0,10);
+            if (!firstDate)                             { status = 'pending';   statusLabel = 'Upcoming'; }
+            else if (lastDate < today && !recentlyEnded){ status = 'completed'; statusLabel = 'Completed'; }
+            else if (lastDate < today && recentlyEnded) { status = 'recent';    statusLabel = 'Completed'; }
+            else if (firstDate <= today)                { status = 'active';    statusLabel = 'In Progress'; }
+            else                                        { status = 'pending';   statusLabel = 'Upcoming'; }
 
             const ageGroups = [...new Set(gData.games.map(g => g['Age Group']).filter(Boolean))].sort();
             const dateRange = firstDate
@@ -393,7 +397,7 @@
                 <a href="assignor-workstation.html?tournament=${encodeURIComponent(t.key)}" class="action-btn primary" style="white-space:nowrap;">Open →</a>`;
 
             if (status === 'completed') archiveCards.push(card);
-            else currentCards.push(card);
+            else currentCards.push(card); // 'recent' intentionally stays in current
         });
 
         if (currentCards.length) currentCards.forEach(c => currentList.appendChild(c));
