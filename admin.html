@@ -1787,31 +1787,28 @@
             const uid = currentUserId();
             if (!uid) return;
             try {
-                const recs  = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
-                const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
-                if (!myRec) return;
-                const role  = (myRec.fields['Role'] || 'Assignor').trim();
+                const { data: myRow } = await supabaseClient.client
+                    .from('assignors')
+                    .select('name, role, clubs, email')
+                    .eq('auth_user_id', uid)
+                    .maybeSingle();
+                if (!myRow) return;
+                const role  = (myRow.role || 'Assignor').trim();
                 const clubs = (() => {
-                    const c = myRec.fields['Clubs'];
+                    const c = myRow.clubs;
                     if (!c) return null;
                     return Array.isArray(c) ? c.filter(Boolean) : [c];
                 })();
-                // Super Admin card — Tod only, regardless of role
-                if (uid !== TOD_UID) {
-                    const sa = document.getElementById('cardSuperAdmin');
-                    if (sa) sa.style.display = 'none';
-                }
                 // Update badge with actual name from DB (before any early return)
-                _setSessionName(myRec.fields['Name'] || role);
+                _setSessionName(myRow.name || role);
                 if (role === 'Admin') {
-                    // Admin still scopes to their listed clubs if they have any
                     if (clubs && clubs.length) adminUserClubs = clubs;
                     return;
                 }
                 // Restrict non-Admin assignors
                 adminUserClubs = clubs;
-                const isEric = (myRec.fields['Email'] || '').toLowerCase() === 'ct.ref.assignor@gmail.com';
-                const isTod  = (myRec.fields['Email'] || '').toLowerCase() === 'nectassignor@gmail.com';
+                const isEric = (myRow.email || '').toLowerCase() === 'ct.ref.assignor@gmail.com';
+                const isTod  = (myRow.email || '').toLowerCase() === 'nectassignor@gmail.com';
                 const restrictedCards = ['cardCentralAssign','cardRefManagement','cardVenueManagement','cardClubContacts','cardTournament'];
                 restrictedCards.forEach(id => {
                     // Tournament card stays visible for Eric
