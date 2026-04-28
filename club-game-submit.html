@@ -1668,14 +1668,20 @@
                 <div class="game-refs">${refsHtml}</div>
                 <div class="change-form" id="chgForm_${r.id}" style="margin-top:10px;">
                     <p style="font-size:0.82rem; font-weight:700; color:#935116; margin:0 0 8px;">Request a change for: <em>${f['Home Team'] || ''} vs ${f['Away Team'] || ''} (${dateStr})</em></p>
-                    <label>New Date (optional)</label>
-                    <input type="date" id="chgDate_${r.id}">
-                    <label>New Time (optional)</label>
-                    <input type="time" id="chgTime_${r.id}">
-                    <label>Reason <span style="color:#e74c3c">*</span></label>
+                    <label style="display:flex; align-items:center; gap:8px; margin-top:0; cursor:pointer;">
+                        <input type="checkbox" id="chgCancel_${r.id}" onchange="toggleCancelMode('${r.id}')" style="width:auto; margin:0;">
+                        <span>This is a cancellation request (not a reschedule)</span>
+                    </label>
+                    <div id="chgDateTimeFields_${r.id}">
+                        <label>New Date (optional)</label>
+                        <input type="date" id="chgDate_${r.id}">
+                        <label>New Time (optional)</label>
+                        <input type="time" id="chgTime_${r.id}">
+                    </div>
+                    <label id="chgReasonLabel_${r.id}">Reason <span style="color:#e74c3c">*</span></label>
                     <textarea id="chgReason_${r.id}" placeholder="Explain the requested change…"></textarea>
                     <div class="change-form-btns">
-                        <button class="btn btn-primary" style="font-size:0.85rem; padding:7px 16px;" onclick="submitChangeRequest('${r.id}')">Submit Request</button>
+                        <button class="btn btn-primary" id="chgSubmitBtn_${r.id}" style="font-size:0.85rem; padding:7px 16px;" onclick="submitChangeRequest('${r.id}')">Submit Request</button>
                         <button class="btn btn-outline" style="font-size:0.85rem; padding:7px 16px;" onclick="toggleChangeForm('${r.id}')">Cancel</button>
                     </div>
                     <p id="chgMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
@@ -1965,6 +1971,18 @@
     function toggleChangeForm(gameId) {
         const form = document.getElementById('chgForm_' + gameId);
         form.style.display = form.style.display === 'block' ? 'none' : 'block';
+        // Reset cancel mode when closing
+        if (form.style.display === 'none') {
+            const cb = document.getElementById('chgCancel_' + gameId);
+            if (cb) { cb.checked = false; toggleCancelMode(gameId); }
+        }
+    }
+
+    function toggleCancelMode(gameId) {
+        const isCancelling = document.getElementById('chgCancel_' + gameId).checked;
+        document.getElementById('chgDateTimeFields_' + gameId).style.display = isCancelling ? 'none' : 'block';
+        document.getElementById('chgReason_' + gameId).placeholder = isCancelling ? 'Reason for cancellation…' : 'Explain the requested change…';
+        document.getElementById('chgSubmitBtn_' + gameId).textContent = isCancelling ? 'Submit Cancellation Request' : 'Submit Request';
     }
 
     function toggleModifyForm(gameId) {
@@ -2011,19 +2029,20 @@
     }
 
     async function submitChangeRequest(gameId) {
+        const isCancelling = document.getElementById('chgCancel_' + gameId)?.checked || false;
         const reason  = (document.getElementById('chgReason_' + gameId).value || '').trim();
-        const newDate = document.getElementById('chgDate_' + gameId).value || '';
-        const newTime = document.getElementById('chgTime_' + gameId).value || '';
+        const newDate = isCancelling ? '' : (document.getElementById('chgDate_' + gameId).value || '');
+        const newTime = isCancelling ? '' : (document.getElementById('chgTime_' + gameId).value || '');
         const msgEl   = document.getElementById('chgMsg_' + gameId);
 
-        if (!newDate) { msgEl.textContent = 'A requested date is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
-        if (!newTime) { msgEl.textContent = 'A requested time is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
+        if (!isCancelling && !newDate) { msgEl.textContent = 'A requested date is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
+        if (!isCancelling && !newTime) { msgEl.textContent = 'A requested time is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
         if (!reason)  { msgEl.textContent = 'Please enter a reason.';        msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
 
         msgEl.textContent = 'Submitting…'; msgEl.style.color = '#555'; msgEl.style.display = 'block';
 
         const now     = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
-        let noteText  = `\n\n[CHANGE REQUEST – ${now}]`;
+        let noteText  = isCancelling ? `\n\n[CANCELLATION REQUEST – ${now}]` : `\n\n[CHANGE REQUEST – ${now}]`;
         if (newDate)  noteText += `\nRequested Date: ${newDate}`;
         if (newTime)  noteText += `\nRequested Time: ${newTime}`;
         noteText += `\nReason: ${reason}`;
