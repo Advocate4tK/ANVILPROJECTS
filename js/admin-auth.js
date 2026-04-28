@@ -64,7 +64,6 @@ if (loginSection) {
     if (isLoggedIn()) {
         loginSection.style.display  = 'none';
         adminDashboard.style.display = 'block';
-        showSessionBadge(true);
     }
 
     // Login
@@ -106,7 +105,6 @@ if (loginSection) {
             loginError.style.display  = 'none';
             loginSection.style.display  = 'none';
             adminDashboard.style.display = 'block';
-            showSessionBadge(true);
         } catch (e) {
             loginError.textContent = 'Login failed. Try again.';
             loginError.style.display = 'block';
