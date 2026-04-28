@@ -55,8 +55,13 @@ const logoutBtn      = document.getElementById('logoutBtn');
 const loginError     = document.getElementById('loginError');
 
 function showSessionBadge(visible) {
-    const badge = document.getElementById('sessionBadge');
-    if (badge) badge.style.display = visible ? 'flex' : 'none';
+    const controls = document.getElementById('sessionControls');
+    if (controls) controls.style.display = visible ? 'flex' : 'none';
+}
+
+function _setSessionName(name) {
+    const el = document.getElementById('sessionName');
+    if (el) el.textContent = name ? `🔒 ${name}` : '';
 }
 
 if (loginSection) {
@@ -64,8 +69,8 @@ if (loginSection) {
     if (isLoggedIn()) {
         loginSection.style.display  = 'none';
         adminDashboard.style.display = 'block';
-        const _badgeSpan1 = document.querySelector('#sessionBadge span');
-        if (_badgeSpan1) _badgeSpan1.textContent = '';
+        const _s = _getSupabaseSession();
+        _setSessionName(_s?.user?.email || '');
         showSessionBadge(true);
     }
 
@@ -108,8 +113,7 @@ if (loginSection) {
             loginError.style.display  = 'none';
             loginSection.style.display  = 'none';
             adminDashboard.style.display = 'block';
-            const _badgeSpan2 = document.querySelector('#sessionBadge span');
-            if (_badgeSpan2) _badgeSpan2.textContent = '';
+            _setSessionName(data.user.email || '');
             showSessionBadge(true);
         } catch (e) {
             loginError.textContent = 'Login failed. Try again.';

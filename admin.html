@@ -76,9 +76,11 @@
         <header style="position:relative;">
             <h1>🔐 Admin Portal</h1>
             <p class="subtitle">Restricted access — authorized personnel only</p>
-            <div id="sessionBadge" style="display:none; position:absolute; top:15px; right:30px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:20px; padding:6px 14px; font-size:0.8rem; color:white; align-items:center; gap:10px;">
-                <span>🔒 Logged in as Admin</span>
-                <button id="logoutBtn" style="background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:white; border-radius:12px; padding:2px 10px; font-size:0.75rem; cursor:pointer;">Logout</button>
+            <div style="display:none; position:absolute; top:15px; right:30px; align-items:center; gap:8px; flex-direction:row;" id="sessionControls">
+                <div id="sessionBadge" style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:20px; padding:6px 14px; font-size:0.8rem; color:white;">
+                    <span id="sessionName"></span>
+                </div>
+                <button id="logoutBtn" style="background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:white; border-radius:12px; padding:4px 12px; font-size:0.75rem; cursor:pointer;">Logout</button>
             </div>
         </header>
 
@@ -340,7 +342,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="js/supabase-client.js?v=12"></script>
     <script>var airtableClient = supabaseClient;</script>
-    <script src="js/admin-auth.js?v=2"></script>
+    <script src="js/admin-auth.js?v=3"></script>
     <script>
         // ── Super Admin PIN ───────────────────────────────────────────────────
         const SUPER_ADMIN_PIN = '8625';
@@ -1787,16 +1789,7 @@
             try {
                 const recs  = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
                 const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
-                if (!myRec) {
-                    const session = _getSupabaseSession();
-                    const badge = document.getElementById('sessionBadge');
-                    if (badge) {
-                        const nameEl = badge.querySelector('span');
-                        if (nameEl) nameEl.textContent = `🔒 ${session?.user?.email || 'Logged In'}`;
-                        showSessionBadge(true);
-                    }
-                    return;
-                }
+                if (!myRec) return;
                 const role  = (myRec.fields['Role'] || 'Assignor').trim();
                 const clubs = (() => {
                     const c = myRec.fields['Clubs'];
@@ -1808,13 +1801,8 @@
                     const sa = document.getElementById('cardSuperAdmin');
                     if (sa) sa.style.display = 'none';
                 }
-                // Always update badge with actual name (before any early return)
-                const badge = document.getElementById('sessionBadge');
-                if (badge) {
-                    const nameEl = badge.querySelector('span');
-                    if (nameEl) nameEl.textContent = `🔒 ${myRec.fields['Name'] || role}`;
-                    showSessionBadge(true);
-                }
+                // Update badge with actual name from DB (before any early return)
+                _setSessionName(myRec.fields['Name'] || role);
                 if (role === 'Admin') {
                     // Admin still scopes to their listed clubs if they have any
                     if (clubs && clubs.length) adminUserClubs = clubs;
