@@ -55,13 +55,13 @@ const logoutBtn      = document.getElementById('logoutBtn');
 const loginError     = document.getElementById('loginError');
 
 function showSessionBadge(visible) {
-    const controls = document.getElementById('sessionControls');
-    if (controls) controls.style.display = visible ? 'flex' : 'none';
+    const badge = document.getElementById('profileBadge');
+    if (badge) badge.style.display = visible ? 'flex' : 'none';
 }
 
 function _setSessionName(name) {
-    const el = document.getElementById('sessionName');
-    if (el) el.textContent = name ? `🔒 ${name}` : '';
+    const el = document.getElementById('profileBadgeName');
+    if (el) el.textContent = name || '';
 }
 
 if (loginSection) {
