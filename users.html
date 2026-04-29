@@ -384,6 +384,12 @@
             <div id="loadingState" style="color:rgba(255,255,255,0.4); text-align:center; padding:60px 0; font-size:0.9rem;">Loading users…</div>
             <div id="errorState" style="display:none; color:#e74c3c; text-align:center; padding:40px 0; font-size:0.88rem;"></div>
             <div id="usersList"></div>
+
+            <!-- Club Portal Access -->
+            <div style="margin-top:40px; margin-bottom:10px; border-top:2px solid rgba(255,255,255,0.08); padding-top:28px;">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:rgba(255,255,255,0.35); margin-bottom:14px;">Club Portal Access</div>
+                <div id="clubAccessList"><div style="color:rgba(255,255,255,0.25); font-size:0.85rem;">Loading…</div></div>
+            </div>
         </div>
     </main>
 </div>
@@ -704,7 +710,39 @@
         }
     }
 
+    async function loadClubAccess() {
+        const { data, error } = await supabaseClient.client
+            .from('clubs')
+            .select('id, name, "Club Name", last_accessed, last_accessed_by')
+            .order('name');
+
+        const wrap = document.getElementById('clubAccessList');
+        if (error || !data) { wrap.innerHTML = '<div style="color:#e74c3c; font-size:0.82rem;">Failed to load club access data.</div>'; return; }
+
+        wrap.innerHTML = data.map(c => {
+            const name = c['Club Name'] || c.name || '—';
+            const ts   = c.last_accessed;
+            const by   = c.last_accessed_by;
+            const when = ts
+                ? new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+                  + ' @ ' + new Date(ts).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })
+                : null;
+            return `
+            <div class="user-card" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                <div>
+                    <span class="user-name">${name}</span>
+                    <div class="user-meta" style="margin-top:3px;">
+                        ${when
+                            ? `Last access: ${when} &nbsp;·&nbsp; <strong>${by || '—'}</strong>`
+                            : '<span style="color:#bbb;">No access recorded yet</span>'}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
     loadUsers();
+    loadClubAccess();
 </script>
 </body>
 </html>
