@@ -341,7 +341,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="js/supabase-client.js?v=12"></script>
     <script>var airtableClient = supabaseClient;</script>
-    <script src="js/admin-auth.js?v=6"></script>
+    <script src="js/admin-auth.js?v=7"></script>
     <script>
         // ── Super Admin PIN ───────────────────────────────────────────────────
         const SUPER_ADMIN_PIN = '8625';
@@ -1821,23 +1821,15 @@
             } catch(e) { /* non-critical */ }
         }
 
-        // Load stats when dashboard becomes visible
-        const observer = new MutationObserver(() => {
-            if (document.getElementById('adminDashboard').style.display !== 'none') {
-                document.getElementById('statusBar').style.display = 'block';
-                applyAdminRestrictions().then(() => { loadStats(); loadBanners(); checkNewLeads(); });
-                observer.disconnect();
-            }
-        });
-        observer.observe(document.getElementById('adminDashboard'), { attributes: true, attributeFilter: ['style'] });
+        // Shared init — called after login (via callback) and on page load (session persisted)
+        window._adminInit = function() {
+            const dash = document.getElementById('adminDashboard');
+            if (!dash || dash.style.display === 'none') return;
+            document.getElementById('statusBar').style.display = 'block';
+            applyAdminRestrictions().then(() => { loadStats(); loadBanners(); checkNewLeads(); });
+        };
 
-        // Also load if already logged in on page load (session persisted)
-        window.addEventListener('load', () => {
-            if (document.getElementById('adminDashboard') && document.getElementById('adminDashboard').style.display !== 'none') {
-                document.getElementById('statusBar').style.display = 'block';
-                applyAdminRestrictions().then(() => { loadStats(); loadBanners(); checkNewLeads(); });
-            }
-        });
+        window.addEventListener('load', () => { window._adminInit(); });
 
         // ── CT Zip Code Centroids ─────────────────────────────────────────────
         const ZIP_LATLNG = {
