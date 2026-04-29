@@ -78,18 +78,20 @@ if (loginSection) {
     async function doLogin() {
         const username = (document.getElementById('adminUsername') || {}).value || '';
         const password = (document.getElementById('adminPassword') || {}).value || '';
+        loginError.style.display = 'none';
         if (!username || !password) {
             loginError.textContent = 'Enter your username and password.';
             loginError.style.display = 'block';
             return;
         }
-        const email = await _resolveUsernameToEmail(username);
-        if (!email) {
-            loginError.textContent = 'Username not found.';
-            loginError.style.display = 'block';
-            return;
-        }
+        if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = 'Logging in…'; }
         try {
+            const email = await _resolveUsernameToEmail(username);
+            if (!email) {
+                loginError.textContent = 'Username not found.';
+                loginError.style.display = 'block';
+                return;
+            }
             const { data, error } = await supabaseClient.client.auth.signInWithPassword({ email, password });
             if (error || !data.session) {
                 loginError.textContent = 'Incorrect username or password.';
@@ -110,16 +112,16 @@ if (loginSection) {
                 return;
             }
 
-            loginError.style.display  = 'none';
             loginSection.style.display  = 'none';
             adminDashboard.style.display = 'block';
             _setSessionName(data.user.email || '');
             showSessionBadge(true);
-            // Delay init so Supabase session is fully committed before making queries
             setTimeout(() => { window._adminInit?.(); }, 150);
         } catch (e) {
-            loginError.textContent = 'Login failed. Try again.';
+            loginError.textContent = 'Login failed: ' + (e.message || 'Unknown error');
             loginError.style.display = 'block';
+        } finally {
+            if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = 'Log In'; }
         }
     }
 
