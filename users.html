@@ -174,6 +174,51 @@
             white-space: nowrap;
         }
         .pw-msg { font-size: 0.82rem; font-weight: 700; display: none; }
+        .btn-tool-access {
+            background: #f0ece6;
+            color: #09142a;
+            border: 1px solid #e2d9ce;
+            border-radius: 6px;
+            padding: 7px 14px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .tool-access-panel {
+            display: none;
+            margin-top: 12px;
+            padding: 14px 16px;
+            background: #f8f9fc;
+            border: 1.5px solid #dde3f0;
+            border-radius: 8px;
+        }
+        .tool-access-label {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #09142a;
+            display: block;
+            margin-bottom: 10px;
+        }
+        .tool-checks { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-bottom: 12px; }
+        .tool-checks label { display: flex; align-items: center; gap: 5px; font-size: 0.84rem; cursor: pointer; }
+        .btn-save-tools {
+            background: #09142a;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 7px 18px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .tool-msg { font-size: 0.82rem; font-weight: 700; margin-left: 10px; display: none; }
         /* ── Logo mark ── */
         .logo-mark { --sz:72px; position:relative; width:var(--sz); height:var(--sz); flex-shrink:0; }
         .lcard { position:absolute; border-radius:calc(var(--sz)*0.065); }
@@ -444,11 +489,28 @@
             + ' @ ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
     }
 
+    const TOOL_DEFS = [
+        { id: 'cardWorkstation',     label: 'Workstation' },
+        { id: 'cardRefManagement',   label: 'Ref Management' },
+        { id: 'cardClubContacts',    label: 'Club Contacts' },
+        { id: 'cardVenueManagement', label: 'Venue Management' },
+        { id: 'cardTournament',      label: 'Tournament' },
+        { id: 'cardCAImport',        label: 'CA Import' },
+        { id: 'cardCentralAssign',   label: 'CA Export' },
+    ];
+
     async function loadUsers() {
-        const [profilesRes, authRes] = await Promise.all([
+        const [profilesRes, authRes, assignorsRes] = await Promise.all([
             supabaseClient.client.from('assignor_profiles').select('*').order('name'),
-            adminClient ? adminClient.auth.admin.listUsers({ perPage: 200 }) : Promise.resolve({ data: null })
+            adminClient ? adminClient.auth.admin.listUsers({ perPage: 200 }) : Promise.resolve({ data: null }),
+            supabaseClient.client.from('assignors').select('auth_user_id, permissions')
         ]);
+
+        // Build uid → permissions map
+        const permMap = {};
+        (assignorsRes.data || []).forEach(r => {
+            if (r.auth_user_id) permMap[r.auth_user_id] = Array.isArray(r.permissions) ? r.permissions : ['cardWorkstation'];
+        });
 
         const { data: rawData, error } = profilesRes;
         const data = rawData ? [...rawData].sort((a, b) => {
@@ -479,6 +541,10 @@
                            || (u.username || '').toLowerCase().includes('admin');
             const cardClass = [isAdmin ? 'is-admin' : '', suspended ? 'is-suspended' : ''].filter(Boolean).join(' ');
             const loginLine = adminClient ? `<div class="user-meta" style="margin-top:3px; color:#aaa;">${fmtLoginDate(lastLoginMap[u.id])}</div>` : '';
+            const perms     = permMap[u.id] || ['cardWorkstation'];
+            const toolChecks = TOOL_DEFS.map(t =>
+                `<label><input type="checkbox" id="tool-${u.id}-${t.id}" value="${t.id}"${perms.includes(t.id) ? ' checked' : ''}> ${t.label}</label>`
+            ).join('');
             return `
             <div class="user-card ${cardClass}" id="user-card-${u.id}">
                 <div class="user-top">
@@ -503,6 +569,7 @@
                     <button class="btn-change-pw" onclick="toggleChangePw('${u.id}')">
                         Change Password
                     </button>
+                    ${isAdmin ? '' : `<button class="btn-tool-access" onclick="toggleToolAccess('${u.id}')">Tool Access</button>`}
                     <span class="reset-msg" id="reset-msg-${u.id}"></span>
                     ${isAdmin
                         ? `<button class="btn-suspend active" style="margin-left:auto; opacity:0.35; cursor:default;" disabled title="Admin account cannot be suspended">Suspend</button>`
@@ -522,6 +589,15 @@
                     </div>
                     <span class="pw-msg" id="pw-msg-${u.id}"></span>
                 </div>
+
+                ${isAdmin ? '' : `
+                <!-- Tool access panel -->
+                <div class="tool-access-panel" id="tool-access-${u.id}">
+                    <span class="tool-access-label">Tool Access</span>
+                    <div class="tool-checks">${toolChecks}</div>
+                    <button class="btn-save-tools" onclick="saveToolAccess('${u.id}')">Save</button>
+                    <span class="tool-msg" id="tool-msg-${u.id}"></span>
+                </div>`}
             </div>`;
         }).join('');
     }
@@ -633,6 +709,34 @@
             card.classList.remove('is-suspended');
             pill.className = 'status-pill active';
             pill.textContent = 'Active';
+        }
+    }
+
+    function toggleToolAccess(id) {
+        const panel = document.getElementById('tool-access-' + id);
+        if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function saveToolAccess(uid) {
+        const perms = TOOL_DEFS
+            .filter(t => document.getElementById('tool-' + uid + '-' + t.id)?.checked)
+            .map(t => t.id);
+        const msg = document.getElementById('tool-msg-' + uid);
+        msg.style.display = 'none';
+
+        const { error } = await supabaseClient.client
+            .from('assignors')
+            .update({ permissions: perms })
+            .eq('auth_user_id', uid);
+
+        msg.style.display = 'inline';
+        if (error) {
+            msg.textContent = '✗ ' + error.message;
+            msg.style.color = '#e74c3c';
+        } else {
+            msg.textContent = '✓ Saved';
+            msg.style.color = '#00c853';
+            setTimeout(() => { msg.style.display = 'none'; }, 2500);
         }
     }
 

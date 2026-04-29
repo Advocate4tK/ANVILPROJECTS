@@ -1790,7 +1790,7 @@
             try {
                 const { data: myRow } = await supabaseClient.client
                     .from('assignors')
-                    .select('name, role, clubs, email')
+                    .select('name, role, clubs, email, permissions')
                     .eq('auth_user_id', uid)
                     .maybeSingle();
                 if (!myRow) return;
@@ -1806,18 +1806,15 @@
                     if (clubs && clubs.length) adminUserClubs = clubs;
                     return;
                 }
-                // Restrict non-Admin assignors
+                // Restrict non-Admin assignors based on their permissions
                 adminUserClubs = clubs;
-                const isEric = (myRow.email || '').toLowerCase() === 'ct.ref.assignor@gmail.com';
-                const isTod  = (myRow.email || '').toLowerCase() === 'nectassignor@gmail.com';
-                const restrictedCards = ['cardCentralAssign','cardRefManagement','cardVenueManagement','cardClubContacts','cardTournament','cardSuperAdmin','cardUsers','cardCAImport'];
-                restrictedCards.forEach(id => {
-                    // Tournament card stays visible for Eric
-                    if (id === 'cardTournament' && isEric) return;
-                    // CA Export card stays visible for Tod
-                    if (id === 'cardCentralAssign' && isTod) return;
-                    const el = document.getElementById(id);
-                    if (el) el.style.display = 'none';
+                const allowed = Array.isArray(myRow.permissions) ? myRow.permissions : ['cardWorkstation'];
+                ['cardCentralAssign','cardRefManagement','cardVenueManagement','cardClubContacts',
+                 'cardTournament','cardCAImport','cardSuperAdmin','cardUsers'].forEach(id => {
+                    if (!allowed.includes(id)) {
+                        const el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    }
                 });
                 const leadDot = document.getElementById('leadNotifDot');
                 if (leadDot) leadDot.style.display = 'none';
