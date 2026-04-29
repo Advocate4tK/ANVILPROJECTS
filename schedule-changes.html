@@ -456,7 +456,7 @@
 
             const changeGames = games.filter(r => {
                 const s = (r.fields['Game Status'] || '').toLowerCase();
-                if (isShowingResolved()) return s === 'change requested' || s === 'change resolved';
+                if (isShowingResolved()) return s === 'change requested' || s === 'change resolved' || s === 'cancelled';
                 return s === 'change requested';
             });
 
@@ -528,7 +528,8 @@
 
         // Apply club filter
         const filtered = allLoadedRecords.filter(r => {
-            const isResolved = (r.fields['Game Status']||'').toLowerCase() === 'change resolved';
+            const s = (r.fields['Game Status']||'').toLowerCase();
+            const isResolved = s === 'change resolved' || s === 'cancelled';
             if (isResolved && cutoff && getResolvedTs(r) < cutoff) return false;
             if (clubFilter && getClubName(r) !== clubFilter) return false;
             return true;
@@ -554,8 +555,8 @@
             const clubColor = getClubColor(club);
             const cards = records
                 .sort((a, b) => {
-                    const isResA = (a.fields['Game Status']||'').toLowerCase() === 'change resolved';
-                    const isResB = (b.fields['Game Status']||'').toLowerCase() === 'change resolved';
+                    const isResA = ['change resolved','cancelled'].includes((a.fields['Game Status']||'').toLowerCase());
+                    const isResB = ['change resolved','cancelled'].includes((b.fields['Game Status']||'').toLowerCase());
                     if (isResA && isResB) {
                         const cmp = getResolvedTs(a) - getResolvedTs(b);
                         return sortDir === 'asc' ? cmp : -cmp;
@@ -566,7 +567,8 @@
                 })
                 .map(r => {
                     const f          = r.fields;
-                    const isResolved = (f['Game Status']||'').toLowerCase() === 'change resolved';
+                    const isCancelled = (f['Game Status']||'').toLowerCase() === 'cancelled';
+                    const isResolved = (f['Game Status']||'').toLowerCase() === 'change resolved' || isCancelled;
                     const center     = resolveRef(f['Center Referee']);
                     const ar1        = resolveRef(f['AR 1']);
                     const ar2        = resolveRef(f['AR 2']);
@@ -611,7 +613,7 @@
                                 ${gameNum ? `<span class="resolved-game-num">${gameNum}</span>` : ''}
                                 <span class="resolved-matchup">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</span>
                                 ${resolvedTs ? `<span class="resolved-meta">${resolvedTs}</span>` : ''}
-                                <span class="status-pill pill-resolved" style="font-size:0.7rem; padding:2px 10px;">✅ Resolved</span>
+                                <span class="status-pill pill-resolved" style="font-size:0.7rem; padding:2px 10px; ${isCancelled ? 'background:#fee2e2; color:#991b1b;' : ''}">${isCancelled ? '🚫 Cancelled' : '✅ Resolved'}</span>
                             </div>
                             <div class="card-body">
                                 <div class="game-meta" style="margin-bottom:10px;">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
