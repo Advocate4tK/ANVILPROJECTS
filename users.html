@@ -400,11 +400,20 @@
         document.getElementById('noServiceKeyWarning').style.display = 'block';
     }
 
+    function fmtLoginDate(iso) {
+        if (!iso) return 'Never logged in';
+        const d = new Date(iso);
+        return 'Last login: ' + d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+            + ' @ ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+    }
+
     async function loadUsers() {
-        const { data: rawData, error } = await supabaseClient.client
-            .from('assignor_profiles')
-            .select('*')
-            .order('name');
+        const [profilesRes, authRes] = await Promise.all([
+            supabaseClient.client.from('assignor_profiles').select('*').order('name'),
+            adminClient ? adminClient.auth.admin.listUsers({ perPage: 200 }) : Promise.resolve({ data: null })
+        ]);
+
+        const { data: rawData, error } = profilesRes;
         const data = rawData ? [...rawData].sort((a, b) => {
             const aAdmin = (a.tier || '').toLowerCase() === 'admin' || (a.username || '').toLowerCase().includes('admin');
             const bAdmin = (b.tier || '').toLowerCase() === 'admin' || (b.username || '').toLowerCase().includes('admin');
@@ -412,6 +421,11 @@
             if (!aAdmin && bAdmin) return 1;
             return 0;
         }) : rawData;
+
+        // Build uid → last_sign_in_at map from auth users
+        const lastLoginMap = {};
+        const authUsers = authRes?.data?.users || [];
+        authUsers.forEach(u => { lastLoginMap[u.id] = u.last_sign_in_at || null; });
 
         document.getElementById('loadingState').style.display = 'none';
 
@@ -427,6 +441,7 @@
             const isAdmin   = (u.tier || '').toLowerCase() === 'admin'
                            || (u.username || '').toLowerCase().includes('admin');
             const cardClass = [isAdmin ? 'is-admin' : '', suspended ? 'is-suspended' : ''].filter(Boolean).join(' ');
+            const loginLine = adminClient ? `<div class="user-meta" style="margin-top:3px; color:#aaa;">${fmtLoginDate(lastLoginMap[u.id])}</div>` : '';
             return `
             <div class="user-card ${cardClass}" id="user-card-${u.id}">
                 <div class="user-top">
@@ -440,6 +455,7 @@
                             @${u.username || '—'} &nbsp;·&nbsp; ${u.email}
                             ${u.clubs && u.clubs.length ? '&nbsp;·&nbsp; ' + (Array.isArray(u.clubs) ? u.clubs.join(', ') : u.clubs) : ''}
                         </div>
+                        ${loginLine}
                     </div>
                 </div>
 
