@@ -110,11 +110,8 @@ if (loginSection) {
                 return;
             }
 
-            loginError.style.display  = 'none';
-            loginSection.style.display  = 'none';
-            adminDashboard.style.display = 'block';
-            _setSessionName(data.user.email || '');
-            showSessionBadge(true);
+            // Reload so the page initializes fresh with the new session already in localStorage
+            window.location.href = window.location.href;
         } catch (e) {
             loginError.textContent = 'Login failed. Try again.';
             loginError.style.display = 'block';
