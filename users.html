@@ -414,6 +414,19 @@
 <script src="js/admin-auth.js?v=5"></script>
 <script>
     checkAdminAccess();
+    // Restrict to admin tier only — assignors should not see this page
+    (async () => {
+        const uid = currentUserId();
+        if (!uid) { window.location.href = 'admin.html'; return; }
+        const { data } = await supabaseClient.client
+            .from('assignor_profiles')
+            .select('tier')
+            .eq('id', uid)
+            .maybeSingle();
+        if (!data || (data.tier || '').toLowerCase() !== 'admin') {
+            window.location.href = 'admin.html';
+        }
+    })();
     // Admin client — needed for force-setting passwords (service role bypasses auth restrictions)
     let adminClient = null;
     if (CONFIG.SUPABASE_SERVICE_KEY) {
