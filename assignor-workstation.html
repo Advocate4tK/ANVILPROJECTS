@@ -2289,6 +2289,7 @@
         let sheet3RefClubFilter   = null;  // null = all, or a club name string (filters ref availability pane)
         let sheet3RefDetailName   = null;  // null = full ref list; string = showing that ref's game schedule
         let sheet3OptRoles        = {}; // { 'gid-slot': 'CR' | 'AR' }
+        let sheet3SelectedGameId  = null; // game row selection for ref pane filtering
 
         const SHEET3_BASE_COLS  = ['date','time','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
         const SHEET3_COL_LABELS = { date:'Date', time:'Time', club:'Club', ageGroup:'Age', gender:'Gender', homeTeam:'Home Team', awayTeam:'Away Team', venue:'Venue', field:'Field', center:'Center', ar1:'AR1', ar2:'AR2' };
@@ -2592,6 +2593,11 @@
 
         function sheet3ToggleMissingFilter() {
             sheet3MissingFilter = !sheet3MissingFilter;
+            renderSheet3View(sheet3LastFiltered);
+        }
+
+        function sheet3SelectGame(gid) {
+            sheet3SelectedGameId = (sheet3SelectedGameId === gid) ? null : gid;
             renderSheet3View(sheet3LastFiltered);
         }
 
@@ -3046,7 +3052,7 @@
                             const [,m,d] = curDate.split('-');
                             const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1];
                             const dn = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(curDate + 'T12:00:00').getDay()];
-                            dividers += `<tr><td colspan="${sheet3ColOrder.length}" style="background:#1a3a6b;color:white;font-size:0.75rem;font-weight:800;letter-spacing:1.5px;padding:6px 10px;text-transform:uppercase;border-top:3px solid rgba(255,255,255,0.15);">${dn} &nbsp;·&nbsp; ${mo} ${parseInt(d)}</td></tr>`;
+                            dividers += `<tr><td colspan="${sheet3ColOrder.length + 1}" style="background:#1a3a6b;color:white;font-size:0.75rem;font-weight:800;letter-spacing:1.5px;padding:6px 10px;text-transform:uppercase;border-top:3px solid rgba(255,255,255,0.15);">${dn} &nbsp;·&nbsp; ${mo} ${parseInt(d)}</td></tr>`;
                         }
                     }
                     // Period divider: Morning / Afternoon within each day
@@ -3055,14 +3061,16 @@
                         const lbl = period === 'am' ? 'Morning' : 'Afternoon';
                         const bg  = period === 'am' ? '#e8f4fd' : '#fff8e1';
                         const col = period === 'am' ? '#1a5276' : '#7d5a00';
-                        dividers += `<tr><td colspan="${sheet3ColOrder.length}" style="background:${bg};color:${col};font-size:0.72rem;font-weight:800;letter-spacing:1.2px;padding:5px 8px;text-transform:uppercase;border-top:2px solid ${col}40;">${lbl}</td></tr>`;
+                        dividers += `<tr><td colspan="${sheet3ColOrder.length + 1}" style="background:${bg};color:${col};font-size:0.72rem;font-weight:800;letter-spacing:1.2px;padding:5px 8px;text-transform:uppercase;border-top:2px solid ${col}40;">${lbl}</td></tr>`;
                     }
                     periodDivider = dividers;
                 }
-                return periodDivider + `<tr style="background:${rowBg};">${sheet3ColOrder.map(k =>
+                const _isSel = gid === sheet3SelectedGameId;
+                const _dotTd = `<td style="border:1px solid #d0d7de; width:22px; min-width:22px; max-width:22px; padding:0; text-align:center; vertical-align:middle; cursor:pointer;" onclick="sheet3SelectGame('${gid}'); event.stopPropagation();" title="${_isSel ? 'Deselect — show all refs' : 'Select to filter refs for this game'}"><span style="display:inline-block; width:11px; height:11px; border-radius:50%; background:${_isSel ? '#1a3a6b' : 'transparent'}; border:2px solid ${_isSel ? '#1a3a6b' : '#ccc'};"></span></td>`;
+                return periodDivider + `<tr style="background:${_isSel ? '#e8f0fb' : rowBg};">${_dotTd}${sheet3ColOrder.map(k =>
                     sheet3HiddenCols.includes(k) ? `<td style="${stubTd}"></td>` : (colRenderers[k] ? colRenderers[k]() : '<td></td>')
                 ).join('')}</tr>`;
-            }).join('') : `<tr><td colspan="${sheet3ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
+            }).join('') : `<tr><td colspan="${sheet3ColOrder.length + 1}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
             const thDrag  = 'cursor:grab; user-select:none;';
             const stubTh  = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:4px 2px; background:#e8eaed; cursor:pointer; text-align:center; font-size:0.65rem; color:#888;';
@@ -3171,7 +3179,7 @@
                 </div>
                 <div id="s3gamesPane" style="max-height:${sheet3SplitGamesH}px; overflow:auto; border:2px solid #d0d7de; direction:rtl;">
                     <table id="s3gamesTable" style="border-collapse:collapse; font-family:'Courier New',Courier,monospace; min-width:100%; zoom:${sheet3ZoomGames}; direction:ltr;">
-                        <thead style="position:sticky; top:0; z-index:2;"><tr>${headerCells}</tr></thead>
+                        <thead style="position:sticky; top:0; z-index:2;"><tr><th style="${hdr} width:22px; min-width:22px; max-width:22px; padding:2px; text-align:center;" title="Click a dot to filter the ref pane for that game">◉</th>${headerCells}</tr></thead>
                         <tbody>${gameRowsHtml}</tbody>
                     </table>
                 </div>`;
@@ -3361,6 +3369,8 @@
 
                 } else {
                 // ── Club ref pane: Date / Name / Exp / Club Preference / Start / End ──
+                const _selGameObj = sheet3SelectedGameId ? allGames.find(g => String(g.id) === sheet3SelectedGameId) : null;
+                const _selDate    = _selGameObj ? (_selGameObj.fields['Date'] || null) : null;
                 let refRows = [];
                 const _seenRefDate = new Set(); // deduplicate ref+date (multiple submissions)
                 const sessionLabel = /^(friday|saturday|sunday)\s+(morning|afternoon|night|evening)/i;
@@ -3372,6 +3382,8 @@
                     if (!name || !date) return;
                     // Only show dates matching the current game filter
                     if (visibleGameDates.size && !visibleGameDates.has(date)) return;
+                    // If a game row is selected, scope ref pane to that game's date
+                    if (_selDate && date !== _selDate) return;
                     // Deduplicate: one row per ref per date
                     const dedupeKey = name.toLowerCase() + '|' + date;
                     if (_seenRefDate.has(dedupeKey)) return;
@@ -3453,7 +3465,21 @@
                 } // end club ref pane
             }  // end ref pane block
 
-            const refsDivider = `<div onmousedown="sheet3SplitterMousedown(event)" style="background:#1a3a6b; color:#fff; padding:2px 14px; margin:3px -20px 4px -20px; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:ns-resize; user-select:none;" title="Drag to resize panes">Referee Availability — drag a row into an Opt cell &#8597;</div>`;
+            const _divSelGame = sheet3SelectedGameId ? allGames.find(g => String(g.id) === sheet3SelectedGameId) : null;
+            let _divLabel = 'Referee Availability — drag a row into an Opt cell &#8597;';
+            if (_divSelGame) {
+                const _df = _divSelGame.fields;
+                const _dd = (_df['Date'] || '').split('-');
+                const _mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+_dd[1]-1] || '';
+                const _dy  = +_dd[2] || '';
+                let _timeStr = '';
+                if (_df['Time']) {
+                    const [_h, _m] = _df['Time'].split(':').map(Number);
+                    _timeStr = ` · ${_h%12||12}:${String(_m).padStart(2,'0')} ${_h>=12?'PM':'AM'}`;
+                }
+                _divLabel = `Refs for ${_mon} ${_dy}${_timeStr} — click dot again to show all &#8597;`;
+            }
+            const refsDivider = `<div onmousedown="sheet3SplitterMousedown(event)" style="background:${_divSelGame ? '#0f3460' : '#1a3a6b'}; color:#fff; padding:2px 14px; margin:3px -20px 4px -20px; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:ns-resize; user-select:none;" title="Drag to resize panes">${_divLabel}</div>`;
 
             // Preserve scroll position across re-render (s3gamesPane is rebuilt each time)
             const _prevPane = document.getElementById('s3gamesPane');
