@@ -57,21 +57,14 @@
             border-top: 1px solid #e2d9ce;
             margin: 24px 0;
         }
-        .notes-area {
-            width: 100%;
-            box-sizing: border-box;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.9rem;
-            padding: 12px 14px;
-            border: 2px solid #e2d9ce;
-            border-radius: 10px;
-            resize: vertical;
-            min-height: 120px;
-            outline: none;
-            color: #09142a;
-            transition: border-color 0.2s;
-        }
-        .notes-area:focus { border-color: #09142a; }
+        .note-entry { padding:9px 13px; background:#f8f7f4; border-radius:6px; margin-bottom:5px; }
+        .note-meta  { font-size:0.74rem; color:#999; margin-bottom:2px; }
+        .note-text  { font-size:0.875rem; color:#09142a; }
+        .note-empty { font-size:0.83rem; color:#bbb; font-style:italic; padding:4px 0 10px; }
+        .add-note-row { display:flex; gap:8px; margin-top:10px; }
+        .note-input { flex:1; font-family:'DM Sans',sans-serif; font-size:0.875rem; padding:8px 12px; border:2px solid #e2d9ce; border-radius:6px; outline:none; color:#09142a; transition:border-color 0.2s; }
+        .note-input:focus { border-color:#09142a; }
+        .btn-add { background:#09142a; color:#fff; border:none; border-radius:6px; padding:8px 18px; font-family:'Barlow Condensed',sans-serif; font-size:0.9rem; font-weight:800; text-transform:uppercase; cursor:pointer; }
         .btn-row {
             display: flex;
             gap: 10px;
@@ -201,13 +194,16 @@
 
             <hr class="divider">
 
-            <div class="lead-label" style="margin-bottom:8px;">Your Notes</div>
-            <textarea id="assignorNotes" class="notes-area" placeholder="Add your notes, follow-up status, next steps…"></textarea>
+            <div class="lead-label" style="margin-bottom:8px;">Activity</div>
+            <div id="notesList"></div>
+            <div class="add-note-row">
+                <input type="text" class="note-input" id="noteInput" placeholder="Add a note…"
+                       onkeydown="if(event.key==='Enter'){ addNote(); event.preventDefault(); }">
+                <button class="btn-add" onclick="addNote()">Add</button>
+            </div>
 
             <div class="btn-row">
-                <button class="btn-save" onclick="saveNotes()">Save Notes</button>
                 <a id="replyBtn" href="#" class="btn-reply">Reply via Email ↗</a>
-                <span id="saveMsg" class="save-msg">✓ Saved</span>
                 <button class="btn-archive" onclick="archiveLead()">Archive</button>
             </div>
         </div><!-- /lead-card -->
@@ -224,6 +220,52 @@
     const params = new URLSearchParams(window.location.search);
     const leadId = parseInt(params.get('id'));
     let leadData = null;
+    let currentUserName = 'admin';
+
+    (async () => {
+        const uid = currentUserId ? currentUserId() : null;
+        if (uid) {
+            const { data } = await supabaseClient.client
+                .from('assignor_profiles').select('username').eq('id', uid).maybeSingle();
+            if (data?.username) currentUserName = data.username;
+        }
+    })();
+
+    function parseNotes(raw) {
+        if (!raw) return [];
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed;
+        } catch(e) {}
+        return [{ text: raw, ts: null, by: '' }];
+    }
+
+    function fmtTs(ts) {
+        if (!ts) return '';
+        return new Date(ts).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+    }
+
+    function notesListHtml(notes) {
+        if (!notes.length) return `<div class="note-empty">No notes yet.</div>`;
+        return notes.map(n => `
+            <div class="note-entry">
+                <div class="note-meta">${[fmtTs(n.ts), n.by].filter(Boolean).join(' — ')}</div>
+                <div class="note-text">${(n.text || '').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>
+            </div>`).join('');
+    }
+
+    async function addNote() {
+        const input = document.getElementById('noteInput');
+        const text  = input.value.trim();
+        if (!text) return;
+        const { data } = await supabaseClient.client.from('leads').select('assignor_notes').eq('id', leadId).single();
+        const notes = parseNotes(data?.assignor_notes);
+        notes.push({ text, ts: new Date().toISOString(), by: currentUserName });
+        await supabaseClient.client.from('leads').update({ assignor_notes: JSON.stringify(notes) }).eq('id', leadId);
+        document.getElementById('notesList').innerHTML = notesListHtml(notes);
+        input.value = '';
+        input.focus();
+    }
 
     async function loadLead() {
         if (!leadId) { document.getElementById('loadingState').textContent = 'No lead ID provided.'; return; }
@@ -255,7 +297,7 @@
         document.getElementById('leadPhone').textContent     = data.phone || '—';
         document.getElementById('leadRole').textContent      = data.role || '—';
         document.getElementById('leadMessage').textContent   = data.message || '—';
-        document.getElementById('assignorNotes').value       = data.assignor_notes || '';
+        document.getElementById('notesList').innerHTML       = notesListHtml(parseNotes(data.assignor_notes));
         document.getElementById('replyBtn').href             =
             `mailto:${data.email}?subject=Re: Referee Tool Inquiry — ${data.club}`;
 
@@ -263,20 +305,6 @@
         await supabaseClient.client.from('leads').update({ viewed: true }).eq('id', leadId);
 
         document.getElementById('leadDetail').style.display = 'block';
-    }
-
-    async function saveNotes() {
-        const notes = document.getElementById('assignorNotes').value.trim();
-        const { error } = await supabaseClient.client
-            .from('leads')
-            .update({ assignor_notes: notes })
-            .eq('id', leadId);
-
-        if (!error) {
-            const msg = document.getElementById('saveMsg');
-            msg.style.display = 'inline';
-            setTimeout(() => msg.style.display = 'none', 2500);
-        }
     }
 
     async function archiveLead() {
