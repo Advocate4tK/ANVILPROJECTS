@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Referee Roster — Referee Tool</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            background-color: #060e20 !important;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            ) !important;
+        }
+
+        .search-wrap {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .search-wrap input {
+            flex: 1;
+            min-width: 220px;
+            padding: 10px 16px;
+            border: 1.5px solid #e2d9ce;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-family: 'DM Sans', sans-serif;
+            color: #09142a;
+            background: #fff;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .search-wrap input:focus {
+            outline: none;
+            border-color: #00c853;
+            box-shadow: 0 0 0 3px rgba(0,200,83,0.11);
+        }
+        .count-note {
+            font-size: 0.83rem;
+            color: #6b7280;
+            white-space: nowrap;
+        }
+
+        .roster-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .ref-row {
+            background: #fff;
+            border: 1px solid #e2d9ce;
+            border-radius: 10px;
+            overflow: hidden;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .ref-row:hover { border-color: #00c853; box-shadow: 0 2px 8px rgba(0,200,83,0.1); }
+        .ref-row.open  { border-color: #09142a; }
+
+        .ref-row-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            cursor: pointer;
+            gap: 10px;
+        }
+
+        .ref-name {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1rem;
+            font-weight: 800;
+            color: #09142a;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .ref-badges {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .badge-club {
+            font-size: 0.68rem;
+            font-weight: 700;
+            background: #e8f5e9;
+            color: #1b5e20;
+            border-radius: 20px;
+            padding: 2px 9px;
+            font-family: 'DM Sans', sans-serif;
+            white-space: nowrap;
+        }
+
+        .badge-minor {
+            font-size: 0.68rem;
+            font-weight: 800;
+            background: #fff3cd;
+            color: #856404;
+            border-radius: 20px;
+            padding: 2px 9px;
+            font-family: 'DM Sans', sans-serif;
+            white-space: nowrap;
+        }
+
+        .ref-chevron {
+            font-size: 0.75rem;
+            color: #00c853;
+            flex-shrink: 0;
+            transition: transform 0.2s;
+            font-weight: 900;
+        }
+        .ref-row.open .ref-chevron { transform: rotate(180deg); }
+
+        .ref-detail {
+            display: none;
+            padding: 0 16px 16px;
+            border-top: 1px solid #f0ece6;
+        }
+        .ref-row.open .ref-detail { display: block; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .detail-field label {
+            display: block;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6b7280;
+            margin-bottom: 2px;
+        }
+
+        .detail-field span {
+            font-size: 0.9rem;
+            color: #09142a;
+            font-weight: 500;
+        }
+
+        .guardian-section {
+            margin-top: 14px;
+            padding: 10px 14px;
+            background: #fff8e1;
+            border-left: 3px solid #f59e0b;
+            border-radius: 0 6px 6px 0;
+        }
+
+        .guardian-section .guardian-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #b45309;
+            margin-bottom: 6px;
+        }
+
+        .loading-state {
+            text-align: center;
+            color: rgba(255,255,255,0.5);
+            padding: 60px 0;
+            font-size: 0.9rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #9ca3af;
+            padding: 40px 0;
+            font-size: 0.88rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>👤 Referee Roster</h1>
+        <p class="subtitle">Active referees — view only</p>
+    </header>
+
+    <main>
+        <div style="margin-bottom:20px;">
+            <a href="admin.html" class="btn-back">← Admin Portal</a>
+        </div>
+
+        <div style="background:#fff; border-radius:12px; padding:24px; box-shadow:0 4px 15px rgba(0,0,0,0.07); margin-bottom:8px;">
+            <div class="search-wrap">
+                <input type="text" id="searchInput" placeholder="Search by name, email, or club…" oninput="applyFilter()">
+                <span id="countNote" class="count-note"></span>
+            </div>
+            <div id="loadingState" class="loading-state">Loading referees…</div>
+            <div id="rosterList" class="roster-list"></div>
+        </div>
+    </main>
+
+    <footer>
+        <p>Referee Tool &copy; 2026 · Read-only view</p>
+    </footer>
+</div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-client.js?v=12"></script>
+<script src="js/admin-auth.js"></script>
+<script>
+    if (!isLoggedIn()) window.location.href = 'index.html';
+</script>
+<script>
+    var airtableClient = supabaseClient;
+
+    let allRefs = [];
+
+    function isUnder18(dob) {
+        if (!dob) return false;
+        const birth = new Date(dob);
+        if (isNaN(birth)) return false;
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+        return age < 18;
+    }
+
+    function calcAge(dob) {
+        if (!dob) return null;
+        const birth = new Date(dob);
+        if (isNaN(birth)) return null;
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+        return age;
+    }
+
+    function normalizeDob(raw) {
+        if (!raw) return '';
+        if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+            const [m, d, y] = raw.split('/');
+            return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+        }
+        return raw;
+    }
+
+    function lastName(name) {
+        if (!name) return '';
+        const parts = name.trim().split(' ');
+        return parts.length > 1 ? parts.slice(1).join(' ') : name;
+    }
+
+    function displayName(name) {
+        if (!name) return '—';
+        const parts = name.trim().split(' ');
+        if (parts.length < 2) return name;
+        const first = parts[0];
+        const last  = parts.slice(1).join(' ');
+        return `${last}, ${first}`;
+    }
+
+    function toggleRow(id) {
+        const row = document.getElementById('ref-row-' + id);
+        if (row) row.classList.toggle('open');
+    }
+
+    function buildRow(r) {
+        const f      = r.fields;
+        const name   = f['Name'] || '—';
+        const dob    = normalizeDob(f['Date of Birth'] || '');
+        const minor  = isUnder18(dob);
+        const age    = calcAge(dob);
+        const phone  = f['phone'] || f['Phone'] || '';
+        const email  = f['Email'] || '';
+        const pref   = f['Club Preference'] || '';
+        const parentName  = f['Parent Name'] || f['Guardian Name'] || '';
+        const parentPhone = f['Parent Phone'] || f['Guardian Phone'] || '';
+
+        const clubPill = pref
+            ? `<span class="badge-club">${pref.split(',')[0].trim()}</span>`
+            : '';
+        const minorBadge = minor ? `<span class="badge-minor">⚠ U18</span>` : '';
+
+        const guardianHtml = minor ? `
+            <div class="guardian-section">
+                <div class="guardian-title">⚠ Minor — Parent / Guardian</div>
+                <div class="detail-grid">
+                    <div class="detail-field">
+                        <label>Parent Name</label>
+                        <span>${parentName || '<em style="color:#9ca3af;">Not on file</em>'}</span>
+                    </div>
+                    <div class="detail-field">
+                        <label>Parent Phone</label>
+                        <span>${parentPhone || '<em style="color:#9ca3af;">Not on file</em>'}</span>
+                    </div>
+                </div>
+            </div>` : '';
+
+        return `
+        <div class="ref-row" id="ref-row-${r.id}">
+            <div class="ref-row-header" onclick="toggleRow('${r.id}')">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex:1; min-width:0;">
+                    <span class="ref-name">${displayName(name)}</span>
+                    <div class="ref-badges">${clubPill}${minorBadge}</div>
+                </div>
+                <span class="ref-chevron">▼</span>
+            </div>
+            <div class="ref-detail">
+                <div class="detail-grid">
+                    <div class="detail-field">
+                        <label>Phone</label>
+                        <span>${phone || '<em style="color:#9ca3af;">—</em>'}</span>
+                    </div>
+                    <div class="detail-field">
+                        <label>Email</label>
+                        <span>${email || '<em style="color:#9ca3af;">—</em>'}</span>
+                    </div>
+                    <div class="detail-field">
+                        <label>Age</label>
+                        <span>${age !== null ? age + ' yrs' : '<em style="color:#9ca3af;">—</em>'}</span>
+                    </div>
+                    <div class="detail-field">
+                        <label>Club Preference</label>
+                        <span>${pref || '<em style="color:#9ca3af;">—</em>'}</span>
+                    </div>
+                </div>
+                ${guardianHtml}
+            </div>
+        </div>`;
+    }
+
+    function applyFilter() {
+        const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+        const matches = q
+            ? allRefs.filter(r => {
+                const f = r.fields;
+                return (f['Name'] || '').toLowerCase().includes(q)
+                    || (f['Email'] || '').toLowerCase().includes(q)
+                    || (f['Club Preference'] || '').toLowerCase().includes(q);
+            })
+            : allRefs;
+
+        document.getElementById('countNote').textContent =
+            q ? `${matches.length} of ${allRefs.length} refs` : `${allRefs.length} refs`;
+
+        const list = document.getElementById('rosterList');
+        list.innerHTML = matches.length
+            ? matches.map(buildRow).join('')
+            : `<div class="empty-state">No referees match "${q}"</div>`;
+    }
+
+    async function loadRoster() {
+        try {
+            allRefs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 });
+            allRefs = allRefs.filter(r => !r.fields['Status'] || r.fields['Status'] === 'Active');
+            allRefs.sort((a, b) => {
+                const la = lastName(a.fields['Name'] || '').toLowerCase();
+                const lb = lastName(b.fields['Name'] || '').toLowerCase();
+                return la.localeCompare(lb);
+            });
+            document.getElementById('loadingState').style.display = 'none';
+            applyFilter();
+        } catch(e) {
+            document.getElementById('loadingState').textContent = 'Could not load referees: ' + e.message;
+        }
+    }
+
+    loadRoster();
+</script>
+</body>
+</html>
