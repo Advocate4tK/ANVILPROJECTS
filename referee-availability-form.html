@@ -923,7 +923,10 @@
 
                 // If all contact fields are on file, hide the whole Contact Details fieldset
                 // so returning refs don't see an empty "Contact Details" header
-                if (f['Phone'] && f['Date of Birth'] && f['Address'] && f['City'] && f['Zip Code']) {
+                const fAge = f['Date of Birth'] ? window.calculateAge(f['Date of Birth']) : null;
+                const fMinor = fAge !== null && fAge < 18;
+                const guardianComplete = !fMinor || (f['Guardian Name'] && f['Guardian Email'] && f['Guardian Phone']);
+                if (f['Phone'] && f['Date of Birth'] && f['Address'] && f['City'] && f['Zip Code'] && guardianComplete) {
                     const cf = document.getElementById('contactFieldset');
                     if (cf) cf.style.display = 'none';
                 }
@@ -1010,6 +1013,8 @@
                         updateGuardianSection();
 
                         // Check all contact + profile fields — these all live in contactSection
+                        const refAge = f['Date of Birth'] ? window.calculateAge(f['Date of Birth']) : null;
+                        const isMinor = refAge !== null && refAge < 18;
                         const missingFields = [
                             !f['Phone']               && 'Phone',
                             !f['Date of Birth']       && 'Date of Birth',
@@ -1017,6 +1022,9 @@
                             !(f['City'] && f['Zip Code']) && 'City / Zip',
                             !f['Years Reffing']       && 'Years Reffing',
                             !f['Gender']              && 'Gender',
+                            (isMinor && !f['Guardian Name'])  && 'Guardian Name',
+                            (isMinor && !f['Guardian Email']) && 'Guardian Email',
+                            (isMinor && !f['Guardian Phone']) && 'Guardian Phone',
                         ].filter(Boolean);
 
                         document.getElementById('entryFieldset').style.display    = 'none';
