@@ -3407,6 +3407,7 @@
                 // ── Club ref pane: Date / Name / Exp / Club Preference / Start / End ──
                 const _selGameObj = sheet3SelectedGameId ? allGames.find(g => String(g.id) === sheet3SelectedGameId) : null;
                 const _selDate    = _selGameObj ? (_selGameObj.fields['Date'] || null) : null;
+                const _selGameDT  = (_selDate && _selGameObj.fields['Time']) ? `${_selDate}|${_selGameObj.fields['Time']}` : null;
                 let refRows = [];
                 const _seenRefDate = new Set(); // deduplicate ref+date (multiple submissions)
                 const sessionLabel = /^(friday|saturday|sunday)\s+(morning|afternoon|night|evening)/i;
@@ -3436,7 +3437,17 @@
                     const notes = sessionLabel.test(rawNote) ? '' : rawNote;
                     refRows.push({ name, date, club, start, end, exp, notes });
                 });
-                refRows.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+                // Tag each row with conflict flag for selected game's date+time
+                refRows.forEach(r => {
+                    const ro = refLookupByName[r.name.trim().replace(/\s+/g, ' ').toLowerCase()];
+                    r._conflict = _selGameDT && ro && assignedAt[ro.id]
+                        ? [...(assignedAt[ro.id].get(_selGameDT) || [])].some(gid => String(gid) !== sheet3SelectedGameId)
+                        : false;
+                });
+                refRows.sort((a, b) => {
+                    if (a._conflict !== b._conflict) return a._conflict ? 1 : -1;
+                    return a.date.localeCompare(b.date) || a.name.localeCompare(b.name);
+                });
                 // Filter by selected club when user has narrowed pills to specific clubs
                 if (selectedClubs.size > 0 && selectedClubs.size < clubsList.length) {
                     const focusClubsLower = [...selectedClubs].map(c => c.toLowerCase());
@@ -3464,16 +3475,19 @@
                         : '';
                     const s3refObj   = refLookupByName[r.name.trim().toLowerCase()];
                     const s3unavail  = s3refObj?.fields['unavailable'] === true;
-                    const s3rowBg    = s3unavail ? 'background:#f0f0f0;opacity:0.55;' : `background:${i%2===0?'#ffffff':'#f6f8fa'};`;
+                    const s3conflict = r._conflict;
+                    const s3rowBg    = s3unavail   ? 'background:#f0f0f0;opacity:0.55;'
+                                     : s3conflict  ? 'background:#fdecea;'
+                                     : `background:${i%2===0?'#ffffff':'#f6f8fa'};`;
                     const s3ctxMenu  = s3refObj ? `oncontextmenu="s2ShowRefCtx(event,'${s3refObj.id}'); return false;"` : '';
                     return `<tr style="${s3rowBg} cursor:${s3unavail?'default':'grab'};"
-                        draggable="${!s3unavail}"
+                        draggable="${!s3unavail && !s3conflict}"
                         ${s3ctxMenu}
-                        ondragstart="${s3unavail ? 'event.preventDefault();' : `sheet3RefDragStart(event,'${safeName}')`}"
+                        ondragstart="${(s3unavail || s3conflict) ? 'event.preventDefault();' : `sheet3RefDragStart(event,'${safeName}')`}"
                         onmouseenter="${s3unavail && s3refObj ? `s2ShowStrikeTooltip(event,'${s3refObj.id}')` : `showRefTooltip('${safeName}', this, event)`}"
                         onmouseleave="hideRefTooltip(); hideAvailNotes();">
                         ${sheet3RefHiddenCols.includes('clubDate')  ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubDate"  style="${cell} ${rcw('clubDate')}">${r.date}</td>`}
-                        <td data-rcol="clubName"  style="${cell} ${rcw('clubName')} cursor:pointer; ${s3unavail?'text-decoration:line-through;color:#aaa;':'color:#0f3460;text-decoration:underline dotted;'}" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's assignments">${r.name}${s3unavail?'<span style=\"font-size:0.65rem;font-weight:700;color:#c0392b;margin-left:4px;\">⚠</span>':''}${countBadge}</td>
+                        <td data-rcol="clubName"  style="${cell} ${rcw('clubName')} cursor:pointer; ${s3unavail?'text-decoration:line-through;color:#aaa;':s3conflict?'color:#c0392b;':'color:#0f3460;text-decoration:underline dotted;'}" onclick="sheet3ShowRefDetail('${safeName}')" title="${s3conflict?'Already assigned at this time':'Click to see this ref\'s assignments'}">${r.name}${s3unavail?'<span style=\"font-size:0.65rem;font-weight:700;color:#c0392b;margin-left:4px;\">⚠</span>':s3conflict?'<span style=\"font-size:0.65rem;font-weight:700;color:#c0392b;margin-left:4px;\">⚠ conflict</span>':''}${countBadge}</td>
                         ${sheet3RefHiddenCols.includes('clubExp')   ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubExp"   style="${cell} ${rcw('clubExp')}">${fmtExp(r.exp, true)}</td>`}
                         ${sheet3RefHiddenCols.includes('clubClub')  ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubClub"  style="${cell} ${rcw('clubClub')}">${r.club}</td>`}
                         ${sheet3RefHiddenCols.includes('clubStart') ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubStart" style="${cell} ${rcw('clubStart')}">${fmt(r.start)}</td>`}
