@@ -949,41 +949,31 @@
             const clubName   = document.getElementById('clubName').value.trim();
             const adminFirst = isRef ? '' : document.getElementById('adminFirst').value.trim();
             const adminLast  = isRef ? '' : document.getElementById('adminLast').value.trim();
-
-            // ── Step 1: Create Club record ──────────────────────────────────
-            log('Creating club record…', 'info');
-            const presFirst   = document.getElementById('presFirst').value.trim();
-            const presLast    = document.getElementById('presLast').value.trim();
-            const presEmail   = document.getElementById('presEmail').value.trim();
-            const presPhone   = document.getElementById('presPhone').value.trim();
+            const presFirst  = document.getElementById('presFirst').value.trim();
+            const presLast   = document.getElementById('presLast').value.trim();
+            const presEmail  = document.getElementById('presEmail').value.trim();
+            const presPhone  = document.getElementById('presPhone').value.trim();
             const displayName = document.getElementById('displayName').value.trim();
-            const clubFields  = {
-                'Club Name':  clubName,
-                'PRESIDENT':  `${presFirst} ${presLast}`,
-                club_type:    isRef ? 'reference' : 'managed'
-            };
-            if (!isRef) clubFields['Club Admin'] = `${adminFirst} ${adminLast}`;
-            if (displayName) clubFields['Display Name'] = displayName;
-            if (presEmail) clubFields['President Email'] = presEmail;
-            if (presPhone) clubFields['President Phone'] = presPhone;
-            if (!isRef && document.getElementById('adminEmail').value.trim())
-                clubFields['Club Admin Email'] = document.getElementById('adminEmail').value.trim();
-            if (!isRef && document.getElementById('adminPhone').value.trim())
-                clubFields['Club Admin Phone'] = document.getElementById('adminPhone').value.trim();
+
+            // ── Reference club — insert directly via supabase client (known column names) ──
             if (isRef) {
+                log('Creating reference club record…', 'info');
                 const assignorName  = document.getElementById('refAssignorName').value.trim();
                 const assignorEmail = document.getElementById('refAssignorEmail').value.trim();
                 const assignorPhone = document.getElementById('refAssignorPhone').value.trim();
-                if (assignorName)  clubFields['assignor']        = assignorName;
-                if (assignorEmail) clubFields['Assignor Email'] = assignorEmail;
-                if (assignorPhone) clubFields['Assignor Phone'] = assignorPhone;
-            }
-            const clubRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.CLUBS, clubFields);
-            const clubRecordId = clubRec.id;
-            log(`✓ Club created — ID: ${clubRecordId}`, 'ok');
-
-            // For reference clubs — no portal URL, no venues
-            if (isRef) {
+                const row = {
+                    name:             clubName,
+                    president:        `${presFirst} ${presLast}`,
+                    'President Email': presEmail || null,
+                    'President Phone': presPhone || null,
+                    assignor:          assignorName || null,
+                    'Assignor Email':  assignorEmail || null,
+                    'Assignor Phone':  assignorPhone || null,
+                    club_type:         'reference'
+                };
+                if (displayName) row['Display Name'] = displayName;
+                const { data: refRec, error: refErr } = await supabaseClient.client.from('clubs').insert(row).select().single();
+                if (refErr) throw new Error(refErr.message);
                 log('', '');
                 log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
                 log(`✅ Done! Reference club "${clubName}" saved.`, 'ok');
@@ -992,6 +982,25 @@
                 document.getElementById('backBtn2').style.display = 'none';
                 return;
             }
+
+            // ── Step 1: Create managed Club record ──────────────────────────────────
+            log('Creating club record…', 'info');
+            const clubFields  = {
+                'Club Name':  clubName,
+                'PRESIDENT':  `${presFirst} ${presLast}`,
+                club_type:    'managed'
+            };
+            clubFields['Club Admin'] = `${adminFirst} ${adminLast}`;
+            if (displayName) clubFields['Display Name'] = displayName;
+            if (presEmail) clubFields['President Email'] = presEmail;
+            if (presPhone) clubFields['President Phone'] = presPhone;
+            if (document.getElementById('adminEmail').value.trim())
+                clubFields['Club Admin Email'] = document.getElementById('adminEmail').value.trim();
+            if (document.getElementById('adminPhone').value.trim())
+                clubFields['Club Admin Phone'] = document.getElementById('adminPhone').value.trim();
+            const clubRec = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.CLUBS, clubFields);
+            const clubRecordId = clubRec.id;
+            log(`✓ Club created — ID: ${clubRecordId}`, 'ok');
 
             // Write Club Game Upload URL immediately
             const clubSlug     = clubName.toLowerCase().replace(/\s+/g, '-');
