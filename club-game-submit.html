@@ -306,6 +306,8 @@
         .btn-mark-paid.paid { background:#dcfce7; border-color:#15803d; color:#14532d; cursor:default; }
         .btn-venmo-pay { display:inline-block; padding:5px 11px; border:1.5px solid #5c4ee8; border-radius:6px; background:#f4f2ff; color:#5c4ee8; font-size:0.76rem; font-weight:700; cursor:pointer; white-space:nowrap; text-decoration:none; transition:all 0.15s; margin-bottom:4px; }
         .btn-venmo-pay:hover { background:#5c4ee8; color:white; }
+        .btn-venmo-link { display:inline-block; padding:4px 11px; border:1.5px solid #15803d; border-radius:6px; background:#dcfce7; color:#14532d; font-size:0.76rem; font-weight:700; cursor:pointer; white-space:nowrap; text-decoration:none; font-family:'JetBrains Mono',monospace; transition:all 0.15s; }
+        .btn-venmo-link:hover { background:#15803d; color:white; }
         .pay-action-cell { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
         .pay-check-note { font-size:0.74rem; color:#555; }
         .pay-check-badge { display:inline-block; background:#fef3c7; border:1.5px solid #f59e0b; color:#92400e; font-size:0.72rem; font-weight:800; padding:2px 8px; border-radius:6px; white-space:nowrap; margin-bottom:3px; }
@@ -2622,7 +2624,7 @@
                         <div style="border-radius:8px; overflow:hidden; border:1px solid var(--border); background:#b0b8c4;">
                         <table class="pay-table">
                             <thead><tr>
-                                <th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Venmo / Check</th><th></th>
+                                <th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Venmo / Check</th>
                             </tr></thead><tbody>`;
 
                     const _gameColors = ['#dbeafe','#fef9c3'];
@@ -2651,21 +2653,17 @@
                             const rate      = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
                             gameTotal      += rate;
 
+                            const venmoHandle = venmo.replace(/^@/, '');
+                            const venmoNote   = encodeURIComponent(`Griswold Soccer - ${slot.pos} ${date}`);
                             const venmoHtml = payMethod === 'check'
                                 ? `<span class="pay-check-badge">✉️ Check</span><br><span class="pay-check-note">${address || '(no address on file)'}</span>`
                                 : (venmo
-                                    ? `<span class="pay-venmo">@${venmo.replace(/^@/, '')}</span>`
+                                    ? `<a class="btn-venmo-link" href="https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount=${rate}&note=${venmoNote}" target="_blank" onclick="this.href='https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount='+this.closest('tr').querySelector('.pay-amount').value+'&note=${venmoNote}'">@${venmoHandle}</a>`
                                     : `<span style="color:#aaa; font-size:0.75rem;">—</span>`);
 
                             const posBadge = slot.pos === 'CR'
                                 ? `<span class="pay-pos-badge pay-pos-cr">CR</span>`
                                 : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
-
-                            const venmoHandle = venmo.replace(/^@/, '');
-                            const venmoNote   = encodeURIComponent(`Griswold Soccer - ${slot.pos} ${date}`);
-                            const venmoPayBtn = (allowPay && !isPaid && venmo && payMethod !== 'check')
-                                ? `<a class="btn-venmo-pay" href="https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount=${rate}&note=${venmoNote}" target="_blank" onclick="this.href='https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount='+this.closest('tr').querySelector('.pay-amount').value+'&note=${venmoNote}'">💸 Pay</a>`
-                                : '';
 
                             html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}" style="${rowBg}">
                                 <td>${idx === 0 ? date : ''}</td>
@@ -2675,7 +2673,6 @@
                                 <td>${posBadge}</td>
                                 <td>$<input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled style="opacity:0.5"' : ''}></td>
                                 <td>${venmoHtml}</td>
-                                <td>${venmoPayBtn}</td>
                             </tr>`;
                         });
 
@@ -2685,7 +2682,7 @@
                             const markPaidBtn = `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ All Paid' : 'Mark All Paid'}</button>${isPaid && paidAt ? `<span class="pay-paid-at">${paidAt}</span>` : ''}`;
                             html += `<tr style="${footerBg} border-top:1.5px solid rgba(0,0,0,0.08);">
                                 <td colspan="5" style="text-align:right; padding-right:10px; font-size:0.74rem; color:#555; font-weight:600;">Total: $${gameTotal}</td>
-                                <td colspan="3" style="text-align:right; padding:6px 10px;">
+                                <td colspan="2" style="text-align:right; padding:6px 10px;">
                                     <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">${markPaidBtn}</div>
                                 </td>
                             </tr>`;
@@ -2693,11 +2690,11 @@
                             const upcomingBg = `background:${_gameColors[gameIdx % _gameColors.length]}; filter:brightness(0.96);`;
                             html += `<tr style="${upcomingBg} border-top:1.5px solid rgba(0,0,0,0.08);">
                                 <td colspan="5" style="text-align:right; padding-right:10px; font-size:0.74rem; color:#555; font-weight:600;">Total: $${gameTotal}</td>
-                                <td colspan="3" style="padding:6px 10px; text-align:right;"><span style="font-size:0.72rem; color:#aaa; font-style:italic;">Upcoming</span></td>
+                                <td colspan="2" style="padding:6px 10px; text-align:right;"><span style="font-size:0.72rem; color:#aaa; font-style:italic;">Upcoming</span></td>
                             </tr>`;
                         }
                         // Gap row — shows the grey countertop between game cards
-                        html += `<tr><td colspan="8" style="height:14px; background:transparent; border:none; padding:0;"></td></tr>`;
+                        html += `<tr><td colspan="7" style="height:14px; background:transparent; border:none; padding:0;"></td></tr>`;
                     });
 
                     html += `</tbody></table></div></div>`;
