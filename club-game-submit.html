@@ -296,6 +296,10 @@
         .pay-table td:first-child { white-space:nowrap; }
         .pay-table tr td { border-bottom:1px solid rgba(0,0,0,0.05); }
         .pay-table tr.row-paid td { background:#dcfce7 !important; color:#14532d; }
+        .pay-slot-cb { width:26px; height:26px; border-radius:6px; border:2px solid #d1d5db; background:white; cursor:pointer; font-size:0.9rem; font-weight:900; color:transparent; display:inline-flex; align-items:center; justify-content:center; transition:all 0.15s; padding:0; line-height:1; }
+        .pay-slot-cb.paid { background:#16a34a; border-color:#16a34a; color:white; }
+        .pay-slot-cb:hover:not(.paid) { border-color:#16a34a; background:#f0fdf4; }
+        .pay-slot-cb:disabled { opacity:0.5; cursor:default; }
         .pay-amount-wrap { display:inline-flex; align-items:center; border:1.5px solid var(--border); border-radius:5px; background:#fafaf8; overflow:hidden; }
         .pay-amount-wrap .pay-prefix { padding:4px 5px 4px 7px; font-size:0.82rem; color:#888; font-family:'DM Sans',sans-serif; line-height:1; }
         .pay-amount { width:60px; padding:4px 7px 4px 0; border:none; font-size:0.82rem; font-family:'DM Sans',sans-serif; text-align:right; background:transparent; outline:none; }
@@ -2529,10 +2533,11 @@
 
         try {
             const today = new Date().toISOString().split('T')[0];
-            const [rawGrisGames, refRecs, ratesResult] = await Promise.all([
+            const [rawGrisGames, refRecs, ratesResult, refPayResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
                 supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state'),
-                supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order')
+                supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order'),
+                supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount')
             ]);
             const games = airtableClient._wrapAll(rawGrisGames.data || []);
             _payRates = (ratesResult.data || []);
@@ -2556,6 +2561,13 @@
                         </table>
                     </div>`;
             }
+
+            // Per-slot paid map: { gameId: { CR: paid_at, AR1: paid_at, ... } }
+            const slotPaidMap = {};
+            (refPayResult.data || []).forEach(r => {
+                if (!slotPaidMap[r.game_id]) slotPaidMap[r.game_id] = {};
+                slotPaidMap[r.game_id][r.slot] = r.paid_at;
+            });
 
             // Supplemental fetch: paid_at bypasses PostgREST schema cache
             const paidAtById = {};
@@ -2640,9 +2652,10 @@
                                 <col style="width:46px">
                                 <col style="width:120px">
                                 <col style="width:260px">
+                                <col style="width:50px">
                             </colgroup>
                             <thead><tr>
-                                <th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Venmo / Check</th>
+                                <th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Venmo / Check</th><th style="text-align:center;">Paid</th>
                             </tr></thead><tbody>`;
 
                     const _gameColors = ['#dbeafe','#fef9c3'];
@@ -2683,7 +2696,13 @@
                                 ? `<span class="pay-pos-badge pay-pos-cr">CR</span>`
                                 : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
 
-                            html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}" style="${rowBg}">
+                            const slotAlreadyPaid = !!(slotPaidMap[r.id] && slotPaidMap[r.id][slot.pos]);
+                            const slotRowBg = slotAlreadyPaid ? 'background:#bbf7d0;' : rowBg;
+                            const cbHtml = allowPay
+                                ? `<button class="pay-slot-cb${slotAlreadyPaid ? ' paid' : ''}" onclick="markRefSlotPaid('${r.id}','${slot.pos}',this)" title="${slotAlreadyPaid ? 'Paid — click to undo' : 'Mark paid'}">${slotAlreadyPaid ? '✓' : ''}</button>`
+                                : '';
+
+                            html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}" data-slot="${slot.pos}" data-orig-bg="${_gameColors[gameIdx % _gameColors.length]}" style="${slotRowBg}">
                                 <td>${idx === 0 ? date : ''}</td>
                                 <td style="font-size:0.82rem; font-weight:700; color:#152d55; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${idx === 0 ? game : ''}</td>
                                 <td>${idx === 0 ? age : ''}</td>
@@ -2691,6 +2710,7 @@
                                 <td>${posBadge}</td>
                                 <td><span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span></td>
                                 <td>${venmoHtml}</td>
+                                <td style="text-align:center;">${cbHtml}</td>
                             </tr>`;
                         });
 
@@ -2700,7 +2720,7 @@
                             const markPaidBtn = `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ All Paid' : 'Mark All Paid'}</button>${isPaid && paidAt ? `<span class="pay-paid-at">${paidAt}</span>` : ''}`;
                             html += `<tr style="${footerBg} border-top:1.5px solid rgba(0,0,0,0.08);">
                                 <td colspan="5" style="text-align:right; padding-right:10px;"><span style="font-size:0.88rem; font-weight:800; color:#1a2e4a; letter-spacing:0.2px;">Total: $${gameTotal}</span></td>
-                                <td colspan="2" style="text-align:right; padding:6px 10px;">
+                                <td colspan="3" style="text-align:right; padding:6px 10px;">
                                     <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">${markPaidBtn}</div>
                                 </td>
                             </tr>`;
@@ -2708,11 +2728,11 @@
                             const upcomingBg = `background:${_gameColors[gameIdx % _gameColors.length]}; filter:brightness(0.96);`;
                             html += `<tr style="${upcomingBg} border-top:1.5px solid rgba(0,0,0,0.08);">
                                 <td colspan="5" style="text-align:right; padding-right:10px;"><span style="font-size:0.88rem; font-weight:800; color:#1a2e4a; letter-spacing:0.2px;">Total: $${gameTotal}</span></td>
-                                <td colspan="2" style="padding:6px 10px; text-align:right;"><span style="font-size:0.72rem; color:#aaa; font-style:italic;">Upcoming</span></td>
+                                <td colspan="3" style="padding:6px 10px; text-align:right;"><span style="font-size:0.72rem; color:#aaa; font-style:italic;">Upcoming</span></td>
                             </tr>`;
                         }
                         // Gap row — shows the grey countertop between game cards
-                        html += `<tr><td colspan="7" style="height:14px; background:transparent; border:none; padding:0;"></td></tr>`;
+                        html += `<tr><td colspan="8" style="height:14px; background:transparent; border:none; padding:0;"></td></tr>`;
                     });
 
                     html += `</tbody></table></div></div>`;
@@ -2737,11 +2757,51 @@
         }
     }
 
+    async function markRefSlotPaid(gameId, slot, btn) {
+        const wasPaid = btn.classList.contains('paid');
+        btn.disabled = true;
+        try {
+            if (wasPaid) {
+                await supabaseClient.client.from('ref_payments').delete().eq('game_id', gameId).eq('slot', slot);
+                btn.classList.remove('paid');
+                btn.textContent = '';
+                const row = btn.closest('tr');
+                row.style.background = row.dataset.origBg || '';
+            } else {
+                const now = new Date().toISOString();
+                const amount = parseFloat(btn.closest('tr').querySelector('.pay-amount')?.value || 0);
+                await supabaseClient.client.from('ref_payments').upsert(
+                    { game_id: gameId, slot, paid_at: now, amount },
+                    { onConflict: 'game_id,slot' }
+                );
+                btn.classList.add('paid');
+                btn.textContent = '✓';
+                btn.closest('tr').style.background = '#bbf7d0';
+            }
+        } catch(e) {
+            alert('Could not save: ' + e.message);
+        }
+        btn.disabled = false;
+    }
+
     async function markGamePaid(gameId, btn) {
         btn.textContent = 'Saving…';
         btn.disabled = true;
         try {
             const now = new Date().toISOString();
+            // Tick any unchecked slot checkboxes
+            const unpaidCbs = [...document.querySelectorAll(`tr[data-game="${gameId}"][data-slot] .pay-slot-cb:not(.paid)`)];
+            for (const cb of unpaidCbs) {
+                const s = cb.closest('tr').dataset.slot;
+                const amount = parseFloat(cb.closest('tr').querySelector('.pay-amount')?.value || 0);
+                await supabaseClient.client.from('ref_payments').upsert(
+                    { game_id: gameId, slot: s, paid_at: now, amount },
+                    { onConflict: 'game_id,slot' }
+                );
+                cb.classList.add('paid');
+                cb.textContent = '✓';
+                cb.closest('tr').style.background = '#bbf7d0';
+            }
             await supabaseClient.client.from('games').update({ paid_at: now, 'Payment Status': 'Paid' }).eq('id', gameId);
             document.querySelectorAll(`tr[data-game="${gameId}"]`).forEach(row => {
                 row.classList.add('row-paid');
