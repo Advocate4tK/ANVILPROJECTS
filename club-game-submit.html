@@ -300,6 +300,7 @@
         .pay-slot-cb.paid { background:#16a34a; border-color:#16a34a; color:white; }
         .pay-slot-cb:hover:not(.paid) { border-color:#16a34a; background:#f0fdf4; }
         .pay-slot-cb:disabled { opacity:0.5; cursor:default; }
+        .pay-slot-ts { font-size:0.58rem; color:#16a34a; font-weight:700; white-space:nowrap; line-height:1.2; text-align:center; }
         .pay-amount-wrap { display:inline-flex; align-items:center; border:1.5px solid var(--border); border-radius:5px; background:#fafaf8; overflow:hidden; }
         .pay-amount-wrap .pay-prefix { padding:4px 5px 4px 7px; font-size:0.82rem; color:#888; font-family:'DM Sans',sans-serif; line-height:1; }
         .pay-amount { width:60px; padding:4px 7px 4px 0; border:none; font-size:0.82rem; font-family:'DM Sans',sans-serif; text-align:right; background:transparent; outline:none; }
@@ -2698,8 +2699,14 @@
 
                             const slotAlreadyPaid = !!(slotPaidMap[r.id] && slotPaidMap[r.id][slot.pos]);
                             const slotRowBg = slotAlreadyPaid ? 'background:#bbf7d0;' : rowBg;
+                            const slotTs = slotAlreadyPaid
+                                ? new Date(slotPaidMap[r.id][slot.pos]).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+                                : '';
                             const cbHtml = allowPay
-                                ? `<button class="pay-slot-cb${slotAlreadyPaid ? ' paid' : ''}" onclick="markRefSlotPaid('${r.id}','${slot.pos}',this)" title="${slotAlreadyPaid ? 'Paid — click to undo' : 'Mark paid'}">${slotAlreadyPaid ? '✓' : ''}</button>`
+                                ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                                    <button class="pay-slot-cb${slotAlreadyPaid ? ' paid' : ''}" onclick="markRefSlotPaid('${r.id}','${slot.pos}',this)" title="${slotAlreadyPaid ? 'Paid — click to undo' : 'Mark paid'}">${slotAlreadyPaid ? '✓' : ''}</button>
+                                    ${slotTs ? `<span class="pay-slot-ts">${slotTs}</span>` : '<span class="pay-slot-ts"></span>'}
+                                   </div>`
                                 : '';
 
                             html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}" data-slot="${slot.pos}" data-orig-bg="${_gameColors[gameIdx % _gameColors.length]}" style="${slotRowBg}">
@@ -2759,12 +2766,14 @@
 
     async function markRefSlotPaid(gameId, slot, btn) {
         const wasPaid = btn.classList.contains('paid');
+        const tsEl = btn.parentNode.querySelector('.pay-slot-ts');
         btn.disabled = true;
         try {
             if (wasPaid) {
                 await supabaseClient.client.from('ref_payments').delete().eq('game_id', gameId).eq('slot', slot);
                 btn.classList.remove('paid');
                 btn.textContent = '';
+                if (tsEl) tsEl.textContent = '';
                 const row = btn.closest('tr');
                 row.style.background = row.dataset.origBg || '';
             } else {
@@ -2776,6 +2785,7 @@
                 );
                 btn.classList.add('paid');
                 btn.textContent = '✓';
+                if (tsEl) tsEl.textContent = new Date(now).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
                 btn.closest('tr').style.background = '#bbf7d0';
             }
         } catch(e) {
