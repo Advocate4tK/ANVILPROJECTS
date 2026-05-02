@@ -2520,7 +2520,7 @@
             const today = new Date().toISOString().split('T')[0];
             const [rawGrisGames, refRecs, ratesResult] = await Promise.all([
                 supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY).from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 2000 }),
+                supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state'),
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order')
             ]);
             const games = airtableClient._wrapAll(rawGrisGames.data || []);
@@ -2559,17 +2559,17 @@
             // Build dual lookup maps: by name (plain text games) and by ID ([1092] workstation format)
             const refByName = {};
             const refById   = {};
-            refRecs.forEach(r => {
-                // Index by numeric ID
-                if (r.id) refById[String(r.id)] = r.fields;
-                const nm = (r.fields['Name'] || '').trim().toLowerCase();
+            (refRecs.data || []).forEach(r => {
+                // Index by Supabase integer ID (matches [1092] workstation format)
+                if (r.id) refById[String(r.id)] = r;
+                const nm = (r.name || '').trim().toLowerCase();
                 if (!nm) return;
-                refByName[nm] = r.fields;
+                refByName[nm] = r;
                 // Also index as "first last" (strips middle name/initial)
                 const parts = nm.split(/\s+/);
                 if (parts.length > 2) {
                     const shortKey = `${parts[0]} ${parts[parts.length - 1]}`;
-                    if (!refByName[shortKey]) refByName[shortKey] = r.fields;
+                    if (!refByName[shortKey]) refByName[shortKey] = r;
                 }
             });
 
@@ -2671,7 +2671,7 @@
                                 <td>${idx === 0 ? date : ''}</td>
                                 <td style="font-size:0.76rem; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${idx === 0 ? game : ''}</td>
                                 <td>${idx === 0 ? age : ''}</td>
-                                <td>${rf['Name'] || slot.name}</td>
+                                <td>${rf['name'] || slot.name}</td>
                                 <td>${posBadge}</td>
                                 <td>$<input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled style="opacity:0.5"' : ''}></td>
                                 <td>${venmoHtml}</td>
