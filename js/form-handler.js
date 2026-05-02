@@ -134,6 +134,21 @@ document.addEventListener('DOMContentLoaded', function() {
                             console.warn('Could not update referee profile:', updateErr.message);
                         }
                     }
+
+                    // Dual-write venmo/payment_method to Supabase so the pay portal can read it
+                    if ((refUpdates['venmo'] || refUpdates['payment_method']) && typeof supabaseClient !== 'undefined') {
+                        try {
+                            const email = document.getElementById('refereeEmail')?.value.trim();
+                            if (email) {
+                                const sbUpdates = {};
+                                if (refUpdates['venmo'])           sbUpdates.venmo           = refUpdates['venmo'];
+                                if (refUpdates['payment_method'])  sbUpdates.payment_method  = refUpdates['payment_method'];
+                                await supabaseClient.client.from('referees').update(sbUpdates).eq('email', email);
+                            }
+                        } catch(sbErr) {
+                            console.warn('Could not sync venmo to Supabase:', sbErr.message);
+                        }
+                    }
                 }
             }
 
