@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Club President Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            background-color: #060e20 !important;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            ) !important;
+        }
+
+        /* ── Doorway ── */
+        .doorway-card {
+            max-width: 460px;
+            margin: 0 auto 32px;
+            background: var(--surface);
+            border-radius: 14px;
+            padding: 32px 28px;
+            box-shadow: var(--shadow-md);
+        }
+        .doorway-card h2 { font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px; }
+        .doorway-card p  { font-size:0.84rem; color:var(--muted); margin-bottom:20px; }
+        .dw-field { margin-bottom:12px; }
+        .dw-field label { font-size:0.78rem; font-weight:700; color:#555; display:block; margin-bottom:3px; }
+        .dw-field input { width:100%; padding:9px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:0.92rem; font-family:'DM Sans',sans-serif; box-sizing:border-box; transition:border-color 0.15s; }
+        .dw-field input:focus { outline:none; border-color:var(--deep); }
+        .dw-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .btn-enter { width:100%; background:var(--deep); color:white; border:none; border-radius:8px; padding:11px; font-size:0.95rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; margin-top:4px; transition:background 0.15s; }
+        .btn-enter:hover { background:#0f3460; }
+        .dw-error { color:#dc2626; font-size:0.82rem; margin-top:8px; display:none; }
+
+        /* ── Dashboard layout ── */
+        #dashboard { display:none; }
+
+        .pres-header {
+            display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:12px;
+            margin-bottom:28px; padding-bottom:16px; border-bottom:2px solid var(--deep);
+        }
+        .pres-club-name { font-family:'Barlow Condensed',sans-serif; font-size:2.4rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1px; line-height:1; }
+        .pres-subtitle  { font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-top:4px; }
+        .pres-welcome   { font-size:0.84rem; color:var(--muted); text-align:right; }
+
+        /* ── Stats bar ── */
+        .stats-bar { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:28px; }
+        .stat-card { background:var(--surface); border-radius:10px; padding:16px 18px; box-shadow:var(--shadow-sm); border-top:3px solid transparent; }
+        .stat-card.green  { border-top-color:#16a34a; }
+        .stat-card.amber  { border-top-color:#f59e0b; }
+        .stat-card.red    { border-top-color:#dc2626; }
+        .stat-card.blue   { border-top-color:#2563eb; }
+        .stat-card.navy   { border-top-color:var(--deep); }
+        .stat-val  { font-family:'JetBrains Mono',monospace; font-size:1.6rem; font-weight:800; color:var(--deep); line-height:1; }
+        .stat-lbl  { font-size:0.72rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px; }
+
+        /* ── Section headers ── */
+        .section-head {
+            font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; font-weight:800;
+            color:var(--deep); text-transform:uppercase; letter-spacing:0.8px;
+            margin:28px 0 12px; padding-bottom:6px; border-bottom:1.5px solid var(--border);
+            display:flex; align-items:center; gap:8px;
+        }
+        .section-count { background:var(--deep); color:white; font-size:0.68rem; font-weight:800; padding:2px 7px; border-radius:10px; letter-spacing:0.3px; }
+
+        /* ── Tables ── */
+        .pres-table { width:100%; border-collapse:collapse; font-size:0.82rem; margin-bottom:24px; }
+        .pres-table th { background:var(--deep); color:rgba(255,255,255,0.85); padding:8px 10px; text-align:left; font-family:'DM Sans',sans-serif; font-weight:600; font-size:0.74rem; letter-spacing:0.3px; white-space:nowrap; }
+        .pres-table td { padding:7px 10px; border-bottom:1px solid rgba(0,0,0,0.05); vertical-align:middle; background:var(--surface); }
+        .pres-table tr:last-child td { border-bottom:none; }
+        .pres-table tbody tr:hover td { background:#f0f4ff; }
+
+        .week-divider td { background:#f8f6f2 !important; font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; padding:5px 10px !important; border-bottom:1px solid var(--border) !important; }
+
+        /* ── Payment status pills ── */
+        .pill-paid   { background:#dcfce7; color:#14532d; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+        .pill-unpaid { background:#fee2e2; color:#991b1b; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+        .pill-upcoming { background:#f1f5f9; color:#64748b; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+
+        /* ── Late change cost badge ── */
+        .cost-badge { background:#fef2f2; color:#dc2626; font-size:0.72rem; font-weight:800; padding:3px 9px; border-radius:8px; font-family:'JetBrains Mono',monospace; }
+
+        /* ── Ref list ── */
+        .ref-row-name  { font-weight:700; color:var(--deep); }
+        .ref-row-games { font-family:'JetBrains Mono',monospace; font-size:0.82rem; color:#555; }
+        .ref-row-total { font-family:'JetBrains Mono',monospace; font-size:0.82rem; font-weight:700; color:#16a34a; }
+
+        /* ── Print ── */
+        .btn-print { background:var(--deep); color:white; border:none; border-radius:8px; padding:7px 16px; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:background 0.15s; }
+        .btn-print:hover { background:#0f3460; }
+        @media print { .btn-print, .pres-welcome { display:none; } body { background:#fff !important; } }
+
+        /* ── Empty state ── */
+        .empty-row td { text-align:center; color:var(--muted); font-style:italic; font-size:0.82rem; padding:18px !important; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div class="header-brand" style="justify-content:center; display:flex; align-items:center; gap:16px; margin-bottom:6px;">
+            <div class="logo-mark" style="--sz:52px; position:relative; width:52px; height:52px; flex-shrink:0;">
+                <div style="position:absolute; width:calc(52px*0.64); height:calc(52px*0.88); background:linear-gradient(145deg,#fde047 0%,#f59e0b 55%,#b45309 100%); border-radius:calc(52px*0.065); top:calc(52px*0.12); left:calc(52px*0.18); transform:rotate(10deg); box-shadow:0 0 calc(52px*0.2) rgba(245,158,11,0.5);"></div>
+                <div style="position:absolute; width:calc(52px*0.58); height:calc(52px*0.82); background:linear-gradient(145deg,#f87171 0%,#ef4444 55%,#b91c1c 100%); border-radius:calc(52px*0.065); top:calc(52px*0.21); left:calc(52px*0.32); transform:rotate(22deg);"></div>
+            </div>
+            <div>
+                <h1 style="margin:0; font-size:clamp(20px,4vw,32px);">Club President Portal</h1>
+                <p class="subtitle" style="margin:0;" id="pageSubtitle">Season overview &amp; reports</p>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Doorway -->
+        <div id="doorway">
+            <div class="doorway-card">
+                <h2>President Access</h2>
+                <p>Enter your name and email to view your club's dashboard.</p>
+                <div class="dw-grid">
+                    <div class="dw-field">
+                        <label>First Name</label>
+                        <input type="text" id="dwFirst" placeholder="Ed" autocomplete="given-name">
+                    </div>
+                    <div class="dw-field">
+                        <label>Last Name</label>
+                        <input type="text" id="dwLast" placeholder="Conn" autocomplete="family-name">
+                    </div>
+                </div>
+                <div class="dw-field">
+                    <label>Email Address</label>
+                    <input type="email" id="dwEmail" placeholder="you@email.com" autocomplete="email">
+                </div>
+                <button class="btn-enter" onclick="attemptLogin()">View My Dashboard →</button>
+                <p class="dw-error" id="dwError">Name or email didn't match our records. Check your spelling or contact your assignor.</p>
+            </div>
+        </div>
+
+        <!-- Dashboard (hidden until auth) -->
+        <div id="dashboard">
+            <div class="pres-header">
+                <div>
+                    <div class="pres-club-name" id="dashClubName">—</div>
+                    <div class="pres-subtitle" id="dashSeason">Spring 2026 Season</div>
+                </div>
+                <div class="pres-welcome">
+                    <div id="dashWelcome" style="font-weight:700; color:var(--deep); margin-bottom:2px;"></div>
+                    <button class="btn-print" onclick="window.print()">🖨 Print Report</button>
+                </div>
+            </div>
+
+            <!-- Stats bar -->
+            <div class="stats-bar" id="statsBar">
+                <div class="stat-card navy"><div class="stat-val" id="statGames">—</div><div class="stat-lbl">Total Games</div></div>
+                <div class="stat-card green"><div class="stat-val" id="statPaidOut">—</div><div class="stat-lbl">Paid Out</div></div>
+                <div class="stat-card amber"><div class="stat-val" id="statOwed">—</div><div class="stat-lbl">Still Owed</div></div>
+                <div class="stat-card red"><div class="stat-val" id="statLateCost">—</div><div class="stat-lbl">Late Cancel Cost</div></div>
+                <div class="stat-card blue"><div class="stat-val" id="statCoverage">—</div><div class="stat-lbl">Games Assigned</div></div>
+            </div>
+
+            <!-- Payments section -->
+            <div class="section-head">💳 Referee Payments <span class="section-count" id="payCount">0</span></div>
+            <div id="paymentsContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>
+
+            <!-- Late cancellations -->
+            <div class="section-head">⚠️ Late Cancellations &amp; Changes <span class="section-count" id="lateCount">0</span></div>
+            <p style="font-size:0.8rem; color:var(--muted); margin:-6px 0 10px;">Games cancelled or changed Thursday or later — refs still get paid per policy.</p>
+            <div id="lateContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>
+
+            <!-- Refs serving this club -->
+            <div class="section-head">👤 Refs Serving This Club <span class="section-count" id="refCount">0</span></div>
+            <div id="refsContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>
+        </div>
+    </main>
+
+    <footer>
+        <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by
+            <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a>
+            <img src="PICS/anvil.png" height="24" style="opacity:0.7;" title="Built by Ralph E. Smith / Anvil Arts">
+        </p>
+    </footer>
+</div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-client.js"></script>
+<script src="js/airtable-client.js"></script>
+<script>
+const airtableClient = supabaseClient;
+
+const _clubSlug = new URLSearchParams(window.location.search).get('club') || '';
+let _clubRecord  = null;
+let _clubId      = null;
+let _payRates    = [];
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+async function attemptLogin() {
+    const first = document.getElementById('dwFirst').value.trim();
+    const last  = document.getElementById('dwLast').value.trim();
+    const email = document.getElementById('dwEmail').value.trim().toLowerCase();
+    const err   = document.getElementById('dwError');
+    err.style.display = 'none';
+
+    if (!first || !last || !email) { err.textContent = 'All fields are required.'; err.style.display = 'block'; return; }
+
+    try {
+        const { data: clubs, error } = await supabaseClient.client
+            .from('clubs')
+            .select('id, name, president, "President Email", "President Phone", club_id, payment_coordinator, assignor')
+            .ilike('slug', _clubSlug || '%')
+            .limit(50);
+        if (error) throw error;
+
+        const fullName = `${first} ${last}`.toLowerCase();
+        const match = (clubs || []).find(c => {
+            const presName  = (c.president || '').trim().toLowerCase();
+            const presEmail = (c['President Email'] || '').trim().toLowerCase();
+            return presName === fullName && presEmail === email;
+        });
+
+        if (!match) { err.style.display = 'block'; return; }
+
+        _clubRecord = match;
+        _clubId     = match.club_id || match.id;
+        document.getElementById('doorway').style.display   = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        document.getElementById('dashClubName').textContent  = (match.name || _clubSlug).toUpperCase();
+        document.getElementById('dashWelcome').textContent   = `Welcome, ${first} ${last}`;
+        document.getElementById('pageSubtitle').textContent  = `${match.name || ''} — President Dashboard`;
+        document.title = `${match.name || 'Club'} President Portal`;
+        loadDashboard(match);
+    } catch(e) {
+        err.textContent = 'Error loading club data: ' + e.message;
+        err.style.display = 'block';
+    }
+}
+
+// Enter key on any field
+['dwFirst','dwLast','dwEmail'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
+});
+
+// ── Pay rate helpers ──────────────────────────────────────────────────────────
+function ageBand(ageGroup) {
+    const ag = (ageGroup || '').replace(/\s+/g, '');
+    if (_payRates.find(r => r.age_group === ag)) return ag;
+    const n = parseInt(ag.replace(/\D/g, ''), 10);
+    if (isNaN(n)) return null;
+    if (n <= 8)  return 'U8';
+    if (n <= 10) return 'U9-U10';
+    if (n <= 12) return 'U11-U12';
+    if (n <= 15) return 'U13-U15';
+    return 'U18-U19';
+}
+function getRate(posKey, ageGroup, isSolo) {
+    const band = ageBand(ageGroup);
+    const row  = _payRates.find(r => r.age_group === band) || _payRates[_payRates.length - 1];
+    if (!row) return 0;
+    if (isSolo && row.solo != null) return row.solo;
+    return posKey === 'CR' ? row.center : row.ar;
+}
+
+// ── Week label ────────────────────────────────────────────────────────────────
+function weekLabel(dateStr) {
+    if (!dateStr) return 'Unknown Week';
+    const d   = new Date(dateStr + 'T12:00:00');
+    const day = d.getDay();
+    const mon = new Date(d); mon.setDate(d.getDate() - ((day + 6) % 7));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const fmt = dt => dt.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    return `Week of ${fmt(mon)} – ${fmt(sun)}`;
+}
+
+// ── Thursday check ────────────────────────────────────────────────────────────
+function isAfterThursday(changeTs, gameDate) {
+    if (!changeTs || !gameDate) return false;
+    const game     = new Date(gameDate + 'T12:00:00');
+    const day      = game.getDay(); // 0=Sun
+    const daysToThurs = (day >= 4) ? (day - 4) : (day + 3);
+    const thursday = new Date(game);
+    thursday.setDate(game.getDate() - daysToThurs);
+    thursday.setHours(0, 0, 0, 0);
+    return new Date(changeTs) >= thursday;
+}
+
+// ── Parse change request timestamp from Notes ─────────────────────────────────
+function getChangeTs(notes) {
+    const match = (notes || '').match(/\[CHANGE REQUEST[^\]]*[–-]\s*([^\]]+)\]/i);
+    return match ? new Date(match[1].trim()) : null;
+}
+
+// ── Main dashboard load ───────────────────────────────────────────────────────
+async function loadDashboard(club) {
+    const clubName = club.name || '';
+    const today    = new Date().toISOString().split('T')[0];
+
+    try {
+        const [rawGames, refRecs, ratesResult, refPayResult] = await Promise.all([
+            supabaseClient.client.from('games').select('*').eq('Source Club', clubName).limit(2000),
+            supabaseClient.client.from('referees').select('id, name, venmo, payment_method'),
+            supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order'),
+            supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount')
+        ]);
+
+        _payRates = ratesResult.data || [];
+
+        const games = airtableClient._wrapAll ? airtableClient._wrapAll(rawGames.data || []) : (rawGames.data || []).map(r => ({ id: r.id, fields: r }));
+
+        // Per-slot paid map
+        const slotPaidMap = {};
+        (refPayResult.data || []).forEach(r => {
+            if (!slotPaidMap[r.game_id]) slotPaidMap[r.game_id] = {};
+            slotPaidMap[r.game_id][r.slot] = r.paid_at;
+        });
+
+        // Ref lookup
+        const refByName = {};
+        const refById   = {};
+        (refRecs.data || []).forEach(r => {
+            if (r.id) refById[String(r.id)] = r;
+            const nm = (r.name || '').trim().toLowerCase();
+            if (nm) refByName[nm] = r;
+        });
+        function resolveRef(val) {
+            const idMatch = (val || '').match(/^\[(\d+)\]$/);
+            if (idMatch) return refById[idMatch[1]] || {};
+            return refByName[(val || '').trim().toLowerCase()] || {};
+        }
+
+        // Filter to games with at least one ref
+        const allGames = games.filter(r => {
+            const f = r.fields;
+            return (f['Date']) && (f['Center Referee'] || f['AR 1'] || f['AR 2']);
+        }).sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || ''));
+
+        // Separate past / upcoming / cancelled
+        const pastGames     = allGames.filter(r => (r.fields['Date'] || '') < today);
+        const upcomingGames = allGames.filter(r => (r.fields['Date'] || '') >= today);
+
+        // ── Stats calculations ────────────────────────────────────────────────
+        let totalPaid = 0, totalOwed = 0, lateCancelCost = 0;
+        let assignedCount = 0, totalGameCount = 0;
+        const refStats = {}; // name → { games, earned }
+        const lateChanges = [];
+
+        allGames.forEach(r => {
+            const f    = r.fields;
+            const date = f['Date'] || '';
+            const age  = f['Age Group'] || '';
+            const slots = [
+                { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
+                { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
+                { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
+            ].filter(s => s.name);
+            const isSolo = slots.length === 1 && slots[0].pos === 'CR';
+            if (slots.length > 0) assignedCount++;
+            totalGameCount++;
+
+            let gameOwed = 0;
+            slots.forEach(slot => {
+                const rate     = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                const slotPaid = slotPaidMap[r.id]?.[slot.pos];
+                if (slotPaid) {
+                    totalPaid += rate;
+                } else if (date < today) {
+                    totalOwed += rate;
+                    gameOwed  += rate;
+                }
+                const refName = resolveRef(slot.name).name || slot.name;
+                if (!refStats[refName]) refStats[refName] = { games: 0, earned: 0 };
+                refStats[refName].games++;
+                if (slotPaid) refStats[refName].earned += rate;
+            });
+
+            // Late change check
+            const status  = (f['Game Status'] || f['Status'] || '').toLowerCase();
+            const notes   = f['Notes'] || '';
+            const changeTs = getChangeTs(notes);
+            if ((status.includes('cancel') || status.includes('postpone') || changeTs) && isAfterThursday(changeTs || new Date().toISOString(), date)) {
+                let gameCost = 0;
+                slots.forEach(slot => {
+                    gameCost += getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                });
+                lateCancelCost += gameCost;
+                lateChanges.push({ r, date, slots, gameCost, changeTs, status });
+            }
+        });
+
+        // ── Update stats bar ─────────────────────────────────────────────────
+        document.getElementById('statGames').textContent    = allGames.length;
+        document.getElementById('statPaidOut').textContent  = `$${totalPaid}`;
+        document.getElementById('statOwed').textContent     = `$${totalOwed}`;
+        document.getElementById('statLateCost').textContent = `$${lateCancelCost}`;
+        document.getElementById('statCoverage').textContent = `${assignedCount}/${totalGameCount}`;
+
+        // ── Payments table ────────────────────────────────────────────────────
+        document.getElementById('payCount').textContent = pastGames.length;
+        renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef);
+
+        // ── Late changes table ────────────────────────────────────────────────
+        document.getElementById('lateCount').textContent = lateChanges.length;
+        renderLateChanges(lateChanges, resolveRef);
+
+        // ── Refs table ────────────────────────────────────────────────────────
+        document.getElementById('refCount').textContent = Object.keys(refStats).length;
+        renderRefs(refStats);
+
+    } catch(e) {
+        document.getElementById('paymentsContent').innerHTML = `<p style="color:#991b1b; font-size:0.85rem;">Error: ${e.message}</p>`;
+    }
+}
+
+// ── Render payments ───────────────────────────────────────────────────────────
+function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
+    const today = new Date().toISOString().split('T')[0];
+    const allForTable = [...pastGames].reverse(); // most recent first
+
+    if (!allForTable.length) {
+        document.getElementById('paymentsContent').innerHTML = '<p style="color:#888; font-size:0.85rem;">No past games on record.</p>';
+        return;
+    }
+
+    let html = `<div style="border-radius:8px; overflow:hidden; border:1px solid var(--border);">
+    <table class="pres-table">
+    <colgroup><col style="width:95px"><col style="width:28%"><col style="width:44px"><col style="width:14%"><col style="width:44px"><col style="width:90px"><col style="width:80px"><col></colgroup>
+    <thead><tr>
+        <th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Status</th><th>Paid At</th>
+    </tr></thead><tbody>`;
+
+    let lastWeek = '';
+    const _colors = ['#dbeafe','#fef9c3'];
+    allForTable.forEach((r, gameIdx) => {
+        const f    = r.fields;
+        const date = f['Date'] || '—';
+        const age  = f['Age Group'] || '—';
+        const game = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
+        const wk   = weekLabel(date);
+        const slots = [
+            { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
+            { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
+            { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
+        ].filter(s => s.name);
+        const isSolo = slots.length === 1 && slots[0].pos === 'CR';
+        const bg = _colors[gameIdx % _colors.length];
+
+        if (wk !== lastWeek) {
+            lastWeek = wk;
+            html += `<tr class="week-divider"><td colspan="8">${wk}</td></tr>`;
+        }
+
+        slots.forEach((slot, idx) => {
+            const rf       = resolveRef(slot.name);
+            const rate     = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+            const slotPaid = slotPaidMap[r.id]?.[slot.pos];
+            const paidTs   = slotPaid ? new Date(slotPaid).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+            const rowBg    = slotPaid ? '#dcfce7' : bg;
+            const pill     = slotPaid
+                ? `<span class="pill-paid">✓ Paid</span>`
+                : `<span class="pill-unpaid">Unpaid</span>`;
+            const posBadge = slot.pos === 'CR'
+                ? `<span style="background:#1e3a8a;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">CR</span>`
+                : `<span style="background:#059669;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">${slot.pos}</span>`;
+
+            html += `<tr style="background:${rowBg};">
+                <td style="white-space:nowrap;">${idx === 0 ? date : ''}</td>
+                <td style="font-weight:700;color:#152d55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${idx === 0 ? game : ''}</td>
+                <td>${idx === 0 ? age : ''}</td>
+                <td style="font-weight:600;color:#1a2e4a;">${rf.name || slot.name}</td>
+                <td>${posBadge}</td>
+                <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#1a2e4a;">$${rate}</td>
+                <td>${pill}</td>
+                <td style="font-size:0.72rem;color:#555;">${paidTs}</td>
+            </tr>`;
+        });
+    });
+
+    // Upcoming games (read-only, no pay status)
+    if (upcomingGames.length) {
+        html += `<tr class="week-divider"><td colspan="8">— Upcoming Games —</td></tr>`;
+        upcomingGames.forEach((r, gameIdx) => {
+            const f    = r.fields;
+            const date = f['Date'] || '—';
+            const age  = f['Age Group'] || '—';
+            const game = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
+            const slots = [
+                { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
+                { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
+                { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
+            ].filter(s => s.name);
+            const isSolo = slots.length === 1 && slots[0].pos === 'CR';
+
+            slots.forEach((slot, idx) => {
+                const rf   = resolveRef(slot.name);
+                const rate = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                const posBadge = slot.pos === 'CR'
+                    ? `<span style="background:#1e3a8a;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">CR</span>`
+                    : `<span style="background:#059669;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">${slot.pos}</span>`;
+                html += `<tr style="background:#f8f6f2;opacity:0.75;">
+                    <td style="white-space:nowrap;">${idx === 0 ? date : ''}</td>
+                    <td style="font-weight:700;color:#152d55;">${idx === 0 ? game : ''}</td>
+                    <td>${idx === 0 ? age : ''}</td>
+                    <td style="font-weight:600;color:#1a2e4a;">${rf.name || slot.name}</td>
+                    <td>${posBadge}</td>
+                    <td style="font-family:'JetBrains Mono',monospace;color:#888;">$${rate}</td>
+                    <td><span class="pill-upcoming">Upcoming</span></td>
+                    <td></td>
+                </tr>`;
+            });
+        });
+    }
+
+    html += `</tbody></table></div>`;
+    document.getElementById('paymentsContent').innerHTML = html;
+}
+
+// ── Render late changes ───────────────────────────────────────────────────────
+function renderLateChanges(lateChanges, resolveRef) {
+    if (!lateChanges.length) {
+        document.getElementById('lateContent').innerHTML = `<p style="color:#16a34a; font-size:0.85rem; font-weight:600;">✓ No late cancellations or changes this season.</p>`;
+        return;
+    }
+    let html = `<div style="border-radius:8px; overflow:hidden; border:1px solid var(--border);">
+    <table class="pres-table">
+    <thead><tr><th>Game Date</th><th>Game</th><th>Age</th><th>Change Submitted</th><th>Status</th><th>Refs Affected</th><th>Cost to Club</th></tr></thead>
+    <tbody>`;
+
+    lateChanges.forEach(({ r, date, slots, gameCost, changeTs, status }) => {
+        const f    = r.fields;
+        const game = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
+        const age  = f['Age Group'] || '—';
+        const refNames = slots.map(s => resolveRef(s.name).name || s.name).join(', ');
+        const changeFmt = changeTs ? changeTs.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '—';
+        const statusLabel = status.includes('cancel') ? 'Cancelled' : status.includes('postpone') ? 'Postponed' : 'Changed';
+        html += `<tr style="background:#fff5f5;">
+            <td style="white-space:nowrap; font-weight:700;">${date}</td>
+            <td style="font-weight:700; color:#152d55;">${game}</td>
+            <td>${age}</td>
+            <td style="font-size:0.78rem; color:#555;">${changeFmt}</td>
+            <td><span style="background:#fee2e2;color:#991b1b;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:8px;">${statusLabel}</span></td>
+            <td style="font-size:0.78rem; color:#555;">${refNames}</td>
+            <td><span class="cost-badge">$${gameCost}</span></td>
+        </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    document.getElementById('lateContent').innerHTML = html;
+}
+
+// ── Render refs ───────────────────────────────────────────────────────────────
+function renderRefs(refStats) {
+    const refs = Object.entries(refStats).sort((a, b) => b[1].games - a[1].games);
+    if (!refs.length) {
+        document.getElementById('refsContent').innerHTML = '<p style="color:#888; font-size:0.85rem;">No refs found.</p>';
+        return;
+    }
+    let html = `<div style="border-radius:8px; overflow:hidden; border:1px solid var(--border);">
+    <table class="pres-table">
+    <thead><tr><th>Referee</th><th style="text-align:center;">Games</th><th style="text-align:right;">Total Earned</th></tr></thead>
+    <tbody>`;
+    refs.forEach(([name, s]) => {
+        html += `<tr>
+            <td class="ref-row-name">${name}</td>
+            <td class="ref-row-games" style="text-align:center;">${s.games}</td>
+            <td class="ref-row-total" style="text-align:right;">$${s.earned}</td>
+        </tr>`;
+    });
+    html += `</tbody></table></div>`;
+    document.getElementById('refsContent').innerHTML = html;
+}
+</script>
+</body>
+</html>
