@@ -2514,14 +2514,14 @@
             <div class="pay-header" style="position:relative;">
                 <button onclick="window.location.href='?club=${_payClub}'" style="position:absolute; top:50%; right:0; transform:translateY(-50%); background:#0f3460; border:1px solid #0f3460; color:white; border-radius:12px; padding:4px 12px; font-size:0.78rem; cursor:pointer;">🚪 Exit</button>
             </div>
-            <p style="color:var(--muted); font-size:0.85rem; margin-bottom:12px;">Tap <strong>💸 Pay</strong> next to each ref — it opens Venmo pre-filled with their handle and amount. Confirm in Venmo, then hit <strong>Mark Paid</strong>. Works on your phone or desktop.</p>
+            <p style="color:var(--muted); font-size:0.85rem; margin-bottom:12px;">Tap the <strong style="color:#14532d;">green @handle</strong> next to each ref — it opens Venmo pre-filled with their handle and amount. Confirm in Venmo, then hit <strong>Mark All Paid</strong>. Works on your phone or desktop.</p>
             <div id="payRateTable" style="margin-bottom:14px;"></div>
             <div id="payContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>`;
 
         try {
             const today = new Date().toISOString().split('T')[0];
             const [rawGrisGames, refRecs, ratesResult] = await Promise.all([
-                supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY).from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
+                supabaseClient.client.from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
                 supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state'),
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order')
             ]);
@@ -2633,7 +2633,7 @@
                         const date     = f['Date'] || '—';
                         const age      = f['Age Group'] || '—';
                         const game     = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
-                        const isPaid   = (f['Payment Status'] || '').toLowerCase() === 'paid';
+                        const isPaid   = !!paidAtById[r.id] || (f['Payment Status'] || '').toLowerCase() === 'paid';
                         const paidAt   = paidAtById[r.id] ? new Date(paidAtById[r.id]).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
                         const rowBg    = isPaid ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]};`;
 
@@ -2724,10 +2724,7 @@
         btn.disabled = true;
         try {
             const now = new Date().toISOString();
-            await Promise.all([
-                airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Payment Status': 'Paid' }),
-                supabaseClient.client.from('games').update({ paid_at: now }).eq('id', gameId)
-            ]);
+            await supabaseClient.client.from('games').update({ paid_at: now, 'Payment Status': 'Paid' }).eq('id', gameId);
             document.querySelectorAll(`tr[data-game="${gameId}"]`).forEach(row => {
                 row.classList.add('row-paid');
             });
