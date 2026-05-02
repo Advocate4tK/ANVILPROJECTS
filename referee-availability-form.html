@@ -833,13 +833,41 @@
                 sec.style.display = 'block';
                 requestAnimationFrame(() => { sec.style.opacity = '1'; });
                 sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                // Re-apply URL club pre-check now that the section is visible
-                const urlClubNow = new URLSearchParams(window.location.search).get('club');
+
+                const urlParams   = new URLSearchParams(window.location.search);
+                const urlClubNow  = urlParams.get('club');
+                const urlNoteNow  = urlParams.get('note');
+                const urlDatesNow = urlParams.get('dates');
+
+                // Re-seed date rows from URL — clear container and rebuild so stale rows don't survive
+                const dayCont   = document.getElementById('availabilityDays');
+                const datesArr  = urlDatesNow
+                    ? urlDatesNow.split(',').map(d => d.trim()).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d))
+                    : [];
+                dayCont.innerHTML = '';
+                if (datesArr.length > 0) {
+                    datesArr.forEach((date, i) => {
+                        const row = createDayRow(i + 1, datesArr.length > 1);
+                        row.querySelector('input[name="availableDate[]"]').value = date;
+                        dayCont.appendChild(row);
+                    });
+                } else {
+                    dayCont.appendChild(createDayRow(1));
+                }
+
+                // Re-apply club checkbox
                 if (urlClubNow) {
                     document.querySelectorAll('input[name="locations"]').forEach(cb => {
                         if (cb.value === urlClubNow && !cb.disabled) cb.checked = true;
                     });
                 }
+
+                // Apply note
+                if (urlNoteNow) {
+                    const notesEl = document.getElementById('notes');
+                    if (notesEl) notesEl.value = urlNoteNow;
+                }
+
                 loadUpcomingAvailability();
                 if (typeof window.checkFormReady === 'function') window.checkFormReady();
             }
