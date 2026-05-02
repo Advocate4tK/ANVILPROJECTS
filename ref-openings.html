@@ -243,13 +243,32 @@
         }
 
         .game-card-header {
-            padding: 10px 14px 8px;
-            border-bottom: 1px solid #eee;
+            padding: 10px 14px 10px;
             display: flex;
             align-items: center;
             gap: 8px;
             flex-wrap: wrap;
+            cursor: pointer;
+            user-select: none;
         }
+        .game-card-header:hover { background: #f8f9fb; }
+
+        .game-card-body {
+            display: none;
+            border-top: 1px solid #eee;
+        }
+        .game-card.open .game-card-body { display: block; }
+
+        .game-chevron {
+            font-size: 0.6rem;
+            color: #bbb;
+            transition: transform 0.2s;
+            flex-shrink: 0;
+            margin-left: 2px;
+        }
+        .game-card.open .game-chevron { transform: rotate(90deg); }
+
+        .badge-open { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
 
         .game-teams {
             font-size: 0.9rem;
@@ -556,19 +575,23 @@
     }
 
     function buildCard(g) {
-        const club     = g['Source Club'] || '';
+        const club      = g['Source Club'] || '';
         const badgeInfo = CLUB_BADGE[club] || { cls: 'badge-def', label: club };
-        const age      = g['Age Group'] || '';
-        const home     = g['Home Team'] || '?';
-        const away     = g['Away Team'] || '?';
-        const time     = formatTime(g['time'] || g['Time'] || '');
-        const venueId  = g['Venue ID'];
-        const venue    = venueId ? (venueMap[String(venueId)] || '') : '';
-        const u8       = isU8Game(g);
+        const age       = g['Age Group'] || '';
+        const home      = g['Home Team'] || '?';
+        const away      = g['Away Team'] || '?';
+        const time      = formatTime(g['time'] || g['Time'] || '');
+        const venueId   = g['Venue ID'];
+        const venue     = venueId ? (venueMap[String(venueId)] || '') : '';
+        const u8        = isU8Game(g);
 
         const crFilled  = isFilled(g['Center Referee']);
         const ar1Filled = isFilled(g['AR 1']);
         const ar2Filled = isFilled(g['AR 2']);
+
+        const openCount = u8
+            ? (!crFilled ? 1 : 0)
+            : (!crFilled ? 1 : 0) + (!ar1Filled ? 1 : 0) + (!ar2Filled ? 1 : 0);
 
         const slotsHtml = u8
             ? `<div class="slots-row one-slot">
@@ -602,10 +625,14 @@
                 <span class="game-meta-line">${time}</span>
                 ${age ? `<span class="badge badge-age">${age}</span>` : ''}
                 <span class="badge ${badgeInfo.cls}">${badgeInfo.label}</span>
+                <span class="badge badge-open">${openCount} Open</span>
+                <span class="game-chevron">▶</span>
             </div>
-            ${venue ? `<div class="game-venue">${venue}</div>` : ''}
-            ${slotsHtml}
-            <a class="avail-link" href="${availUrl}">📅 Submit My Availability for This Game</a>
+            <div class="game-card-body">
+                ${venue ? `<div class="game-venue">${venue}</div>` : ''}
+                ${slotsHtml}
+                <a class="avail-link" href="${availUrl}">📅 Submit My Availability for This Game</a>
+            </div>
         </div>`;
     }
 
@@ -641,6 +668,13 @@
         });
 
         list.innerHTML = html;
+
+        // Wire collapse toggle
+        list.querySelectorAll('.game-card-header').forEach(header => {
+            header.addEventListener('click', () => {
+                header.closest('.game-card').classList.toggle('open');
+            });
+        });
     }
 
     async function loadData() {
