@@ -428,18 +428,35 @@
                 </div>
 
                 <div id="payRatesSection" style="display:none;">
-                    <table style="width:100%; border-collapse:collapse; font-family:'DM Sans',sans-serif; font-size:0.88rem; margin-bottom:6px;">
-                        <thead>
-                            <tr style="border-bottom:2px solid #e2d9ce;">
-                                <th style="text-align:left; padding:8px 12px; color:#09142a; font-size:0.73rem; text-transform:uppercase; letter-spacing:0.8px;">Age Group</th>
-                                <th style="padding:8px 12px; color:#09142a; font-size:0.73rem; text-transform:uppercase; letter-spacing:0.8px;">Center Ref</th>
-                                <th style="padding:8px 12px; color:#09142a; font-size:0.73rem; text-transform:uppercase; letter-spacing:0.8px;">AR</th>
-                                <th style="padding:8px 12px; color:#09142a; font-size:0.73rem; text-transform:uppercase; letter-spacing:0.8px;">Solo CR</th>
-                            </tr>
-                        </thead>
-                        <tbody id="payRatesBody"></tbody>
-                    </table>
-                    <div style="font-size:0.74rem; color:#aaa; margin-bottom:16px;">Leave blank if that position is not paid for this age group. Solo = CR rate when no ARs are assigned.</div>
+                    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:6px;">
+                        <!-- Rec -->
+                        <div style="flex:1; min-width:260px;">
+                            <div style="background:#09142a; color:#fff; padding:6px 12px; border-radius:6px 6px 0 0; font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">Rec</div>
+                            <table style="width:100%; border-collapse:collapse; font-family:'DM Sans',sans-serif; font-size:0.88rem; border:1px solid #e2d9ce; border-top:none;">
+                                <thead><tr style="background:#f7f8fc; border-bottom:2px solid #e2d9ce;">
+                                    <th style="text-align:left; padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Age</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Center</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">AR</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Solo</th>
+                                </tr></thead>
+                                <tbody id="payRatesBodyRec"></tbody>
+                            </table>
+                        </div>
+                        <!-- Comp -->
+                        <div style="flex:1; min-width:260px;">
+                            <div style="background:#7c3aed; color:#fff; padding:6px 12px; border-radius:6px 6px 0 0; font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">Comp</div>
+                            <table style="width:100%; border-collapse:collapse; font-family:'DM Sans',sans-serif; font-size:0.88rem; border:1px solid #e2d9ce; border-top:none;">
+                                <thead><tr style="background:#f7f8fc; border-bottom:2px solid #e2d9ce;">
+                                    <th style="text-align:left; padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Age</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Center</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">AR</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Solo</th>
+                                </tr></thead>
+                                <tbody id="payRatesBodyComp"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div style="font-size:0.74rem; color:#aaa; margin-bottom:16px;">Leave blank if that position is not paid for this age group.</div>
                     <button onclick="savePayRates()" id="savePayBtn"
                         style="background:#7c3aed; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:800; font-size:0.95rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">
                         Save Pay Rates ↗
@@ -1482,51 +1499,48 @@
     }
 
     // ── Pay Rates Editor ──────────────────────────────────────────────────────
-    const PAY_AGE_GROUPS = ['U8', 'U9-U10', 'U11-U12', 'U13-U15', 'U18-U19'];
+    const REC_AGE_GROUPS  = ['U8', 'U10', 'U12', 'U15', 'U19'];
+    const COMP_AGE_GROUPS = ['U9-U10', 'U11-U12', 'U13-U15'];
+
+    function buildPayRows(groups, existing, gameType) {
+        const inputStyle = 'width:62px; padding:5px 8px; border:1.5px solid #e2d9ce; border-radius:6px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; text-align:right;';
+        return groups.map(ag => {
+            const key = gameType + '_' + ag.replace(/-/g,'_');
+            const r = existing[gameType + ':' + ag] || {};
+            return `<tr style="border-bottom:1px solid #f0ece6;">
+                <td style="padding:8px 10px; font-weight:700; color:#09142a; font-family:'DM Sans',sans-serif;">${ag}</td>
+                <td style="padding:8px 10px;"><div style="display:flex;align-items:center;gap:3px;"><span style="color:#888;font-size:0.82rem;">$</span><input type="number" min="0" step="1" id="pay_cr_${key}" value="${r.center != null ? r.center : ''}" placeholder="—" style="${inputStyle}"></div></td>
+                <td style="padding:8px 10px;"><div style="display:flex;align-items:center;gap:3px;"><span style="color:#888;font-size:0.82rem;">$</span><input type="number" min="0" step="1" id="pay_ar_${key}" value="${r.ar != null ? r.ar : ''}" placeholder="—" style="${inputStyle}"></div></td>
+                <td style="padding:8px 10px;"><div style="display:flex;align-items:center;gap:3px;"><span style="color:#888;font-size:0.82rem;">$</span><input type="number" min="0" step="1" id="pay_solo_${key}" value="${r.solo != null ? r.solo : ''}" placeholder="—" style="${inputStyle}"></div></td>
+            </tr>`;
+        }).join('');
+    }
 
     async function loadPayRates() {
-        const clubId = document.getElementById('payClubSelect').value;
+        const clubId  = document.getElementById('payClubSelect').value;
         const section = document.getElementById('payRatesSection');
         const msg     = document.getElementById('payRatesMsg');
         msg.style.display = 'none';
         if (!clubId) { section.style.display = 'none'; return; }
         section.style.display = 'block';
-        document.getElementById('payRatesBody').innerHTML =
-            '<tr><td colspan="4" style="padding:12px; color:#aaa; font-family:\'DM Sans\',sans-serif;">Loading…</td></tr>';
+        const loading = '<tr><td colspan="4" style="padding:12px; color:#aaa; font-family:\'DM Sans\',sans-serif;">Loading…</td></tr>';
+        document.getElementById('payRatesBodyRec').innerHTML  = loading;
+        document.getElementById('payRatesBodyComp').innerHTML = loading;
         try {
             const { data, error } = await supabaseClient.client
                 .from('pay_rates').select('*').eq('club_id', parseInt(clubId));
             if (error) throw new Error(error.message);
             const existing = {};
-            (data || []).forEach(r => { existing[r.age_group] = r; });
-            const inputStyle = 'width:70px; padding:5px 8px; border:1.5px solid #e2d9ce; border-radius:6px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; text-align:right;';
-            document.getElementById('payRatesBody').innerHTML = PAY_AGE_GROUPS.map(ag => {
-                const r = existing[ag] || {};
-                return `<tr style="border-bottom:1px solid #f0ece6;">
-                    <td style="padding:9px 12px; font-weight:700; color:#09142a; font-family:'DM Sans',sans-serif;">${ag}</td>
-                    <td style="padding:9px 12px;">
-                        <div style="display:flex;align-items:center;gap:4px;">
-                            <span style="color:#888;font-size:0.85rem;font-family:'DM Sans',sans-serif;">$</span>
-                            <input type="number" min="0" step="1" id="pay_cr_${ag.replace(/-/g,'_')}" value="${r.center != null ? r.center : ''}" placeholder="—" style="${inputStyle}">
-                        </div>
-                    </td>
-                    <td style="padding:9px 12px;">
-                        <div style="display:flex;align-items:center;gap:4px;">
-                            <span style="color:#888;font-size:0.85rem;font-family:'DM Sans',sans-serif;">$</span>
-                            <input type="number" min="0" step="1" id="pay_ar_${ag.replace(/-/g,'_')}" value="${r.ar != null ? r.ar : ''}" placeholder="—" style="${inputStyle}">
-                        </div>
-                    </td>
-                    <td style="padding:9px 12px;">
-                        <div style="display:flex;align-items:center;gap:4px;">
-                            <span style="color:#888;font-size:0.85rem;font-family:'DM Sans',sans-serif;">$</span>
-                            <input type="number" min="0" step="1" id="pay_solo_${ag.replace(/-/g,'_')}" value="${r.solo != null ? r.solo : ''}" placeholder="—" style="${inputStyle}">
-                        </div>
-                    </td>
-                </tr>`;
-            }).join('');
+            (data || []).forEach(r => {
+                const type = r.game_type || 'rec';
+                existing[type + ':' + r.age_group] = r;
+            });
+            document.getElementById('payRatesBodyRec').innerHTML  = buildPayRows(REC_AGE_GROUPS,  existing, 'rec');
+            document.getElementById('payRatesBodyComp').innerHTML = buildPayRows(COMP_AGE_GROUPS, existing, 'comp');
         } catch(e) {
-            document.getElementById('payRatesBody').innerHTML =
-                `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
+            const err = `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
+            document.getElementById('payRatesBodyRec').innerHTML  = err;
+            document.getElementById('payRatesBodyComp').innerHTML = err;
         }
     }
 
@@ -1541,23 +1555,20 @@
                 .from('pay_rates').delete().eq('club_id', parseInt(clubId));
             if (delErr) throw new Error(delErr.message);
             const rows = [];
-            for (const ag of PAY_AGE_GROUPS) {
-                const key  = ag.replace(/-/g, '_');
-                const crV  = document.getElementById(`pay_cr_${key}`).value.trim();
-                const arV  = document.getElementById(`pay_ar_${key}`).value.trim();
-                const soloV = document.getElementById(`pay_solo_${key}`).value.trim();
-                if (!crV) continue;
-                rows.push({
-                    club_id:   parseInt(clubId),
-                    age_group: ag,
-                    center:    parseFloat(crV),
-                    ar:        arV  ? parseFloat(arV)   : null,
-                    solo:      soloV ? parseFloat(soloV) : null
-                });
-            }
+            const collectRows = (groups, gameType) => {
+                for (const ag of groups) {
+                    const key   = gameType + '_' + ag.replace(/-/g, '_');
+                    const crV   = document.getElementById(`pay_cr_${key}`)?.value.trim();
+                    const arV   = document.getElementById(`pay_ar_${key}`)?.value.trim();
+                    const soloV = document.getElementById(`pay_solo_${key}`)?.value.trim();
+                    if (!crV) continue;
+                    rows.push({ club_id: parseInt(clubId), age_group: ag, game_type: gameType, center: parseFloat(crV), ar: arV ? parseFloat(arV) : null, solo: soloV ? parseFloat(soloV) : null });
+                }
+            };
+            collectRows(REC_AGE_GROUPS,  'rec');
+            collectRows(COMP_AGE_GROUPS, 'comp');
             if (rows.length > 0) {
-                const { error: insErr } = await supabaseClient.client
-                    .from('pay_rates').insert(rows);
+                const { error: insErr } = await supabaseClient.client.from('pay_rates').insert(rows);
                 if (insErr) throw new Error(insErr.message);
             }
             msg.textContent = `✅ Saved — ${rows.length} age group${rows.length !== 1 ? 's' : ''} configured.`;
