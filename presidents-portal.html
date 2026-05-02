@@ -187,9 +187,7 @@
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/supabase-client.js"></script>
-<script src="js/airtable-client.js"></script>
 <script>
-const airtableClient = supabaseClient;
 
 const _clubSlug = new URLSearchParams(window.location.search).get('club') || '';
 let _clubRecord  = null;
@@ -209,31 +207,34 @@ async function attemptLogin() {
     try {
         const { data: clubs, error } = await supabaseClient.client
             .from('clubs')
-            .select('id, name, president, "President Email", "President Phone", club_id, payment_coordinator, assignor')
-            .ilike('slug', _clubSlug || '%')
-            .limit(50);
+            .select('id, name, president, "President Email", "President Phone", club_id, payment_coordinator, assignor');
         if (error) throw error;
 
+        const normalize     = s => (s || '').toLowerCase().replace(/[\s-]+/g, '');
         const fullName      = `${first} ${last}`.toLowerCase();
         const isAdminBypass = fullName === 'admin override';
-        const match = (clubs || []).find(c => {
-            if (isAdminBypass) return true;
-            const presName  = (c.president || '').trim().toLowerCase();
-            const presEmail = (c['President Email'] || '').trim().toLowerCase();
-            return presName === fullName && presEmail === email;
-        });
 
-        if (!match) { err.style.display = 'block'; return; }
+        // Find club by slug match against Name column
+        const clubRow = (clubs || []).find(c => normalize(c.name) === normalize(_clubSlug));
+        if (!clubRow && !isAdminBypass) { err.textContent = 'Club not found. Check your link.'; err.style.display = 'block'; return; }
+        const target = clubRow || clubs[0];
 
-        _clubRecord = match;
-        _clubId     = match.club_id || match.id;
+        // Verify president identity
+        if (!isAdminBypass) {
+            const presName  = (target.president || '').trim().toLowerCase();
+            const presEmail = (target['President Email'] || '').trim().toLowerCase();
+            if (presName !== fullName || presEmail !== email) { err.style.display = 'block'; return; }
+        }
+
+        _clubRecord = target;
+        _clubId     = target.club_id || target.id;
         document.getElementById('doorway').style.display   = 'none';
         document.getElementById('dashboard').style.display = 'block';
-        document.getElementById('dashClubName').textContent  = (match.name || _clubSlug).toUpperCase();
+        document.getElementById('dashClubName').textContent  = (target.name || _clubSlug).toUpperCase();
         document.getElementById('dashWelcome').textContent   = `Welcome, ${first} ${last}`;
-        document.getElementById('pageSubtitle').textContent  = `${match.name || ''} — President Dashboard`;
-        document.title = `${match.name || 'Club'} President Portal`;
-        loadDashboard(match);
+        document.getElementById('pageSubtitle').textContent  = `${target.name || ''} — President Dashboard`;
+        document.title = `${target.name || 'Club'} President Portal`;
+        loadDashboard(target);
     } catch(e) {
         err.textContent = 'Error loading club data: ' + e.message;
         err.style.display = 'block';
@@ -309,7 +310,7 @@ async function loadDashboard(club) {
 
         _payRates = ratesResult.data || [];
 
-        const games = airtableClient._wrapAll ? airtableClient._wrapAll(rawGames.data || []) : (rawGames.data || []).map(r => ({ id: r.id, fields: r }));
+        const games = (rawGames.data || []).map(r => ({ id: r.id, fields: r }));
 
         // Per-slot paid map
         const slotPaidMap = {};
