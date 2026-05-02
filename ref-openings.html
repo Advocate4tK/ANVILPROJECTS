@@ -159,17 +159,58 @@
             50%       { opacity: 0.2; }
         }
 
+        /* ── Filter bar ── */
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        .filter-group {
+            display: flex;
+            gap: 4px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 4px;
+        }
+        .filter-btn {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 5px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background: transparent;
+            color: rgba(255,255,255,0.5);
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .filter-btn:hover  { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.08); }
+        .filter-btn.active { background: #fff; color: #0f1e3c; }
+
         /* ── Date divider ── */
         .date-divider {
-            background: #152d55;
-            color: #fff;
-            font-size: 0.72rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 20px 0 8px;
+        }
+        .date-divider-text {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1rem;
             font-weight: 800;
             letter-spacing: 2px;
             text-transform: uppercase;
-            padding: 7px 14px;
-            border-radius: 6px;
-            margin: 16px 0 8px;
+            color: #fff;
+            white-space: nowrap;
+        }
+        .date-divider-line {
+            flex: 1;
+            height: 1px;
+            background: rgba(255,255,255,0.12);
         }
 
         /* ── Game card ── */
@@ -292,6 +333,22 @@
             50%       { opacity: 0.85; box-shadow: 0 0 0 4px rgba(185,28,28,0); }
         }
 
+        /* ── Availability link ── */
+        .avail-link {
+            display: block;
+            padding: 8px 14px;
+            background: #f0f7ff;
+            border-top: 1px solid #e0eaf6;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #1a56db;
+            text-decoration: none;
+            letter-spacing: 0.2px;
+            transition: background 0.15s;
+        }
+        .avail-link:hover { background: #dbeafe; color: #1e40af; }
+
         /* ── Loading / empty ── */
         .loading-state, .empty-state {
             text-align: center;
@@ -343,6 +400,22 @@
         </div>
     </div>
 
+    <!-- Filter bar -->
+    <div class="filter-bar">
+        <div class="filter-group">
+            <button class="filter-btn active" onclick="setWeekFilter('this', this)">This Week</button>
+            <button class="filter-btn" onclick="setWeekFilter('next', this)">Next Week</button>
+            <button class="filter-btn" onclick="setWeekFilter('all', this)">All</button>
+        </div>
+        <div class="filter-group">
+            <button class="filter-btn active" onclick="setClubFilter('all', this)">All Clubs</button>
+            <button class="filter-btn" onclick="setClubFilter('Griswold', this)">Griswold</button>
+            <button class="filter-btn" onclick="setClubFilter('East Haddam', this)">East Haddam</button>
+            <button class="filter-btn" onclick="setClubFilter('RHAMYS', this)">RHAMYS</button>
+            <button class="filter-btn" onclick="setClubFilter('Lebanon', this)">Lebanon</button>
+        </div>
+    </div>
+
     <!-- Status bar -->
     <div class="status-bar">
         <div class="status-count"><span class="refresh-dot"></span><span id="gameCount">—</span> open games</div>
@@ -365,6 +438,47 @@
 <script>
 
     const CLUBS = ['Griswold', 'East Haddam', 'RHAMYS', 'Lebanon'];
+
+    let _allOpenGames = [];
+    let _weekFilter   = 'this';
+    let _clubFilter   = 'all';
+
+    function getWeekBounds(offset) {
+        const now  = new Date();
+        const dow  = now.getDay(); // 0=Sun
+        const mon  = new Date(now); mon.setDate(now.getDate() - dow + (dow === 0 ? -6 : 1) + offset * 7);
+        const sun  = new Date(mon); sun.setDate(mon.getDate() + 6);
+        return {
+            from: mon.toISOString().split('T')[0],
+            to:   sun.toISOString().split('T')[0]
+        };
+    }
+
+    function applyFilters() {
+        let games = _allOpenGames;
+        if (_clubFilter !== 'all') {
+            games = games.filter(g => (g['Source Club'] || '') === _clubFilter);
+        }
+        if (_weekFilter !== 'all') {
+            const bounds = getWeekBounds(_weekFilter === 'this' ? 0 : 1);
+            games = games.filter(g => g.date >= bounds.from && g.date <= bounds.to);
+        }
+        render(games);
+    }
+
+    function setWeekFilter(val, btn) {
+        _weekFilter = val;
+        btn.closest('.filter-group').querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyFilters();
+    }
+
+    function setClubFilter(val, btn) {
+        _clubFilter = val;
+        btn.closest('.filter-group').querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyFilters();
+    }
 
     const CLUB_BADGE = {
         'Griswold':     { cls: 'badge-gri', label: 'Griswold' },
@@ -404,7 +518,8 @@
         const dt = new Date(d + 'T12:00:00');
         const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        return `${days[dt.getDay()]} &nbsp;·&nbsp; ${months[dt.getMonth()]} ${dt.getDate()}`;
+        const text = `${days[dt.getDay()]} · ${months[dt.getMonth()]} ${dt.getDate()}`;
+        return `<div class="date-divider"><span class="date-divider-text">${text}</span><div class="date-divider-line"></div></div>`;
     }
 
     function formatTime(t) {
@@ -456,6 +571,10 @@
                 </div>
                </div>`;
 
+        const gameDesc  = `${home} vs ${away} (${age}) — ${formatDate(g.date || '')}${time ? ' @ ' + time : ''}`;
+        const noteParam = encodeURIComponent(`Interested in ${gameDesc}`);
+        const availUrl  = `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}`;
+
         return `<div class="game-card">
             <div class="game-card-header">
                 <span class="game-teams">${home} vs ${away}</span>
@@ -465,6 +584,7 @@
             </div>
             ${venue ? `<div class="game-venue">${venue}</div>` : ''}
             ${slotsHtml}
+            <a class="avail-link" href="${availUrl}">📅 Submit My Availability for This Game</a>
         </div>`;
     }
 
@@ -494,7 +614,7 @@
             const d = g.date || g.Date || '';
             if (d !== lastDate) {
                 lastDate = d;
-                html += `<div class="date-divider">${formatDateHeader(d)}</div>`;
+                html += formatDateHeader(d);
             }
             html += buildCard(g);
         });
@@ -530,7 +650,7 @@
 
             // Merge + filter + sort
             const allGames = clubResults.flatMap(r => r.data || []);
-            const openGames = allGames
+            _allOpenGames = allGames
                 .filter(hasOpenSlot)
                 .sort((a, b) => {
                     const da = (a.date || '') + '|' + (a.time || a.Time || '');
@@ -538,7 +658,7 @@
                     return da.localeCompare(db);
                 });
 
-            render(openGames);
+            applyFilters();
         } catch (err) {
             console.error('Load error:', err);
             document.getElementById('gameList').innerHTML =
