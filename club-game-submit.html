@@ -2536,7 +2536,7 @@
             const today = new Date().toISOString().split('T')[0];
             const [rawGrisGames, refRecs, ratesResult, refPayResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
-                supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state'),
+                supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state, email, phone'),
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order'),
                 supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount')
             ]);
@@ -2709,16 +2709,35 @@
                                    </div>`
                                 : '';
 
+                            const refEmail  = rf['email'] || '';
+                            const refPhone  = rf['phone'] || '';
+                            const hasContact = !!(refEmail || refPhone);
+                            const contactRowId = `contact-${r.id}-${slot.pos}`;
+                            const refNameCell = hasContact
+                                ? `<span style="display:inline-flex;align-items:center;gap:5px;">
+                                    <span style="font-weight:600;color:#1a2e4a;">${rf['name'] || slot.name}</span>
+                                    <span onclick="toggleRefContact('${contactRowId}',this)" style="cursor:pointer;color:#00c853;font-size:0.55rem;transition:transform 0.2s;display:inline-block;" title="Show contact info">▶</span>
+                                   </span>`
+                                : `<span style="font-weight:600;color:#1a2e4a;">${rf['name'] || slot.name}</span>`;
+
                             html += `<tr class="${isPaid ? 'row-paid' : ''}" data-game="${r.id}" data-slot="${slot.pos}" data-orig-bg="${_gameColors[gameIdx % _gameColors.length]}" style="${slotRowBg}">
                                 <td>${idx === 0 ? date : ''}</td>
                                 <td style="font-size:0.82rem; font-weight:700; color:#152d55; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${idx === 0 ? game : ''}</td>
                                 <td>${idx === 0 ? age : ''}</td>
-                                <td style="font-weight:600; color:#1a2e4a;">${rf['name'] || slot.name}</td>
+                                <td>${refNameCell}</td>
                                 <td>${posBadge}</td>
                                 <td><span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span></td>
                                 <td>${venmoHtml}</td>
                                 <td style="text-align:center;">${cbHtml}</td>
-                            </tr>`;
+                            </tr>
+                            ${hasContact ? `<tr id="${contactRowId}" style="display:none;">
+                                <td colspan="8" style="padding:6px 14px 8px 28px; background:#f0fdf4; border-top:1px solid #bbf7d0;">
+                                    <span style="font-size:0.78rem; color:#14532d; display:inline-flex; gap:20px; flex-wrap:wrap; user-select:text;">
+                                        ${refEmail ? `<span>✉ <strong>Email:</strong> ${refEmail}</span>` : ''}
+                                        ${refPhone ? `<span>📞 <strong>Cell:</strong> ${refPhone}</span>` : ''}
+                                    </span>
+                                </td>
+                            </tr>` : ''}`;
                         });
 
                         // Game footer row — Mark Paid lives here, not on individual ref rows
@@ -2762,6 +2781,14 @@
         } catch(e) {
             document.getElementById('payContent').innerHTML = `<p style="color:#991b1b; font-size:0.85rem;">Error loading payment data: ${e.message}</p>`;
         }
+    }
+
+    function toggleRefContact(rowId, triangle) {
+        const row = document.getElementById(rowId);
+        if (!row) return;
+        const open = row.style.display !== 'none';
+        row.style.display = open ? 'none' : 'table-row';
+        triangle.style.transform = open ? '' : 'rotate(90deg)';
     }
 
     async function markRefSlotPaid(gameId, slot, btn) {
