@@ -2536,7 +2536,7 @@
             const today = new Date().toISOString().split('T')[0];
             const [rawGrisGames, refRecs, ratesResult, refPayResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
-                supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state, email, phone, "Date of Birth", "Guardian Name", "Guardian Email"'),
+                supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state, email, phone, "Date of Birth", "Guardian Name", "Guardian Email", "Guardian Phone"'),
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order'),
                 supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount')
             ]);
@@ -2714,13 +2714,14 @@
                             const dob           = rf['Date of Birth'] || '';
                             const guardianName  = rf['Guardian Name']  || '';
                             const guardianEmail = rf['Guardian Email'] || '';
+                            const guardianPhone = rf['Guardian Phone'] || '';
                             const isMinor = dob ? (() => {
                                 const b = new Date(dob);
                                 const t = new Date();
                                 const calcAge = t.getFullYear() - b.getFullYear() - (t < new Date(t.getFullYear(), b.getMonth(), b.getDate()) ? 1 : 0);
                                 return calcAge < 18;
                             })() : false;
-                            const hasGuardian = isMinor && !!(guardianName || guardianEmail);
+                            const hasGuardian = isMinor && !!(guardianName || guardianEmail || guardianPhone);
                             const hasContact  = !!(refEmail || refPhone || hasGuardian);
                             const contactRowId = `contact-${r.id}-${slot.pos}`;
                             const refNameCell = hasContact
@@ -2749,8 +2750,9 @@
                                         </span>
                                         ${hasGuardian ? `<span style="display:inline-flex; gap:6px; align-items:center; padding-top:4px; border-top:1px dashed #86efac; flex-wrap:wrap;">
                                             <span style="font-size:0.68rem; font-weight:700; color:#166534; text-transform:uppercase; letter-spacing:0.5px;">Guardian</span>
-                                            ${guardianName  ? `<span>${guardianName}</span>`         : ''}
-                                            ${guardianEmail ? `<span>✉ ${guardianEmail}</span>` : ''}
+                                            ${guardianName  ? `<span>${guardianName}</span>`      : ''}
+                                            ${guardianEmail ? `<span>✉ ${guardianEmail}</span>`  : ''}
+                                            ${guardianPhone ? `<span>📞 ${guardianPhone}</span>` : ''}
                                         </span>` : ''}
                                     </span>
                                 </td>
