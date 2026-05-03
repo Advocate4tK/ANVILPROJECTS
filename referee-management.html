@@ -174,8 +174,17 @@
                                     <option>Prefer not to say</option>
                                 </select>
                             </div>
-                            <div class="field-item"><label>Date of Birth</label><input type="date" id="f_dob"></div>
+                            <div class="field-item"><label>Date of Birth</label><input type="date" id="f_dob" onchange="const gs=document.getElementById('guardianSection'); if(isUnder18(this.value)||document.getElementById('f_guardianName').value||document.getElementById('f_guardianEmail').value) gs.style.display=''; else gs.style.display='none';"></div>
                             <div class="field-item"><label>Club Preference</label><input type="text" id="f_clubPref" placeholder="e.g. Griswold, NECONN"></div>
+                        </div>
+                    </div>
+
+                    <!-- Guardian (U18) -->
+                    <div class="card-section" id="guardianSection" style="display:none;">
+                        <div class="card-section-title">Guardian / Parent <span style="font-size:0.68rem; color:#92400e; background:#fef3c7; border:1px solid #fcd34d; border-radius:4px; padding:1px 6px; margin-left:6px;">Minor</span></div>
+                        <div class="field-grid">
+                            <div class="field-item"><label>Guardian Name</label><input type="text" id="f_guardianName" placeholder="Parent or guardian full name"></div>
+                            <div class="field-item"><label>Guardian Email</label><input type="email" id="f_guardianEmail" placeholder="guardian@email.com"></div>
                         </div>
                     </div>
 
@@ -386,7 +395,7 @@
                 const joined = formatJoined(r);
                 const isMinor = isUnder18(f['Date of Birth']);
                 const nameColor = isMinor ? '#1a7a3c' : '#0f3460';
-                const badge = isMinor ? '<span style="font-size:0.68rem; font-weight:800; background:#d4edda; color:#1a7a3c; border-radius:4px; padding:1px 6px; margin-left:6px;">U18</span>' : '';
+                const badge = isMinor ? '<span style="font-size:0.68rem; font-weight:800; background:#fef3c7; color:#92400e; border-radius:4px; padding:1px 6px; margin-left:6px; border:1px solid #fcd34d;">Minor</span>' : '';
                 return `<div class="result-row" onclick="openCard('${r.id}')">
                     <div>
                         <div class="result-name" style="color:${nameColor};">${f['Name'] || '—'}${badge}</div>
@@ -450,6 +459,11 @@
                 normDob = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
             }
             document.getElementById('f_dob').value = normDob;
+            // Guardian section — show for minors (or when guardian data already exists)
+            document.getElementById('f_guardianName').value  = f['Guardian Name']  || '';
+            document.getElementById('f_guardianEmail').value = f['Guardian Email'] || '';
+            const showGuardian = isUnder18(normDob) || !!(f['Guardian Name'] || f['Guardian Email']);
+            document.getElementById('guardianSection').style.display = showGuardian ? '' : 'none';
             let clubPrefRaw = f['Club Preference'] || '';
             if (typeof clubPrefRaw === 'string' && clubPrefRaw.startsWith('[')) {
                 try { clubPrefRaw = JSON.parse(clubPrefRaw).join(', '); } catch(e) {}
@@ -537,6 +551,8 @@
             updates['Certification Level'] = document.getElementById('f_cert').value;
             updates['Gender']           = document.getElementById('f_gender').value;
             updates['Date of Birth']    = document.getElementById('f_dob').value;
+            updates['Guardian Name']    = document.getElementById('f_guardianName').value.trim();
+            updates['Guardian Email']   = document.getElementById('f_guardianEmail').value.trim();
             updates['Club Preference']  = document.getElementById('f_clubPref').value.trim();
             updates['Assignor Notes']   = document.getElementById('f_notes').value.trim();
 
