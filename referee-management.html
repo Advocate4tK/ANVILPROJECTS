@@ -27,8 +27,10 @@
         .result-joined { font-size:0.8rem; color:#555; font-weight:600; white-space:nowrap; }
         .result-list { display:flex; flex-direction:column; gap:8px; margin-bottom:24px; }
         .result-row { display:flex; justify-content:space-between; align-items:center; background:white; border:1px solid #e0e0e0; border-radius:8px; padding:12px 16px; cursor:pointer; transition:all 0.15s; }
-        .result-row:hover { border-color:#e94560; background:#fff8f9; }
-        .result-row.active { border-color:#0f3460; background:#f0f4ff; }
+        .result-row:hover { border-color:#00c853; background:#f0fdf4; }
+        .result-row.active { border-color:#00c853; background:#f0fdf4; }
+        .row-chevron { color:#00c853; font-size:0.55rem; transition:transform 0.2s; display:inline-block; flex-shrink:0; }
+        .ref-card-inline { margin:0 0 8px; border-left:3px solid #00c853; border-radius:0 10px 10px 0; }
         .result-name { font-weight:700; color:#0f3460; }
         .result-sub { font-size:0.82rem; color:#888; margin-top:2px; }
         .ref-card { background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.08); border-top:4px solid #e94560; }
@@ -396,23 +398,36 @@
                 const isMinor = isUnder18(f['Date of Birth']);
                 const nameColor = isMinor ? '#1a7a3c' : '#0f3460';
                 const badge = isMinor ? '<span style="font-size:0.68rem; font-weight:800; background:#fef3c7; color:#92400e; border-radius:4px; padding:1px 6px; margin-left:6px; border:1px solid #fcd34d;">Minor</span>' : '';
-                return `<div class="result-row" onclick="openCard('${r.id}')">
-                    <div class="result-name" style="color:${nameColor};">${f['Name'] || '—'}${badge}</div>
-                    ${joined ? `<div class="result-joined" style="margin-left:auto;">Joined ${joined}</div>` : ''}
+                return `<div class="result-row" onclick="openCard('${r.id}', this)" data-refid="${r.id}">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="row-chevron">▶</span>
+                        <span class="result-name" style="color:${nameColor};">${f['Name'] || '—'}${badge}</span>
+                    </div>
+                    ${joined ? `<div class="result-joined">Joined ${joined}</div>` : ''}
                 </div>`;
             }).join('');
         }
 
         // ── Open card ─────────────────────────────────────────────────────────
-        function openCard(refId) {
+        function openCard(refId, rowEl) {
+            // Toggle — click same row again to close
+            if (currentId === refId) { closeCard(); return; }
             currentId = refId;
             const ref = allRefs.find(r => String(r.id) === String(refId));
             if (!ref) return;
             const f = ref.fields;
 
-            // Highlight selected row
-            document.querySelectorAll('.result-row').forEach(el => el.classList.remove('active'));
-            event?.currentTarget?.classList.add('active');
+            // Reset all rows, rotate this chevron
+            document.querySelectorAll('.result-row').forEach(el => {
+                el.classList.remove('active');
+                const ch = el.querySelector('.row-chevron');
+                if (ch) ch.style.transform = '';
+            });
+            if (rowEl) {
+                rowEl.classList.add('active');
+                const ch = rowEl.querySelector('.row-chevron');
+                if (ch) ch.style.transform = 'rotate(90deg)';
+            }
 
             // Populate fields
             const nameParts = (f['Name'] || '').split(' ');
@@ -478,10 +493,13 @@
             document.getElementById('cardTitle').innerHTML = `${f['Name'] || '—'} <span style="font-size:0.72rem; font-weight:500; color:#aaa; background:#f5f5f5; border:1px solid #e0e0e0; border-radius:4px; padding:2px 7px; vertical-align:middle; user-select:all;">#${refId}</span>`;
             document.getElementById('cardSubtitle').textContent = f['Email'] || '';
 
-            document.getElementById('refCard').style.display = 'block';
+            const refCard = document.getElementById('refCard');
+            refCard.classList.add('ref-card-inline');
+            refCard.style.display = 'block';
             document.getElementById('saveStatus').style.display = 'none';
             document.getElementById('saveErr').style.display    = 'none';
-            document.getElementById('refCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Inject inline below the clicked row
+            if (rowEl) rowEl.insertAdjacentElement('afterend', refCard);
             loadClubConnections(f['Name'] || '');
         }
 
@@ -622,8 +640,18 @@
         }
 
         function closeCard() {
-            document.getElementById('refCard').style.display = 'none';
-            document.querySelectorAll('.result-row').forEach(el => el.classList.remove('active'));
+            const refCard = document.getElementById('refCard');
+            refCard.style.display = 'none';
+            // Park refCard back after the result list so it's ready for next open
+            const resultList = document.getElementById('resultList');
+            if (resultList && resultList.parentNode) {
+                resultList.parentNode.insertBefore(refCard, resultList.nextSibling);
+            }
+            document.querySelectorAll('.result-row').forEach(el => {
+                el.classList.remove('active');
+                const ch = el.querySelector('.row-chevron');
+                if (ch) ch.style.transform = '';
+            });
             currentId = null;
         }
 
