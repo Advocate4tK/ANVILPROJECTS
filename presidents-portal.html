@@ -97,6 +97,27 @@
 
         /* ── Empty state ── */
         .empty-row td { text-align:center; color:var(--muted); font-style:italic; font-size:0.82rem; padding:18px !important; }
+
+        /* ── Week accordion ── */
+        .week-accordion { margin-bottom:12px; border-radius:10px; overflow:hidden; border:1px solid var(--border); }
+        .week-toggle {
+            width:100%; display:flex; align-items:center; justify-content:space-between;
+            padding:10px 14px; background:#f0f4ff; border:none; cursor:pointer;
+            font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800;
+            color:var(--deep); text-transform:uppercase; letter-spacing:0.6px;
+            transition:background 0.15s;
+        }
+        .week-toggle:hover { background:#e2eaff; }
+        .week-toggle.current { background:#e8f0fe; border-left:4px solid var(--deep); }
+        .week-toggle-right { display:flex; align-items:center; gap:10px; font-family:'DM Sans',sans-serif; font-size:0.78rem; font-weight:600; color:#555; text-transform:none; letter-spacing:0; }
+        .week-toggle-arrow { font-size:0.7rem; transition:transform 0.2s; display:inline-block; }
+        .week-toggle.open .week-toggle-arrow { transform:rotate(90deg); }
+        .week-body { display:none; }
+        .week-body.open { display:block; }
+
+        /* ── Logout ── */
+        .btn-logout { background:transparent; color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:6px 14px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s; margin-left:8px; }
+        .btn-logout:hover { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
     </style>
 </head>
 <body>
@@ -147,8 +168,9 @@
                     <div class="pres-subtitle" id="dashSeason">Spring 2026 Season</div>
                 </div>
                 <div class="pres-welcome">
-                    <div id="dashWelcome" style="font-weight:700; color:var(--deep); margin-bottom:2px;"></div>
+                    <div id="dashWelcome" style="font-weight:700; color:var(--deep); margin-bottom:6px;"></div>
                     <button class="btn-print" onclick="window.print()">🖨 Print Report</button>
+                    <button class="btn-logout" onclick="logout()">Sign Out</button>
                 </div>
             </div>
 
@@ -246,6 +268,17 @@ async function attemptLogin() {
 ['dwFirst','dwLast','dwEmail'].forEach(id => {
     document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
 });
+
+function logout() {
+    _clubRecord = null;
+    _clubId     = null;
+    _payRates   = [];
+    ['dwFirst','dwLast','dwEmail'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('doorway').style.display   = 'block';
+    document.getElementById('pageSubtitle').textContent = 'Season overview & reports';
+    document.title = 'Club President Portal';
+}
 
 // ── Pay rate helpers ──────────────────────────────────────────────────────────
 function ageBand(ageGroup) {
@@ -420,83 +453,123 @@ async function loadDashboard(club) {
 // ── Render payments ───────────────────────────────────────────────────────────
 function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
     const today = new Date().toISOString().split('T')[0];
+    const currentWeekLabel = weekLabel(today);
     const allForTable = [...pastGames].reverse(); // most recent first
 
-    if (!allForTable.length) {
-        document.getElementById('paymentsContent').innerHTML = '<p style="color:#888; font-size:0.85rem;">No past games on record.</p>';
+    if (!allForTable.length && !upcomingGames.length) {
+        document.getElementById('paymentsContent').innerHTML = '<p style="color:#888; font-size:0.85rem;">No games on record.</p>';
         return;
     }
 
-    let html = `<div style="border-radius:8px; overflow:hidden; border:1px solid var(--border);">
-    <table class="pres-table">
-    <colgroup><col style="width:95px"><col style="width:26%"><col style="width:44px"><col style="width:13%"><col style="width:44px"><col style="width:80px"><col style="width:72px"><col style="width:130px"><col style="width:72px"></colgroup>
-    <thead><tr>
-        <th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Status</th><th>Paid At</th><th>Paid In</th>
-    </tr></thead><tbody>`;
-
-    let lastWeek = '';
+    // Group past games by week
+    const weekMap = new Map();
     const _colors = ['#dbeafe','#fef9c3'];
     allForTable.forEach((r, gameIdx) => {
-        const f    = r.fields;
-        const date = f['date'] || '—';
-        const age  = f['Age Group'] || '—';
-        const game = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
-        const wk   = weekLabel(date);
-        const slots = [
-            { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
-            { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
-            { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
-        ].filter(s => s.name);
-        const isSolo = slots.length === 1 && slots[0].pos === 'CR';
-        const bg = _colors[gameIdx % _colors.length];
-
-        if (wk !== lastWeek) {
-            lastWeek = wk;
-            html += `<tr class="week-divider"><td colspan="9">${wk}</td></tr>`;
-        }
-
-        slots.forEach((slot, idx) => {
-            const rf       = resolveRef(slot.name);
-            const rate     = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
-            const slotPaid = slotPaidMap[r.id]?.[slot.pos];
-            const paidTs   = slotPaid ? new Date(slotPaid).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
-            const rowBg    = slotPaid ? '#dcfce7' : bg;
-            const pill     = slotPaid
-                ? `<span class="pill-paid">✓ Paid</span>`
-                : `<span class="pill-unpaid">Unpaid</span>`;
-
-            // Days to pay — game date to paid_at
-            let paidInHtml = '';
-            if (slotPaid && date && date !== '—') {
-                const gameDay  = new Date(date + 'T12:00:00');
-                const paidDay  = new Date(slotPaid);
-                const diffDays = Math.round((paidDay - gameDay) / 86400000);
-                const label    = diffDays <= 0 ? 'Same day' : diffDays === 1 ? '1 day' : `${diffDays} days`;
-                const color    = diffDays <= 1 ? '#16a34a' : diffDays <= 4 ? '#b45309' : '#dc2626';
-                const bg2      = diffDays <= 1 ? '#dcfce7' : diffDays <= 4 ? '#fef3c7' : '#fee2e2';
-                paidInHtml = `<span style="background:${bg2};color:${color};font-size:0.68rem;font-weight:800;padding:2px 7px;border-radius:8px;white-space:nowrap;">${label}</span>`;
-            }
-            const posBadge = slot.pos === 'CR'
-                ? `<span style="background:#1e3a8a;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">CR</span>`
-                : `<span style="background:#059669;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">${slot.pos}</span>`;
-
-            html += `<tr style="background:${rowBg};">
-                <td style="white-space:nowrap;">${idx === 0 ? date : ''}</td>
-                <td style="font-weight:700;color:#152d55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${idx === 0 ? game : ''}</td>
-                <td>${idx === 0 ? age : ''}</td>
-                <td style="font-weight:600;color:#1a2e4a;">${rf.name || slot.name}</td>
-                <td>${posBadge}</td>
-                <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#1a2e4a;">$${rate}</td>
-                <td>${pill}</td>
-                <td style="font-size:0.72rem;color:#555;">${paidTs}</td>
-                <td style="text-align:center;">${paidInHtml}</td>
-            </tr>`;
-        });
+        const f  = r.fields;
+        const wk = weekLabel(f['date'] || '');
+        if (!weekMap.has(wk)) weekMap.set(wk, []);
+        weekMap.get(wk).push({ r, gameIdx });
     });
 
-    // Upcoming games (read-only, no pay status)
+    const tableHead = `<table class="pres-table">
+        <colgroup><col style="width:95px"><col style="width:26%"><col style="width:44px"><col style="width:13%"><col style="width:44px"><col style="width:80px"><col style="width:72px"><col style="width:130px"><col style="width:72px"></colgroup>
+        <thead><tr><th>Date</th><th>Game</th><th>Age</th><th>Referee</th><th>Pos</th><th>Amount</th><th>Status</th><th>Paid At</th><th>Paid In</th></tr></thead><tbody>`;
+
+    let html = '';
+    let sectionIdx = 0;
+
+    weekMap.forEach((games, wk) => {
+        const isCurrent = wk === currentWeekLabel;
+        const isOpen    = isCurrent || sectionIdx === 0;
+        const sid       = `wk-${sectionIdx}`;
+
+        // Compute week totals
+        let weekTotal = 0, weekGames = games.length;
+        games.forEach(({ r }) => {
+            const f   = r.fields;
+            const age = f['Age Group'] || '';
+            const slots = [
+                { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
+                { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
+                { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
+            ].filter(s => s.name);
+            const isSolo = slots.length === 1 && slots[0].pos === 'CR';
+            slots.forEach(slot => { weekTotal += getRate(slot.rateKey, age, isSolo && slot.pos === 'CR'); });
+        });
+
+        html += `<div class="week-accordion">
+            <button class="week-toggle${isCurrent ? ' current' : ''}${isOpen ? ' open' : ''}" onclick="toggleWeek('${sid}', this)">
+                <span>${wk}</span>
+                <span class="week-toggle-right">
+                    ${weekGames} game${weekGames !== 1 ? 's' : ''} &nbsp;·&nbsp; $${weekTotal}
+                    <span class="week-toggle-arrow">▶</span>
+                </span>
+            </button>
+            <div class="week-body${isOpen ? ' open' : ''}" id="${sid}">
+                ${tableHead}<tbody>`;
+
+        games.forEach(({ r, gameIdx }) => {
+            const f    = r.fields;
+            const date = f['date'] || '—';
+            const age  = f['Age Group'] || '—';
+            const game = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}`;
+            const slots = [
+                { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
+                { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
+                { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
+            ].filter(s => s.name);
+            const isSolo = slots.length === 1 && slots[0].pos === 'CR';
+            const bg = _colors[gameIdx % _colors.length];
+
+            slots.forEach((slot, idx) => {
+                const rf       = resolveRef(slot.name);
+                const rate     = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                const slotPaid = slotPaidMap[r.id]?.[slot.pos];
+                const paidTs   = slotPaid ? new Date(slotPaid).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+                const rowBg    = slotPaid ? '#dcfce7' : bg;
+                const pill     = slotPaid ? `<span class="pill-paid">✓ Paid</span>` : `<span class="pill-unpaid">Unpaid</span>`;
+
+                let paidInHtml = '';
+                if (slotPaid && date && date !== '—') {
+                    const diffDays = Math.round((new Date(slotPaid) - new Date(date + 'T12:00:00')) / 86400000);
+                    const label    = diffDays <= 0 ? 'Same day' : diffDays === 1 ? '1 day' : `${diffDays} days`;
+                    const color    = diffDays <= 1 ? '#16a34a' : diffDays <= 4 ? '#b45309' : '#dc2626';
+                    const bg2      = diffDays <= 1 ? '#dcfce7' : diffDays <= 4 ? '#fef3c7' : '#fee2e2';
+                    paidInHtml = `<span style="background:${bg2};color:${color};font-size:0.68rem;font-weight:800;padding:2px 7px;border-radius:8px;white-space:nowrap;">${label}</span>`;
+                }
+                const posBadge = slot.pos === 'CR'
+                    ? `<span style="background:#1e3a8a;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">CR</span>`
+                    : `<span style="background:#059669;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">${slot.pos}</span>`;
+
+                html += `<tr style="background:${rowBg};">
+                    <td style="white-space:nowrap;">${idx === 0 ? date : ''}</td>
+                    <td style="font-weight:700;color:#152d55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${idx === 0 ? game : ''}</td>
+                    <td>${idx === 0 ? age : ''}</td>
+                    <td style="font-weight:600;color:#1a2e4a;">${rf.name || slot.name}</td>
+                    <td>${posBadge}</td>
+                    <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#1a2e4a;">$${rate}</td>
+                    <td>${pill}</td>
+                    <td style="font-size:0.72rem;color:#555;">${paidTs}</td>
+                    <td style="text-align:center;">${paidInHtml}</td>
+                </tr>`;
+            });
+        });
+
+        html += `</tbody></table></div></div>`;
+        sectionIdx++;
+    });
+
+    // Upcoming games accordion
     if (upcomingGames.length) {
-        html += `<tr class="week-divider"><td colspan="9">— Upcoming Games —</td></tr>`;
+        const sid = 'wk-upcoming';
+        html += `<div class="week-accordion">
+            <button class="week-toggle open" onclick="toggleWeek('${sid}', this)">
+                <span>— Upcoming Games —</span>
+                <span class="week-toggle-right">${upcomingGames.length} game${upcomingGames.length !== 1 ? 's' : ''} <span class="week-toggle-arrow">▶</span></span>
+            </button>
+            <div class="week-body open" id="${sid}">
+                ${tableHead}<tbody>`;
+
         upcomingGames.forEach((r, gameIdx) => {
             const f    = r.fields;
             const date = f['date'] || '—';
@@ -523,15 +596,21 @@ function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
                     <td>${posBadge}</td>
                     <td style="font-family:'JetBrains Mono',monospace;color:#888;">$${rate}</td>
                     <td><span class="pill-upcoming">Upcoming</span></td>
-                    <td></td>
-                    <td></td>
+                    <td></td><td></td>
                 </tr>`;
             });
         });
+
+        html += `</tbody></table></div></div>`;
     }
 
-    html += `</tbody></table></div>`;
     document.getElementById('paymentsContent').innerHTML = html;
+}
+
+function toggleWeek(sid, btn) {
+    const body = document.getElementById(sid);
+    const isOpen = body.classList.toggle('open');
+    btn.classList.toggle('open', isOpen);
 }
 
 // ── Render late changes ───────────────────────────────────────────────────────
