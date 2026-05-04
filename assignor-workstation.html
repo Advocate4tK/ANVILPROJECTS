@@ -5149,7 +5149,20 @@
                     const sig = [sigName, sigEmail, sigPhone].filter(Boolean).join('\n');
                     const gameDates = [...new Set(games.map(g => g.fields['Date']).filter(Boolean))].sort().join(',');
                     const formLink = `https://referee-tool.com/referee-availability-form.html?dates=${gameDates}&club=${encodeURIComponent(club)}`;
-                    blocks.push(`Week [#]  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${formLink}\n\nFor moment-by-moment updates on open games:\nhttps://referee-tool.com/ref-openings.html\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
+
+                    // Calculate week number from first game of season for this club
+                    let weekNum = '';
+                    const allClubDates = allGames
+                        .filter(g => g.fields['Source Club'] === club)
+                        .map(g => g.fields['Date']).filter(Boolean).sort();
+                    const firstGameDate  = allClubDates[0];
+                    const firstOpenDate  = games.map(g => g.fields['Date']).filter(Boolean).sort()[0];
+                    if (firstGameDate && firstOpenDate) {
+                        weekNum = Math.floor((new Date(firstOpenDate + 'T12:00:00') - new Date(firstGameDate + 'T12:00:00')) / 604800000) + 1;
+                    }
+                    const weekLabel2 = weekNum ? `Week ${weekNum}` : 'Week [#]';
+
+                    blocks.push(`${weekLabel2}  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${formLink}\n\nFor moment-by-moment updates on open games:\nhttps://referee-tool.com/ref-openings.html\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
                 }
                 document.getElementById('emailBodyText').value = blocks.join('\n\n' + '─'.repeat(60) + '\n\n');
             }
