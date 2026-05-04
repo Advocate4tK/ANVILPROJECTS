@@ -5075,18 +5075,39 @@
             const blocks = [];
 
             if (multiClub) {
-                const weekNum = (() => {
-                    const d = new Date();
-                    const jan1 = new Date(d.getFullYear(), 0, 1);
-                    return Math.ceil((((d - jan1) / 86400000) + jan1.getDay() + 1) / 7);
-                })();
                 const clubList = clubsWithGames.join(', ');
                 const sigName  = currentAssignor?.name  || '';
                 const sigEmail = currentAssignor?.email || '';
                 const sigPhone = currentAssignor?.phone || '';
                 const sig = [sigName, sigEmail, sigPhone].filter(Boolean).join('\n');
+
+                const clubSections = clubsWithGames.map(club => {
+                    const games = openGames.filter(g => g.fields['Source Club'] === club)
+                        .sort((a,b) => (a.fields['Date']||'').localeCompare(b.fields['Date']||'') || (a.fields['Time']||'').localeCompare(b.fields['Time']||''));
+                    if (!games.length) return null;
+
+                    const byDate = {};
+                    for (const g of games) {
+                        const d = g.fields['Date'] || '';
+                        if (!byDate[d]) byDate[d] = [];
+                        byDate[d].push(g);
+                    }
+
+                    const dateBlocks = Object.keys(byDate).sort().map(dateStr => {
+                        const dateLabel = fmtDate(dateStr);
+                        return byDate[dateStr].map(g => {
+                            const f = g.fields;
+                            const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
+                            const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
+                            return `${dateLabel}  ${fmtTime(f['Time'])}  ${vName}  ${f['Age Group'] || ''}`;
+                        }).join('\n');
+                    }).join('\n\n');
+
+                    return `${club}\n${dateBlocks}`;
+                }).filter(Boolean);
+
                 document.getElementById('emailBodyText').value =
-                    `Week ${weekNum} — ${clubList}\n\nWe have multiple openings.  LMK if you wanna work!\n\nhttps://referee-tool.com/ref-openings.html\n\n${sig}`;
+                    `Week [#] — ${clubList}\n\nWe have multiple openings.  LMK if you wanna work!\n\n${clubSections.join('\n\n\n')}\n\nhttps://referee-tool.com/ref-openings.html\n\n${sig}`;
 
             } else {
                 // Single-club format: full email with pay rates and form link
