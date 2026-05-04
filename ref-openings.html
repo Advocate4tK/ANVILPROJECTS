@@ -690,7 +690,6 @@
                         .select('*')
                         .eq('Source Club', club)
                         .gte('date', today)
-                        .neq('Game Status', 'Cancelled')
                         .order('date', { ascending: true })
                         .limit(500)
                 )
@@ -705,12 +704,9 @@
             });
 
             // Merge + filter + sort
-            console.log('DEBUG today=' + today);
-            clubResults.forEach((r,i) => console.log('DEBUG ' + CLUBS[i] + ' fetched=' + (r.data ? r.data.length : 'ERR') + ' open=' + (r.data||[]).filter(hasOpenSlot).length + ' firstDate=' + (r.data && r.data[0] ? r.data[0].date : 'n/a')));
-            // All-time count (no date filter) to confirm games exist in DB
-            Promise.all(['Griswold','East Haddam'].map(c => supabaseClient.client.from('games').select('id, date', {count:'exact'}).eq('Source Club', c).order('date',{ascending:true}).limit(5))).then(res => res.forEach((r,i) => console.log('ALLTIME ' + ['Griswold','East Haddam'][i] + ' total=' + (r.count ?? '?') + ' dates=' + (r.data||[]).map(g=>g.date).join(','))));
             const allGames = clubResults.flatMap(r => r.data || []);
             _allOpenGames = allGames
+                .filter(g => (g['Game Status'] || '') !== 'Cancelled')
                 .filter(hasOpenSlot)
                 .sort((a, b) => {
                     const da = (a.date || '') + '|' + (a.time || a.Time || '');
