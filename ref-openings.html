@@ -477,7 +477,7 @@
 <script src="js/supabase-client.js"></script>
 <script>
 
-    const CLUBS = ['Griswold', 'East Haddam', 'RHAMYS', 'Lebanon'];
+    let CLUBS = ['Griswold', 'East Haddam']; // overridden by settings table on load
 
     let _allOpenGames = [];
     let _weekFilter   = 'this';
@@ -681,6 +681,13 @@
         try {
             const _now = new Date();
             const today = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0') + '-' + String(_now.getDate()).padStart(2,'0');
+
+            // Fetch active clubs from settings
+            const settingRes = await supabaseClient.client
+                .from('settings').select('value').eq('key', 'openings_clubs').maybeSingle();
+            if (settingRes.data?.value) {
+                try { CLUBS = JSON.parse(settingRes.data.value); } catch(e) {}
+            }
 
             const [venueRes, ...clubResults] = await Promise.all([
                 supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name').limit(500),

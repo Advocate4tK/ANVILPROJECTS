@@ -241,6 +241,15 @@
                         <a href="users.html" class="btn btn-secondary">Manage Users</a>
                     </div>
 
+                    <div class="card" id="cardRefAvailTools" style="display:none; border-top:4px solid #1a6b3a;">
+                        <div class="card-icon">📋</div>
+                        <h2>Ref Availability Tools</h2>
+                        <p style="margin-bottom:12px;">Control which clubs appear on the public openings board</p>
+                        <div id="openingsClubChecks" style="text-align:left; margin-bottom:14px; display:flex; flex-direction:column; gap:8px;"></div>
+                        <button onclick="saveOpeningsClubs()" class="btn btn-secondary" style="width:100%;">Save</button>
+                        <div id="openingsSaveMsg" style="display:none; margin-top:8px; font-size:0.8rem; color:#1a6b3a; font-weight:700; text-align:center;">Saved</div>
+                    </div>
+
                 </div>
 
                 <!-- Operations Dashboard - Full Width -->
@@ -1883,12 +1892,39 @@
             } catch(e) { /* non-critical */ }
         }
 
+        const OPENINGS_ALL_CLUBS = ['Griswold', 'East Haddam', 'RHAMYS', 'Lebanon', 'WAM', 'Plainfield', 'NECONN'];
+
+        async function loadRefAvailTools() {
+            if (adminUserClubs !== null) return; // admin only
+            const card = document.getElementById('cardRefAvailTools');
+            if (card) card.style.display = '';
+            const wrap = document.getElementById('openingsClubChecks');
+            if (!wrap) return;
+            const res = await supabaseClient.client.from('settings').select('value').eq('key','openings_clubs').maybeSingle();
+            let active = [];
+            try { active = JSON.parse(res.data?.value || '[]'); } catch(e) {}
+            wrap.innerHTML = OPENINGS_ALL_CLUBS.map(club => `
+                <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer;">
+                    <input type="checkbox" value="${club}" ${active.includes(club) ? 'checked' : ''}
+                        style="width:16px; height:16px; cursor:pointer;">
+                    ${club}
+                </label>`).join('');
+        }
+
+        async function saveOpeningsClubs() {
+            const checks = document.querySelectorAll('#openingsClubChecks input[type=checkbox]');
+            const selected = [...checks].filter(c => c.checked).map(c => c.value);
+            await supabaseClient.client.from('settings').update({ value: JSON.stringify(selected) }).eq('key','openings_clubs');
+            const msg = document.getElementById('openingsSaveMsg');
+            if (msg) { msg.style.display = 'block'; setTimeout(() => msg.style.display = 'none', 2000); }
+        }
+
         // Shared init — called after login (via callback) and on page load (session persisted)
         window._adminInit = function() {
             const dash = document.getElementById('adminDashboard');
             if (!dash || dash.style.display === 'none') return;
             document.getElementById('statusBar').style.display = 'block';
-            applyAdminRestrictions().then(() => { loadStats(); loadBanners(); checkNewLeads(); });
+            applyAdminRestrictions().then(() => { loadStats(); loadBanners(); checkNewLeads(); loadRefAvailTools(); });
         };
 
         window.addEventListener('load', () => { window._adminInit(); });
