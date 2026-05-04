@@ -2536,7 +2536,7 @@
             const today = new Date().toISOString().split('T')[0];
             const [rawGrisGames, refRecs, ratesResult, refPayResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', 'Griswold').limit(2000),
-                supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state, email, phone, "Date of Birth", "Guardian Name", "Guardian Email", "Guardian Phone"'),
+                supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state, "Zip Code", email, phone, "Date of Birth", "Guardian Name", "Guardian Email", "Guardian Phone"'),
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', 40).order('sort_order'),
                 supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount')
             ]);
@@ -2681,7 +2681,9 @@
                             const rf        = resolveRef(slot.name);
                             const venmo     = rf['venmo']          || '';
                             const payMethod = rf['payment_method'] || 'venmo';
-                            const address   = [rf['address'], rf['city'], rf['state']].filter(Boolean).join(', ');
+                            const zipRaw  = String(rf['Zip Code'] || '');
+                            const zip     = zipRaw && zipRaw.length === 4 ? '0' + zipRaw : zipRaw;
+                            const address = [rf['address'], rf['city'], rf['state'], zip].filter(Boolean).join(', ');
                             const rate      = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
                             gameTotal      += rate;
 
