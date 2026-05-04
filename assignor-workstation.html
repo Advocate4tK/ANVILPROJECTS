@@ -5075,29 +5075,18 @@
             const blocks = [];
 
             if (multiClub) {
-                // Compact format: club header + date-grouped game list, no pay rates
-                for (const club of clubsWithGames) {
-                    const games = openGames.filter(g => g.fields['Source Club'] === club)
-                        .sort((a,b) => (a.fields['Date']||'').localeCompare(b.fields['Date']||'') || (a.fields['Time']||'').localeCompare(b.fields['Time']||''));
-
-                    const lines = [club];
-                    let lastDate = null;
-                    for (const g of games) {
-                        const f = g.fields;
-                        const d = f['Date'] || '';
-                        if (d !== lastDate) {
-                            if (lastDate !== null) lines.push('');
-                            lastDate = d;
-                        }
-                        const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
-                        const field = venueObj ? venueObj.name : (f['field'] || f['Venue ID'] || '—');
-                        const age   = f['Age Group'] || '';
-                        const gtype = f['game_type'] || '';
-                        lines.push(`${fmtDateShort(d)} ${fmtTime(f['Time'])} ${field} ${age} ${gtype}`);
-                    }
-                    blocks.push(lines.join('\n'));
-                }
-                document.getElementById('emailBodyText').value = blocks.join('\n\n\n');
+                const weekNum = (() => {
+                    const d = new Date();
+                    const jan1 = new Date(d.getFullYear(), 0, 1);
+                    return Math.ceil((((d - jan1) / 86400000) + jan1.getDay() + 1) / 7);
+                })();
+                const clubList = clubsWithGames.join(', ');
+                const sigName  = currentAssignor?.name  || '';
+                const sigEmail = currentAssignor?.email || '';
+                const sigPhone = currentAssignor?.phone || '';
+                const sig = [sigName, sigEmail, sigPhone].filter(Boolean).join('\n');
+                document.getElementById('emailBodyText').value =
+                    `Week ${weekNum} — ${clubList}\n\nWe have multiple openings.  LMK if you wanna work!\n\nhttps://referee-tool.com/ref-openings.html\n\n${sig}`;
 
             } else {
                 // Single-club format: full email with pay rates and form link
@@ -5115,7 +5104,7 @@
                         const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
                         const age = f['Age Group'] || '';
                         const gender = f['Gender'] || '';
-                        const positions = age === 'U8' ? 'CR' : 'CR | AR | AR';
+                        const positions = (age||'').startsWith('U8') ? 'CR' : 'CR | AR | AR';
                         return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age} ${gender}    ${vName}      ${positions}`;
                     }).join('\n');
 
