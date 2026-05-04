@@ -679,7 +679,8 @@
 
     async function loadData() {
         try {
-            const today = new Date().toISOString().split('T')[0];
+            const _now = new Date();
+            const today = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0') + '-' + String(_now.getDate()).padStart(2,'0');
 
             const [venueRes, ...clubResults] = await Promise.all([
                 supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name').limit(500),
@@ -704,7 +705,10 @@
             });
 
             // Merge + filter + sort
-            clubResults.forEach((r,i) => console.log('DEBUG ' + CLUBS[i] + ' fetched=' + (r.data ? r.data.length : 'ERR') + ' open=' + (r.data||[]).filter(hasOpenSlot).length + ' err=' + (r.error ? r.error.message : 'none') + ' src=' + (r.data && r.data[0] ? r.data[0]['Source Club'] : 'n/a')));
+            console.log('DEBUG today=' + today);
+            clubResults.forEach((r,i) => console.log('DEBUG ' + CLUBS[i] + ' fetched=' + (r.data ? r.data.length : 'ERR') + ' open=' + (r.data||[]).filter(hasOpenSlot).length + ' firstDate=' + (r.data && r.data[0] ? r.data[0].date : 'n/a')));
+            // All-time count (no date filter) to confirm games exist in DB
+            Promise.all(['Griswold','East Haddam'].map(c => supabaseClient.client.from('games').select('id, date', {count:'exact'}).eq('Source Club', c).order('date',{ascending:true}).limit(5))).then(res => res.forEach((r,i) => console.log('ALLTIME ' + ['Griswold','East Haddam'][i] + ' total=' + (r.count ?? '?') + ' dates=' + (r.data||[]).map(g=>g.date).join(','))));
             const allGames = clubResults.flatMap(r => r.data || []);
             _allOpenGames = allGames
                 .filter(hasOpenSlot)
