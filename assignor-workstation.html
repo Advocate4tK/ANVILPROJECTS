@@ -5058,45 +5058,84 @@
                 return `${h12}:${String(m).padStart(2,'0')}${ampm}`;
             };
 
-            // Build one block per club
+            // Determine how many clubs have open games
+            const clubsWithGames = targetClubs.filter(club =>
+                openGames.some(g => g.fields['Source Club'] === club)
+            );
+            const multiClub = clubsWithGames.length > 1;
+
+            const fmtDateShort = iso => {
+                const d = new Date(iso + 'T12:00:00');
+                const days  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                return `${days[d.getDay()]} ${d.getDate()}-${months[d.getMonth()]}`;
+            };
+
             const blocks = [];
-            for (const club of targetClubs) {
-                const games = openGames.filter(g => g.fields['Source Club'] === club)
-                    .sort((a,b) => (a.fields['Date']||'').localeCompare(b.fields['Date']||'') || (a.fields['Time']||'').localeCompare(b.fields['Time']||''));
-                if (!games.length) continue;
 
-                const clubId = clubIdByName[club];
-                const rates = clubId ? (payRatesByClubId[clubId] || []) : [];
+            if (multiClub) {
+                // Compact format: club header + date-grouped game list, no pay rates
+                for (const club of clubsWithGames) {
+                    const games = openGames.filter(g => g.fields['Source Club'] === club)
+                        .sort((a,b) => (a.fields['Date']||'').localeCompare(b.fields['Date']||'') || (a.fields['Time']||'').localeCompare(b.fields['Time']||''));
 
-                const gameLines = games.map(g => {
-                    const f = g.fields;
-                    const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
-                    const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
-                    const age = f['Age Group'] || '';
-                    const gender = f['Gender'] || '';
-                    const positions = age === 'U8' ? 'CR' : 'CR | AR | AR';
-                    return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age} ${gender}    ${vName}      ${positions}`;
-                }).join('\n');
+                    const lines = [club];
+                    let lastDate = null;
+                    for (const g of games) {
+                        const f = g.fields;
+                        const d = f['Date'] || '';
+                        if (d !== lastDate) {
+                            if (lastDate !== null) lines.push('');
+                            lastDate = d;
+                        }
+                        const field = f['field'] || f['Venue ID'] || '—';
+                        const age   = f['Age Group'] || '';
+                        const gtype = f['game_type'] || '';
+                        lines.push(`${fmtDateShort(d)} ${fmtTime(f['Time'])} ${field} ${age} ${gtype}`);
+                    }
+                    blocks.push(lines.join('\n'));
+                }
+                document.getElementById('emailBodyText').value = blocks.join('\n\n\n');
 
-                const openCount = games.length;
-                const intro = `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`}.  LMK if you wanna work!`;
+            } else {
+                // Single-club format: full email with pay rates and form link
+                for (const club of targetClubs) {
+                    const games = openGames.filter(g => g.fields['Source Club'] === club)
+                        .sort((a,b) => (a.fields['Date']||'').localeCompare(b.fields['Date']||'') || (a.fields['Time']||'').localeCompare(b.fields['Time']||''));
+                    if (!games.length) continue;
 
-                const rateLines = rates.length
-                    ? rates.sort((a,b) => parseInt(a.age_group.replace(/^U/i,'')) - parseInt(b.age_group.replace(/^U/i,'')))
-                           .map(r => r.ar ? `${r.age_group} | C $${r.center} | AR $${r.ar} |` : `${r.age_group} | C $${r.center} |`)
-                           .join('\n')
-                    : '(no pay rates on file for this club)';
+                    const clubId = clubIdByName[club];
+                    const rates  = clubId ? (payRatesByClubId[clubId] || []) : [];
 
-                                const sigName  = currentAssignor?.name  || 'TodLSmith';
-                const sigEmail = currentAssignor?.email || 'nectassignor@gmail.com';
-                const sigPhone = currentAssignor?.phone || '';
-                const sig = [sigName, sigEmail, sigPhone].filter(Boolean).join('\n');
-                const gameDates = [...new Set(games.map(g => g.fields['Date']).filter(Boolean))].sort().join(',');
-                const formLink = `https://referee-tool.com/referee-availability-form.html?dates=${gameDates}&club=${encodeURIComponent(club)}`;
-                blocks.push(`Week [#]  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${formLink}\n\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
+                    const gameLines = games.map(g => {
+                        const f = g.fields;
+                        const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
+                        const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
+                        const age = f['Age Group'] || '';
+                        const gender = f['Gender'] || '';
+                        const positions = age === 'U8' ? 'CR' : 'CR | AR | AR';
+                        return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age} ${gender}    ${vName}      ${positions}`;
+                    }).join('\n');
+
+                    const openCount = games.length;
+                    const intro = `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`}.  LMK if you wanna work!`;
+
+                    const rateLines = rates.length
+                        ? rates.sort((a,b) => parseInt(a.age_group.replace(/^U/i,'')) - parseInt(b.age_group.replace(/^U/i,'')))
+                               .map(r => r.ar ? `${r.age_group} | C $${r.center} | AR $${r.ar} |` : `${r.age_group} | C $${r.center} |`)
+                               .join('\n')
+                        : '(no pay rates on file for this club)';
+
+                    const sigName  = currentAssignor?.name  || 'TodLSmith';
+                    const sigEmail = currentAssignor?.email || 'nectassignor@gmail.com';
+                    const sigPhone = currentAssignor?.phone || '';
+                    const sig = [sigName, sigEmail, sigPhone].filter(Boolean).join('\n');
+                    const gameDates = [...new Set(games.map(g => g.fields['Date']).filter(Boolean))].sort().join(',');
+                    const formLink = `https://referee-tool.com/referee-availability-form.html?dates=${gameDates}&club=${encodeURIComponent(club)}`;
+                    blocks.push(`Week [#]  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${formLink}\n\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
+                }
+                document.getElementById('emailBodyText').value = blocks.join('\n\n' + '─'.repeat(60) + '\n\n');
             }
-
-            document.getElementById('emailBodyText').value = blocks.join('\n\n' + '─'.repeat(60) + '\n\n');
             const modal = document.getElementById('emailBodyModal');
             modal.style.display = 'flex';
         }
