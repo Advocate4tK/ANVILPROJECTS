@@ -40,15 +40,21 @@ const DEFAULTS = {
     assessorRate: 0
 };
 
-// ── Period lengths by age group ────────────────────────────────────────────────
-// durationTime = (2 × period) + halftime  (U8/U10/U12 = 5 min HT, U13/U15/U19 = 10 min HT)
+// ── Period lengths by age group (REC) ─────────────────────────────────────────
+// durationTime = (2 × period) + halftime  (U8–U12 = 5 min HT, U13+ = 10 min HT)
+// Comp game durations TBD — handle separately when built
 const DURATION_BY_AGE = {
     'U8':  { duration: '2 x 20', durationTime: 45  },  // 40 + 5
-    'U10': { duration: '2 x 30', durationTime: 65  },  // 60 + 5
+    'U9':  { duration: '2 x 20', durationTime: 45  },  // 40 + 5
+    'U10': { duration: '2 x 20', durationTime: 45  },  // 40 + 5
+    'U11': { duration: '2 x 35', durationTime: 75  },  // 70 + 5
     'U12': { duration: '2 x 35', durationTime: 75  },  // 70 + 5
-    'U13': { duration: '2 x 40', durationTime: 90  },  // 80 + 10  (comp — same as U15)
+    'U13': { duration: '2 x 40', durationTime: 90  },  // 80 + 10
+    'U14': { duration: '2 x 40', durationTime: 90  },  // 80 + 10
     'U15': { duration: '2 x 40', durationTime: 90  },  // 80 + 10
-    'U16': { duration: '2 x 40', durationTime: 90  },  // 80 + 10  (same as U15)
+    'U16': { duration: '2 x 40', durationTime: 90  },  // 80 + 10
+    'U17': { duration: '2 x 40', durationTime: 90  },  // 80 + 10
+    'U18': { duration: '2 x 40', durationTime: 90  },  // 80 + 10
     'U19': { duration: '2 x 45', durationTime: 100 },  // 90 + 10
 };
 
@@ -603,9 +609,10 @@ exportBtn.addEventListener('click', () => {
         const gRaw = (f['Gender'] || '').trim();
         const gameGender = ['Male','Boys'].includes(gRaw) ? 'M' : ['Female','Girls'].includes(gRaw) ? 'F' : DEFAULTS.gender;
 
-        // Period length by age group
+        // Period length by age group — strip B/G suffix and division label before lookup
         const ageGroup = f['Age Group'] || '';
-        const { duration, durationTime } = DURATION_BY_AGE[ageGroup] || { duration: '2 x 40', durationTime: 90 };
+        const ageKey = ageGroup.replace(/\s.*$/, '').replace(/[BGbg]$/, '').toUpperCase();
+        const { duration, durationTime } = DURATION_BY_AGE[ageKey] || { duration: '2 x 40', durationTime: 90 };
 
         return [
             f['Home Team']  || '',
