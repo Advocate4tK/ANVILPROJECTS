@@ -2511,6 +2511,11 @@
     }
 
     function initPaymentMode() {
+        if (!currentClubRecord?.id) {
+            document.getElementById('paymentSection').style.display = 'block';
+            document.getElementById('paymentSection').innerHTML = '<p style="color:#e74c3c; padding:24px; font-weight:700;">Payment portal unavailable — club not recognised. Check your link.</p>';
+            return;
+        }
         document.getElementById('preDoorwayClubName').style.display  = 'none';
         document.getElementById('doorwayStep1').style.display        = 'none';
         document.getElementById('doorwayStep2').style.display        = 'none';
@@ -2541,15 +2546,24 @@
             const today = new Date().toISOString().split('T')[0];
             const _sourceClub = (currentClubRecord?.fields?.['Club Name'] || currentClubRecord?.fields?.['Name'] || '').trim();
             const _clubId = currentClubRecord?.id || null;
-            const [rawGrisGames, refRecs, ratesResult, refPayResult] = await Promise.all([
+            const [rawGrisGames, ratesResult, refPayResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', _sourceClub).limit(2000),
-                supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state, "Zip Code", email, phone, "Date of Birth", "Guardian Name", "Guardian Email", "Guardian Phone"'),
                 _clubId
                     ? supabaseClient.client.from('pay_rates').select('*').eq('club_id', _clubId).order('sort_order')
                     : Promise.resolve({ data: [] }),
                 supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount')
             ]);
             const games = airtableClient._wrapAll(rawGrisGames.data || []);
+
+            // Scope ref fetch to only refs assigned to this club's games
+            const _refNames = new Set();
+            games.forEach(g => {
+                ['Center Referee', 'AR 1', 'AR 2'].forEach(slot => { if (g.fields[slot]) _refNames.add(g.fields[slot].trim()); });
+            });
+            const _refNamesArr = [..._refNames];
+            const refRecs = _refNamesArr.length
+                ? await supabaseClient.client.from('referees').select('id, name, venmo, payment_method, address, city, state, "Zip Code", email, phone, "Date of Birth", "Guardian Name", "Guardian Email", "Guardian Phone"').in('name', _refNamesArr)
+                : { data: [] };
             _payRates = (ratesResult.data || []);
 
             // Render rate schedule

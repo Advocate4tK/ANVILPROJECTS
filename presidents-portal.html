@@ -239,8 +239,8 @@ async function attemptLogin() {
 
         // Find club by slug match against Name column
         const clubRow = (clubs || []).find(c => normalize(c.name) === normalize(_clubSlug));
-        if (!clubRow && !isAdminBypass) { err.textContent = 'Club not found. Check your link.'; err.style.display = 'block'; return; }
-        const target = clubRow || clubs[0];
+        const target = clubRow || (isAdminBypass ? clubs[0] : null);
+        if (!target) { err.textContent = 'Club not found. Check your link.'; err.style.display = 'block'; return; }
 
         // Verify president identity
         if (!isAdminBypass) {
@@ -335,12 +335,21 @@ async function loadDashboard(club) {
     const today    = new Date().toISOString().split('T')[0];
 
     try {
-        const [rawGames, refRecs, ratesResult, refPayResult] = await Promise.all([
+        const [rawGames, ratesResult, refPayResult] = await Promise.all([
             supabaseClient.client.from('games').select('*').eq('Source Club', clubName).limit(2000),
-            supabaseClient.client.from('referees').select('id, name, venmo, payment_method'),
             supabaseClient.client.from('pay_rates').select('*').eq('club_id', club.id).order('sort_order'),
             supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount')
         ]);
+
+        // Scope ref fetch to only refs assigned to this club's games
+        const _refNames = new Set();
+        (rawGames.data || []).forEach(g => {
+            ['Center Referee', 'AR 1', 'AR 2'].forEach(slot => { if (g[slot]) _refNames.add(g[slot].trim()); });
+        });
+        const _refNamesArr = [..._refNames];
+        const refRecs = _refNamesArr.length
+            ? await supabaseClient.client.from('referees').select('id, name, venmo, payment_method').in('name', _refNamesArr)
+            : { data: [] };
 
         _payRates = ratesResult.data || [];
 
