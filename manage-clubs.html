@@ -428,6 +428,22 @@
                 </div>
 
                 <div id="payRatesSection" style="display:none;">
+                    <!-- Pay Types -->
+                    <div style="margin-bottom:20px;">
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; margin-bottom:8px;">Payment Methods Accepted</div>
+                        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                            <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;">
+                                <input type="checkbox" id="paytype_venmo" value="venmo" style="width:16px;height:16px;cursor:pointer;"> Venmo
+                            </label>
+                            <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;">
+                                <input type="checkbox" id="paytype_check" value="check" style="width:16px;height:16px;cursor:pointer;"> Check
+                            </label>
+                            <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;">
+                                <input type="checkbox" id="paytype_cashapp" value="cashapp" style="width:16px;height:16px;cursor:pointer;"> Cash App
+                            </label>
+                        </div>
+                    </div>
+
                     <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:6px;">
                         <!-- Rec -->
                         <div style="flex:1; min-width:260px;">
@@ -1529,13 +1545,21 @@
         document.getElementById('payRatesBodyRec').innerHTML  = loading;
         document.getElementById('payRatesBodyComp').innerHTML = loading;
         try {
-            const { data, error } = await supabaseClient.client
-                .from('pay_rates').select('*').eq('club_id', parseInt(clubId));
-            if (error) throw new Error(error.message);
+            const [ratesRes, clubRes] = await Promise.all([
+                supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(clubId)),
+                supabaseClient.client.from('clubs').select('payment_methods').eq('id', parseInt(clubId)).single()
+            ]);
+            if (ratesRes.error) throw new Error(ratesRes.error.message);
             const existing = {};
-            (data || []).forEach(r => { existing[r.age_group] = r; });
+            (ratesRes.data || []).forEach(r => { existing[r.age_group] = r; });
             document.getElementById('payRatesBodyRec').innerHTML  = buildPayRows(REC_AGE_GROUPS,  existing);
             document.getElementById('payRatesBodyComp').innerHTML = buildPayRows(COMP_AGE_GROUPS, existing);
+            // Pre-check payment method boxes
+            const methods = (clubRes.data?.payment_methods || '').split(',').map(s => s.trim()).filter(Boolean);
+            ['venmo','check','cashapp'].forEach(m => {
+                const cb = document.getElementById('paytype_' + m);
+                if (cb) cb.checked = methods.includes(m);
+            });
         } catch(e) {
             const err = `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
             document.getElementById('payRatesBodyRec').innerHTML  = err;
@@ -1566,6 +1590,11 @@
                 const { error: insErr } = await supabaseClient.client.from('pay_rates').insert(rows);
                 if (insErr) throw new Error(insErr.message);
             }
+            // Save payment methods
+            const methods = ['venmo','check','cashapp']
+                .filter(m => document.getElementById('paytype_' + m)?.checked)
+                .join(',');
+            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null }).eq('id', parseInt(clubId));
             msg.textContent = `✅ Saved — ${rows.length} age group${rows.length !== 1 ? 's' : ''} configured.`;
             msg.style.color = '#15803d'; msg.style.display = 'block';
         } catch(e) {
