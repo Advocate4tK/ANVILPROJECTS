@@ -62,8 +62,9 @@
         </header>
 
         <main>
-            <div style="margin-bottom:20px; display:flex; gap:12px;">
+            <div style="margin-bottom:20px; display:flex; gap:12px; align-items:center;">
                 <a href="admin.html" class="btn-back">← Admin Portal</a>
+                <button onclick="newRef()" style="background:#0f3460; color:white; border:none; border-radius:8px; padding:8px 18px; font-size:0.88rem; font-weight:700; cursor:pointer; font-family:inherit;">+ New Referee</button>
             </div>
 
             <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); margin-bottom:24px;">
@@ -537,7 +538,26 @@
         }
 
         // ── Save card ─────────────────────────────────────────────────────────
+        function newRef() {
+            closeCard();
+            currentId = '__new__';
+            const fields = ['f_firstName','f_lastName','f_email','f_email2','f_phone',
+                'f_payMethod','f_venmo','f_address','f_city','f_state','f_zip',
+                'f_years','f_cert','f_gender','f_dob','f_guardianName',
+                'f_guardianEmail','f_guardianPhone','f_clubPref','f_notes'];
+            fields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            document.getElementById('cardTitle').innerHTML = 'New Referee';
+            document.getElementById('cardSubtitle').textContent = 'Fill in the details below and hit Save';
+            const refCard = document.getElementById('refCard');
+            refCard.style.display = 'block';
+            refCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
         async function saveCard() {
+            const isNew = currentId === '__new__';
             if (!currentId) return;
             const statusEl = document.getElementById('saveStatus');
             const errEl    = document.getElementById('saveErr');
@@ -589,10 +609,19 @@
             });
 
             try {
-                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, currentId, updates);
-                // Update local cache
-                const ref = allRefs.find(r => String(r.id) === String(currentId));
-                if (ref) Object.assign(ref.fields, updates);
+                if (isNew) {
+                    const created = await airtableClient.createRecord(CONFIG.AIRTABLE_TABLES.REFEREES, updates);
+                    currentId = String(created.id);
+                    allRefs.unshift(created);
+                    document.getElementById('cardTitle').innerHTML =
+                        `${updates['Name'] || 'New Referee'} <span style="font-size:0.72rem; font-weight:500; color:#aaa; background:#f5f5f5; border:1px solid #e0e0e0; border-radius:4px; padding:2px 7px; vertical-align:middle;">#${currentId}</span>`;
+                    document.getElementById('cardSubtitle').textContent = '';
+                    applyFilters();
+                } else {
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, currentId, updates);
+                    const ref = allRefs.find(r => String(r.id) === String(currentId));
+                    if (ref) Object.assign(ref.fields, updates);
+                }
                 statusEl.style.display = 'inline';
                 setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
             } catch(e) {
