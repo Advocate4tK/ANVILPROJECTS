@@ -428,17 +428,31 @@
                 </div>
 
                 <div id="payRatesSection" style="display:none;">
-                    <div style="margin-bottom:6px;">
-                        <div style="max-width:380px;">
-                            <div style="background:#09142a; color:#fff; padding:6px 12px; border-radius:6px 6px 0 0; font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">Pay Rates</div>
+                    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:6px;">
+                        <!-- Rec -->
+                        <div style="flex:1; min-width:260px;">
+                            <div style="background:#09142a; color:#fff; padding:6px 12px; border-radius:6px 6px 0 0; font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">Rec</div>
                             <table style="width:100%; border-collapse:collapse; font-family:'DM Sans',sans-serif; font-size:0.88rem; border:1px solid #e2d9ce; border-top:none;">
                                 <thead><tr style="background:#f7f8fc; border-bottom:2px solid #e2d9ce;">
-                                    <th style="text-align:left; padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Age Group</th>
+                                    <th style="text-align:left; padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Age</th>
                                     <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Center</th>
                                     <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">AR</th>
-                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Solo</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Solo CR</th>
                                 </tr></thead>
-                                <tbody id="payRatesBody"></tbody>
+                                <tbody id="payRatesBodyRec"></tbody>
+                            </table>
+                        </div>
+                        <!-- Comp -->
+                        <div style="flex:1; min-width:260px;">
+                            <div style="background:#7c3aed; color:#fff; padding:6px 12px; border-radius:6px 6px 0 0; font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">Comp</div>
+                            <table style="width:100%; border-collapse:collapse; font-family:'DM Sans',sans-serif; font-size:0.88rem; border:1px solid #e2d9ce; border-top:none;">
+                                <thead><tr style="background:#f7f8fc; border-bottom:2px solid #e2d9ce;">
+                                    <th style="text-align:left; padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Age</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Center</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">AR</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Solo CR</th>
+                                </tr></thead>
+                                <tbody id="payRatesBodyComp"></tbody>
                             </table>
                         </div>
                     </div>
@@ -1486,7 +1500,9 @@
     }
 
     // ── Pay Rates Editor ──────────────────────────────────────────────────────
-    const PAY_AGE_GROUPS = ['U8', 'U9-U10', 'U11-U12', 'U13-U15', 'U18-U19'];
+    // Rec uses individual ages; Comp uses bands. Each string is unique — no collision, no game_type column needed.
+    const REC_AGE_GROUPS  = ['U8', 'U10', 'U12', 'U15', 'U19'];
+    const COMP_AGE_GROUPS = ['U9-U10', 'U11-U12', 'U13-U15'];
 
     function buildPayRows(groups, existing) {
         const inputStyle = 'width:62px; padding:5px 8px; border:1.5px solid #e2d9ce; border-radius:6px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; text-align:right;';
@@ -1510,17 +1526,20 @@
         if (!clubId) { section.style.display = 'none'; return; }
         section.style.display = 'block';
         const loading = '<tr><td colspan="4" style="padding:12px; color:#aaa; font-family:\'DM Sans\',sans-serif;">Loading…</td></tr>';
-        document.getElementById('payRatesBody').innerHTML = loading;
+        document.getElementById('payRatesBodyRec').innerHTML  = loading;
+        document.getElementById('payRatesBodyComp').innerHTML = loading;
         try {
             const { data, error } = await supabaseClient.client
                 .from('pay_rates').select('*').eq('club_id', parseInt(clubId));
             if (error) throw new Error(error.message);
             const existing = {};
             (data || []).forEach(r => { existing[r.age_group] = r; });
-            document.getElementById('payRatesBody').innerHTML = buildPayRows(PAY_AGE_GROUPS, existing);
+            document.getElementById('payRatesBodyRec').innerHTML  = buildPayRows(REC_AGE_GROUPS,  existing);
+            document.getElementById('payRatesBodyComp').innerHTML = buildPayRows(COMP_AGE_GROUPS, existing);
         } catch(e) {
-            document.getElementById('payRatesBody').innerHTML =
-                `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
+            const err = `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
+            document.getElementById('payRatesBodyRec').innerHTML  = err;
+            document.getElementById('payRatesBodyComp').innerHTML = err;
         }
     }
 
@@ -1535,7 +1554,7 @@
                 .from('pay_rates').delete().eq('club_id', parseInt(clubId));
             if (delErr) throw new Error(delErr.message);
             const rows = [];
-            for (const ag of PAY_AGE_GROUPS) {
+            for (const ag of [...REC_AGE_GROUPS, ...COMP_AGE_GROUPS]) {
                 const key   = ag.replace(/-/g, '_');
                 const crV   = document.getElementById(`pay_cr_${key}`)?.value.trim();
                 const arV   = document.getElementById(`pay_ar_${key}`)?.value.trim();
