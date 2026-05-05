@@ -27,6 +27,16 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!document.getElementById('refereeGender')?.value)       missing.push('Gender');
         if (!document.querySelectorAll('input[name="locations"]:checked').length)  missing.push('Preferred Locations (at least one)');
         if (!document.querySelectorAll('input[name="ageGroups"]:checked').length)  missing.push('Preferred Age Groups (at least one)');
+
+        // Griswold Venmo — required if Griswold selected, no payment on file, and venmo method chosen
+        const checkedLocs = [...document.querySelectorAll('input[name="locations"]:checked')].map(c => c.value);
+        if (checkedLocs.includes('Griswold') && !window._griswoldPayOnFile) {
+            const payMethod = document.querySelector('input[name="griswoldPayMethod"]:checked')?.value;
+            if (!payMethod || payMethod === 'venmo') {
+                const venmoVal = (document.getElementById('griswoldVenmo')?.value || '').trim();
+                if (!venmoVal) missing.push('Venmo handle (required for Griswold)');
+            }
+        }
         if (!document.getElementById('arOnly')?.value)              missing.push('AR Only preference');
 
         const dayRows = document.querySelectorAll('.day-row');
@@ -270,6 +280,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (locations.length === 0) {
             showMessage('error', 'Please select at least one preferred location.');
             return false;
+        }
+
+        // Griswold Venmo required
+        if (locations.includes('Griswold') && !window._griswoldPayOnFile) {
+            const payMethod = document.querySelector('input[name="griswoldPayMethod"]:checked')?.value;
+            if (!payMethod || payMethod === 'venmo') {
+                const venmoVal = (document.getElementById('griswoldVenmo')?.value || '').trim();
+                if (!venmoVal) {
+                    showMessage('error', 'Please enter your Venmo handle for Griswold payment.');
+                    document.getElementById('griswoldVenmo')?.focus();
+                    return false;
+                }
+            }
         }
 
         const ageGroups = getCheckboxValues('ageGroups');
