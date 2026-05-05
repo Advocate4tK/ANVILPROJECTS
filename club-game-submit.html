@@ -1125,12 +1125,19 @@
         }
     });
 
-    // Parse CA venue ID list — handles plain CSV (1072,795), decimal (1072.0), and thousands-comma (1,128.0)
+    // Parse CA venue ID list — handles plain CSV (1072,795), decimal (9001.0,9002.0), thousands-comma (1,128.0)
     function parseAirtableIds(str) {
         if (!str) return [];
-        return (str.match(/\d+(?:,\d{3})*(?:\.\d+)?/g) || [])
-            .map(s => parseInt(s.replace(/,/g, ''), 10))
-            .filter(n => !isNaN(n));
+        const cleaned = str.replace(/"/g, '').trim();
+        if (!cleaned) return [];
+        if (cleaned.includes('.')) {
+            // Decimal format — original regex handles thousands-comma Airtable IDs correctly
+            return (cleaned.match(/[\d,]+(?:\.\d+)?/g) || [])
+                .map(s => parseInt(s.replace(/,/g, ''), 10))
+                .filter(n => !isNaN(n));
+        }
+        // Plain comma-separated integers: "1072,795,958"
+        return cleaned.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
     }
 
     // ── Load reference data ───────────────────────────────────────────────────
