@@ -476,6 +476,7 @@
 <script>
 
     let CLUBS = ['Griswold', 'East Haddam']; // overridden by settings table on load
+    let _formConfig   = {};
 
     let _allOpenGames = [];
     let _weekFilter   = 'this';
@@ -615,7 +616,10 @@
 
         const gameDesc  = `${home} vs ${away} (${age}) — ${formatDate(g.date || '')}${time ? ' @ ' + time : ''}`;
         const noteParam = encodeURIComponent(`Interested in ${gameDesc}`);
-        const availUrl  = `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}`;
+        const formCfg   = _formConfig[club] || {};
+        const availUrl  = (formCfg.formType === 'jotform' && formCfg.jotformUrl)
+            ? formCfg.jotformUrl
+            : `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}`;
 
         return `<div class="game-card">
             <div class="game-card-header">
@@ -680,12 +684,15 @@
             const _now = new Date();
             const today = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0') + '-' + String(_now.getDate()).padStart(2,'0');
 
-            // Fetch active clubs from settings
-            const settingRes = await supabaseClient.client
-                .from('settings').select('value').eq('key', 'openings_clubs').maybeSingle();
+            // Fetch active clubs + per-club form routing from settings
+            const [settingRes, formConfigRes] = await Promise.all([
+                supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
+                supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle()
+            ]);
             if (settingRes.data?.value) {
                 try { CLUBS = JSON.parse(settingRes.data.value); } catch(e) {}
             }
+            try { _formConfig = JSON.parse(formConfigRes.data?.value || '{}'); } catch(e) { _formConfig = {}; }
 
             // Build club filter buttons from live CLUBS list
             const clubGroup = document.getElementById('clubFilterGroup');

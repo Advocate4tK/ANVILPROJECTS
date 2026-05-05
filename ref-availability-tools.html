@@ -19,16 +19,42 @@
         .club-check-list {
             display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;
         }
-        .club-check-list label {
+        .club-row {
+            border: 1px solid #e2d9ce; border-radius: 8px;
+            overflow: hidden; background: #fff;
+        }
+        .club-main-row {
             display: flex; align-items: center; gap: 10px;
             font-size: 0.92rem; color: #1f2328; cursor: pointer;
-            padding: 9px 14px; border-radius: 8px; border: 1px solid #e2d9ce;
+            padding: 9px 14px;
             transition: background 0.15s; font-family: 'DM Sans', sans-serif;
         }
-        .club-check-list label:hover { background: #f6f8fa; }
-        .club-check-list input[type=checkbox] {
-            width: 18px; height: 18px; cursor: pointer; accent-color: #09142a;
+        .club-main-row:hover { background: #f6f8fa; }
+        .club-main-row input[type=checkbox] {
+            width: 18px; height: 18px; cursor: pointer; accent-color: #09142a; flex-shrink: 0;
         }
+        .form-type-row {
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 7px 14px 9px 42px;
+            background: #f8f9fb; border-top: 1px solid #ede8e2;
+            font-size: 0.82rem; font-family: 'DM Sans', sans-serif;
+        }
+        .form-type-label {
+            font-size: 0.7rem; font-weight: 700; color: #bbb;
+            text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0;
+        }
+        .radio-opt {
+            display: flex; align-items: center; gap: 5px;
+            cursor: pointer; color: #555;
+        }
+        .radio-opt input[type=radio] { cursor: pointer; accent-color: #09142a; }
+        .jotform-url-input {
+            flex: 1; min-width: 220px; padding: 4px 9px;
+            border: 1px solid #d0c8be; border-radius: 5px;
+            font-size: 0.8rem; font-family: 'DM Sans', sans-serif;
+            color: #1f2328; display: none;
+        }
+        .jotform-url-input:focus { outline: none; border-color: #09142a; }
         .save-msg {
             display: none; margin-left: 14px; font-size: 0.82rem;
             color: #1a6b3a; font-weight: 700; font-family: 'DM Sans', sans-serif;
@@ -90,23 +116,74 @@
     const OPENINGS_ALL_CLUBS = ['Griswold', 'East Haddam', 'RHAMYS', 'Lebanon', 'WAM', 'Plainfield', 'NECONN'];
 
     async function loadOpeningsClubs() {
-        const res = await supabaseClient.client
-            .from('settings').select('value').eq('key', 'openings_clubs').maybeSingle();
+        const [clubsRes, formRes] = await Promise.all([
+            supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
+            supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle()
+        ]);
         let active = [];
-        try { active = JSON.parse(res.data?.value || '[]'); } catch(e) {}
+        let formConfig = {};
+        try { active     = JSON.parse(clubsRes.data?.value || '[]'); } catch(e) {}
+        try { formConfig = JSON.parse(formRes.data?.value  || '{}'); } catch(e) {}
+
         const wrap = document.getElementById('openingsClubChecks');
-        wrap.innerHTML = OPENINGS_ALL_CLUBS.map(club => `
-            <label>
-                <input type="checkbox" value="${club}" ${active.includes(club) ? 'checked' : ''}>
-                ${club}
-            </label>`).join('');
+        wrap.innerHTML = OPENINGS_ALL_CLUBS.map(club => {
+            const cfg       = formConfig[club] || {};
+            const isJotform = cfg.formType === 'jotform';
+            return `
+            <div class="club-row">
+                <label class="club-main-row">
+                    <input type="checkbox" value="${club}" ${active.includes(club) ? 'checked' : ''}>
+                    ${club}
+                </label>
+                <div class="form-type-row">
+                    <span class="form-type-label">Avail Form:</span>
+                    <label class="radio-opt">
+                        <input type="radio" name="form_${club}" value="referee-tool" ${!isJotform ? 'checked' : ''}
+                            onchange="toggleJotformUrl('${club}', this.value)"> Referee Tool
+                    </label>
+                    <label class="radio-opt">
+                        <input type="radio" name="form_${club}" value="jotform" ${isJotform ? 'checked' : ''}
+                            onchange="toggleJotformUrl('${club}', this.value)"> JotForm
+                    </label>
+                    <input type="url" class="jotform-url-input" id="jfurl_${club}"
+                        placeholder="https://form.jotform.com/…"
+                        value="${cfg.jotformUrl || ''}"
+                        style="display:${isJotform ? 'block' : 'none'}">
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function toggleJotformUrl(club, val) {
+        const inp = document.getElementById('jfurl_' + club);
+        if (inp) inp.style.display = val === 'jotform' ? 'block' : 'none';
     }
 
     async function saveOpeningsClubs() {
         const checks = document.querySelectorAll('#openingsClubChecks input[type=checkbox]');
         const selected = [...checks].filter(c => c.checked).map(c => c.value);
-        await supabaseClient.client.from('settings')
-            .update({ value: JSON.stringify(selected) }).eq('key', 'openings_clubs');
+
+        const formConfig = {};
+        OPENINGS_ALL_CLUBS.forEach(club => {
+            let formType = 'referee-tool';
+            document.querySelectorAll(`input[name="form_${club}"]`).forEach(r => {
+                if (r.checked) formType = r.value;
+            });
+            const entry = { formType };
+            if (formType === 'jotform') {
+                const urlInp = document.getElementById('jfurl_' + club);
+                entry.jotformUrl = urlInp ? urlInp.value.trim() : '';
+            }
+            formConfig[club] = entry;
+        });
+
+        await Promise.all([
+            supabaseClient.client.from('settings')
+                .upsert({ key: 'openings_clubs',       value: JSON.stringify(selected)   }, { onConflict: 'key' }),
+            supabaseClient.client.from('settings')
+                .upsert({ key: 'openings_form_config', value: JSON.stringify(formConfig) }, { onConflict: 'key' })
+        ]);
+
         const msg = document.getElementById('openingsSaveMsg');
         msg.style.display = 'inline';
         setTimeout(() => msg.style.display = 'none', 2000);
