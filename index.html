@@ -608,6 +608,22 @@
             pointer-events: auto;
         }
 
+        .type-cursor {
+            display: inline-block;
+            width: 0.55em;
+            height: 1.05em;
+            background: #00c853;
+            vertical-align: text-bottom;
+            margin-left: 2px;
+            border-radius: 1px;
+            animation: cursor-throb 0.65s ease-in-out infinite;
+        }
+
+        @keyframes cursor-throb {
+            0%, 100% { opacity: 1;   transform: scaleY(1); }
+            50%      { opacity: 0.1; transform: scaleY(0.85); }
+        }
+
         .carousel-dots {
             display: flex;
             justify-content: center;
@@ -1060,10 +1076,38 @@
     </script>
     <script>
         (function() {
-            var slides  = document.querySelectorAll('.testimonial-slide');
-            var dots    = document.querySelectorAll('.carousel-dot');
-            var current = 0;
+            var slides   = document.querySelectorAll('.testimonial-slide');
+            var dots     = document.querySelectorAll('.carousel-dot');
+            var current  = 0;
             var timer;
+            var typeTimer;
+
+            // Cache quote text from HTML, then clear for typing
+            slides.forEach(function(slide) {
+                var body = slide.querySelector('.testimonial-body');
+                if (body) {
+                    body.dataset.text = body.textContent.trim();
+                    body.textContent  = '';
+                }
+            });
+
+            function typeWriter(el) {
+                if (typeTimer) clearTimeout(typeTimer);
+                el.textContent = '';
+                var cursor = document.createElement('span');
+                cursor.className = 'type-cursor';
+                el.appendChild(cursor);
+                var text = el.dataset.text || '';
+                var i = 0;
+                function tick() {
+                    if (i < text.length) {
+                        el.insertBefore(document.createTextNode(text[i]), cursor);
+                        i++;
+                        typeTimer = setTimeout(tick, 28);
+                    }
+                }
+                tick();
+            }
 
             function goTo(n) {
                 slides[current].classList.remove('active');
@@ -1071,10 +1115,12 @@
                 current = (n + slides.length) % slides.length;
                 slides[current].classList.add('active');
                 dots[current].classList.add('active');
+                var newBody = slides[current].querySelector('.testimonial-body');
+                if (newBody) setTimeout(function() { typeWriter(newBody); }, 300);
             }
 
             function startTimer() {
-                timer = setInterval(function() { goTo(current + 1); }, 5000);
+                timer = setInterval(function() { goTo(current + 1); }, 7000);
             }
 
             dots.forEach(function(dot, i) {
@@ -1090,6 +1136,10 @@
                 carousel.addEventListener('mouseenter', function() { clearInterval(timer); });
                 carousel.addEventListener('mouseleave', startTimer);
             }
+
+            // Kick off typing on first slide
+            var firstBody = slides[0] && slides[0].querySelector('.testimonial-body');
+            if (firstBody) setTimeout(function() { typeWriter(firstBody); }, 300);
 
             startTimer();
         })();
