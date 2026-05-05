@@ -227,6 +227,7 @@
             transition: box-shadow 0.15s;
         }
         .game-card:hover { box-shadow: var(--shadow-md); }
+        .game-card.current-week-card { background:#ffffff; border-left-color:#00c853; box-shadow:0 2px 10px rgba(0,200,83,0.1), 0 1px 3px rgba(0,0,0,0.06); }
         .game-card.change-req     { border-left-color: var(--amber); background: #fffbeb; }
         .game-card.change-done    { border-left-color: var(--accent); background: #f0fdf4; }
         .game-card.cancelled-game { border-left-color: #dc2626; background: #fef2f2; opacity: 0.82; }
@@ -1676,7 +1677,7 @@
                 <p id="modMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
             </div>` : '';
 
-        return `<div class="game-card">
+        return `<div class="game-card${opts.currentWeek ? ' current-week-card' : ''}">
             <div class="game-card-main">
                 <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
                 <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
@@ -1927,30 +1928,32 @@
                         const isPast = key < currentWeekKey;
                         const collapsed = window._weekCollapsed[key];
                         const wCancelled = cancelledByWeek[key] || [];
-                        const borderColor = isCurrent ? '#00c853' : '#e2d9ce';
-                        const borderWidth = isCurrent ? '3px' : '1px';
-                        const hdrBg = isCurrent ? 'background:#f0fdf4; border-radius:8px; padding:8px 10px;' : '';
-                        const hdrStyle = `font-family:"Barlow Condensed",sans-serif; font-size:1.05rem; font-weight:800; color:${isPast ? '#9ca3af' : '#09142a'}; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:${collapsed ? '0' : '8px'}; padding-bottom:5px; border-bottom:${borderWidth} solid ${borderColor}; display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; user-select:none; ${hdrBg}`;
-                        const arrow = `<span id="weekArrow_${key}" style="font-size:0.78rem; color:${isPast ? '#9ca3af' : '#09142a'}; flex-shrink:0; margin-right:2px;">${collapsed ? '▶' : '▼'}</span>`;
+                        const borderColor = isCurrent ? '#00c853' : isPast ? '#e2d9ce' : '#d1d9e0';
+                        const hdrStyle = `font-family:"Barlow Condensed",sans-serif; font-size:1.05rem; font-weight:800; color:${isPast ? '#9ca3af' : '#09142a'}; text-transform:uppercase; letter-spacing:0.8px; padding:${collapsed ? '10px 14px' : '0 0 6px 0'}; border-bottom:${collapsed ? 'none' : `2px solid ${borderColor}`}; margin-bottom:${collapsed ? '0' : '10px'}; display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; flex-wrap:nowrap;`;
+                        const weekWrapStyle = collapsed
+                            ? `margin-bottom:5px; background:${isCurrent ? '#f0fdf4' : isPast ? 'rgba(9,20,42,0.02)' : 'rgba(9,20,42,0.03)'}; border:1px solid ${isCurrent ? '#bbf7d0' : 'rgba(9,20,42,0.07)'}; border-radius:8px; overflow:hidden;`
+                            : `margin-bottom:24px;`;
+                        const arrow = `<span id="weekArrow_${key}" style="font-size:0.75rem; color:${isPast ? '#9ca3af' : isCurrent ? '#00c853' : '#09142a'}; flex-shrink:0;">${collapsed ? '▶' : '▼'}</span>`;
                         const cancelledBadge = wCancelled.length > 0
                             ? `<span style="background:#fee2e2; color:#991b1b; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:8px; font-family:'DM Sans',sans-serif; flex-shrink:0;">🚫 ${wCancelled.length}</span>`
                             : '';
-                        const leftSide = `<span style="display:flex; align-items:center; gap:7px; flex:1; min-width:0;">
-                            ${arrow}
-                            <span style="font-weight:800; white-space:nowrap; color:${isPast ? '#6b7280' : '#09142a'};">${label}</span>
-                            <span style="background:${isPast ? '#e5e7eb' : '#09142a'}; color:${isPast ? '#6b7280' : '#fff'}; font-size:0.72rem; font-weight:700; padding:2px 10px; border-radius:8px; font-family:'DM Sans',sans-serif; min-width:22px; text-align:center; flex-shrink:0;">${wGames.length}</span>
-                            ${cancelledBadge}
-                        </span>`;
-                        const rightSide = isCurrent
+                        const statusBadge = isCurrent
                             ? `<span style="background:#00c853; color:#09142a; font-size:0.6rem; font-weight:800; padding:2px 7px; border-radius:8px; letter-spacing:1px; font-family:'DM Sans',sans-serif; white-space:nowrap; flex-shrink:0;">CURRENT WEEK</span>`
                             : isPast ? `<span style="font-size:0.68rem; color:#9ca3af; font-family:'DM Sans',sans-serif; font-weight:600; white-space:nowrap; flex-shrink:0;">PAST</span>` : '';
+                        const leftSide = `<span style="display:flex; align-items:center; gap:7px; flex:1; min-width:0; flex-wrap:nowrap; overflow:hidden;">
+                            ${arrow}
+                            <span style="font-weight:800; white-space:nowrap; color:${isPast ? '#6b7280' : '#09142a'}; overflow:hidden; text-overflow:ellipsis;">${label}</span>
+                            <span style="background:${isPast ? '#e5e7eb' : '#09142a'}; color:${isPast ? '#6b7280' : '#fff'}; font-size:0.72rem; font-weight:700; padding:2px 10px; border-radius:8px; font-family:'DM Sans',sans-serif; min-width:22px; text-align:center; flex-shrink:0;">${wGames.length}</span>
+                            ${cancelledBadge}
+                            ${statusBadge}
+                        </span>`;
                         const cancelledInWeekHtml = wCancelled.length > 0
                             ? `<div style="margin-top:${wGames.length > 0 ? '6px' : '0'};">${wCancelled.map(r => buildGameCard(r, { cancelled: true })).join('')}</div>`
                             : '';
-                        return `<div style="margin-bottom:${collapsed ? '6px' : '22px'};">
-                            <div style="${hdrStyle}" onclick="window._toggleWeek('${key}')">${leftSide}${rightSide}</div>
+                        return `<div style="${weekWrapStyle}">
+                            <div style="${hdrStyle}" onclick="window._toggleWeek('${key}')">${leftSide}</div>
                             <div id="weekCards_${key}" style="display:${collapsed ? 'none' : 'block'};">
-                                ${wGames.map(r => buildGameCard(r)).join('')}
+                                ${wGames.map(r => buildGameCard(r, { currentWeek: isCurrent })).join('')}
                                 ${cancelledInWeekHtml}
                             </div>
                         </div>`;
