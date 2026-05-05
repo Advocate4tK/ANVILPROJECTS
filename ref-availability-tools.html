@@ -177,12 +177,18 @@
             formConfig[club] = entry;
         });
 
-        await Promise.all([
-            supabaseClient.client.from('settings')
-                .upsert({ key: 'openings_clubs',       value: JSON.stringify(selected)   }, { onConflict: 'key' }),
-            supabaseClient.client.from('settings')
-                .upsert({ key: 'openings_form_config', value: JSON.stringify(formConfig) }, { onConflict: 'key' })
-        ]);
+        // openings_clubs row always exists — plain update
+        await supabaseClient.client.from('settings')
+            .update({ value: JSON.stringify(selected) }).eq('key', 'openings_clubs');
+
+        // openings_form_config may not exist yet — update; if 0 rows touched, insert
+        const formVal = JSON.stringify(formConfig);
+        const updRes  = await supabaseClient.client.from('settings')
+            .update({ value: formVal }).eq('key', 'openings_form_config').select();
+        if (!updRes.data?.length) {
+            await supabaseClient.client.from('settings')
+                .insert({ key: 'openings_form_config', value: formVal });
+        }
 
         const msg = document.getElementById('openingsSaveMsg');
         msg.style.display = 'inline';
