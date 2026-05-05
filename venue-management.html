@@ -138,16 +138,23 @@
                         <span class="save-status" id="saveStatus">✅ Saved</span>
                         <span class="save-err" id="saveErr">❌ Save failed</span>
                     </div>
-                </div>
-            </div>
-            <!-- Fields Section -->
-            <div id="fieldsSection" style="display:none; margin-top:16px;">
-                <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.08); border-top:4px solid #152d55;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
-                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#09142a;">⚽ Fields at this Venue</div>
-                        <button onclick="addField()" style="background:#00c853; color:#09142a; border:none; border-radius:8px; padding:8px 20px; font-weight:800; font-size:0.85rem; cursor:pointer; font-family:inherit;">+ Add Field</button>
+
+                    <!-- Fields — collapsible inside the card -->
+                    <div style="margin-top:20px; padding-top:18px; border-top:1px solid #eee;">
+                        <div onclick="toggleFields()" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding:2px 0; user-select:none;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#aaa;">⚽ Fields at this Venue</span>
+                                <span id="fieldsCountBadge" style="font-size:0.72rem; font-weight:700; color:#fff; background:#152d55; border-radius:10px; padding:2px 8px; display:none;"></span>
+                            </div>
+                            <span id="fieldsToggleArrow" style="color:#00c853; font-size:0.88rem; transition:transform 0.22s; display:inline-block;">▶</span>
+                        </div>
+                        <div id="fieldsDropdown" style="display:none; margin-top:14px;">
+                            <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+                                <button onclick="addField()" style="background:#00c853; color:#09142a; border:none; border-radius:8px; padding:7px 18px; font-weight:800; font-size:0.82rem; cursor:pointer; font-family:inherit;">+ Add Field</button>
+                            </div>
+                            <div id="fieldsList"></div>
+                        </div>
                     </div>
-                    <div id="fieldsList"></div>
                 </div>
             </div>
 
@@ -285,6 +292,11 @@
             document.getElementById('saveStatus').style.display = 'none';
             document.getElementById('saveErr').style.display    = 'none';
 
+            // Reset fields dropdown to closed
+            document.getElementById('fieldsDropdown').style.display = 'none';
+            document.getElementById('fieldsToggleArrow').style.transform = '';
+            document.getElementById('fieldsCountBadge').style.display = 'none';
+
             loadFields(v['Venue ID']);
             applyFilters();
             document.getElementById('venueCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -335,21 +347,31 @@
         // ── Fields ───────────────────────────────────────────────────────────────
         let currentVenueCAId = null;
 
+        function toggleFields() {
+            const dropdown = document.getElementById('fieldsDropdown');
+            const arrow    = document.getElementById('fieldsToggleArrow');
+            const open     = dropdown.style.display === 'none';
+            dropdown.style.display    = open ? 'block' : 'none';
+            arrow.style.transform     = open ? 'rotate(90deg)' : '';
+        }
+
         async function loadFields(venueCAId) {
             currentVenueCAId = venueCAId;
-            const sec  = document.getElementById('fieldsSection');
-            const list = document.getElementById('fieldsList');
-            sec.style.display = 'block';
-            list.innerHTML = '<div style="color:#aaa; font-size:0.88rem; padding:8px 0;">Loading…</div>';
+            const badge = document.getElementById('fieldsCountBadge');
+            const list  = document.getElementById('fieldsList');
 
             if (!venueCAId) {
+                badge.style.display = 'none';
                 list.innerHTML = '<div style="color:#aaa; font-size:0.88rem; padding:8px 0;">No CA Venue ID set — save a Venue ID first to link fields.</div>';
                 return;
             }
 
             const { data, error } = await db.client.from('fields').select('*').eq('"Venue ID"', venueCAId).order('id');
             if (error) { list.innerHTML = `<div style="color:#e74c3c; font-size:0.88rem;">${error.message}</div>`; return; }
-            renderFields(data || []);
+            const fields = data || [];
+            badge.textContent   = fields.length + ' field' + (fields.length !== 1 ? 's' : '');
+            badge.style.display = fields.length ? 'inline' : 'none';
+            renderFields(fields);
         }
 
         function renderFields(fields) {
