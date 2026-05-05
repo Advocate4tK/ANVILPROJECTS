@@ -140,6 +140,17 @@
                     </div>
                 </div>
             </div>
+            <!-- Fields Section -->
+            <div id="fieldsSection" style="display:none; margin-top:16px;">
+                <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.08); border-top:4px solid #152d55;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#09142a;">⚽ Fields at this Venue</div>
+                        <button onclick="addField()" style="background:#00c853; color:#09142a; border:none; border-radius:8px; padding:8px 20px; font-weight:800; font-size:0.85rem; cursor:pointer; font-family:inherit;">+ Add Field</button>
+                    </div>
+                    <div id="fieldsList"></div>
+                </div>
+            </div>
+
         </main>
 
         <footer>
@@ -274,6 +285,7 @@
             document.getElementById('saveStatus').style.display = 'none';
             document.getElementById('saveErr').style.display    = 'none';
 
+            loadFields(v['Venue ID']);
             applyFilters();
             document.getElementById('venueCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
@@ -318,6 +330,97 @@
             setTimeout(() => document.getElementById('saveStatus').style.display = 'none', 3000);
 
             applyFilters();
+        }
+
+        // ── Fields ───────────────────────────────────────────────────────────────
+        let currentVenueCAId = null;
+
+        async function loadFields(venueCAId) {
+            currentVenueCAId = venueCAId;
+            const sec  = document.getElementById('fieldsSection');
+            const list = document.getElementById('fieldsList');
+            sec.style.display = 'block';
+            list.innerHTML = '<div style="color:#aaa; font-size:0.88rem; padding:8px 0;">Loading…</div>';
+
+            if (!venueCAId) {
+                list.innerHTML = '<div style="color:#aaa; font-size:0.88rem; padding:8px 0;">No CA Venue ID set — save a Venue ID first to link fields.</div>';
+                return;
+            }
+
+            const { data, error } = await db.client.from('fields').select('*').eq('"Venue ID"', venueCAId).order('id');
+            if (error) { list.innerHTML = `<div style="color:#e74c3c; font-size:0.88rem;">${error.message}</div>`; return; }
+            renderFields(data || []);
+        }
+
+        function renderFields(fields) {
+            const list = document.getElementById('fieldsList');
+            const inp  = 'width:100%; padding:8px 10px; border:1.5px solid #ddd; border-radius:6px; font-size:0.88rem; font-family:inherit; box-sizing:border-box;';
+            const lbl  = 'display:block; font-size:0.72rem; font-weight:700; color:#555; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px;';
+
+            if (!fields.length) {
+                list.innerHTML = '<div style="color:#aaa; font-size:0.88rem; padding:8px 0;">No fields linked to this venue yet. Hit + Add Field to create one.</div>';
+                return;
+            }
+
+            list.innerHTML = fields.map(f => `
+                <div style="border:1px solid #e8e8e8; border-radius:10px; padding:18px; margin-bottom:14px; background:#fafafa;" id="field-row-${f.id}">
+                    <div style="display:grid; grid-template-columns:2fr 1fr 2fr 2fr; gap:14px; align-items:end; flex-wrap:wrap;">
+                        <div>
+                            <label style="${lbl}">Field Name</label>
+                            <input type="text" id="ff_name_${f.id}" value="${f['Field Name'] || ''}" placeholder="e.g. Field 1" style="${inp}">
+                        </div>
+                        <div>
+                            <label style="${lbl}">CA Field ID</label>
+                            <input type="number" id="ff_caid_${f.id}" value="${f['Field ID'] ? Math.round(f['Field ID']) : ''}" placeholder="—" style="${inp}">
+                        </div>
+                        <div>
+                            <label style="${lbl}">Parking Notes</label>
+                            <input type="text" id="ff_park_${f.id}" value="${f['Parking Notes'] || ''}" placeholder="—" style="${inp}">
+                        </div>
+                        <div>
+                            <label style="${lbl}">Field Notes</label>
+                            <input type="text" id="ff_notes_${f.id}" value="${f['Field Notes'] || ''}" placeholder="—" style="${inp}">
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center; margin-top:12px;">
+                        <button onclick="saveField(${f.id})" style="background:#152d55; color:#fff; border:none; border-radius:7px; padding:7px 20px; font-size:0.85rem; font-weight:700; cursor:pointer; font-family:inherit;">Save</button>
+                        <span id="ff_status_${f.id}" style="font-size:0.82rem; font-weight:600; display:none;"></span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function saveField(fieldId) {
+            const updates = {
+                'Field Name':    document.getElementById(`ff_name_${fieldId}`)?.value.trim() || null,
+                'Field ID':      parseFloat(document.getElementById(`ff_caid_${fieldId}`)?.value) || null,
+                'Parking Notes': document.getElementById(`ff_park_${fieldId}`)?.value.trim() || null,
+                'Field Notes':   document.getElementById(`ff_notes_${fieldId}`)?.value.trim() || null,
+            };
+            const stat = document.getElementById(`ff_status_${fieldId}`);
+            const { error } = await db.client.from('fields').update(updates).eq('id', fieldId);
+            stat.style.display = 'inline';
+            if (error) {
+                stat.textContent = '❌ Save failed';
+                stat.style.color = '#e74c3c';
+            } else {
+                stat.textContent = '✅ Saved';
+                stat.style.color = '#15803d';
+                setTimeout(() => { stat.style.display = 'none'; }, 3000);
+            }
+        }
+
+        async function addField() {
+            const venue = allVenues.find(v => v.id === currentVenueId);
+            if (!venue || !venue['Venue ID']) { alert('Save a CA Venue ID for this venue first.'); return; }
+            const { data, error } = await db.client.from('fields').insert({
+                'Venue ID': venue['Venue ID'],
+                club: venue.club_name || null
+            }).select().single();
+            if (error) { alert('Could not create field: ' + error.message); return; }
+            await loadFields(venue['Venue ID']);
+            // Focus the new field's name input
+            setTimeout(() => document.getElementById(`ff_name_${data.id}`)?.focus(), 100);
         }
 
         loadVenues();
