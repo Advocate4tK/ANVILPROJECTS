@@ -6310,6 +6310,17 @@
 
         function makeSlot2(gameId, position, label, refName, linkedIds) {
             const confirmed = !!(caConfirmedMap[String(gameId)]?.has(position));
+            const safePos   = position.replace(/'/g, "\\'");
+
+            if (refName === 'FILLED') {
+                return `<div class="slot s2-slot" data-game-id="${gameId}" data-position="${position}"
+                    style="background:#e3f2fd; border-color:#1565c0; cursor:pointer;"
+                    oncontextmenu="s2ShowCellFilledMenu(event,'${gameId}','${safePos}',true); return false;">
+                    <span class="slot-label" style="color:#1565c0;">${label}</span>
+                    <span style="font-size:0.8rem;font-weight:700;background:#1565c0;color:#fff;border-radius:3px;padding:2px 8px;letter-spacing:0.03em;">Filled</span>
+                </div>`;
+            }
+
             if (refName) {
                 const refId = typeof linkedIds === 'string'
                     ? (refLookupByName[(refName || '').toLowerCase()]?.id || '')
@@ -6339,10 +6350,40 @@
                     <button class="unassign-btn s2-unassign" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
                 </div>`;
             }
-            return `<div class="slot s2-slot" data-game-id="${gameId}" data-position="${position}">
+            return `<div class="slot s2-slot" data-game-id="${gameId}" data-position="${position}"
+                oncontextmenu="s2ShowCellFilledMenu(event,'${gameId}','${safePos}',false); return false;">
                 <span class="slot-label">${label}</span>
                 <span>Drop ref here</span>
             </div>`;
+        }
+
+        function s2ShowCellFilledMenu(e, gameId, position, alreadyFilled) {
+            e.preventDefault();
+            e.stopPropagation();
+            let menu = document.getElementById('s2CellFilledMenu');
+            if (!menu) {
+                menu = document.createElement('div');
+                menu.id = 's2CellFilledMenu';
+                menu.style.cssText = 'position:fixed; background:#fff; border:1px solid #d0d7de; border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.15); z-index:9999; min-width:160px; padding:4px 0; font-family:"DM Sans",sans-serif; font-size:0.82rem;';
+                document.body.appendChild(menu);
+            }
+            const item = (label, fn) => `<div style="padding:8px 16px; cursor:pointer;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''" onclick="${fn}">${label}</div>`;
+            const safePos = position.replace(/'/g, "\\'");
+            menu.innerHTML = alreadyFilled
+                ? item('✅ Unmark as Filled', `s2SetCellFilled('${gameId}','${safePos}',false); document.getElementById('s2CellFilledMenu').style.display='none';`)
+                : item('🔒 Mark as Filled',   `s2SetCellFilled('${gameId}','${safePos}',true);  document.getElementById('s2CellFilledMenu').style.display='none';`);
+            menu.style.left    = e.clientX + 'px';
+            menu.style.top     = e.clientY + 'px';
+            menu.style.display = 'block';
+            setTimeout(() => document.addEventListener('click', () => { if (menu) menu.style.display = 'none'; }, { once: true }), 0);
+        }
+
+        async function s2SetCellFilled(gameId, position, filled) {
+            const val = filled ? 'FILLED' : null;
+            await supabaseClient.client.from('games').update({ [position]: val }).eq('id', parseInt(gameId));
+            const game = allGames.find(g => String(g.id) === String(gameId));
+            if (game) game.fields[position] = val;
+            renderGames();
         }
 
         function renderStandard2View(games) {
@@ -6356,9 +6397,9 @@
                 totalGames++;
                 const f   = g.fields;
                 const age = f['Age Group'] || '';
-                const cRef = resolveRefName(f['Center Referee']);
-                const ar1  = resolveRefName(f['AR 1']);
-                const ar2  = resolveRefName(f['AR 2']);
+                const cRef = f['Center Referee'] === 'FILLED' ? 'FILLED' : resolveRefName(f['Center Referee']);
+                const ar1  = f['AR 1'] === 'FILLED' ? 'FILLED' : resolveRefName(f['AR 1']);
+                const ar2  = f['AR 2'] === 'FILLED' ? 'FILLED' : resolveRefName(f['AR 2']);
                 const isU8 = (age || '').startsWith('U8');
                 const hideARs = isU8 || (hideU10Games && (age || '').startsWith('U10'));
                 const full = cRef && (hideARs || (ar1 && ar2));
@@ -6390,9 +6431,9 @@
                 const age  = f['Age Group'] || '';
                 const isCancelled = cancelledGameIds.has(g.id) || f['Game Status'] === 'Cancelled';
                 const isChangeReq = (f['Game Status'] || '') === 'Change Requested';
-                const cRef = resolveRefName(f['Center Referee']);
-                const ar1  = resolveRefName(f['AR 1']);
-                const ar2  = resolveRefName(f['AR 2']);
+                const cRef = f['Center Referee'] === 'FILLED' ? 'FILLED' : resolveRefName(f['Center Referee']);
+                const ar1  = f['AR 1'] === 'FILLED' ? 'FILLED' : resolveRefName(f['AR 1']);
+                const ar2  = f['AR 2'] === 'FILLED' ? 'FILLED' : resolveRefName(f['AR 2']);
                 const hideARs = (age || '').startsWith('U8') || (hideU10Games && (age || '').startsWith('U10'));
                 const full = !isCancelled && cRef && (hideARs || (ar1 && ar2));
                 const conf = caConfirmedMap[gid] || new Set();
