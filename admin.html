@@ -1583,6 +1583,52 @@
                             return;
                         }
 
+                        // ── Recreation Organizations ──────────────────────────
+                        if (clubName === 'RECREATION') {
+                            stat.innerHTML = `<div style="background:white; border:1px solid #dde3f0; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+                                <div style="background:#1e5f1e; padding:12px 18px; display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-size:0.85rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#fff;">Recreation Organizations</span>
+                                    <span style="font-size:0.72rem; background:rgba(255,255,255,0.15); color:#fff; padding:2px 10px; border-radius:12px; font-weight:700;">UNSANCTIONED</span>
+                                </div>
+                                <div id="recOrgList" style="padding:16px 18px;"><em style="color:#aaa; font-size:0.85rem;">Loading…</em></div>
+                            </div>`;
+                            supabaseClient.client.from('organizations').select('*').order('name').then(({ data }) => {
+                                const el = document.getElementById('recOrgList');
+                                if (!el) return;
+                                if (!data || !data.length) { el.innerHTML = '<em style="color:#aaa; font-size:0.85rem;">No organizations registered yet.</em>'; return; }
+                                el.innerHTML = data.map(org => `
+                                    <div style="border:1px solid #e8e8e8; border-radius:8px; margin-bottom:10px; overflow:hidden;">
+                                        <div style="background:#f4f6fa; padding:9px 14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                                            <span style="font-weight:800; color:#09142a; font-size:0.92rem;">${org.name}</span>
+                                            <span style="font-size:0.68rem; font-weight:800; padding:2px 9px; border-radius:10px; ${org.active ? 'background:#e8f9ef; color:#1a6b3a; border:1px solid #a8e6bf;' : 'background:#fff3cd; color:#856404; border:1px solid #ffc107;'}">${org.active ? '✅ Active' : '⏳ Pending Review'}</span>
+                                        </div>
+                                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); padding:10px 14px; gap:10px; font-size:0.82rem;">
+                                            <div>
+                                                <div style="font-size:0.62rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; font-weight:700; margin-bottom:3px;">Administrator</div>
+                                                <div style="font-weight:700; color:#1f2328;">${org.admin_name || '—'}</div>
+                                                ${org.phone ? `<div style="color:#555; margin-top:2px;">📞 ${org.phone}</div>` : ''}
+                                            </div>
+                                            <div>
+                                                <div style="font-size:0.62rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; font-weight:700; margin-bottom:3px;">Address</div>
+                                                <div style="color:#555;">${org.address || '—'}</div>
+                                            </div>
+                                            <div>
+                                                <div style="font-size:0.62rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; font-weight:700; margin-bottom:3px;">Pay Type</div>
+                                                <div style="font-weight:700; color:#1f2328;">${org.pay_type || '—'}</div>
+                                            </div>
+                                            <div>
+                                                <div style="font-size:0.62rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; font-weight:700; margin-bottom:3px;">Insurance</div>
+                                                <div style="font-weight:700; ${org.insurance_confirmed ? 'color:#1a6b3a;' : 'color:#b91c1c;'}">${org.insurance_confirmed ? '✅ Confirmed' : '❌ Not confirmed'}</div>
+                                            </div>
+                                        </div>
+                                        <div style="padding:8px 14px; border-top:1px solid #f0f0f0; background:#fafbfc; display:flex; gap:8px; flex-wrap:wrap;">
+                                            <button onclick="toggleOrgActive(${org.id}, ${org.active}, this)" style="font-size:0.75rem; font-weight:700; padding:4px 12px; border-radius:5px; cursor:pointer; border:1px solid ${org.active ? '#fecaca' : '#bbf7d0'}; background:${org.active ? '#fef2f2' : '#f0fdf4'}; color:${org.active ? '#b91c1c' : '#15803d'};">${org.active ? 'Suspend' : 'Activate'}</button>
+                                        </div>
+                                    </div>`).join('');
+                            });
+                            return;
+                        }
+
                         // ── Tournament entry ──────────────────────────────────
                         if (clubName === '__tourney_glastonbury') {
                             const glastRec = clubRecordByName['Glastonbury'];
@@ -2126,6 +2172,31 @@
                 </div>`;
             }).join('');
         }
+        async function toggleOrgActive(orgId, currentlyActive, btn) {
+            const newState = !currentlyActive;
+            btn.disabled = true;
+            const { error } = await supabaseClient.client
+                .from('organizations').update({ active: newState }).eq('id', orgId);
+            if (error) { alert('Error: ' + error.message); btn.disabled = false; return; }
+            btn.textContent = newState ? 'Suspend' : 'Activate';
+            btn.style.borderColor = newState ? '#fecaca' : '#bbf7d0';
+            btn.style.background  = newState ? '#fef2f2' : '#f0fdf4';
+            btn.style.color       = newState ? '#b91c1c' : '#15803d';
+            btn.onclick = () => toggleOrgActive(orgId, newState, btn);
+            btn.disabled = false;
+            // Update pending badge
+            const card = btn.closest('div[style*="border:1px solid"]');
+            if (card) {
+                const badge = card.querySelector('span[style*="border-radius:10px"]');
+                if (badge) {
+                    badge.textContent = newState ? '✅ Active' : '⏳ Pending Review';
+                    badge.style.background  = newState ? '#e8f9ef' : '#fff3cd';
+                    badge.style.color       = newState ? '#1a6b3a' : '#856404';
+                    badge.style.borderColor = newState ? '#a8e6bf' : '#ffc107';
+                }
+            }
+        }
+
     </script>
 </body>
 </html>
