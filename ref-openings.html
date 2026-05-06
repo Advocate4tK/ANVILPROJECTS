@@ -300,6 +300,8 @@
         .badge-rhm  { background: #3e1e5f; color: #d8b4fe; }
         .badge-leb  { background: #5f3e1e; color: #fcd34d; }
         .badge-def  { background: #334155; color: #94a3b8; }
+        .badge-rec  { background: #1e5f1e; color: #86efac; }
+        .badge-unsanctioned { background: #78350f; color: #fcd34d; font-size: 0.58rem; padding: 1px 6px; }
 
         /* ── Venue line ── */
         .game-venue {
@@ -477,6 +479,7 @@
 
     let CLUBS = ['Griswold', 'East Haddam']; // overridden by settings table on load
     let _formConfig   = {};
+    let _recOrgs      = []; // active recreation orgs from settings
 
     let _allOpenGames = [];
     let _weekFilter   = 'this';
@@ -524,6 +527,7 @@
         'East Haddam':  { cls: 'badge-eh',  label: 'East Haddam' },
         'RHAMYS':       { cls: 'badge-rhm', label: 'RHAMYS' },
         'Lebanon':      { cls: 'badge-leb', label: 'Lebanon' },
+        'RECREATION':   { cls: 'badge-rec', label: 'Recreation' },
     };
 
     let venueMap = {};
@@ -614,12 +618,18 @@
                 </div>
                </div>`;
 
+        const isRec     = club === 'RECREATION';
+        const org       = g.organization || '';
+        const payType   = g.pay_type || '';
         const gameDesc  = `${home} vs ${away} (${age}) — ${formatDate(g.date || '')}${time ? ' @ ' + time : ''}`;
         const noteParam = encodeURIComponent(`Interested in ${gameDesc}`);
         const formCfg   = _formConfig[club] || {};
-        const availUrl  = (formCfg.formType === 'jotform' && formCfg.jotformUrl)
-            ? formCfg.jotformUrl
-            : `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}`;
+        const availUrl  = isRec
+            ? `recreation-portal.html`
+            : (formCfg.formType === 'jotform' && formCfg.jotformUrl)
+                ? formCfg.jotformUrl
+                : `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}`;
+        const availLabel = isRec ? '👉 Contact Your Assignor to Work This Game' : '👉 Click Here to Submit Your Availability for This Game';
 
         return `<div class="game-card">
             <div class="game-card-header">
@@ -627,13 +637,16 @@
                 <span class="game-teams">${home} vs ${away}</span>
                 <span class="game-meta-line">${time}</span>
                 ${age ? `<span class="badge badge-age">${age}</span>` : ''}
+                ${isRec && org ? `<span class="badge badge-def" style="font-size:0.6rem;">${org}</span>` : ''}
                 <span class="badge ${badgeInfo.cls}">${badgeInfo.label}</span>
+                ${isRec ? `<span class="badge badge-unsanctioned">Unsanctioned</span>` : ''}
                 <span class="badge badge-open">${openCount} Open</span>
             </div>
             <div class="game-card-body">
                 ${venue ? `<div class="game-venue">${venue}</div>` : ''}
                 ${slotsHtml}
-                <a class="avail-link" href="${availUrl}">Click Here to Submit Your Availability for This Game</a>
+                ${isRec && payType ? `<div style="padding:6px 14px; background:#fffbeb; border-top:1px solid #fef3c7; font-size:0.75rem; color:#92400e;"><strong>Payment:</strong> ${payType}</div>` : ''}
+                <a class="avail-link" href="${availUrl}" ${isRec ? 'style="background:#1d4ed8;"' : ''}>${availLabel}</a>
             </div>
         </div>`;
     }
@@ -684,24 +697,28 @@
             const _now = new Date();
             const today = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0') + '-' + String(_now.getDate()).padStart(2,'0');
 
-            // Fetch active clubs + per-club form routing from settings
-            const [settingRes, formConfigRes] = await Promise.all([
+            // Fetch active clubs + per-club form routing + rec orgs from settings
+            const [settingRes, formConfigRes, recOrgsRes] = await Promise.all([
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
-                supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle()
+                supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
+                supabaseClient.client.from('settings').select('value').eq('key', 'openings_recreation_orgs').maybeSingle()
             ]);
             if (settingRes.data?.value) {
                 try { CLUBS = JSON.parse(settingRes.data.value); } catch(e) {}
             }
             try { _formConfig = JSON.parse(formConfigRes.data?.value || '{}'); } catch(e) { _formConfig = {}; }
+            try { _recOrgs    = JSON.parse(recOrgsRes.data?.value    || '[]'); } catch(e) { _recOrgs = []; }
 
-            // Build club filter buttons from live CLUBS list
+            // Build club filter buttons — include Recreation tab if any rec orgs are active
+            const allFilterClubs = [...CLUBS, ...(_recOrgs.length ? ['RECREATION'] : [])];
             const clubGroup = document.getElementById('clubFilterGroup');
             const savedClub = _clubFilter;
             clubGroup.innerHTML = `<button class="filter-btn" onclick="setClubFilter('all', this)">All Clubs</button>` +
-                CLUBS.map(c => `<button class="filter-btn" onclick="setClubFilter('${c}', this)">${c}</button>`).join('');
-            _clubFilter = (savedClub === 'all' || CLUBS.includes(savedClub)) ? savedClub : 'all';
+                CLUBS.map(c => `<button class="filter-btn" onclick="setClubFilter('${c}', this)">${c}</button>`).join('') +
+                (_recOrgs.length ? `<button class="filter-btn" onclick="setClubFilter('RECREATION', this)">Recreation</button>` : '');
+            _clubFilter = (savedClub === 'all' || allFilterClubs.includes(savedClub)) ? savedClub : 'all';
             clubGroup.querySelectorAll('.filter-btn').forEach(b => {
-                if ((b.textContent === 'All Clubs' && _clubFilter === 'all') || b.textContent === _clubFilter) b.classList.add('active');
+                if ((b.textContent === 'All Clubs' && _clubFilter === 'all') || b.textContent === _clubFilter || (b.textContent === 'Recreation' && _clubFilter === 'RECREATION')) b.classList.add('active');
             });
 
             const [venueRes, ...clubResults] = await Promise.all([
@@ -714,7 +731,17 @@
                         .gte('date', today)
                         .order('date', { ascending: true })
                         .limit(500)
-                )
+                ),
+                ...(_recOrgs.length ? [
+                    supabaseClient.client
+                        .from('games')
+                        .select('*')
+                        .eq('Source Club', 'RECREATION')
+                        .in('organization', _recOrgs)
+                        .gte('date', today)
+                        .order('date', { ascending: true })
+                        .limit(500)
+                ] : [])
             ]);
 
             // Build venue lookup

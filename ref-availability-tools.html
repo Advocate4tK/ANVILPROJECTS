@@ -105,6 +105,19 @@
             </div>
         </div>
 
+        <!-- Recreation Organizations -->
+        <div class="tool-card">
+            <h2>Recreation Organizations</h2>
+            <p style="margin-bottom:14px;">Select which recreation organizations appear on the public openings board under the Recreation tab.</p>
+            <div class="club-check-list" id="recOrgChecks">
+                <p style="color:#aaa; font-size:0.85rem;">Loading…</p>
+            </div>
+            <div style="display:flex; align-items:center;">
+                <button class="btn btn-secondary" onclick="saveRecOrgs()">Save</button>
+                <span class="save-msg" id="recSaveMsg">✓ Saved</span>
+            </div>
+        </div>
+
     </main>
 </div>
 
@@ -189,7 +202,41 @@
         setTimeout(() => msg.style.display = 'none', 2000);
     }
 
-    window.addEventListener('load', () => { loadOpeningsClubs(); });
+    async function loadRecOrgs() {
+        const [orgsRes, activeRes] = await Promise.all([
+            supabaseClient.client.from('organizations').select('id, name, active').order('name'),
+            supabaseClient.client.from('settings').select('value').eq('key', 'openings_recreation_orgs').maybeSingle()
+        ]);
+        const orgs = orgsRes.data || [];
+        let activeOrgs = [];
+        try { activeOrgs = JSON.parse(activeRes.data?.value || '[]'); } catch(e) {}
+
+        const wrap = document.getElementById('recOrgChecks');
+        if (!orgs.length) {
+            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No organizations registered yet.</p>';
+            return;
+        }
+        wrap.innerHTML = orgs.map(org => `
+            <div class="club-row">
+                <label class="club-main-row">
+                    <input type="checkbox" value="${org.name}" ${activeOrgs.includes(org.name) ? 'checked' : ''}>
+                    ${org.name}
+                    ${org.active ? '' : '<span style="font-size:0.7rem; color:#e67e22; margin-left:6px;">(pending review)</span>'}
+                </label>
+            </div>`).join('');
+    }
+
+    async function saveRecOrgs() {
+        const checks = document.querySelectorAll('#recOrgChecks input[type=checkbox]');
+        const selected = [...checks].filter(c => c.checked).map(c => c.value);
+        await supabaseClient.client.from('settings')
+            .update({ value: JSON.stringify(selected) }).eq('key', 'openings_recreation_orgs');
+        const msg = document.getElementById('recSaveMsg');
+        msg.style.display = 'inline';
+        setTimeout(() => msg.style.display = 'none', 2000);
+    }
+
+    window.addEventListener('load', () => { loadOpeningsClubs(); loadRecOrgs(); });
 </script>
 </body>
 </html>
