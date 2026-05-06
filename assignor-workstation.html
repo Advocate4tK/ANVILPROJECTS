@@ -4992,6 +4992,22 @@
             arrow.textContent = open ? '▸' : '▾';
         }
 
+        function getOpeningsWeekParam(gameDates) {
+            const now = new Date();
+            const dow = now.getDay();
+            const mon = new Date(now); mon.setDate(now.getDate() - dow + (dow === 0 ? -6 : 1));
+            const thisFrom = mon.toISOString().split('T')[0];
+            const nextMon  = new Date(mon); nextMon.setDate(mon.getDate() + 7);
+            const nextFrom = nextMon.toISOString().split('T')[0];
+            const nextSun  = new Date(nextMon); nextSun.setDate(nextMon.getDate() + 6);
+            const nextTo   = nextSun.toISOString().split('T')[0];
+            const first = [...gameDates].filter(Boolean).sort()[0];
+            if (!first) return 'all';
+            if (first >= nextFrom && first <= nextTo) return 'next';
+            if (first >= thisFrom && first < nextFrom) return 'this';
+            return 'all';
+        }
+
         async function generateEmailBody() {
             if (!allGames.length) { alert('Load games first.'); return; }
 
@@ -5102,8 +5118,9 @@
                     return `${club}\n${dateBlocks}`;
                 }).filter(Boolean);
 
+                const multiWeekParam = getOpeningsWeekParam(openGames.map(g => g.fields['Date']));
                 document.getElementById('emailBodyText').value =
-                    `Week [#] — ${clubList}\n\nWe have multiple openings.  LMK if you wanna work!\n\n${clubSections.join('\n\n\n')}\n\nhttps://referee-tool.com/ref-openings.html\n\n${sig}`;
+                    `Week [#] — ${clubList}\n\nWe have multiple openings.  LMK if you wanna work!\n\n${clubSections.join('\n\n\n')}\n\nhttps://referee-tool.com/ref-openings.html?week=${multiWeekParam}\n\n${sig}`;
 
             } else {
                 // Single-club format: full email with pay rates and form link
@@ -5144,7 +5161,8 @@
                     const sigPhone = currentAssignor?.phone || '';
                     const sig = [sigName, sigEmail, sigPhone].filter(Boolean).join('\n');
                     const gameDates = [...new Set(games.map(g => g.fields['Date']).filter(Boolean))].sort().join(',');
-                    const formLink = `https://referee-tool.com/referee-availability-form.html?dates=${gameDates}&club=${encodeURIComponent(club)}`;
+                    const weekParam = getOpeningsWeekParam(games.map(g => g.fields['Date']));
+                    const openingsLink = `https://referee-tool.com/ref-openings.html?club=${encodeURIComponent(club)}&week=${weekParam}`;
 
                     // Calculate week number from first game of season for this club
                     let weekNum = '';
@@ -5158,7 +5176,7 @@
                     }
                     const weekLabel2 = weekNum ? `Week ${weekNum}` : 'Week [#]';
 
-                    blocks.push(`${weekLabel2}  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${formLink}\n\nFor moment-by-moment updates on open games:\nhttps://referee-tool.com/ref-openings.html\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
+                    blocks.push(`${weekLabel2}  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${openingsLink}\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
                 }
                 document.getElementById('emailBodyText').value = blocks.join('\n\n' + '─'.repeat(60) + '\n\n');
             }
