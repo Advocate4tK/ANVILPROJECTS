@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Organizations — Referee Tool</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            background-color: #060e20 !important;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            ) !important;
+        }
+
+        .org-card {
+            background: white; border-radius: 12px; margin-bottom: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.07); overflow: hidden;
+        }
+        .org-header {
+            background: #09142a; padding: 13px 20px;
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+        }
+        .org-name {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.15rem; font-weight: 800; color: #fff;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .badge-active   { background: #e8f9ef; color: #1a6b3a; border: 1px solid #a8e6bf; border-radius: 10px; font-size: 0.7rem; font-weight: 800; padding: 2px 10px; }
+        .badge-pending  { background: #fff3cd; color: #856404; border: 1px solid #ffc107; border-radius: 10px; font-size: 0.7rem; font-weight: 800; padding: 2px 10px; }
+
+        .org-body {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 0; border-bottom: 1px solid #edf0f7;
+        }
+        .org-cell {
+            padding: 14px 18px; border-right: 1px solid #edf0f7;
+        }
+        .org-cell:last-child { border-right: none; }
+        .org-cell-label {
+            font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.8px;
+            color: #888; font-weight: 700; margin-bottom: 4px;
+        }
+        .org-cell-value { font-weight: 700; color: #1f2328; font-size: 0.88rem; }
+        .org-cell-sub   { font-size: 0.78rem; color: #555; margin-top: 2px; }
+
+        .org-footer {
+            padding: 12px 18px; background: #fafbfd;
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+        }
+
+        .btn-activate { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; border-radius: 6px; padding: 5px 14px; font-size: 0.78rem; font-weight: 700; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+        .btn-suspend  { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 6px; padding: 5px 14px; font-size: 0.78rem; font-weight: 700; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+
+        .insurance-check {
+            display: flex; align-items: center; gap: 7px;
+            font-size: 0.8rem; font-weight: 600; color: #444;
+            font-family: 'DM Sans', sans-serif; cursor: pointer;
+        }
+        .insurance-check input { accent-color: #09142a; cursor: pointer; width: 16px; height: 16px; }
+
+        .openings-check {
+            display: flex; align-items: center; gap: 7px;
+            font-size: 0.8rem; font-weight: 600; color: #444;
+            font-family: 'DM Sans', sans-serif; cursor: pointer;
+            margin-left: auto;
+        }
+        .openings-check input { accent-color: #1e5f1e; cursor: pointer; width: 16px; height: 16px; }
+
+        .empty-state { text-align: center; padding: 60px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; }
+        .loading-state { text-align: center; padding: 60px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; }
+
+        .save-flash { display: none; font-size: 0.78rem; color: #1a6b3a; font-weight: 700; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>🏃 Manage Organizations</h1>
+        <p class="subtitle">Recreation departments and unaffiliated groups — insurance, activation, openings board</p>
+    </header>
+
+    <main>
+        <div style="margin-bottom:20px;">
+            <a href="manage-clubs.html" class="btn-back">← Back to Manage Clubs</a>
+        </div>
+
+        <div id="orgList">
+            <div class="loading-state">Loading organizations…</div>
+        </div>
+    </main>
+</div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-client.js?v=12"></script>
+<script src="js/admin-auth.js"></script>
+<script>
+
+    let _openingsOrgs = [];
+
+    async function loadPage() {
+        const [orgsRes, settingsRes] = await Promise.all([
+            supabaseClient.client.from('organizations').select('*').order('name'),
+            supabaseClient.client.from('settings').select('value').eq('key', 'openings_recreation_orgs').maybeSingle()
+        ]);
+        try { _openingsOrgs = JSON.parse(settingsRes.data?.value || '[]'); } catch(e) { _openingsOrgs = []; }
+
+        const orgs = orgsRes.data || [];
+        const el   = document.getElementById('orgList');
+
+        if (!orgs.length) {
+            el.innerHTML = '<div class="empty-state">No organizations registered yet.</div>';
+            return;
+        }
+
+        el.innerHTML = orgs.map(org => renderOrgCard(org)).join('');
+    }
+
+    function renderOrgCard(org) {
+        const onOpenings = _openingsOrgs.includes(org.name);
+        const addr = [org.address, org.city, org.state, org.zip].filter(Boolean).join(', ');
+        return `<div class="org-card" id="orgcard-${org.id}">
+            <div class="org-header">
+                <span class="org-name">${org.name}</span>
+                <span class="${org.active ? 'badge-active' : 'badge-pending'}" id="badge-${org.id}">${org.active ? '✅ Active' : '⏳ Pending'}</span>
+            </div>
+            <div class="org-body">
+                <div class="org-cell">
+                    <div class="org-cell-label">Administrator</div>
+                    <div class="org-cell-value">${org.admin_name || '—'}</div>
+                    ${org.phone ? `<div class="org-cell-sub">📞 ${org.phone}</div>` : ''}
+                </div>
+                <div class="org-cell">
+                    <div class="org-cell-label">Address</div>
+                    <div class="org-cell-value" style="font-size:0.82rem; font-weight:400; color:#555;">${addr || '—'}</div>
+                </div>
+                <div class="org-cell">
+                    <div class="org-cell-label">Pay Type</div>
+                    <div class="org-cell-value">${org.pay_type || '—'}</div>
+                </div>
+                <div class="org-cell">
+                    <div class="org-cell-label">Games Submitted</div>
+                    <div class="org-cell-value" id="gamecount-${org.id}">—</div>
+                </div>
+            </div>
+            <div class="org-footer">
+                <label class="insurance-check">
+                    <input type="checkbox" ${org.insurance_confirmed ? 'checked' : ''} onchange="saveInsurance(${org.id}, this.checked)">
+                    Insurance on file
+                </label>
+                <span class="save-flash" id="insflash-${org.id}">✓ Saved</span>
+
+                ${org.active
+                    ? `<button class="btn-suspend" onclick="toggleActive(${org.id}, true, this)">Suspend</button>`
+                    : `<button class="btn-activate" onclick="toggleActive(${org.id}, false, this)">Activate</button>`}
+
+                <label class="openings-check">
+                    <input type="checkbox" ${onOpenings ? 'checked' : ''} onchange="saveOpenings('${org.name}', this.checked)">
+                    Show on Openings Board
+                </label>
+                <span class="save-flash" id="openflash-${org.id}">✓ Saved</span>
+            </div>
+        </div>`;
+    }
+
+    async function saveInsurance(orgId, checked) {
+        await supabaseClient.client.from('organizations').update({ insurance_confirmed: checked }).eq('id', orgId);
+        const flash = document.getElementById('insflash-' + orgId);
+        flash.style.display = 'inline'; setTimeout(() => flash.style.display = 'none', 2000);
+    }
+
+    async function toggleActive(orgId, currentlyActive, btn) {
+        const newState = !currentlyActive;
+        btn.disabled = true;
+        await supabaseClient.client.from('organizations').update({ active: newState }).eq('id', orgId);
+        const badge = document.getElementById('badge-' + orgId);
+        if (badge) { badge.className = newState ? 'badge-active' : 'badge-pending'; badge.textContent = newState ? '✅ Active' : '⏳ Pending'; }
+        btn.outerHTML = newState
+            ? `<button class="btn-suspend" onclick="toggleActive(${orgId}, true, this)">Suspend</button>`
+            : `<button class="btn-activate" onclick="toggleActive(${orgId}, false, this)">Activate</button>`;
+    }
+
+    async function saveOpenings(orgName, checked) {
+        if (checked && !_openingsOrgs.includes(orgName)) _openingsOrgs.push(orgName);
+        if (!checked) _openingsOrgs = _openingsOrgs.filter(n => n !== orgName);
+        await supabaseClient.client.from('settings').update({ value: JSON.stringify(_openingsOrgs) }).eq('key', 'openings_recreation_orgs');
+        // find org id for flash
+        const cards = document.querySelectorAll('[id^="orgcard-"]');
+        cards.forEach(card => {
+            const nameEl = card.querySelector('.org-name');
+            if (nameEl && nameEl.textContent.trim() === orgName) {
+                const id = card.id.replace('orgcard-','');
+                const flash = document.getElementById('openflash-' + id);
+                if (flash) { flash.style.display = 'inline'; setTimeout(() => flash.style.display = 'none', 2000); }
+            }
+        });
+    }
+
+    async function loadGameCounts() {
+        const { data } = await supabaseClient.client
+            .from('games').select('organization').eq('Source Club', 'RECREATION');
+        if (!data) return;
+        const counts = {};
+        data.forEach(g => { if (g.organization) counts[g.organization] = (counts[g.organization] || 0) + 1; });
+        Object.entries(counts).forEach(([name, count]) => {
+            document.querySelectorAll('.org-name').forEach(el => {
+                if (el.textContent.trim() === name) {
+                    const card = el.closest('.org-card');
+                    if (card) { const gc = card.querySelector('[id^="gamecount-"]'); if (gc) gc.textContent = count; }
+                }
+            });
+        });
+    }
+
+    window.addEventListener('load', async () => {
+        await loadPage();
+        loadGameCounts();
+    });
+</script>
+</body>
+</html>
