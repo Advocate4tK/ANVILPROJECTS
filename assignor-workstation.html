@@ -1855,7 +1855,8 @@
             const gameRowsHtml = allFilteredGames.length ? allFilteredGames.map((g, i) => {
                 const f        = g.fields;
                 const gid      = String(g.id);
-                const rowBg    = i % 2 === 0 ? '#ffffff' : '#f6f8fa';
+                const isFilledGame = (f['Game Status'] || '') === 'Filled';
+                const rowBg    = isFilledGame ? '#fff8e1' : (i % 2 === 0 ? '#ffffff' : '#f6f8fa');
                 const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                 const fieldObj = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
                 const cRefRaw  = resolveRefName(f['Center Referee']) || '—';
@@ -1870,7 +1871,7 @@
                     const storedBg  = sheet2OptColors[`assigned-${gid}-${field}`] || '';
                     const bg        = hasRef ? (storedBg || '#e8f5e9') : '#fffde7';
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet2AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
-                    const ctx       = hasRef ? `oncontextmenu="sheet2ShowAssignedMenu(event,'${gid}','${field}'); return false;"` : '';
+                    const ctx       = hasRef ? `oncontextmenu="sheet2ShowAssignedMenu(event,'${gid}','${field}'); event.stopPropagation(); return false;"` : '';
                     return `<td id="s2${field}-${gid}" style="${cell} min-width:120px; cursor:${hasRef?'grab':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
@@ -1881,7 +1882,7 @@
                     const bg   = sheet2OptColors[`${gid}-${n}`] || rowBg;
                     const col  = name ? '#1f2328' : '#bbb';
                     const drag = name ? `draggable="true" ondragstart="sheet2OptDragStart(event,'${gid}',${n},'${name.replace(/'/g,"\\'")}')"` : '';
-                    const ctx  = name ? `oncontextmenu="sheet2ShowOptMenu(event,'${gid}',${n}); return false;"` : '';
+                    const ctx  = name ? `oncontextmenu="sheet2ShowOptMenu(event,'${gid}',${n}); event.stopPropagation(); return false;"` : '';
                     return `<td id="s2opt-${gid}-${n}" style="border:1px solid #d0d7de; padding:4px 8px; font-size:0.78rem; min-width:140px; white-space:nowrap; background:${bg}; color:${col}; cursor:${name?'grab':'default'};"
                         ${drag} ${ctx}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
@@ -1891,7 +1892,7 @@
                 const fmtGameTime = t => { if (!t) return '—'; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
                 const fmtGameDate = d => { if (!d) return '—'; const [,m,day] = d.split('-'); const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]; return `${mo} ${parseInt(day)}`; };
                 const colRenderers = {
-                    date:     () => `<td style="${cell}">${fmtGameDate(f['Date'])}</td>`,
+                    date:     () => `<td style="${cell}">${fmtGameDate(f['Date'])}${isFilledGame ? ' <span style="font-size:0.65rem;background:#ef6c00;color:#fff;border-radius:3px;padding:1px 5px;font-weight:700;margin-left:4px;letter-spacing:0.03em;">FILLED</span>' : ''}</td>`,
                     time:     () => `<td style="${cell}">${fmtGameTime(f['Time'])}</td>`,
                     club:     () => `<td style="${cell}">${f['Source Club'] || '—'}</td>`,
                     ageGroup: () => `<td style="${cell}">${f['Age Group'] || '—'}</td>`,
@@ -1906,7 +1907,7 @@
                     opt0: () => optTd(0), opt1: () => optTd(1), opt2: () => optTd(2),
                     opt3: () => optTd(3), opt4: () => optTd(4), opt5: () => optTd(5),
                 };
-                return `<tr style="background:${rowBg};">${sheet2ColOrder.map(k => colRenderers[k]()).join('')}</tr>`;
+                return `<tr id="s2row-${gid}" style="background:${rowBg};" oncontextmenu="sheet2ShowGameMenu(event,'${gid}'); return false;">${sheet2ColOrder.map(k => colRenderers[k]()).join('')}</tr>`;
             }).join('') : `<tr><td colspan="${sheet2ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
             const thDrag = 'cursor:grab; user-select:none;';
@@ -2208,6 +2209,36 @@
         function sheet2HideOptMenu() {
             const menu = document.getElementById('s2ContextMenu');
             if (menu) menu.style.display = 'none';
+        }
+
+        function sheet2ShowGameMenu(e, gid) {
+            e.preventDefault();
+            const game = allGames.find(g => String(g.id) === String(gid));
+            if (!game) return;
+            const filled = (game.fields['Game Status'] || '') === 'Filled';
+            let menu = document.getElementById('s2GameMenu');
+            if (!menu) {
+                menu = document.createElement('div');
+                menu.id = 's2GameMenu';
+                menu.style.cssText = 'position:fixed; background:#fff; border:1px solid #d0d7de; border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.15); z-index:9999; min-width:160px; padding:4px 0; font-family:"DM Sans",sans-serif; font-size:0.82rem;';
+                document.body.appendChild(menu);
+            }
+            const item = (label, fn) => `<div style="padding:8px 16px; cursor:pointer;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''" onclick="${fn}">${label}</div>`;
+            menu.innerHTML = filled
+                ? item('✅ Unmark as Filled', `sheet2SetGameFilled('${gid}', false); document.getElementById('s2GameMenu').style.display='none';`)
+                : item('🔒 Mark as Filled',   `sheet2SetGameFilled('${gid}', true);  document.getElementById('s2GameMenu').style.display='none';`);
+            menu.style.left    = e.clientX + 'px';
+            menu.style.top     = e.clientY + 'px';
+            menu.style.display = 'block';
+            setTimeout(() => document.addEventListener('click', () => { if (menu) menu.style.display = 'none'; }, { once: true }), 0);
+        }
+
+        async function sheet2SetGameFilled(gid, filled) {
+            const newStatus = filled ? 'Filled' : '';
+            await supabaseClient.client.from('games').update({ 'Game Status': newStatus }).eq('id', parseInt(gid));
+            const game = allGames.find(g => String(g.id) === String(gid));
+            if (game) game.fields['Game Status'] = newStatus;
+            renderSheet2View(sheet2LastFiltered);
         }
 
         function sheet2ShowAssignedMenu(e, gid, field) {
@@ -2980,23 +3011,32 @@
                 const venueObj    = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                 const fieldObj = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
                 const isU8     = (f['Age Group'] || '').startsWith('U8');
-                const cRefRaw  = resolveRefName(f['Center Referee']) || '—';
-                const ar1Raw   = resolveRefName(f['AR 1']) || '—';
-                const ar2Raw   = resolveRefName(f['AR 2']) || '—';
+                const cRefRaw  = f['Center Referee'] === 'FILLED' ? 'FILLED' : (resolveRefName(f['Center Referee']) || '—');
+                const ar1Raw   = f['AR 1'] === 'FILLED' ? 'FILLED' : (resolveRefName(f['AR 1']) || '—');
+                const ar2Raw   = f['AR 2'] === 'FILLED' ? 'FILLED' : (resolveRefName(f['AR 2']) || '—');
                 const cleared  = sheet3ClearedAssigned[gid] || {};
                 const staged   = sheet3StagedRefs[gid] || [null,null,null,null,null,null];
                 const assignedTd = (field, rawName) => {
-                    const isCleared = !!cleared[field];
-                    const hasRef    = rawName !== '—' && !isCleared;
-                    const display   = isCleared ? '—' : rawName;
+                    const isFil     = rawName === 'FILLED';
+                    const isCleared = !isFil && !!cleared[field];
+                    const hasRef    = !isFil && rawName !== '—' && !isCleared;
+                    const display   = isFil
+                        ? '<span style="font-size:0.72rem;background:#1565c0;color:#fff;border-radius:3px;padding:1px 6px;font-weight:700;letter-spacing:0.03em;">Filled</span>'
+                        : (isCleared ? '—' : rawName);
                     const storedBg  = sheet3OptColors[`assigned-${gid}-${field}`] || '';
-                    const bg        = hasRef ? (storedBg || '#e8f5e9') : '#fffde7';
+                    const bg        = isFil ? '#e3f2fd' : (hasRef ? (storedBg || '#e8f5e9') : '#fffde7');
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet3AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
-                    const ctx       = hasRef ? `oncontextmenu="sheet3ShowAssignedMenu(event,'${gid}','${field}'); return false;"` : '';
+                    const gcols     = { center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' };
+                    const gcol      = gcols[field] || field;
+                    const ctx       = isFil
+                        ? `oncontextmenu="sheet3ShowCellFilledMenu(event,'${gid}','${gcol}',true); return false;"`
+                        : (hasRef
+                            ? `oncontextmenu="sheet3ShowAssignedMenu(event,'${gid}','${field}'); event.stopPropagation(); return false;"`
+                            : `oncontextmenu="sheet3ShowCellFilledMenu(event,'${gid}','${gcol}',false); return false;"`);
                     const badge     = hasRef ? refCountBadge(rawName) : '';
                     const hoverIn  = hasRef ? `onmouseenter="showRefTooltip('${display.replace(/'/g,"\\'")}', this, event)"` : '';
                     const hoverOut = hasRef ? `onmouseleave="hideRefTooltip()"` : '';
-                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${hasRef?'grab':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut}
+                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${(hasRef||isFil)?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
                         ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}</td>`;
@@ -3897,6 +3937,35 @@
             menu.style.top     = e.clientY + 'px';
             menu.style.display = 'block';
             setTimeout(() => document.addEventListener('click', sheet3HideOptMenu, { once: true }), 0);
+        }
+
+        function sheet3ShowCellFilledMenu(e, gid, gameCol, alreadyFilled) {
+            e.preventDefault();
+            e.stopPropagation();
+            let menu = document.getElementById('s3CellFilledMenu');
+            if (!menu) {
+                menu = document.createElement('div');
+                menu.id = 's3CellFilledMenu';
+                menu.style.cssText = 'position:fixed; background:#fff; border:1px solid #d0d7de; border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.15); z-index:9999; min-width:160px; padding:4px 0; font-family:"DM Sans",sans-serif; font-size:0.82rem;';
+                document.body.appendChild(menu);
+            }
+            const item = (label, fn) => `<div style="padding:8px 16px; cursor:pointer;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''" onclick="${fn}">${label}</div>`;
+            const safeCol = gameCol.replace(/'/g, "\\'");
+            menu.innerHTML = alreadyFilled
+                ? item('✅ Unmark as Filled', `sheet3SetCellFilled('${gid}','${safeCol}',false); document.getElementById('s3CellFilledMenu').style.display='none';`)
+                : item('🔒 Mark as Filled',   `sheet3SetCellFilled('${gid}','${safeCol}',true);  document.getElementById('s3CellFilledMenu').style.display='none';`);
+            menu.style.left    = e.clientX + 'px';
+            menu.style.top     = e.clientY + 'px';
+            menu.style.display = 'block';
+            setTimeout(() => document.addEventListener('click', () => { if (menu) menu.style.display = 'none'; }, { once: true }), 0);
+        }
+
+        async function sheet3SetCellFilled(gid, gameCol, filled) {
+            const val = filled ? 'FILLED' : null;
+            await supabaseClient.client.from('games').update({ [gameCol]: val }).eq('id', parseInt(gid));
+            const game = allGames.find(g => String(g.id) === String(gid));
+            if (game) game.fields[gameCol] = val;
+            renderGames();
         }
 
         function sheet3ShowGameMenu(e, gid) {
