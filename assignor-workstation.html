@@ -2638,6 +2638,8 @@
             arr.forEach((refName, slot) => {
                 if (slot >= insertSlot) sheet3UpsertSlot(gid, slot, refName);
             });
+            // Keep max queue length in sync
+            sheet3MaxQueueLen = Math.max(sheet3MaxQueueLen, arr.filter(Boolean).length);
         }
 
         function sheet3OptRoleBadge(gid, slot) {
@@ -3702,10 +3704,17 @@
             if (!sheet3StagedRefs[toGid]) sheet3StagedRefs[toGid] = [];
             // Block duplicate: ref already in OPT queue or an assigned slot for this game
             if (type === 'ref') {
-                const alreadyInQueue = (sheet3StagedRefs[toGid] || []).includes(name);
-                const alreadyAssigned = ['center','ar1','ar2'].some(f => {
-                    const td = document.getElementById(`s3${f}-${toGid}`);
-                    return td && td.textContent.trim() === name;
+                const nameLc = name.trim().toLowerCase();
+                const alreadyInQueue = (sheet3StagedRefs[toGid] || []).some(n => n && n.trim().toLowerCase() === nameLc);
+                const cleared = sheet3ClearedAssigned[toGid] || {};
+                const game = allGames.find(g => String(g.id) === String(toGid));
+                const alreadyAssigned = game && ['center','ar1','ar2'].some(f => {
+                    if (cleared[f]) return false;
+                    const pos = { center:'Center Referee', ar1:'AR 1', ar2:'AR 2' }[f];
+                    const raw = game.fields[pos];
+                    if (!raw || raw === 'FILLED') return false;
+                    const resolved = resolveRefName(raw);
+                    return resolved && resolved.trim().toLowerCase() === nameLc;
                 });
                 if (alreadyInQueue || alreadyAssigned) {
                     const td = document.getElementById(`s3opt-${toGid}-${toSlot}`);
