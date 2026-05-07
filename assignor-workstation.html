@@ -2606,6 +2606,40 @@
             return promises;
         }
 
+        function sheet3InsertQueue(gid, insertSlot, name) {
+            const arr = sheet3StagedRefs[gid] || [];
+            arr.splice(insertSlot, 0, name);
+            sheet3StagedRefs[gid] = arr;
+            sheet3CacheStagedRefs();
+            // Slide roles right for all slots >= insertSlot
+            const newRoles = {};
+            Object.keys(sheet3OptRoles).forEach(key => {
+                const lastDash = key.lastIndexOf('-');
+                const keyGid   = key.slice(0, lastDash);
+                const slotNum  = parseInt(key.slice(lastDash + 1));
+                if (keyGid !== String(gid)) { newRoles[key] = sheet3OptRoles[key]; return; }
+                if (slotNum < insertSlot) newRoles[key] = sheet3OptRoles[key];
+                else newRoles[`${gid}-${slotNum + 1}`] = sheet3OptRoles[key];
+            });
+            sheet3OptRoles = newRoles;
+            // Slide colors right for all slots >= insertSlot
+            const newColors = {};
+            Object.keys(sheet3OptColors).forEach(key => {
+                if (key.startsWith('assigned-')) { newColors[key] = sheet3OptColors[key]; return; }
+                const lastDash = key.lastIndexOf('-');
+                const keyGid   = key.slice(0, lastDash);
+                const slotNum  = parseInt(key.slice(lastDash + 1));
+                if (keyGid !== String(gid)) { newColors[key] = sheet3OptColors[key]; return; }
+                if (slotNum < insertSlot) newColors[key] = sheet3OptColors[key];
+                else newColors[`${gid}-${slotNum + 1}`] = sheet3OptColors[key];
+            });
+            sheet3OptColors = newColors;
+            // Upsert all slots from insertSlot onward
+            arr.forEach((refName, slot) => {
+                if (slot >= insertSlot) sheet3UpsertSlot(gid, slot, refName);
+            });
+        }
+
         function sheet3OptRoleBadge(gid, slot) {
             const role = sheet3OptRoles[`${gid}-${slot}`];
             if (!role) return '';
@@ -3667,9 +3701,14 @@
             sheet3DragData = null;
             if (!sheet3StagedRefs[toGid]) sheet3StagedRefs[toGid] = [];
             if (type === 'ref') {
-                sheet3StagedRefs[toGid][toSlot] = name;
-                sheet3UpdateCell(toGid, toSlot, name);
-                sheet3UpsertSlot(toGid, toSlot, name);
+                if (sheet3StagedRefs[toGid][toSlot]) {
+                    sheet3InsertQueue(toGid, toSlot, name);
+                    renderGames();
+                } else {
+                    sheet3StagedRefs[toGid][toSlot] = name;
+                    sheet3UpdateCell(toGid, toSlot, name);
+                    sheet3UpsertSlot(toGid, toSlot, name);
+                }
             } else if (type === 'opt') {
                 const fromArr   = sheet3StagedRefs[fromGid] || [null,null,null,null,null,null];
                 const toArr     = sheet3StagedRefs[toGid];
@@ -3694,10 +3733,14 @@
                 sheet3UpsertSlot(toGid, toSlot, name);
                 sheet3UpsertSlot(fromGid, fromSlot, displaced);
             } else if (type === 'assigned') {
-                sheet3StagedRefs[toGid][toSlot] = name;
-                sheet3UpdateCell(toGid, toSlot, name);
+                if (sheet3StagedRefs[toGid][toSlot]) {
+                    sheet3InsertQueue(toGid, toSlot, name);
+                } else {
+                    sheet3StagedRefs[toGid][toSlot] = name;
+                    sheet3UpsertSlot(toGid, toSlot, name);
+                }
                 sheet3ClearAssignedCell(fromGid, fromField);
-                sheet3UpsertSlot(toGid, toSlot, name);
+                renderGames();
             }
             sheet3CacheStagedRefs();
         }
