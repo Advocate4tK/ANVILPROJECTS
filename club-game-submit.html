@@ -2666,13 +2666,31 @@
 
                 let html = '';
                 const weekOrder = Object.keys(byWeek).sort();
-                if (!allowPay) weekOrder.reverse(); // upcoming: soonest first
-                else weekOrder.reverse();           // past: most recent first
+                if (allowPay) weekOrder.reverse(); // past: most recent first; upcoming: ascending (soonest first)
+
+                const _curWkKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
+                if (!window._payWeekCollapsed) window._payWeekCollapsed = {};
+                window._togglePayWeek = function(pid) {
+                    window._payWeekCollapsed[pid] = !window._payWeekCollapsed[pid];
+                    const el    = document.getElementById('paywkcontent_' + pid);
+                    const arrow = document.getElementById('paywkarrow_' + pid);
+                    if (el)    el.style.display     = window._payWeekCollapsed[pid] ? 'none' : 'block';
+                    if (arrow) arrow.style.transform = window._payWeekCollapsed[pid] ? 'rotate(0deg)' : 'rotate(90deg)';
+                };
 
                 for (const wkKey of weekOrder) {
                     const wk = byWeek[wkKey];
-                    html += `<div class="pay-week-group">
-                        <div class="pay-week-label">${wk.label}</div>
+                    const pid = 'pw_' + wkKey.replace(/-/g,'');
+                    const allPaid = allowPay && wk.games.every(r => !!paidAtById[r.id] || (r.fields['Payment Status'] || '').toLowerCase() === 'paid');
+                    const startCollapsed = allowPay ? allPaid : (wkKey !== _curWkKey);
+                    if (!(pid in window._payWeekCollapsed)) window._payWeekCollapsed[pid] = startCollapsed;
+                    const wkCollapsed = window._payWeekCollapsed[pid];
+                    html += `<div style="margin-bottom:10px;">
+                        <div style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:5px 2px; font-family:'Barlow Condensed',sans-serif; font-size:0.92rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; border-bottom:1px solid var(--border); margin-bottom:6px;" onclick="window._togglePayWeek('${pid}')">
+                            <span id="paywkarrow_${pid}" style="color:#00c853; font-size:0.75rem; display:inline-block; transition:transform 0.2s; transform:${wkCollapsed ? 'rotate(0deg)' : 'rotate(90deg)'};">▶</span>
+                            ${wk.label}
+                        </div>
+                        <div id="paywkcontent_${pid}" style="display:${wkCollapsed ? 'none' : 'block'};">
                         <div style="border-radius:8px; overflow:hidden; border:1px solid var(--border); background:#b0b8c4;">
                         <table class="pay-table">
                             <colgroup>
@@ -2826,7 +2844,7 @@
                         html += `<tr><td colspan="8" style="height:14px; background:transparent; border:none; padding:0;"></td></tr>`;
                     });
 
-                    html += `</tbody></table></div></div>`;
+                    html += `</tbody></table></div></div></div>`;
                 }
                 return html;
             }
