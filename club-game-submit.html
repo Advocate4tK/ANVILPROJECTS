@@ -2553,13 +2553,18 @@
             const today = new Date().toISOString().split('T')[0];
             const _sourceClub = (currentClubRecord?.fields?.['Club Name'] || currentClubRecord?.fields?.['Name'] || '').trim();
             const _clubId = currentClubRecord?.id || null;
-            const [rawGrisGames, ratesResult, refPayResult] = await Promise.all([
+            const [rawGrisGames, ratesResult, refPayResult, clubResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', _sourceClub).limit(2000),
                 _clubId
                     ? supabaseClient.client.from('pay_rates').select('*').eq('club_id', _clubId).order('sort_order')
                     : Promise.resolve({ data: [] }),
-                supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount')
+                supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount'),
+                _clubId
+                    ? supabaseClient.client.from('clubs').select('payment_methods').eq('id', _clubId).maybeSingle()
+                    : Promise.resolve({ data: null })
             ]);
+            const clubPayMethods = (clubResult.data?.payment_methods || 'venmo,check')
+                .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
             const games = airtableClient._wrapAll(rawGrisGames.data || []);
 
             // Scope ref fetch to only refs assigned to this club's games
@@ -2635,6 +2640,7 @@
             }
 
             // All Griswold games with at least one ref assigned
+            const _sourceClubLc = _sourceClub.toLowerCase();
             const grisGames = games
                 .filter(r => {
                     const dateStr = r.fields['Date'] || '';
@@ -2642,7 +2648,7 @@
                     const home   = (r.fields['Home Team']   || '').toLowerCase();
                     const source = (r.fields['Source Club'] || '').toLowerCase();
                     const club   = (r.fields['Club']        || '').toLowerCase();
-                    if (!home.includes('griswold') && !source.includes('griswold') && !club.includes('griswold')) return false;
+                    if (!home.includes(_sourceClubLc) && !source.includes(_sourceClubLc) && !club.includes(_sourceClubLc)) return false;
                     return !!(r.fields['Center Referee'] || r.fields['AR 1'] || r.fields['AR 2']);
                 })
                 .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || ''));
@@ -2737,9 +2743,9 @@
 
                             const venmoHandle = venmo.replace(/^@/, '');
                             const venmoNote   = encodeURIComponent(`Griswold Soccer - ${slot.pos} ${date}`);
-                            const venmoHtml = payMethod === 'check'
+                            const venmoHtml = (payMethod === 'check' || !clubPayMethods.includes('venmo'))
                                 ? `<span class="pay-check-badge"><span class="vc-badge"><span class="vc-icon">✉️</span><span class="vc-label">check</span></span><span class="vc-note">${address || 'No address on file'}</span></span>`
-                                : (venmo
+                                : (venmo && clubPayMethods.includes('venmo')
                                     ? `<a class="btn-venmo-link" href="https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount=${rate}&note=${venmoNote}" target="_blank" onclick="this.href='https://venmo.com/?txn=pay&recipients=${venmoHandle}&amount='+this.closest('tr').querySelector('.pay-amount').value+'&note=${venmoNote}'"><span class="vl-badge">V</span><span class="vl-handle">@${venmoHandle}</span></a>`
                                     : `<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#94a3b8;font-size:0.68rem;font-weight:600;letter-spacing:0.3px;">No info</span>`);
 
