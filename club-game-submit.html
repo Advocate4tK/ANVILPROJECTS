@@ -2560,11 +2560,12 @@
                     : Promise.resolve({ data: [] }),
                 supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount'),
                 _clubId
-                    ? supabaseClient.client.from('clubs').select('payment_methods').eq('id', _clubId).maybeSingle()
+                    ? supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day').eq('id', _clubId).maybeSingle()
                     : Promise.resolve({ data: null })
             ]);
             const clubPayMethods = (clubResult.data?.payment_methods || 'venmo,check')
                 .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+            const clubCutoffDay = (clubResult.data?.cancellation_cutoff_day || 'thursday').toLowerCase();
             const games = airtableClient._wrapAll(rawGrisGames.data || []);
 
             // Scope ref fetch to only refs assigned to this club's games
@@ -2641,14 +2642,49 @@
 
             // All Griswold games with at least one ref assigned
             const _sourceClubLc = _sourceClub.toLowerCase();
+
+            function _matchesClub(r) {
+                const home   = (r.fields['Home Team']   || '').toLowerCase();
+                const source = (r.fields['Source Club'] || '').toLowerCase();
+                const club   = (r.fields['Club']        || '').toLowerCase();
+                return home.includes(_sourceClubLc) || source.includes(_sourceClubLc) || club.includes(_sourceClubLc);
+            }
+
+            function isCancellationPayable(r) {
+                if (r.fields['cancellation_type'] !== 'non_weather') return false;
+                const cancelledAt = r.fields['cancelled_at'];
+                if (!cancelledAt) return false;
+                const cancelDate = new Date(cancelledAt);
+                const gameDate   = new Date((r.fields['Date'] || '') + 'T12:00:00');
+                const dayNums    = { monday:1, tuesday:2, wednesday:3, thursday:4, friday:5, saturday:6, sunday:0 };
+                const cutoffNum  = dayNums[clubCutoffDay] ?? 4;
+                const gameDay    = gameDate.getDay();
+                const daysFromMon = gameDay === 0 ? 6 : gameDay - 1;
+                const monday = new Date(gameDate);
+                monday.setDate(gameDate.getDate() - daysFromMon);
+                monday.setHours(0, 0, 0, 0);
+                const cutoffDaysFromMon = cutoffNum === 0 ? 6 : cutoffNum - 1;
+                const cutoff = new Date(monday);
+                cutoff.setDate(monday.getDate() + cutoffDaysFromMon);
+                cutoff.setHours(0, 0, 0, 0);
+                return cancelDate >= cutoff;
+            }
+
             const grisGames = games
                 .filter(r => {
                     const dateStr = r.fields['Date'] || '';
                     if (!dateStr) return false;
-                    const home   = (r.fields['Home Team']   || '').toLowerCase();
-                    const source = (r.fields['Source Club'] || '').toLowerCase();
-                    const club   = (r.fields['Club']        || '').toLowerCase();
-                    if (!home.includes(_sourceClubLc) && !source.includes(_sourceClubLc) && !club.includes(_sourceClubLc)) return false;
+                    if ((r.fields['Game Status'] || '') === 'Cancelled') return false;
+                    if (!_matchesClub(r)) return false;
+                    return !!(r.fields['Center Referee'] || r.fields['AR 1'] || r.fields['AR 2']);
+                })
+                .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || ''));
+
+            const cancelledPayGames = games
+                .filter(r => {
+                    if ((r.fields['Game Status'] || '') !== 'Cancelled') return false;
+                    if (!_matchesClub(r)) return false;
+                    if (!isCancellationPayable(r)) return false;
                     return !!(r.fields['Center Referee'] || r.fields['AR 1'] || r.fields['AR 2']);
                 })
                 .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || ''));
@@ -2856,13 +2892,20 @@
             }
 
             let html = '';
+            if (cancelledPayGames.length) {
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#b91c1c; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; display:flex; align-items:center; gap:8px;">📋 Cancelled — Refs Due Payment</div>`;
+                html += buildGameRows(cancelledPayGames, true);
+            }
             if (pastGames.length) {
-                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">Needs Payment</div>`;
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1px; margin:${cancelledPayGames.length ? '14px' : '0'} 0 12px;">Needs Payment</div>`;
                 html += buildGameRows(pastGames, true);
             }
             if (upcomingGames.length) {
-                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin:${pastGames.length ? '14px' : '0'} 0 10px;">Upcoming</div>`;
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin:${(pastGames.length || cancelledPayGames.length) ? '14px' : '0'} 0 10px;">Upcoming</div>`;
                 html += buildGameRows(upcomingGames, false);
+            }
+            if (!cancelledPayGames.length && !pastGames.length && !upcomingGames.length) {
+                html = '<p style="color:#888; font-size:0.85rem;">No games with assigned refs yet.</p>';
             }
 
             document.getElementById('payContent').innerHTML = html;

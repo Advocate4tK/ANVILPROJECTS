@@ -453,6 +453,16 @@
                         </div>
                     </div>
 
+                    <div style="margin-bottom:16px; padding:12px 14px; background:#f7f8fc; border:1px solid #e2d9ce; border-radius:8px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                        <div style="font-family:'DM Sans',sans-serif; font-size:0.78rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.8px; white-space:nowrap;">Cancellation Pay Cutoff</div>
+                        <select id="cancellationCutoffDay" style="font-family:'DM Sans',sans-serif; font-size:0.88rem; padding:6px 10px; border:1.5px solid #e2d9ce; border-radius:6px; background:#fff; color:#09142a; font-weight:600;">
+                            <option value="wednesday">Wednesday midnight</option>
+                            <option value="thursday" selected>Thursday midnight (default)</option>
+                            <option value="friday">Friday midnight</option>
+                        </select>
+                        <div style="font-size:0.76rem; color:#888; font-family:'DM Sans',sans-serif;">Non-weather cancellations at or after this point → refs get paid</div>
+                    </div>
+
                     <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:6px;">
                         <!-- Rec -->
                         <div style="flex:1; min-width:260px;">
@@ -1565,7 +1575,7 @@
         try {
             const [ratesRes, clubRes] = await Promise.all([
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(clubId)),
-                supabaseClient.client.from('clubs').select('payment_methods').eq('id', parseInt(clubId)).single()
+                supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day').eq('id', parseInt(clubId)).single()
             ]);
             if (ratesRes.error) throw new Error(ratesRes.error.message);
             const existing = {};
@@ -1578,6 +1588,9 @@
                 const cb = document.getElementById('paytype_' + m);
                 if (cb) cb.checked = methods.includes(m);
             });
+            // Set cancellation cutoff day
+            const cutoffSel = document.getElementById('cancellationCutoffDay');
+            if (cutoffSel) cutoffSel.value = clubRes.data?.cancellation_cutoff_day || 'thursday';
         } catch(e) {
             const err = `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
             document.getElementById('payRatesBodyRec').innerHTML  = err;
@@ -1608,11 +1621,12 @@
                 const { error: insErr } = await supabaseClient.client.from('pay_rates').insert(rows);
                 if (insErr) throw new Error(insErr.message);
             }
-            // Save payment methods
+            // Save payment methods + cancellation cutoff
             const methods = ['venmo','check','cashapp','cash','dd','zelle']
                 .filter(m => document.getElementById('paytype_' + m)?.checked)
                 .join(',');
-            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null }).eq('id', parseInt(clubId));
+            const cutoffDay = document.getElementById('cancellationCutoffDay')?.value || 'thursday';
+            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null, cancellation_cutoff_day: cutoffDay }).eq('id', parseInt(clubId));
             msg.textContent = `✅ Saved — ${rows.length} age group${rows.length !== 1 ? 's' : ''} configured.`;
             msg.style.color = '#15803d'; msg.style.display = 'block';
         } catch(e) {
