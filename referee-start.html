@@ -409,21 +409,21 @@
                         </svg>
                     </div>
                     <div class="custom-select-dropdown" id="selectDropdown">
-                        <div class="custom-select-group-label" style="color:#00c853;">Referee Tool Availability Form</div>
-                        <div class="custom-select-option ours" onclick="selectOption('ours','East Haddam')">East Haddam</div>
-                        <div class="custom-select-option ours" onclick="selectOption('ours','Griswold')">Griswold</div>
-                        <div class="custom-select-option ours" onclick="selectOption('ours','Plainfield Youth Soccer')">Plainfield Youth Soccer</div>
+                        <div id="refToolOptions">
+                            <div class="custom-select-group-label" style="color:#00c853;">Referee Tool Availability Form</div>
+                            <div class="custom-select-option ours" style="color:#aaa; cursor:default; font-style:italic;">Loading…</div>
+                        </div>
                         <div class="custom-select-group-label">JotForm Availability Form</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','WAM')">WAM</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','Glastonbury')">Glastonbury</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','Lebanon')">Lebanon</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','RHAMYS')">RHAMYS</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','Stonington')">Stonington</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','New London')">New London</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','Portland')">Portland</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','Valley')">Valley</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','Haddam-Killingworth')">Haddam-Killingworth</div>
-                        <div class="custom-select-option" onclick="selectOption('jot','NECONN')">NECONN</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','WAM','Mansfield (WAM/NEU)')">WAM</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','Glastonbury','Glastonbury')">Glastonbury</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','Lebanon','Lebanon')">Lebanon</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','RHAMYS','Hebron/Marlborough (RHAM)')">RHAMYS</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','Stonington','Stonington')">Stonington</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','New London','New London')">New London</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','Portland','Portland')">Portland</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','Valley','Valley')">Valley</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','Haddam-Killingworth','Haddam-Killingworth')">Haddam-Killingworth</div>
+                        <div class="custom-select-option" onclick="selectOption('jot','NECONN','NECONN')">NECONN</div>
                     </div>
                 </div>
 
@@ -446,8 +446,31 @@
 
     <script>
         var selectedValue = '';
+        var selectedJotValue = '';
         var btn = document.getElementById('goBtn');
         var dropdown = document.getElementById('selectDropdown');
+
+        // Load Referee Tool clubs dynamically from openings_form_config
+        fetch('https://kaniccdqieyesezpousu.supabase.co/rest/v1/settings?key=eq.openings_form_config&select=value', {
+            headers: {
+                'apikey': 'sb_publishable_pJX6Fsg4YrSNEhfNTHbkLA_tzFJmEUb',
+                'Authorization': 'Bearer sb_publishable_pJX6Fsg4YrSNEhfNTHbkLA_tzFJmEUb'
+            }
+        }).then(r => r.json()).then(rows => {
+            var cfg = {};
+            try { cfg = JSON.parse(rows[0]?.value || '{}'); } catch(e) {}
+            var rtClubs = Object.keys(cfg).filter(c => cfg[c].formType === 'referee-tool').sort();
+            var el = document.getElementById('refToolOptions');
+            el.innerHTML = '<div class="custom-select-group-label" style="color:#00c853;">Referee Tool Availability Form</div>'
+                + (rtClubs.length
+                    ? rtClubs.map(c => `<div class="custom-select-option ours" onclick="selectOption('ours','${c}')">${c}</div>`).join('')
+                    : '<div class="custom-select-option" style="color:#aaa; cursor:default; font-style:italic;">None configured</div>');
+        }).catch(() => {
+            document.getElementById('refToolOptions').innerHTML =
+                '<div class="custom-select-group-label" style="color:#00c853;">Referee Tool Availability Form</div>'
+                + '<div class="custom-select-option ours" onclick="selectOption(\'ours\',\'East Haddam\')">East Haddam</div>'
+                + '<div class="custom-select-option ours" onclick="selectOption(\'ours\',\'Griswold\')">Griswold</div>';
+        });
 
         // Move dropdown to body so it escapes overflow:hidden on the card
         document.body.appendChild(dropdown);
@@ -470,8 +493,9 @@
             }
         }
 
-        function selectOption(val, label) {
+        function selectOption(val, label, jotValue) {
             selectedValue = val;
+            selectedJotValue = jotValue || '';
             document.getElementById('selectLabel').textContent = label;
             document.getElementById('selectTrigger').classList.add('has-value');
             dropdown.classList.remove('open');
@@ -491,7 +515,9 @@
 
         function goToForm() {
             if (selectedValue === 'jot') {
-                window.location.href = 'https://www.jotform.com/form/251825994555168';
+                var url = 'https://www.jotform.com/form/251825994555168';
+                if (selectedJotValue) url += '?q27=' + encodeURIComponent(selectedJotValue);
+                window.location.href = url;
             } else if (selectedValue === 'ours') {
                 var club = encodeURIComponent(document.getElementById('selectLabel').textContent);
                 window.location.href = 'https://referee-tool.com/referee-availability-form.html?club=' + club;
