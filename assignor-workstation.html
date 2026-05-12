@@ -4055,23 +4055,54 @@
             renderGames();
         }
 
+        async function setGameStatusFilled(gid, filled) {
+            const newStatus = filled ? 'Filled' : '';
+            await supabaseClient.client.from('games').update({ 'Game Status': newStatus }).eq('id', parseInt(gid));
+            const game = allGames.find(g => String(g.id) === String(gid));
+            if (game) game.fields['Game Status'] = newStatus;
+            renderGames();
+        }
+
+        function s2ShowCardMenu(e, gid) {
+            e.preventDefault();
+            e.stopPropagation();
+            const game   = allGames.find(g => String(g.id) === String(gid));
+            const filled = game && (game.fields['Game Status'] || '') === 'Filled';
+            let menu = document.getElementById('s2CardMenu');
+            if (!menu) {
+                menu = document.createElement('div');
+                menu.id = 's2CardMenu';
+                menu.style.cssText = 'position:fixed; background:#fff; border:1px solid #d0d7de; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); font-family:"DM Sans",sans-serif; font-size:0.82rem; z-index:9999; min-width:160px; padding:4px 0; overflow:hidden;';
+                document.body.appendChild(menu);
+            }
+            const item = (label, fn) => `<div style="padding:8px 16px; cursor:pointer;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''" onclick="${fn}">${label}</div>`;
+            menu.innerHTML = filled
+                ? item('✅ Unmark as Filled', `setGameStatusFilled('${gid}',false); document.getElementById('s2CardMenu').style.display='none';`)
+                : item('🔒 Mark as Filled',   `setGameStatusFilled('${gid}',true);  document.getElementById('s2CardMenu').style.display='none';`);
+            menu.style.left    = e.clientX + 'px';
+            menu.style.top     = e.clientY + 'px';
+            menu.style.display = 'block';
+            setTimeout(() => document.addEventListener('click', () => { if (menu) menu.style.display = 'none'; }, { once: true }), 0);
+        }
+
         function sheet3ShowGameMenu(e, gid) {
             e.preventDefault();
+            const game   = allGames.find(g => String(g.id) === String(gid));
+            const filled = game && (game.fields['Game Status'] || '') === 'Filled';
             let menu = document.getElementById('s3ContextMenu');
             if (!menu) {
                 menu = document.createElement('div');
                 menu.id = 's3ContextMenu';
-                menu.style.cssText = 'position:fixed; background:#fff; border:1px solid #d0d7de; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); font-family:sans-serif; font-size:0.82rem; z-index:9999; min-width:140px; overflow:hidden;';
+                menu.style.cssText = 'position:fixed; background:#fff; border:1px solid #d0d7de; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); font-family:sans-serif; font-size:0.82rem; z-index:9999; min-width:160px; overflow:hidden;';
                 document.body.appendChild(menu);
             }
-            menu.innerHTML = `
-                <div style="padding:6px 0;">
-                    <div onclick="sheet3HideOptMenu(); sheet3OpenGameEditModal('${gid}');"
-                         style="padding:7px 16px; cursor:pointer;"
-                         onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
-                        ✏️ Edit Game
-                    </div>
-                </div>`;
+            const item = (label, fn) => `<div style="padding:7px 16px; cursor:pointer;" onmouseover="this.style.background='#f6f8fa'" onmouseout="this.style.background=''" onclick="${fn}">${label}</div>`;
+            menu.innerHTML = `<div style="padding:6px 0;">
+                ${item('✏️ Edit Game', `sheet3HideOptMenu(); sheet3OpenGameEditModal('${gid}');`)}
+                ${filled
+                    ? item('✅ Unmark as Filled', `setGameStatusFilled('${gid}',false); document.getElementById('s3ContextMenu').style.display='none';`)
+                    : item('🔒 Mark as Filled',   `setGameStatusFilled('${gid}',true);  document.getElementById('s3ContextMenu').style.display='none';`)}
+            </div>`;
             menu.style.left    = e.clientX + 'px';
             menu.style.top     = e.clientY + 'px';
             menu.style.display = 'block';
@@ -6556,7 +6587,7 @@
                     const away = f['Away Team'] || '?';
                     const time = f['Time'] ? '@ ' + formatTime(f['Time']) : '';
                     const club = resolveGameClub(f);
-                    html += `<div class="s2-compact-row" onclick="s2ToggleExpand('${gid}', event)">
+                    html += `<div class="s2-compact-row" onclick="s2ToggleExpand('${gid}', event)" oncontextmenu="s2ShowCardMenu(event,'${gid}'); return false;">
                         <span style="color:#1e8449;font-weight:900;font-size:0.85rem;flex-shrink:0;">✓</span>
                         ${gn ? `<span style="font-size:0.62rem;color:#aaa;letter-spacing:0.4px;flex-shrink:0;">${gn}</span>` : ''}
                         <span style="font-weight:700;font-size:0.82rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${home} vs ${away}</span>
@@ -6591,7 +6622,7 @@
                 const confirmedBorder = allConf ? 'border-left:4px solid #1e8449;' : full ? 'border-left:4px solid #2980b9;' : '';
 
                 html += `<div class="game-card ${full ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}"
-                    onclick="selectGame('${gid}')" id="card-${gid}" style="${confirmedBorder}">
+                    onclick="selectGame('${gid}')" oncontextmenu="s2ShowCardMenu(event,'${gid}'); return false;" id="card-${gid}" style="${confirmedBorder}">
                     ${isCancelled ? '<div class="cancelled-stamp">CANCELLED</div>' : ''}
                     ${isChangeReq ? '<div style="font-size:0.72rem;font-weight:700;color:#935116;background:#fdebd0;border-radius:4px;padding:2px 8px;margin-bottom:6px;display:inline-block;">⚠ Change Requested</div>' : ''}
                     <div class="game-header">
