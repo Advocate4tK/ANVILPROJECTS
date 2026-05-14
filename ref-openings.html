@@ -211,6 +211,82 @@
         .filter-btn:hover  { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.08); }
         .filter-btn.active { background: #fff; color: #0f1e3c; }
 
+        /* ── Club rotator selector ── */
+        .club-selector {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 6px 12px 6px 10px;
+            cursor: pointer;
+            min-width: 180px;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .club-selector:hover {
+            background: rgba(255,255,255,0.09);
+            border-color: rgba(255,255,255,0.22);
+        }
+        .club-selector.has-selection {
+            border-color: #00c853;
+            background: rgba(0,200,83,0.08);
+        }
+        .club-selector-label {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.35);
+            white-space: nowrap;
+        }
+        .club-rotator-wrap {
+            flex: 1;
+            overflow: hidden;
+            height: 20px;
+            position: relative;
+        }
+        .club-rotator-name {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: opacity 0.4s, transform 0.4s;
+        }
+        .club-rotator-name.fade-out {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
+        .club-rotator-name.fade-in {
+            opacity: 0;
+            transform: translateY(6px);
+        }
+        .club-selector-arrow {
+            font-size: 0.6rem;
+            color: rgba(255,255,255,0.4);
+            flex-shrink: 0;
+        }
+        .club-selector.has-selection .club-rotator-name { color: #00c853; }
+        .club-selector.has-selection .club-selector-label { color: rgba(0,200,83,0.6); }
+
+        /* hidden native select — positioned over the whole box for click handling */
+        .club-selector select {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            font-size: 16px; /* prevents iOS zoom */
+            width: 100%;
+            height: 100%;
+        }
+
         /* ── Date divider ── */
         .date-divider {
             display: flex;
@@ -455,8 +531,15 @@
             <button class="filter-btn" onclick="setWeekFilter('next', this)">Next Week</button>
             <button class="filter-btn" onclick="setWeekFilter('all', this)">All</button>
         </div>
-        <div class="filter-group" id="clubFilterGroup">
-            <button class="filter-btn active" onclick="setClubFilter('all', this)">All Clubs</button>
+        <div class="club-selector" id="clubSelector">
+            <span class="club-selector-label">Club</span>
+            <div class="club-rotator-wrap">
+                <div class="club-rotator-name" id="clubRotatorName">All Clubs</div>
+            </div>
+            <span class="club-selector-arrow">▼</span>
+            <select id="clubSelectNative" onchange="onClubSelectChange(this)">
+                <option value="all">All Clubs</option>
+            </select>
         </div>
     </div>
 
@@ -525,10 +608,76 @@
         applyFilters();
     }
 
+    // ── Club rotator ──
+    let _rotatorClubs = [];
+    let _rotatorIdx   = 0;
+    let _rotatorTimer = null;
+
+    function setRotatorClubs(clubs) {
+        _rotatorClubs = ['All Clubs', ...clubs];
+        _rotatorIdx = 0;
+        clearInterval(_rotatorTimer);
+        if (_clubFilter === 'all') startRotator();
+    }
+
+    function startRotator() {
+        clearInterval(_rotatorTimer);
+        if (_rotatorClubs.length <= 1) return;
+        _rotatorTimer = setInterval(rotatorTick, 2200);
+    }
+
+    function stopRotator() {
+        clearInterval(_rotatorTimer);
+        _rotatorTimer = null;
+    }
+
+    function rotatorTick() {
+        if (_clubFilter !== 'all') { stopRotator(); return; }
+        const el = document.getElementById('clubRotatorName');
+        if (!el) return;
+        el.classList.add('fade-out');
+        setTimeout(() => {
+            _rotatorIdx = (_rotatorIdx + 1) % _rotatorClubs.length;
+            el.textContent = _rotatorClubs[_rotatorIdx];
+            el.classList.remove('fade-out');
+            el.classList.add('fade-in');
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                el.classList.remove('fade-in');
+            }));
+        }, 400);
+    }
+
+    function setRotatorDisplay(label) {
+        const el = document.getElementById('clubRotatorName');
+        if (!el) return;
+        el.classList.add('fade-out');
+        setTimeout(() => {
+            el.textContent = label;
+            el.classList.remove('fade-out');
+            el.classList.add('fade-in');
+            requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('fade-in')));
+        }, 400);
+    }
+
+    function onClubSelectChange(sel) {
+        const val = sel.value;
+        const selector = document.getElementById('clubSelector');
+        if (val === 'all') {
+            _clubFilter = 'all';
+            selector.classList.remove('has-selection');
+            setRotatorDisplay('All Clubs');
+            startRotator();
+        } else {
+            _clubFilter = val;
+            selector.classList.add('has-selection');
+            stopRotator();
+            setRotatorDisplay(val === 'RECREATION' ? 'Recreation' : val);
+        }
+        applyFilters();
+    }
+
     function setClubFilter(val, btn) {
         _clubFilter = val;
-        btn.closest('.filter-group').querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
         applyFilters();
     }
 
@@ -721,17 +870,25 @@
             try { _formConfig = JSON.parse(formConfigRes.data?.value || '{}'); } catch(e) { _formConfig = {}; }
             try { _recOrgs    = JSON.parse(recOrgsRes.data?.value    || '[]'); } catch(e) { _recOrgs = []; }
 
-            // Build club filter buttons — include Recreation tab if any rec orgs are active
+            // Build club selector dropdown + rotator
             const allFilterClubs = [...CLUBS, ...(_recOrgs.length ? ['RECREATION'] : [])];
-            const clubGroup = document.getElementById('clubFilterGroup');
             const savedClub = _clubFilter;
-            clubGroup.innerHTML = `<button class="filter-btn" onclick="setClubFilter('all', this)">All Clubs</button>` +
-                CLUBS.map(c => `<button class="filter-btn" onclick="setClubFilter('${c}', this)">${c}</button>`).join('') +
-                (_recOrgs.length ? `<button class="filter-btn" onclick="setClubFilter('RECREATION', this)">Recreation</button>` : '');
             _clubFilter = (savedClub === 'all' || allFilterClubs.includes(savedClub)) ? savedClub : 'all';
-            clubGroup.querySelectorAll('.filter-btn').forEach(b => {
-                if ((b.textContent === 'All Clubs' && _clubFilter === 'all') || b.textContent === _clubFilter || (b.textContent === 'Recreation' && _clubFilter === 'RECREATION')) b.classList.add('active');
-            });
+            const sel = document.getElementById('clubSelectNative');
+            sel.innerHTML = `<option value="all">All Clubs</option>` +
+                CLUBS.map(c => `<option value="${c}">${c}</option>`).join('') +
+                (_recOrgs.length ? `<option value="RECREATION">Recreation</option>` : '');
+            sel.value = _clubFilter;
+            const selector = document.getElementById('clubSelector');
+            if (_clubFilter !== 'all') {
+                selector.classList.add('has-selection');
+                document.getElementById('clubRotatorName').textContent = _clubFilter === 'RECREATION' ? 'Recreation' : _clubFilter;
+                stopRotator();
+            } else {
+                selector.classList.remove('has-selection');
+                document.getElementById('clubRotatorName').textContent = 'All Clubs';
+            }
+            setRotatorClubs(allFilterClubs.map(c => c === 'RECREATION' ? 'Recreation' : c));
 
             const [venueRes, ...clubResults] = await Promise.all([
                 supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name').limit(500),
