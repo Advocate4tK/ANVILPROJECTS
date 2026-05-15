@@ -5754,6 +5754,32 @@
                     return da.localeCompare(db);
                 });
                 buildCAConfirmedMap();
+
+                // Load crew rules for all clubs in loaded games — must run before renderGames()
+                window._crewRules = {};
+                {
+                    const crewSrcClubs = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
+                    if (crewSrcClubs.length) {
+                        const { data: crewClubRecs } = await supabaseClient.client.from('clubs').select('id, name, "Club Name"');
+                        const crewNameToId = {};
+                        (crewClubRecs || []).forEach(c => {
+                            if (crewSrcClubs.includes(c.name))           crewNameToId[c.name]           = c.id;
+                            if (crewSrcClubs.includes(c['Club Name']))   crewNameToId[c['Club Name']]   = c.id;
+                        });
+                        const crewIds = Object.values(crewNameToId);
+                        if (crewIds.length) {
+                            const { data: crewData } = await supabaseClient.client.from('crew_rules').select('club_id, age_group, ar1, ar2').in('club_id', crewIds);
+                            const crewIdToName = {};
+                            Object.entries(crewNameToId).forEach(([n, id]) => { crewIdToName[id] = n; });
+                            (crewData || []).forEach(r => {
+                                const name = crewIdToName[r.club_id] || String(r.club_id);
+                                if (!window._crewRules[name]) window._crewRules[name] = {};
+                                window._crewRules[name][r.age_group] = { ar1: r.ar1, ar2: r.ar2 };
+                            });
+                        }
+                    }
+                }
+
                 // Merge Airtable club names + Source Club game values into the known list
                 const sourceClubs  = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
                 const airtableClubs = clubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
