@@ -397,7 +397,7 @@
                         <div class="portal-card-title">Club Portal</div>
                         <div class="portal-card-desc">Games, scheduling, and club management</div>
                     </div>
-                    <div class="portal-card" onclick="portalGo('pay')">
+                    <div class="portal-card" id="payRefCard" onclick="portalGo('pay')">
                         <div class="portal-card-icon">💳</div>
                         <div class="portal-card-title">Pay Refs</div>
                         <div class="portal-card-desc">View assigned games, Venmo handles, and mark refs paid</div>
@@ -665,6 +665,7 @@
     let currentSubmitter     = '';   // name of person who completed doorway
     let _clubPayCoord        = '';   // payment_coordinator (supplemental — bypasses schema cache)
     let _clubPayPin          = '';   // payment_portal_pin (null = no PIN required)
+    let _clubPayPortalEnabled = false; // payment_portal_enabled
     let refById           = {};   // Airtable referee record ID → display name
 
     // Keys are set per-club once the URL param is known
@@ -824,6 +825,7 @@
         if (_payCoord && (_submitterLC === _payCoord || (_president && _submitterLC === _president))) {
             document.getElementById('doorwayStep1').style.display = 'none';
             document.getElementById('portalChoice').style.display = 'block';
+            document.getElementById('payRefCard').style.display = _clubPayPortalEnabled ? '' : 'none';
             return;
         }
 
@@ -836,6 +838,7 @@
             if (_payCoord) {
                 document.getElementById('doorwayStep1').style.display = 'none';
                 document.getElementById('portalChoice').style.display = 'block';
+                document.getElementById('payRefCard').style.display = _clubPayPortalEnabled ? '' : 'none';
                 return;
             }
             showMainForm();
@@ -1077,11 +1080,12 @@
                     try {
                         const { data: _pcRow } = await supabaseClient.client
                             .from('clubs')
-                            .select('payment_coordinator, payment_portal_pin')
+                            .select('payment_coordinator, payment_portal_pin, payment_portal_enabled')
                             .eq('id', currentClubRecord.id)
                             .single();
-                        _clubPayCoord = (_pcRow?.payment_coordinator || '').trim().toLowerCase();
-                        _clubPayPin   = (_pcRow?.payment_portal_pin  || '').trim();
+                        _clubPayCoord        = (_pcRow?.payment_coordinator || '').trim().toLowerCase();
+                        _clubPayPin          = (_pcRow?.payment_portal_pin  || '').trim();
+                        _clubPayPortalEnabled = !!_pcRow?.payment_portal_enabled;
                     } catch(e) { /* non-critical */ }
                 }
 
