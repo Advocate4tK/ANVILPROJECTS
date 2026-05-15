@@ -431,11 +431,18 @@
 
                 <div id="payRatesSection" style="display:none;">
                     <!-- Managed by Referee Tool toggle -->
-                    <div style="margin-bottom:20px; padding:14px 18px; background:#f0fdf4; border:1.5px solid #22c55e; border-radius:10px; display:flex; align-items:center; gap:12px;">
-                        <input type="checkbox" id="payPortalEnabled" style="width:18px;height:18px;cursor:pointer;accent-color:#16a34a;">
-                        <div>
-                            <div style="font-family:'DM Sans',sans-serif; font-weight:700; font-size:0.92rem; color:#14532d;">Managed by Referee Tool</div>
-                            <div style="font-family:'DM Sans',sans-serif; font-size:0.8rem; color:#166534;">When checked, this club has access to the Referee Pay portal.</div>
+                    <div style="margin-bottom:20px; padding:14px 18px; background:#f0fdf4; border:1.5px solid #22c55e; border-radius:10px;">
+                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+                            <input type="checkbox" id="payPortalEnabled" style="width:18px;height:18px;cursor:pointer;accent-color:#16a34a;">
+                            <div>
+                                <div style="font-family:'DM Sans',sans-serif; font-weight:700; font-size:0.92rem; color:#14532d;">Managed by Referee Tool</div>
+                                <div style="font-family:'DM Sans',sans-serif; font-size:0.8rem; color:#166534;">When checked, this club has access to the Referee Pay portal.</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <label style="font-family:'DM Sans',sans-serif; font-size:0.85rem; font-weight:600; color:#14532d; white-space:nowrap;">Portal Start Date</label>
+                            <input type="date" id="payPortalStartDate" style="padding:6px 10px; border:1.5px solid #86efac; border-radius:7px; font-size:0.88rem; font-family:'DM Sans',sans-serif; background:#fff; color:#09142a;">
+                            <span style="font-family:'DM Sans',sans-serif; font-size:0.78rem; color:#166534;">Games before this date won't appear as unpaid.</span>
                         </div>
                     </div>
 
@@ -1590,7 +1597,7 @@
         try {
             const [ratesRes, clubRes] = await Promise.all([
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(clubId)),
-                supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day, payment_portal_enabled').eq('id', parseInt(clubId)).single()
+                supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day, payment_portal_enabled, payment_portal_start_date').eq('id', parseInt(clubId)).single()
             ]);
             if (ratesRes.error) throw new Error(ratesRes.error.message);
             const existing = {};
@@ -1606,9 +1613,11 @@
             // Set cancellation cutoff day
             const cutoffSel = document.getElementById('cancellationCutoffDay');
             if (cutoffSel) cutoffSel.value = clubRes.data?.cancellation_cutoff_day || 'thursday';
-            // Set Managed by Referee Tool
+            // Set Managed by Referee Tool + portal start date
             const portalCb = document.getElementById('payPortalEnabled');
             if (portalCb) portalCb.checked = !!clubRes.data?.payment_portal_enabled;
+            const startDateEl = document.getElementById('payPortalStartDate');
+            if (startDateEl) startDateEl.value = clubRes.data?.payment_portal_start_date || '';
         } catch(e) {
             const err = `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
             document.getElementById('payRatesBodyRec').innerHTML  = err;
@@ -1644,8 +1653,9 @@
                 .filter(m => document.getElementById('paytype_' + m)?.checked)
                 .join(',');
             const cutoffDay = document.getElementById('cancellationCutoffDay')?.value || 'thursday';
-            const portalEnabled = document.getElementById('payPortalEnabled')?.checked || false;
-            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null, cancellation_cutoff_day: cutoffDay, payment_portal_enabled: portalEnabled }).eq('id', parseInt(clubId));
+            const portalEnabled   = document.getElementById('payPortalEnabled')?.checked || false;
+            const portalStartDate = document.getElementById('payPortalStartDate')?.value || null;
+            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null, cancellation_cutoff_day: cutoffDay, payment_portal_enabled: portalEnabled, payment_portal_start_date: portalStartDate }).eq('id', parseInt(clubId));
             msg.textContent = `✅ Saved — ${rows.length} age group${rows.length !== 1 ? 's' : ''} configured.`;
             msg.style.color = '#15803d'; msg.style.display = 'block';
         } catch(e) {

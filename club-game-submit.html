@@ -2611,13 +2611,17 @@
                     : Promise.resolve({ data: [] }),
                 supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount'),
                 _clubId
-                    ? supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day').eq('id', _clubId).maybeSingle()
+                    ? supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day, payment_portal_start_date').eq('id', _clubId).maybeSingle()
                     : Promise.resolve({ data: null })
             ]);
             const clubPayMethods = (clubResult.data?.payment_methods || 'venmo,check')
                 .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
             const clubCutoffDay = (clubResult.data?.cancellation_cutoff_day || 'thursday').toLowerCase();
-            const games = airtableClient._wrapAll(rawGrisGames.data || []);
+            const portalStartDate = clubResult.data?.payment_portal_start_date || null;
+            const allGames = airtableClient._wrapAll(rawGrisGames.data || []);
+            const games = portalStartDate
+                ? allGames.filter(g => (g.fields['date'] || g.fields['Date'] || '') >= portalStartDate)
+                : allGames;
 
             // Scope ref fetch to only refs assigned to this club's games
             const _refNames = new Set();
