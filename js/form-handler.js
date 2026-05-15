@@ -28,13 +28,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!document.querySelectorAll('input[name="locations"]:checked').length)  missing.push('Preferred Locations (at least one)');
         if (!document.querySelectorAll('input[name="ageGroups"]:checked').length)  missing.push('Preferred Age Groups (at least one)');
 
-        // Griswold Venmo — required if Griswold selected, no payment on file, and venmo method chosen
+        // Venmo — required if Griswold or East Haddam selected, no payment on file, and venmo method chosen
         const checkedLocs = [...document.querySelectorAll('input[name="locations"]:checked')].map(c => c.value);
-        if (checkedLocs.includes('Griswold') && !window._griswoldPayOnFile) {
-            const payMethod = document.querySelector('input[name="griswoldPayMethod"]:checked')?.value;
+        const needsPay = ['Griswold','East Haddam'].some(c => checkedLocs.includes(c));
+        if (needsPay && !window._clubPayOnFile) {
+            const payMethod = document.querySelector('input[name="clubPayMethod"]:checked')?.value;
             if (!payMethod || payMethod === 'venmo') {
-                const venmoVal = (document.getElementById('griswoldVenmo')?.value || '').trim();
-                if (!venmoVal) missing.push('Venmo handle (required for Griswold)');
+                const venmoVal = (document.getElementById('clubVenmo')?.value || '').trim();
+                if (!venmoVal) missing.push('Venmo handle (required for Griswold / East Haddam)');
             }
         }
         if (!document.getElementById('arOnly')?.value)              missing.push('AR Only preference');
@@ -110,12 +111,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     refUpdates['Club Preference'] = locations; // array for multi-select
                 }
 
-                // Griswold payment preference — skip if already on file
-                if (locations.includes('Griswold') && !window._griswoldPayOnFile) {
-                    const payMethod = document.querySelector('input[name="griswoldPayMethod"]:checked')?.value || 'venmo';
+                // Payment preference (Griswold / East Haddam) — skip if already on file
+                const needsPay = ['Griswold','East Haddam'].some(c => locations.includes(c));
+                if (needsPay && !window._clubPayOnFile) {
+                    const payMethod = document.querySelector('input[name="clubPayMethod"]:checked')?.value || 'venmo';
                     refUpdates['payment_method'] = payMethod;
                     if (payMethod === 'venmo') {
-                        const venmo = (document.getElementById('griswoldVenmo')?.value || '').trim().replace(/^@/, '');
+                        const venmo = (document.getElementById('clubVenmo')?.value || '').trim().replace(/^@/, '');
                         if (venmo) refUpdates['venmo'] = venmo;
                     }
                 }
@@ -282,14 +284,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
         }
 
-        // Griswold Venmo required
-        if (locations.includes('Griswold') && !window._griswoldPayOnFile) {
-            const payMethod = document.querySelector('input[name="griswoldPayMethod"]:checked')?.value;
+        // Venmo required for Griswold or East Haddam
+        const needsPay = ['Griswold','East Haddam'].some(c => locations.includes(c));
+        if (needsPay && !window._clubPayOnFile) {
+            const payMethod = document.querySelector('input[name="clubPayMethod"]:checked')?.value;
             if (!payMethod || payMethod === 'venmo') {
-                const venmoVal = (document.getElementById('griswoldVenmo')?.value || '').trim();
+                const venmoVal = (document.getElementById('clubVenmo')?.value || '').trim();
                 if (!venmoVal) {
-                    showMessage('error', 'Please enter your Venmo handle for Griswold payment.');
-                    document.getElementById('griswoldVenmo')?.focus();
+                    showMessage('error', 'Please enter your Venmo handle for payment.');
+                    document.getElementById('clubVenmo')?.focus();
                     return false;
                 }
             }
