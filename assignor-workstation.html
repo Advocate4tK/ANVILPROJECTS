@@ -3069,32 +3069,36 @@
                 const venueObj    = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                 const fieldObj = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
                 const isU8     = (f['Age Group'] || '').startsWith('U8');
-                const cRefRaw  = f['Center Referee'] === 'FILLED' ? 'FILLED' : (resolveRefName(f['Center Referee']) || '—');
-                const ar1Raw   = f['AR 1'] === 'FILLED' ? 'FILLED' : (resolveRefName(f['AR 1']) || '—');
-                const ar2Raw   = f['AR 2'] === 'FILLED' ? 'FILLED' : (resolveRefName(f['AR 2']) || '—');
+                const cRefRaw  = ['FILLED','EMPTY'].includes(f['Center Referee']) ? f['Center Referee'] : (resolveRefName(f['Center Referee']) || '—');
+                const ar1Raw   = ['FILLED','EMPTY'].includes(f['AR 1'])           ? f['AR 1']           : (resolveRefName(f['AR 1']) || '—');
+                const ar2Raw   = ['FILLED','EMPTY'].includes(f['AR 2'])           ? f['AR 2']           : (resolveRefName(f['AR 2']) || '—');
                 const cleared  = sheet3ClearedAssigned[gid] || {};
                 const staged   = sheet3StagedRefs[gid] || [null,null,null,null,null,null];
                 const assignedTd = (field, rawName) => {
                     const isFil     = rawName === 'FILLED';
-                    const isCleared = !isFil && !!cleared[field];
-                    const hasRef    = !isFil && rawName !== '—' && !isCleared;
+                    const isEmpty   = rawName === 'EMPTY';
+                    const isCleared = !isFil && !isEmpty && !!cleared[field];
+                    const hasRef    = !isFil && !isEmpty && rawName !== '—' && !isCleared;
                     const display   = isFil
                         ? '<span style="font-size:0.72rem;background:#1565c0;color:#fff;border-radius:3px;padding:1px 6px;font-weight:700;letter-spacing:0.03em;">Filled</span>'
-                        : (isCleared ? '—' : rawName);
+                        : isEmpty
+                            ? '<span style="font-size:0.72rem;background:#9e9e9e;color:#fff;border-radius:3px;padding:1px 6px;font-weight:700;letter-spacing:0.03em;">Empty</span>'
+                            : (isCleared ? '—' : rawName);
                     const storedBg  = sheet3OptColors[`assigned-${gid}-${field}`] || '';
-                    const bg        = isFil ? '#e3f2fd' : (hasRef ? (storedBg || '#e8f5e9') : '#fffde7');
+                    const bg        = isFil ? '#e3f2fd' : isEmpty ? '#f5f5f5' : (hasRef ? (storedBg || '#e8f5e9') : '#fffde7');
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet3AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
                     const gcols     = { center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' };
                     const gcol      = gcols[field] || field;
-                    const ctx       = isFil
-                        ? `oncontextmenu="sheet3ShowCellFilledMenu(event,'${gid}','${gcol}',true); return false;"`
+                    const curVal    = isFil ? 'FILLED' : isEmpty ? 'EMPTY' : '';
+                    const ctx       = (isFil || isEmpty)
+                        ? `oncontextmenu="sheet3ShowCellFilledMenu(event,'${gid}','${gcol}','${curVal}'); return false;"`
                         : (hasRef
                             ? `oncontextmenu="sheet3ShowAssignedMenu(event,'${gid}','${field}'); event.stopPropagation(); return false;"`
-                            : `oncontextmenu="sheet3ShowCellFilledMenu(event,'${gid}','${gcol}',false); return false;"`);
+                            : `oncontextmenu="sheet3ShowCellFilledMenu(event,'${gid}','${gcol}',''); return false;"`);
                     const badge     = hasRef ? refCountBadge(rawName) : '';
                     const hoverIn  = hasRef ? `onmouseenter="showRefTooltip('${display.replace(/'/g,"\\'")}', this, event)"` : '';
                     const hoverOut = hasRef ? `onmouseleave="hideRefTooltip()"` : '';
-                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${(hasRef||isFil)?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut}
+                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${(hasRef||isFil||isEmpty)?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
                         ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}</td>`;
@@ -4026,7 +4030,7 @@
             setTimeout(() => document.addEventListener('click', sheet3HideOptMenu, { once: true }), 0);
         }
 
-        function sheet3ShowCellFilledMenu(e, gid, gameCol, alreadyFilled) {
+        function sheet3ShowCellFilledMenu(e, gid, gameCol, curVal) {
             e.preventDefault();
             e.stopPropagation();
             let menu = document.getElementById('s3CellFilledMenu');
@@ -4038,17 +4042,26 @@
             }
             const item = (label, fn) => `<div style="padding:8px 16px; cursor:pointer;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''" onclick="${fn}">${label}</div>`;
             const safeCol = gameCol.replace(/'/g, "\\'");
-            menu.innerHTML = alreadyFilled
-                ? item('✅ Unmark as Filled', `sheet3SetCellFilled('${gid}','${safeCol}',false); document.getElementById('s3CellFilledMenu').style.display='none';`)
-                : item('🔒 Mark Game as Filled',   `sheet3SetCellFilled('${gid}','${safeCol}',true);  document.getElementById('s3CellFilledMenu').style.display='none';`);
+            const hide    = `document.getElementById('s3CellFilledMenu').style.display='none';`;
+            let items = '';
+            if (curVal === 'FILLED') {
+                items = item('✅ Unmark as Filled', `sheet3SetCellVal('${gid}','${safeCol}',null); ${hide}`);
+                items += item('⬜ Mark as Empty',   `sheet3SetCellVal('${gid}','${safeCol}','EMPTY'); ${hide}`);
+            } else if (curVal === 'EMPTY') {
+                items = item('✅ Unmark as Empty',  `sheet3SetCellVal('${gid}','${safeCol}',null); ${hide}`);
+                items += item('🔒 Mark as Filled',  `sheet3SetCellVal('${gid}','${safeCol}','FILLED'); ${hide}`);
+            } else {
+                items = item('🔒 Mark as Filled',   `sheet3SetCellVal('${gid}','${safeCol}','FILLED'); ${hide}`);
+                items += item('⬜ Mark as Empty',   `sheet3SetCellVal('${gid}','${safeCol}','EMPTY'); ${hide}`);
+            }
+            menu.innerHTML = items;
             menu.style.left    = e.clientX + 'px';
             menu.style.top     = e.clientY + 'px';
             menu.style.display = 'block';
             setTimeout(() => document.addEventListener('click', () => { if (menu) menu.style.display = 'none'; }, { once: true }), 0);
         }
 
-        async function sheet3SetCellFilled(gid, gameCol, filled) {
-            const val = filled ? 'FILLED' : null;
+        async function sheet3SetCellVal(gid, gameCol, val) {
             await supabaseClient.client.from('games').update({ [gameCol]: val }).eq('id', parseInt(gid));
             const game = allGames.find(g => String(g.id) === String(gid));
             if (game) game.fields[gameCol] = val;
@@ -6439,9 +6452,18 @@
             if (refName === 'FILLED') {
                 return `<div class="slot s2-slot" data-game-id="${gameId}" data-position="${position}"
                     style="background:#e3f2fd; border-color:#1565c0; cursor:pointer;"
-                    oncontextmenu="s2ShowCellFilledMenu(event,'${gameId}','${safePos}',true); return false;">
+                    oncontextmenu="s2ShowCellFilledMenu(event,'${gameId}','${safePos}','FILLED'); return false;">
                     <span class="slot-label" style="color:#1565c0;">${label}</span>
                     <span style="font-size:0.8rem;font-weight:700;background:#1565c0;color:#fff;border-radius:3px;padding:2px 8px;letter-spacing:0.03em;">Filled</span>
+                </div>`;
+            }
+
+            if (refName === 'EMPTY') {
+                return `<div class="slot s2-slot" data-game-id="${gameId}" data-position="${position}"
+                    style="background:#f5f5f5; border-color:#9e9e9e; cursor:pointer;"
+                    oncontextmenu="s2ShowCellFilledMenu(event,'${gameId}','${safePos}','EMPTY'); return false;">
+                    <span class="slot-label" style="color:#9e9e9e;">${label}</span>
+                    <span style="font-size:0.8rem;font-weight:700;background:#9e9e9e;color:#fff;border-radius:3px;padding:2px 8px;letter-spacing:0.03em;">Empty</span>
                 </div>`;
             }
 
@@ -6475,13 +6497,13 @@
                 </div>`;
             }
             return `<div class="slot s2-slot" data-game-id="${gameId}" data-position="${position}"
-                oncontextmenu="s2ShowCellFilledMenu(event,'${gameId}','${safePos}',false); return false;">
+                oncontextmenu="s2ShowCellFilledMenu(event,'${gameId}','${safePos}',''); return false;">
                 <span class="slot-label">${label}</span>
                 <span>Drop ref here</span>
             </div>`;
         }
 
-        function s2ShowCellFilledMenu(e, gameId, position, alreadyFilled) {
+        function s2ShowCellFilledMenu(e, gameId, position, curVal) {
             e.preventDefault();
             e.stopPropagation();
             let menu = document.getElementById('s2CellFilledMenu');
@@ -6493,17 +6515,26 @@
             }
             const item = (label, fn) => `<div style="padding:8px 16px; cursor:pointer;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''" onclick="${fn}">${label}</div>`;
             const safePos = position.replace(/'/g, "\\'");
-            menu.innerHTML = alreadyFilled
-                ? item('✅ Unmark as Filled', `s2SetCellFilled('${gameId}','${safePos}',false); document.getElementById('s2CellFilledMenu').style.display='none';`)
-                : item('🔒 Mark as Filled',   `s2SetCellFilled('${gameId}','${safePos}',true);  document.getElementById('s2CellFilledMenu').style.display='none';`);
+            const hide    = `document.getElementById('s2CellFilledMenu').style.display='none';`;
+            let items = '';
+            if (curVal === 'FILLED') {
+                items = item('✅ Unmark as Filled', `s2SetCellVal('${gameId}','${safePos}',null); ${hide}`);
+                items += item('⬜ Mark as Empty',   `s2SetCellVal('${gameId}','${safePos}','EMPTY'); ${hide}`);
+            } else if (curVal === 'EMPTY') {
+                items = item('✅ Unmark as Empty',  `s2SetCellVal('${gameId}','${safePos}',null); ${hide}`);
+                items += item('🔒 Mark as Filled',  `s2SetCellVal('${gameId}','${safePos}','FILLED'); ${hide}`);
+            } else {
+                items = item('🔒 Mark as Filled',   `s2SetCellVal('${gameId}','${safePos}','FILLED'); ${hide}`);
+                items += item('⬜ Mark as Empty',   `s2SetCellVal('${gameId}','${safePos}','EMPTY'); ${hide}`);
+            }
+            menu.innerHTML = items;
             menu.style.left    = e.clientX + 'px';
             menu.style.top     = e.clientY + 'px';
             menu.style.display = 'block';
             setTimeout(() => document.addEventListener('click', () => { if (menu) menu.style.display = 'none'; }, { once: true }), 0);
         }
 
-        async function s2SetCellFilled(gameId, position, filled) {
-            const val = filled ? 'FILLED' : null;
+        async function s2SetCellVal(gameId, position, val) {
             await supabaseClient.client.from('games').update({ [position]: val }).eq('id', parseInt(gameId));
             const game = allGames.find(g => String(g.id) === String(gameId));
             if (game) game.fields[position] = val;
@@ -6521,9 +6552,9 @@
                 totalGames++;
                 const f   = g.fields;
                 const age = f['Age Group'] || '';
-                const cRef = f['Center Referee'] === 'FILLED' ? 'FILLED' : resolveRefName(f['Center Referee']);
-                const ar1  = f['AR 1'] === 'FILLED' ? 'FILLED' : resolveRefName(f['AR 1']);
-                const ar2  = f['AR 2'] === 'FILLED' ? 'FILLED' : resolveRefName(f['AR 2']);
+                const cRef = ['FILLED','EMPTY'].includes(f['Center Referee']) ? f['Center Referee'] : resolveRefName(f['Center Referee']);
+                const ar1  = ['FILLED','EMPTY'].includes(f['AR 1'])           ? f['AR 1']           : resolveRefName(f['AR 1']);
+                const ar2  = ['FILLED','EMPTY'].includes(f['AR 2'])           ? f['AR 2']           : resolveRefName(f['AR 2']);
                 const isU8 = (age || '').startsWith('U8');
                 const hideARs = isU8 || (hideU10Games && (age || '').startsWith('U10'));
                 const full = cRef && (hideARs || (ar1 && ar2));
@@ -6556,9 +6587,9 @@
                 const isCancelled = cancelledGameIds.has(g.id) || f['Game Status'] === 'Cancelled';
                 const isChangeReq = (f['Game Status'] || '') === 'Change Requested';
                 const isFilled = (f['Game Status'] || '') === 'Filled';
-                const cRef = f['Center Referee'] === 'FILLED' ? 'FILLED' : resolveRefName(f['Center Referee']);
-                const ar1  = f['AR 1'] === 'FILLED' ? 'FILLED' : resolveRefName(f['AR 1']);
-                const ar2  = f['AR 2'] === 'FILLED' ? 'FILLED' : resolveRefName(f['AR 2']);
+                const cRef = ['FILLED','EMPTY'].includes(f['Center Referee']) ? f['Center Referee'] : resolveRefName(f['Center Referee']);
+                const ar1  = ['FILLED','EMPTY'].includes(f['AR 1'])           ? f['AR 1']           : resolveRefName(f['AR 1']);
+                const ar2  = ['FILLED','EMPTY'].includes(f['AR 2'])           ? f['AR 2']           : resolveRefName(f['AR 2']);
                 const hideARs = (age || '').startsWith('U8') || (hideU10Games && (age || '').startsWith('U10'));
                 const full = !isCancelled && cRef && (hideARs || (ar1 && ar2));
                 const conf = caConfirmedMap[gid] || new Set();
