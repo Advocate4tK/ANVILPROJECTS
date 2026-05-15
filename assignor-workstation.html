@@ -1290,6 +1290,14 @@
         }
 
         // parseYrs: converts 'Years Reffing' field value to a numeric index.
+        function crewAllowed(clubName, ageGroup, slot) {
+            if (!window._crewRules) return true;
+            const ag = (ageGroup || '').replace(/[BG]$/, '').trim();
+            const rule = (window._crewRules[clubName] || {})[ag];
+            if (!rule) return true;
+            return slot === 'AR 1' ? rule.ar1 : slot === 'AR 2' ? rule.ar2 : true;
+        }
+
         // "Seas 1" / "Seas 2" (strings) → 0 / 1.  Integer 2+ → that integer.  Missing → missing arg (default -1).
         // Scale: 0 = Season 1, 1 = Season 2, 2 = Year 2, 3 = Year 3, ...
         function parseYrs(v, missing) {
@@ -3075,10 +3083,16 @@
                 const cleared  = sheet3ClearedAssigned[gid] || {};
                 const staged   = sheet3StagedRefs[gid] || [null,null,null,null,null,null];
                 const assignedTd = (field, rawName) => {
+                    const gcols     = { center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' };
+                    const posName   = gcols[field] || field;
                     const isFil     = rawName === 'FILLED';
                     const isEmpty   = rawName === 'EMPTY';
-                    const isCleared = !isFil && !isEmpty && !!cleared[field];
-                    const hasRef    = !isFil && !isEmpty && rawName !== '—' && !isCleared;
+                    const isBlocked = rawName === '—' && !crewAllowed(f['Source Club'] || '', f['Age Group'] || '', posName);
+                    const isCleared = !isFil && !isEmpty && !isBlocked && !!cleared[field];
+                    const hasRef    = !isFil && !isEmpty && !isBlocked && rawName !== '—' && !isCleared;
+                    if (isBlocked) {
+                        return `<td style="${cell} min-width:120px; background:#f3f4f6; color:#9ca3af; opacity:0.55; cursor:not-allowed; font-style:italic; font-size:0.78rem;">N/A</td>`;
+                    }
                     const display   = isFil
                         ? '<span style="font-size:0.72rem;background:#1565c0;color:#fff;border-radius:3px;padding:1px 6px;font-weight:700;letter-spacing:0.03em;">Filled</span>'
                         : isEmpty
@@ -3087,8 +3101,7 @@
                     const storedBg  = sheet3OptColors[`assigned-${gid}-${field}`] || '';
                     const bg        = isFil ? '#e3f2fd' : isEmpty ? '#f5f5f5' : (hasRef ? (storedBg || '#e8f5e9') : '#fffde7');
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet3AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
-                    const gcols     = { center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' };
-                    const gcol      = gcols[field] || field;
+                    const gcol      = posName;
                     const curVal    = isFil ? 'FILLED' : isEmpty ? 'EMPTY' : '';
                     const ctx       = (isFil || isEmpty)
                         ? `oncontextmenu="sheet3ShowCellFilledMenu(event,'${gid}','${gcol}','${curVal}'); return false;"`
@@ -5245,13 +5258,23 @@
             }
 
             let payRatesByClubId = {};
+            window._crewRules = {}; // { clubName: { ageGroup: { ar1, ar2 } } }
             const clubIds = Object.values(clubIdByName);
             if (clubIds.length) {
-                const { data: rates } = await supabaseClient.client
-                    .from('pay_rates').select('club_id, age_group, center, ar').in('club_id', clubIds);
-                if (rates) rates.forEach(r => {
+                const [ratesRes, crewRes] = await Promise.all([
+                    supabaseClient.client.from('pay_rates').select('club_id, age_group, center, ar').in('club_id', clubIds),
+                    supabaseClient.client.from('crew_rules').select('club_id, age_group, ar1, ar2').in('club_id', clubIds)
+                ]);
+                if (ratesRes.data) ratesRes.data.forEach(r => {
                     if (!payRatesByClubId[r.club_id]) payRatesByClubId[r.club_id] = [];
                     payRatesByClubId[r.club_id].push(r);
+                });
+                const clubNameById = {};
+                Object.entries(clubIdByName).forEach(([name, id]) => { clubNameById[id] = name; });
+                if (crewRes.data) crewRes.data.forEach(r => {
+                    const name = clubNameById[r.club_id] || String(r.club_id);
+                    if (!window._crewRules[name]) window._crewRules[name] = {};
+                    window._crewRules[name][r.age_group] = { ar1: r.ar1, ar2: r.ar2 };
                 });
             }
 
@@ -6449,6 +6472,13 @@
             const confirmed = !!(caConfirmedMap[String(gameId)]?.has(position));
             const safePos   = position.replace(/'/g, "\\'");
 
+            if (refName === 'BLOCKED') {
+                return `<div class="slot s2-slot" style="background:#f3f4f6; border-color:#d1d5db; cursor:not-allowed; opacity:0.55;">
+                    <span class="slot-label" style="color:#9ca3af;">${label}</span>
+                    <span style="font-size:0.78rem;color:#9ca3af;font-style:italic;">N/A</span>
+                </div>`;
+            }
+
             if (refName === 'FILLED') {
                 return `<div class="slot s2-slot" data-game-id="${gameId}" data-position="${position}"
                     style="background:#e3f2fd; border-color:#1565c0; cursor:pointer;"
@@ -6676,8 +6706,8 @@
                     </div>
                     <div class="slots" style="${hideARs ? 'grid-template-columns:1fr;' : ''}">
                         ${makeSlot2(gid, 'Center Referee', 'Center', cRef, f['Center Referee'])}
-                        ${hideARs ? '' : makeSlot2(gid, 'AR 1', 'AR 1', ar1, f['AR 1'])}
-                        ${hideARs ? '' : makeSlot2(gid, 'AR 2', 'AR 2', ar2, f['AR 2'])}
+                        ${hideARs ? '' : makeSlot2(gid, 'AR 1', 'AR 1', (!crewAllowed(f['Source Club'],age,'AR 1') && !ar1) ? 'BLOCKED' : ar1, f['AR 1'])}
+                        ${hideARs ? '' : makeSlot2(gid, 'AR 2', 'AR 2', (!crewAllowed(f['Source Club'],age,'AR 2') && !ar2) ? 'BLOCKED' : ar2, f['AR 2'])}
                     </div>
                     <div class="venue-field-row" onclick="event.stopPropagation()">
                         <span style="font-size:0.72rem;color:#888;">📍</span>
