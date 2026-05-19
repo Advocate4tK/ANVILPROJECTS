@@ -759,6 +759,8 @@
                     <div id="quickSelectSection">
                         <div style="font-size:0.95rem; font-weight:700; color:#333; margin-bottom:6px;">Quick Select</div>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button class="date-quick-btn" onclick="setDateRange('this-week', event)">This Week</button>
+                            <button class="date-quick-btn" onclick="setDateRange('next-week', event)">Next Week</button>
                             <button class="date-quick-btn" onclick="setDateRange('this-sat', event)">This Sat</button>
                             <button class="date-quick-btn" onclick="setDateRange('this-sun', event)">This Sun</button>
                             <button class="date-quick-btn" onclick="setDateRange('this-weekend', event)">This Weekend</button>
@@ -4997,7 +4999,19 @@
         function setDateRange(preset, evt) {
             let from, to;
 
-            if (preset === 'this-sat') {
+            if (preset === 'this-week') {
+                const today = new Date();
+                const day = today.getDay();
+                const mon = new Date(today); mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+                const sun = new Date(mon);   sun.setDate(mon.getDate() + 6);
+                from = mon; to = sun;
+            } else if (preset === 'next-week') {
+                const today = new Date();
+                const day = today.getDay();
+                const mon = new Date(today); mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1) + 7);
+                const sun = new Date(mon);   sun.setDate(mon.getDate() + 6);
+                from = mon; to = sun;
+            } else if (preset === 'this-sat') {
                 const { sat } = getWeekendDates(0);
                 from = to = sat;
             } else if (preset === 'this-sun') {
@@ -5105,17 +5119,16 @@
                 }
                 // loadAll fires from openWorkstation() after profile is selected
             } else if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
-                // Set this weekend and auto-load for unassigned filter link
-                setDateRange('this-weekend', null);
+                setDateRange('this-week', null);
                 loadAll();
             } else {
-                // Default to this weekend on load
-                setDateRange('this-weekend', null);
+                // Default to this week on load
+                setDateRange('this-week', null);
             }
 
-            // Highlight the "This Weekend" button manually since no click event
+            // Highlight the "This Week" button manually since no click event
             const weekendBtn = [...document.querySelectorAll('.date-quick-btn')]
-                .find(b => b.textContent.trim() === 'This Weekend');
+                .find(b => b.textContent.trim() === 'This Week');
             if (weekendBtn) weekendBtn.classList.add('active');
 
             buildClubPills();
