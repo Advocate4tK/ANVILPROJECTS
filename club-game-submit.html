@@ -2908,7 +2908,7 @@
                         // Game footer row — Mark Paid lives here, not on individual ref rows
                         if (allowPay) {
                             const footerBg = isPaid ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]}; filter:brightness(0.96);`;
-                            const markPaidBtn = `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" onclick="markGamePaid('${r.id}',this)" ${isPaid ? 'disabled' : ''}>${isPaid ? '✓ All Paid' : 'Mark All Paid'}</button>${isPaid && paidAt ? `<span class="pay-paid-at">${paidAt}</span>` : ''}`;
+                            const markPaidBtn = `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" data-game-footer="${r.id}" ${isPaid ? 'disabled' : 'disabled'}>${isPaid ? '✓ Paid' : 'Payment Pending'}</button>${isPaid && paidAt ? `<span class="pay-paid-at">${paidAt}</span>` : ''}`;
                             html += `<tr style="${footerBg} border-top:1.5px solid rgba(0,0,0,0.08);">
                                 <td colspan="3"></td>
                                 <td colspan="2" style="text-align:right; padding-right:4px; font-size:0.78rem; font-weight:600; color:#666;">Total</td>
@@ -3000,11 +3000,37 @@
                 btn.textContent = '✓';
                 if (tsEl) tsEl.textContent = new Date(now).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
                 btn.closest('tr').style.background = '#bbf7d0';
+                // Auto-close game if all payable slots are now paid
+                const allSlotRows = [...document.querySelectorAll(`tr[data-game="${gameId}"][data-slot]`)];
+                const allPaid = allSlotRows.length > 0 && allSlotRows.every(r => r.querySelector('.pay-slot-cb')?.classList.contains('paid'));
+                if (allPaid) await autoCloseGame(gameId, now);
             }
         } catch(e) {
             alert('Could not save: ' + e.message);
         }
         btn.disabled = false;
+    }
+
+    async function autoCloseGame(gameId, paidAt) {
+        try {
+            await supabaseClient.client.from('games').update({ paid_at: paidAt, 'Payment Status': 'Paid' }).eq('id', gameId);
+            document.querySelectorAll(`tr[data-game="${gameId}"]`).forEach(row => row.classList.add('row-paid'));
+            const footerBtn = document.querySelector(`.btn-mark-paid[data-game-footer="${gameId}"]`);
+            if (footerBtn) {
+                const tsLabel = new Date(paidAt).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+                footerBtn.textContent = '✓ Paid';
+                footerBtn.classList.add('paid');
+                footerBtn.disabled = true;
+                if (!footerBtn.parentNode.querySelector('.pay-paid-at')) {
+                    const tsEl = document.createElement('span');
+                    tsEl.className = 'pay-paid-at';
+                    tsEl.textContent = tsLabel;
+                    footerBtn.parentNode.appendChild(tsEl);
+                }
+                const footerRow = footerBtn.closest('tr');
+                if (footerRow) footerRow.style.background = '#bbf7d0';
+            }
+        } catch(e) { /* non-critical — individual payments already saved */ }
     }
 
     async function markGamePaid(gameId, btn) {
