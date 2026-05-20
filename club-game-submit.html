@@ -2752,11 +2752,34 @@
             const pastGames     = grisGames.filter(r => (r.fields['Date'] || '') <  today);
             const upcomingGames = grisGames.filter(r => (r.fields['Date'] || '') >= today);
 
-            function buildGameRows(gameList, allowPay) {
+            function isGamePaid(r) {
+                if (!!paidAtById[r.id] || (r.fields['Payment Status'] || '').toLowerCase() === 'paid') return true;
+                const f = r.fields;
+                const payablePos = ['CR','AR1','AR2'].filter(pos => {
+                    const v = pos === 'CR' ? f['Center Referee'] : pos === 'AR1' ? f['AR 1'] : f['AR 2'];
+                    return v && v.trim() && !['EMPTY','FILLED'].includes(v.trim().toUpperCase());
+                });
+                return payablePos.length === 0 || payablePos.every(pos => !!(slotPaidMap[r.id] && slotPaidMap[r.id][pos]));
+            }
+
+            // Split past games by week: fully paid weeks → complete, any unpaid → needsPayment
+            const _pastByWeek = {};
+            pastGames.forEach(r => {
+                const wk = getWeekLabel(r.fields['Date'] || r.fields['date'] || '');
+                if (!_pastByWeek[wk.key]) _pastByWeek[wk.key] = { label: wk.label, games: [] };
+                _pastByWeek[wk.key].games.push(r);
+            });
+            const needsPaymentGames = [], completedGames = [];
+            Object.values(_pastByWeek).forEach(wk => {
+                if (wk.games.every(r => isGamePaid(r))) completedGames.push(...wk.games);
+                else needsPaymentGames.push(...wk.games);
+            });
+
+            function buildGameRows(gameList, allowPay, forceCollapsed) {
                 // Group by week
                 const byWeek = {};
                 gameList.forEach(r => {
-                    const wk = getWeekLabel(r.fields['Date']);
+                    const wk = getWeekLabel(r.fields['Date'] || r.fields['date'] || '');
                     if (!byWeek[wk.key]) byWeek[wk.key] = { label: wk.label, games: [] };
                     byWeek[wk.key].games.push(r);
                 });
@@ -2777,16 +2800,7 @@
                 for (const wkKey of weekOrder) {
                     const wk = byWeek[wkKey];
                     const pid = 'pw_' + wkKey.replace(/-/g,'');
-                    const allPaid = allowPay && wk.games.every(r => {
-                        if (!!paidAtById[r.id] || (r.fields['Payment Status'] || '').toLowerCase() === 'paid') return true;
-                        const f = r.fields;
-                        const payablePos = ['CR','AR1','AR2'].filter(pos => {
-                            const v = pos === 'CR' ? f['Center Referee'] : pos === 'AR1' ? f['AR 1'] : f['AR 2'];
-                            return v && v.trim() && !['EMPTY','FILLED'].includes(v.trim().toUpperCase());
-                        });
-                        return payablePos.length > 0 && payablePos.every(pos => !!(slotPaidMap[r.id] && slotPaidMap[r.id][pos]));
-                    });
-                    const startCollapsed = allowPay ? (allPaid && wkKey !== _curWkKey) : (wkKey !== _curWkKey);
+                    const startCollapsed = forceCollapsed !== undefined ? forceCollapsed : (wkKey !== _curWkKey);
                     if (!(pid in window._payWeekCollapsed)) window._payWeekCollapsed[pid] = startCollapsed;
                     const wkCollapsed = window._payWeekCollapsed[pid];
                     html += `<div style="margin-bottom:10px;">
@@ -2967,17 +2981,21 @@
             let html = '';
             if (upcomingGames.length) {
                 html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin:0 0 10px;">Upcoming</div>`;
-                html += buildGameRows(upcomingGames, false);
+                html += buildGameRows(upcomingGames, false, false);
             }
             if (cancelledPayGames.length) {
                 html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#b91c1c; text-transform:uppercase; letter-spacing:1px; margin:${upcomingGames.length ? '14px' : '0'} 0 12px; display:flex; align-items:center; gap:8px;">📋 Cancelled — Refs Due Payment</div>`;
-                html += buildGameRows(cancelledPayGames, true);
+                html += buildGameRows(cancelledPayGames, true, false);
             }
-            if (pastGames.length) {
+            if (needsPaymentGames.length) {
                 html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1px; margin:${(upcomingGames.length || cancelledPayGames.length) ? '14px' : '0'} 0 12px;">Needs Payment</div>`;
-                html += buildGameRows(pastGames, true);
+                html += buildGameRows(needsPaymentGames, true, false);
             }
-            if (!cancelledPayGames.length && !pastGames.length && !upcomingGames.length) {
+            if (completedGames.length) {
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#15803d; text-transform:uppercase; letter-spacing:1px; margin:${(upcomingGames.length || cancelledPayGames.length || needsPaymentGames.length) ? '14px' : '0'} 0 12px;">✓ Complete</div>`;
+                html += buildGameRows(completedGames, true, true);
+            }
+            if (!cancelledPayGames.length && !needsPaymentGames.length && !completedGames.length && !upcomingGames.length) {
                 html = '<p style="color:#888; font-size:0.85rem;">No games with assigned refs yet.</p>';
             }
 
