@@ -2762,7 +2762,7 @@
                 });
 
                 let html = '';
-                const weekOrder = Object.keys(byWeek).sort();
+                const weekOrder = Object.keys(byWeek).sort().reverse();
 
                 const _curWkKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
                 if (!window._payWeekCollapsed) window._payWeekCollapsed = {};
@@ -2777,7 +2777,15 @@
                 for (const wkKey of weekOrder) {
                     const wk = byWeek[wkKey];
                     const pid = 'pw_' + wkKey.replace(/-/g,'');
-                    const allPaid = allowPay && wk.games.every(r => !!paidAtById[r.id] || (r.fields['Payment Status'] || '').toLowerCase() === 'paid');
+                    const allPaid = allowPay && wk.games.every(r => {
+                        if (!!paidAtById[r.id] || (r.fields['Payment Status'] || '').toLowerCase() === 'paid') return true;
+                        const f = r.fields;
+                        const payablePos = ['CR','AR1','AR2'].filter(pos => {
+                            const v = pos === 'CR' ? f['Center Referee'] : pos === 'AR1' ? f['AR 1'] : f['AR 2'];
+                            return v && v.trim() && !['EMPTY','FILLED'].includes(v.trim().toUpperCase());
+                        });
+                        return payablePos.length > 0 && payablePos.every(pos => !!(slotPaidMap[r.id] && slotPaidMap[r.id][pos]));
+                    });
                     const startCollapsed = allowPay ? (allPaid && wkKey !== _curWkKey) : (wkKey !== _curWkKey);
                     if (!(pid in window._payWeekCollapsed)) window._payWeekCollapsed[pid] = startCollapsed;
                     const wkCollapsed = window._payWeekCollapsed[pid];
@@ -2957,17 +2965,17 @@
             }
 
             let html = '';
+            if (upcomingGames.length) {
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin:0 0 10px;">Upcoming</div>`;
+                html += buildGameRows(upcomingGames, false);
+            }
             if (cancelledPayGames.length) {
-                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#b91c1c; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; display:flex; align-items:center; gap:8px;">📋 Cancelled — Refs Due Payment</div>`;
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#b91c1c; text-transform:uppercase; letter-spacing:1px; margin:${upcomingGames.length ? '14px' : '0'} 0 12px; display:flex; align-items:center; gap:8px;">📋 Cancelled — Refs Due Payment</div>`;
                 html += buildGameRows(cancelledPayGames, true);
             }
             if (pastGames.length) {
-                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1px; margin:${cancelledPayGames.length ? '14px' : '0'} 0 12px;">Needs Payment</div>`;
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1px; margin:${(upcomingGames.length || cancelledPayGames.length) ? '14px' : '0'} 0 12px;">Needs Payment</div>`;
                 html += buildGameRows(pastGames, true);
-            }
-            if (upcomingGames.length) {
-                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin:${(pastGames.length || cancelledPayGames.length) ? '14px' : '0'} 0 10px;">Upcoming</div>`;
-                html += buildGameRows(upcomingGames, false);
             }
             if (!cancelledPayGames.length && !pastGames.length && !upcomingGames.length) {
                 html = '<p style="color:#888; font-size:0.85rem;">No games with assigned refs yet.</p>';
