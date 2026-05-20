@@ -2907,8 +2907,19 @@
 
                         // Game footer row — Mark Paid lives here, not on individual ref rows
                         if (allowPay) {
-                            const footerBg = isPaid ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]}; filter:brightness(0.96);`;
-                            const markPaidBtn = `<button class="btn-mark-paid${isPaid ? ' paid' : ''}" data-game-footer="${r.id}" ${isPaid ? 'disabled' : 'disabled'}>${isPaid ? '✓ Paid' : 'Payment Pending'}</button>${isPaid && paidAt ? `<span class="pay-paid-at">${paidAt}</span>` : ''}`;
+                            // Treat as paid if game-level paid_at exists OR all payable slots are individually paid
+                            const allSlotsPaid = slots.length > 0 && slots.every(s => !!(slotPaidMap[r.id] && slotPaidMap[r.id][s.pos]));
+                            const effectivelyPaid = isPaid || allSlotsPaid;
+                            // For timestamp: use game-level paid_at if available, else latest slot paid_at
+                            let effectivePaidAt = paidAt;
+                            if (!effectivePaidAt && allSlotsPaid) {
+                                const latest = Object.values(slotPaidMap[r.id] || {}).sort().pop();
+                                effectivePaidAt = latest ? new Date(latest).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+                                // Backfill game-level paid_at if missing
+                                if (latest) supabaseClient.client.from('games').update({ paid_at: latest, 'Payment Status': 'Paid' }).eq('id', r.id).then(() => {});
+                            }
+                            const footerBg = effectivelyPaid ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]}; filter:brightness(0.96);`;
+                            const markPaidBtn = `<button class="btn-mark-paid${effectivelyPaid ? ' paid' : ''}" data-game-footer="${r.id}" disabled>${effectivelyPaid ? '✓ Paid' : 'Payment Pending'}</button>${effectivelyPaid && effectivePaidAt ? `<span class="pay-paid-at">${effectivePaidAt}</span>` : ''}`;
                             html += `<tr style="${footerBg} border-top:1.5px solid rgba(0,0,0,0.08);">
                                 <td colspan="3"></td>
                                 <td colspan="2" style="text-align:right; padding-right:4px; font-size:0.78rem; font-weight:600; color:#666;">Total</td>
