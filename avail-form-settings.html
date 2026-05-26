@@ -172,19 +172,25 @@
 <script>
     checkAdminAccess();
 
-    const OPENINGS_ALL_CLUBS = ['Griswold', 'East Haddam', 'RHAMYS', 'Lebanon', 'WAM', 'Plainfield', 'NECONN'];
+    let OPENINGS_ALL_CLUBS = [];
 
     async function loadOpeningsClubs() {
-        const [clubsRes, formRes] = await Promise.all([
+        const [clubsRes, settingsRes, formRes] = await Promise.all([
+            supabaseClient.client.from('clubs').select('name').eq('portal_enabled', true).order('name'),
             supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
             supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle()
         ]);
+        OPENINGS_ALL_CLUBS = (clubsRes.data || []).map(c => c.name);
         let active = [];
         let formConfig = {};
-        try { active     = JSON.parse(clubsRes.data?.value || '[]'); } catch(e) {}
-        try { formConfig = JSON.parse(formRes.data?.value  || '{}'); } catch(e) {}
+        try { active     = JSON.parse(settingsRes.data?.value || '[]'); } catch(e) {}
+        try { formConfig = JSON.parse(formRes.data?.value     || '{}'); } catch(e) {}
 
         const wrap = document.getElementById('openingsClubChecks');
+        if (!OPENINGS_ALL_CLUBS.length) {
+            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No managed clubs found.</p>';
+            return;
+        }
         wrap.innerHTML = OPENINGS_ALL_CLUBS.map(club => {
             const cfg = formConfig[club] || {};
             const ft  = cfg.formType || 'referee-tool';
