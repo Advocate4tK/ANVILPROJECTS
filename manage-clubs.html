@@ -296,6 +296,17 @@
             transition: border-color 0.15s, background 0.15s;
         }
         .section-toggle-btn:hover { border-color: #09142a; background: #f8f6f2; }
+
+        /* ── Entity type selector ── */
+        .entity-type-btn {
+            display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+            font-family: 'DM Sans', sans-serif; font-size: 0.88rem; font-weight: 600;
+            color: #888; background: #f8f6f2; border: 2px solid #e2d9ce;
+            border-radius: 8px; padding: 8px 16px; transition: all 0.15s; user-select: none;
+        }
+        .entity-type-btn input[type="radio"] { display: none; }
+        .entity-type-btn.active { color: #09142a; background: #f0ece6; border-color: #09142a; }
+        .entity-type-btn:hover { border-color: #09142a; }
     </style>
 </head>
 <body>
@@ -577,8 +588,19 @@
                 </div>
                 <div id="wizardContent" style="display:none; margin-top:20px; padding-top:20px; border-top:1px solid #e2d9ce;">
 
-            <!-- Club type toggle -->
-            <div style="display:flex; gap:10px; margin-bottom:24px;">
+            <!-- Entity type selector -->
+            <div style="margin-bottom:20px;">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px;">What are you creating?</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <label class="entity-type-btn active" id="etBtn-club"><input type="radio" name="entityType" value="club" checked onchange="setEntityType('club')"> 🏟 Club</label>
+                    <label class="entity-type-btn" id="etBtn-tournament"><input type="radio" name="entityType" value="tournament" onchange="setEntityType('tournament')"> 🏆 Tournament / Event</label>
+                    <label class="entity-type-btn" id="etBtn-recreation"><input type="radio" name="entityType" value="recreation" onchange="setEntityType('recreation')"> 🌳 Organization (Recreation)</label>
+                    <label class="entity-type-btn" id="etBtn-league"><input type="radio" name="entityType" value="league" onchange="setEntityType('league')"> ⚽ Summer League</label>
+                </div>
+            </div>
+
+            <!-- Club type toggle (Managed / Reference Only) -->
+            <div id="clubTypeToggle" style="display:flex; gap:10px; margin-bottom:24px;">
                 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:0.88rem; font-weight:600; color:#09142a; background:#f0ece6; border:2px solid #09142a; border-radius:8px; padding:8px 16px;">
                     <input type="radio" name="clubType" value="managed" checked onchange="setClubType('managed')"> Managed
                 </label>
@@ -612,7 +634,7 @@
                     <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:20px;">Organization Information</h2>
 
                     <div class="fg">
-                        <label>Club Name <span style="color:#e74c3c">*</span></label>
+                        <label id="clubNameLabel">Club Name <span style="color:#e74c3c">*</span></label>
                         <input type="text" id="clubName" placeholder="e.g. Glastonbury">
                         <div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Short operational name — used in URLs and system filters.</div>
                     </div>
@@ -623,10 +645,24 @@
                         <div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Full public name shown on the club's scheduling page. Leave blank to use Club Name.</div>
                     </div>
 
+                    <!-- Tournament dates (shown only for Tournament/Event type) -->
+                    <div id="tournamentDates" style="display:none; margin-bottom:16px;">
+                        <div class="form-row">
+                            <div class="fg" style="margin-bottom:0;">
+                                <label>Start Date <span style="color:#e74c3c">*</span></label>
+                                <input type="date" id="tourneyFrom">
+                            </div>
+                            <div class="fg" style="margin-bottom:0;">
+                                <label>End Date</label>
+                                <input type="date" id="tourneyTo">
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Club President (primary) -->
                     <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #09142a; border-radius:8px; padding:14px 16px; margin-bottom:16px;">
                         <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px;">
-                            <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px;">Club President</div>
+                            <div id="presTitle" style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px;">Club President</div>
                             <label style="display:flex; align-items:center; gap:6px; font-family:'DM Sans',sans-serif; font-size:0.82rem; color:#666; cursor:pointer; font-weight:600;">
                                 <input type="checkbox" id="presNA" onchange="togglePresNA(this)" style="width:15px;height:15px;cursor:pointer;"> N/A
                             </label>
@@ -659,8 +695,8 @@
 
                 <!-- Organization Admin block — hidden for reference clubs -->
                 <div id="clubAdminBlock" style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #00c853; border-radius:8px; padding:14px 16px;">
-                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;">Organization Admin — Scheduling Contact</div>
-                    <div style="font-size:0.78rem; color:#888; margin-bottom:12px;">This person logs into the club's scheduling page to submit games.</div>
+                    <div id="adminSectionTitle" style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;">Organization Admin — Scheduling Contact</div>
+                    <div id="adminSectionDesc" style="font-size:0.78rem; color:#888; margin-bottom:12px;">This person logs into the club's scheduling page to submit games.</div>
                     <div class="form-row">
                         <div class="fg" style="margin-bottom:0;">
                             <label>First Name <span style="color:#e74c3c">*</span></label>
@@ -859,6 +895,45 @@
     }
 
     let _clubTypeMode = 'managed';
+    window._entityType = 'club';
+
+    const _entityConfig = {
+        club:        { name: 'Club Name',         pres: 'Club President',         admin: 'Organization Admin — Scheduling Contact', adminDesc: "This person logs into the club's scheduling page to submit games.",        createBtn: 'Create Club',         dates: false },
+        tournament:  { name: 'Tournament Name',   pres: 'Tournament Director',    admin: 'Tournament Admin — Scheduling Contact',  adminDesc: 'This person logs into the tournament portal to submit games.',           createBtn: 'Create Tournament',   dates: true  },
+        recreation:  { name: 'Organization Name', pres: 'Organization Director',  admin: 'Organization Admin — Scheduling Contact', adminDesc: "This person logs into the organization's scheduling page to submit games.", createBtn: 'Create Organization', dates: false },
+        league:      { name: 'League Name',       pres: 'League Director',        admin: 'League Admin — Scheduling Contact',      adminDesc: "This person logs into the league's scheduling page to submit games.",       createBtn: 'Create League',       dates: false },
+    };
+
+    function setEntityType(type) {
+        window._entityType = type;
+        const cfg = _entityConfig[type] || _entityConfig.club;
+
+        // Update selector button styles
+        ['club','tournament','recreation','league'].forEach(t => {
+            const btn = document.getElementById('etBtn-' + t);
+            if (btn) btn.classList.toggle('active', t === type);
+        });
+
+        // Show/hide Managed/Reference toggle (tournaments are always managed)
+        const toggle = document.getElementById('clubTypeToggle');
+        if (toggle) toggle.style.display = (type === 'tournament') ? 'none' : '';
+        if (type === 'tournament') setClubType('managed');
+
+        // Update field labels
+        const nameLabel = document.getElementById('clubNameLabel');
+        if (nameLabel) nameLabel.firstChild.textContent = cfg.name + ' ';
+        document.getElementById('presTitle').textContent        = cfg.pres;
+        document.getElementById('adminSectionTitle').textContent = cfg.admin;
+        document.getElementById('adminSectionDesc').textContent  = cfg.adminDesc;
+
+        // Show/hide tournament date fields
+        const tDates = document.getElementById('tournamentDates');
+        if (tDates) tDates.style.display = cfg.dates ? '' : 'none';
+
+        // Update Create button
+        const createBtn = document.getElementById('createBtn');
+        if (createBtn) createBtn.textContent = cfg.createBtn;
+    }
 
     function setClubType(type) {
         _clubTypeMode = type;
