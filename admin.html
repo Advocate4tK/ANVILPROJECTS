@@ -1153,7 +1153,7 @@
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,    { maxRecords: 200 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,    { maxRecords: 500 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.ASSIGNORS, { maxRecords: 100 }),
-                    supabaseClient.client.from('tournaments').select('id, key, name, status, club, from_date, to_date, director, director_email, event_admin, event_admin_phone, event_admin_email, payment_coordinator, payment_coordinator_phone, payment_coordinator_email, assignor, assignor_phone, assignor_email, pay_rates, venues').order('from_date', { ascending: false }),
+                    supabaseClient.client.from('tournaments').select('id, key, name, status, club, from_date, to_date, director, director_email, event_admin, event_admin_phone, event_admin_email, payment_coordinator, payment_coordinator_phone, payment_coordinator_email, assignor, assignor_phone, assignor_email, age_groups, venues').order('from_date', { ascending: false }),
                 ]);
                 const allTournaments = (tournamentsRes.data || []);
 
@@ -1668,23 +1668,38 @@
                             const tVenues      = Array.isArray(t.venues) ? t.venues : [];
                             const venueCount   = tVenues.length;
                             const fieldCount   = tVenues.reduce((s, v) => s + (v.fields ? v.fields.length : 0), 0);
-                            const payRates     = Array.isArray(t.pay_rates) ? t.pay_rates : [];
-                            const statusColor  = t.status === 'active' ? '#00c853' : t.status === 'completed' ? '#888' : '#f59e0b';
+                            const ageGroups    = Array.isArray(t.age_groups) ? t.age_groups : [];
 
-                            const payRatesHtml = payRates.length ? `
+                            const ageGroupsHtml = ageGroups.length ? `
                             <div style="border-top:1px solid #edf0f7;">
+                                <div style="padding:10px 18px 4px; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Age Groups</div>
                                 <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
                                     <thead><tr style="background:#f4f6fa;">
-                                        <th style="padding:8px 18px; text-align:left; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Age Group</th>
-                                        <th style="padding:8px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Center</th>
-                                        <th style="padding:8px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">AR</th>
-                                        <th style="padding:8px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Solo CR</th>
+                                        <th style="padding:7px 18px; text-align:left; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555; font-weight:700;">Age Group</th>
+                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555; font-weight:700;">Format</th>
+                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555; font-weight:700;">Half Length</th>
                                     </tr></thead>
-                                    <tbody>${payRates.map((r, i) => `<tr style="${i % 2 === 1 ? 'background:#fafbfd;' : ''}">
-                                        <td style="padding:8px 18px; font-weight:600; color:#09142a;">${r.age_group || ''}</td>
-                                        <td style="padding:8px 12px; text-align:center; color:#00c853; font-weight:700;">${r.center ? '$' + r.center : '—'}</td>
-                                        <td style="padding:8px 12px; text-align:center; color:#3498db; font-weight:700;">${r.ar ? '$' + r.ar : '—'}</td>
-                                        <td style="padding:8px 12px; text-align:center; color:#9b59b6; font-weight:700;">${r.solo_cr ? '$' + r.solo_cr : '—'}</td>
+                                    <tbody>${ageGroups.map((r, i) => `<tr style="${i % 2 === 1 ? 'background:#fafbfd;' : ''}">
+                                        <td style="padding:7px 18px; font-weight:600; color:#09142a;">${r.age_group || ''}</td>
+                                        <td style="padding:7px 12px; text-align:center; color:#555;">${r.format || '—'}</td>
+                                        <td style="padding:7px 12px; text-align:center; color:#555;">${r.half_length ? '2 × ' + r.half_length + ' min' : '—'}</td>
+                                    </tr>`).join('')}</tbody>
+                                </table>
+                            </div>
+                            <div style="border-top:1px solid #edf0f7;">
+                                <div style="padding:10px 18px 4px; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Pay Rates</div>
+                                <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+                                    <thead><tr style="background:#f4f6fa;">
+                                        <th style="padding:7px 18px; text-align:left; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555; font-weight:700;">Age Group</th>
+                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#00c853; font-weight:700;">Center</th>
+                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#3498db; font-weight:700;">AR</th>
+                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#9b59b6; font-weight:700;">Solo CR</th>
+                                    </tr></thead>
+                                    <tbody>${ageGroups.map((r, i) => `<tr style="${i % 2 === 1 ? 'background:#fafbfd;' : ''}">
+                                        <td style="padding:7px 18px; font-weight:600; color:#09142a;">${r.age_group || ''}</td>
+                                        <td style="padding:7px 12px; text-align:center; color:#00c853; font-weight:700;">${r.center ? '$' + r.center : '—'}</td>
+                                        <td style="padding:7px 12px; text-align:center; color:#3498db; font-weight:700;">${r.ar ? '$' + r.ar : '—'}</td>
+                                        <td style="padding:7px 12px; text-align:center; color:#9b59b6; font-weight:700;">${r.solo_cr ? '$' + r.solo_cr : '—'}</td>
                                     </tr>`).join('')}</tbody>
                                 </table>
                             </div>` : '';
@@ -1729,7 +1744,7 @@
                                         ${assEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${assEmail}" style="color:#3498db; text-decoration:none;">✉️ ${assEmail}</a></div>` : ''}
                                     </div>
                                 </div>
-                                ${payRatesHtml}
+                                ${ageGroupsHtml}
                                 <div style="padding:12px 18px; background:#fafbfd; border-top:1px solid #edf0f7;">
                                     <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:10px;">Portals &amp; Links</div>
                                     <div style="display:flex; flex-direction:column; gap:7px;">

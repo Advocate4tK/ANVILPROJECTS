@@ -645,8 +645,13 @@
                     <span>Venues &amp; Fields</span>
                 </div>
                 <div class="wizard-connector" id="conn-2"></div>
-                <div class="wizard-step" id="step-ind-3">
+                <div class="wizard-step" id="step-ind-3" style="display:none;">
                     <div class="step-num">3</div>
+                    <span>Age Groups</span>
+                </div>
+                <div class="wizard-connector" id="conn-3" style="display:none;"></div>
+                <div class="wizard-step" id="step-ind-4">
+                    <div class="step-num" id="review-step-num">3</div>
                     <span>Review &amp; Create</span>
                 </div>
             </div>
@@ -817,8 +822,35 @@
                 </div>
             </div>
 
-            <!-- Step 3: Review & Create -->
+            <!-- Step 3: Age Groups (tournament only) -->
             <div class="step-panel" id="step-3">
+                <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #7c3aed;">
+                    <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">⚽ Age Groups &amp; Pay Rates</h2>
+                    <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Define each age group playing in this tournament — format, half length, and referee pay.</p>
+
+                    <div style="display:grid; grid-template-columns:1.5fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 32px; gap:8px; margin-bottom:6px; padding:0 2px;">
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa;">Age Group</div>
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; text-align:center;">Format</div>
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; text-align:center;">Half (min)</div>
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#00c853; text-align:center;">Center $</div>
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#3498db; text-align:center;">AR $</div>
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#9b59b6; text-align:center;">Solo CR $</div>
+                        <div></div>
+                    </div>
+
+                    <div id="ageGroupList" style="margin-bottom:14px;"></div>
+
+                    <button onclick="addAgeGroupRow()" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:8px 18px; border-radius:8px; font-weight:700; font-size:0.88rem; cursor:pointer; font-family:'DM Sans',sans-serif;">+ Add Age Group</button>
+                </div>
+
+                <div class="wizard-nav">
+                    <button onclick="goToStep(2)" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:10px 22px; border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">← Back</button>
+                    <button onclick="goToStep4()" class="btn btn-primary" style="background:#09142a; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Next: Review →</button>
+                </div>
+            </div>
+
+            <!-- Step 4: Review & Create -->
+            <div class="step-panel" id="step-4">
                 <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #00c853;">
                     <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:20px;">Review &amp; Create</h2>
 
@@ -830,7 +862,7 @@
                 </div>
 
                 <div class="wizard-nav">
-                    <button onclick="goToStep(2)" id="backBtn2" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:10px 22px; border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">← Back</button>
+                    <button onclick="backFromReview()" id="backBtn2" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:10px 22px; border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">← Back</button>
                     <button onclick="createClub()" id="createBtn" style="background:#00c853; color:#09142a; border:none; padding:10px 32px; border-radius:8px; font-weight:800; font-size:1rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">Create Club</button>
                 </div>
 
@@ -980,17 +1012,73 @@
     function goToStep(n) {
         document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
         document.getElementById('step-' + n).classList.add('active');
-        [1,2,3].forEach(i => {
+        const isTourney = window._entityType === 'tournament';
+        const visSteps  = isTourney ? [1,2,3,4] : [1,2,4];
+        visSteps.forEach(i => {
             const ind = document.getElementById('step-ind-' + i);
+            if (!ind) return;
             ind.classList.remove('active','done');
             if (i < n) ind.classList.add('done');
             else if (i === n) ind.classList.add('active');
         });
-        [1,2].forEach(i => {
+        [1,2,3].forEach(i => {
             const conn = document.getElementById('conn-' + i);
-            conn.classList.toggle('done', i < n);
+            if (conn) conn.classList.toggle('done', i < n);
         });
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function goToStep4() {
+        buildReview();
+        goToStep(4);
+    }
+
+    function backFromReview() {
+        if (window._entityType === 'tournament') {
+            goToStep(3);
+        } else if (_clubTypeMode === 'reference') {
+            goToStep(1);
+        } else {
+            goToStep(2);
+        }
+    }
+
+    function addAgeGroupRow() {
+        const list = document.getElementById('ageGroupList');
+        const row  = document.createElement('div');
+        row.className = 'age-group-row';
+        row.style.cssText = 'display:grid; grid-template-columns:1.5fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 32px; gap:8px; margin-bottom:8px; align-items:center;';
+        row.innerHTML = `
+            <input type="text" placeholder="e.g. Rec U10" class="ag-name" style="padding:8px 10px; border:1px solid #e2d9ce; border-radius:6px; font-size:0.85rem; font-family:'DM Sans',sans-serif;">
+            <input type="text" placeholder="11v11" class="ag-format" style="padding:8px 10px; border:1px solid #e2d9ce; border-radius:6px; font-size:0.85rem; font-family:'DM Sans',sans-serif; text-align:center;">
+            <input type="number" placeholder="30" class="ag-half" min="1" max="90" style="padding:8px 10px; border:1px solid #e2d9ce; border-radius:6px; font-size:0.85rem; font-family:'DM Sans',sans-serif; text-align:center;">
+            <input type="number" placeholder="0" class="ag-center" min="0" step="5" style="padding:8px 10px; border:1px solid #e2d9ce; border-radius:6px; font-size:0.85rem; font-family:'DM Sans',sans-serif; text-align:center;">
+            <input type="number" placeholder="0" class="ag-ar" min="0" step="5" style="padding:8px 10px; border:1px solid #e2d9ce; border-radius:6px; font-size:0.85rem; font-family:'DM Sans',sans-serif; text-align:center;">
+            <input type="number" placeholder="0" class="ag-solo" min="0" step="5" style="padding:8px 10px; border:1px solid #e2d9ce; border-radius:6px; font-size:0.85rem; font-family:'DM Sans',sans-serif; text-align:center;">
+            <button onclick="this.parentElement.remove()" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:6px; padding:6px 8px; cursor:pointer; font-size:0.85rem; font-weight:700;">✕</button>
+        `;
+        list.appendChild(row);
+    }
+
+    function collectAgeGroups() {
+        const rows = [];
+        document.querySelectorAll('#ageGroupList .age-group-row').forEach(row => {
+            const name = row.querySelector('.ag-name').value.trim();
+            if (!name) return;
+            const entry = { age_group: name };
+            const fmt  = row.querySelector('.ag-format').value.trim();
+            if (fmt) entry.format = fmt;
+            const half = parseInt(row.querySelector('.ag-half').value);
+            if (!isNaN(half) && half > 0) entry.half_length = half;
+            const center = parseFloat(row.querySelector('.ag-center').value);
+            if (!isNaN(center) && center > 0) entry.center = center;
+            const ar = parseFloat(row.querySelector('.ag-ar').value);
+            if (!isNaN(ar) && ar > 0) entry.ar = ar;
+            const solo = parseFloat(row.querySelector('.ag-solo').value);
+            if (!isNaN(solo) && solo > 0) entry.solo_cr = solo;
+            rows.push(entry);
+        });
+        return rows;
     }
 
     let _clubTypeMode = 'managed';
@@ -1035,6 +1123,15 @@
         // Update Create button
         const createBtn = document.getElementById('createBtn');
         if (createBtn) createBtn.textContent = cfg.createBtn;
+
+        // Show/hide age groups step indicator
+        const isTourney = type === 'tournament';
+        const agInd = document.getElementById('step-ind-3');
+        const agConn = document.getElementById('conn-3');
+        if (agInd)  agInd.style.display  = isTourney ? '' : 'none';
+        if (agConn) agConn.style.display = isTourney ? '' : 'none';
+        const revNum = document.getElementById('review-step-num');
+        if (revNum) revNum.textContent = isTourney ? '4' : '3';
     }
 
     let _hostClubShortName = '';
@@ -1287,12 +1384,12 @@
             goToStep(2);
         } else {
             buildReview();
-            goToStep(3);
+            goToStep(4);
         }
     }
 
     function goToStep3() {
-        // Validate at least one venue with a name and one field
+        // Validate at least one venue with a name
         const vBlocks = document.querySelectorAll('.venue-block');
         if (vBlocks.length === 0) { alert('Add at least one venue.'); return; }
         let valid = true;
@@ -1301,8 +1398,12 @@
             if (!vName) { alert(`Venue ${i+1}: please select a venue.`); valid = false; }
         });
         if (!valid) return;
-        buildReview();
-        goToStep(3);
+        if (window._entityType === 'tournament') {
+            goToStep(3);
+        } else {
+            buildReview();
+            goToStep(4);
+        }
     }
 
     // ── Venue Builder ─────────────────────────────────────────────────────────
@@ -1458,7 +1559,32 @@
                     <div class="url-box"><span>${slug}</span></div>
                 </div>
                 <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:8px; font-family:'DM Sans',sans-serif;">Venues &amp; Fields</div>
-                ${venueHtml}`;
+                ${venueHtml}
+                ${(() => {
+                    const ags = collectAgeGroups();
+                    if (!ags.length) return '';
+                    return `<div style="margin-top:16px;">
+                        <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:8px; font-family:'DM Sans',sans-serif;">Age Groups &amp; Pay Rates</div>
+                        <table style="width:100%; border-collapse:collapse; font-size:0.82rem; border:1px solid #e2d9ce; border-radius:8px; overflow:hidden;">
+                            <thead><tr style="background:#f4f6fa;">
+                                <th style="padding:7px 10px; text-align:left; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Age Group</th>
+                                <th style="padding:7px 10px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Format</th>
+                                <th style="padding:7px 10px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Half</th>
+                                <th style="padding:7px 10px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#00c853;">Center</th>
+                                <th style="padding:7px 10px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#3498db;">AR</th>
+                                <th style="padding:7px 10px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#9b59b6;">Solo CR</th>
+                            </tr></thead>
+                            <tbody>${ags.map((r,i) => `<tr style="${i%2===1?'background:#fafbfd;':''}">
+                                <td style="padding:7px 10px; font-weight:600;">${r.age_group}</td>
+                                <td style="padding:7px 10px; text-align:center;">${r.format || '—'}</td>
+                                <td style="padding:7px 10px; text-align:center;">${r.half_length ? r.half_length+' min' : '—'}</td>
+                                <td style="padding:7px 10px; text-align:center; color:#00c853; font-weight:700;">${r.center ? '$'+r.center : '—'}</td>
+                                <td style="padding:7px 10px; text-align:center; color:#3498db; font-weight:700;">${r.ar ? '$'+r.ar : '—'}</td>
+                                <td style="padding:7px 10px; text-align:center; color:#9b59b6; font-weight:700;">${r.solo_cr ? '$'+r.solo_cr : '—'}</td>
+                            </tr>`).join('')}</tbody>
+                        </table>
+                    </div>`;
+                })()}`;
             return;
         }
 
@@ -1541,14 +1667,17 @@
                     venues.push({ name: vName, address: addr || null, fields });
                 });
 
+                const ageGroups = collectAgeGroups();
+
                 log('Creating tournament record…', 'info');
                 const row = { key, name: clubName, status: 'upcoming' };
-                if (hostClub)  row.club       = hostClub;
-                if (fromDate)  row.from_date  = fromDate;
-                if (toDate)    row.to_date    = toDate;
-                if (venues.length) row.venues = venues;
-                if (director)  row.director   = director;
-                if (dirEmail)  row.director_email = dirEmail;
+                if (hostClub)        row.club        = hostClub;
+                if (fromDate)        row.from_date   = fromDate;
+                if (toDate)          row.to_date     = toDate;
+                if (venues.length)   row.venues      = venues;
+                if (director)        row.director    = director;
+                if (dirEmail)        row.director_email = dirEmail;
+                if (ageGroups.length) row.age_groups = ageGroups;
 
                 const { data: tRec, error: tErr } = await supabaseClient.client
                     .from('tournaments').insert(row).select().single();
@@ -1556,7 +1685,8 @@
 
                 log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
                 log(`✅ Tournament "${clubName}" created — key: ${key}`, 'ok');
-                if (venues.length) log(`📍 ${venues.length} venue(s) saved.`, 'ok');
+                if (venues.length)    log(`📍 ${venues.length} venue(s) saved.`, 'ok');
+                if (ageGroups.length) log(`⚽ ${ageGroups.length} age group(s) saved.`, 'ok');
                 createBtn.textContent = '✓ Created';
                 createBtn.style.background = '#00c853';
                 document.getElementById('backBtn2').style.display = 'none';
