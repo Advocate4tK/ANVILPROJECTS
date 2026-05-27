@@ -1146,14 +1146,16 @@
 
             try {
                 // Fetch games, referees, clubs, venues, and fields in parallel
-                const [allGames, allReferees, allClubs, allVenues, allFields, allAssignors] = await Promise.all([
+                const [allGames, allReferees, allClubs, allVenues, allFields, allAssignors, tournamentsRes] = await Promise.all([
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,     { maxRecords: 1000 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES,  { maxRecords: 1000 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,     { maxRecords: 200 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,    { maxRecords: 200 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,    { maxRecords: 500 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.ASSIGNORS, { maxRecords: 100 }),
+                    supabaseClient.client.from('tournaments').select('id, key, name, status').order('from_date', { ascending: false }),
                 ]);
+                const allTournaments = (tournamentsRes.data || []);
 
                 // Supplemental fetch for payment coordinator columns (bypasses schema cache wrapper)
                 const clubPayMap = {};
@@ -1467,7 +1469,7 @@
                     <select id="clubDropdown" style="padding:8px 14px; border-radius:8px; border:1px solid #ccc; font-size:0.9rem; color:#09142a; min-width:220px;">
                         <option value="">— Select a Club or Event —</option>
                         ${clubNames.map(c => `<option value="${c}">${c}</option>`).join('')}
-                        ${!adminUserClubs ? `<option disabled>──────────────</option><option value="__tourney_glastonbury">🏆 Glastonbury Spring Warmup Tournament</option>` : ''}
+                        ${!adminUserClubs && allTournaments.length ? `<option disabled>──────────────</option>` + allTournaments.map(t => `<option value="__tourney_${t.key}">🏆 ${t.name}</option>`).join('') : ''}
                         ${_refClubs.length > 0 ? `<option disabled>── Reference Clubs ──</option>` + _refClubs.sort((a,b)=>(a.fields['Name']||a.fields['Club Name']||'').localeCompare(b.fields['Name']||b.fields['Club Name']||'')).map(c => { const n = c.fields['Name'] || c.fields['Club Name'] || ''; return `<option value="__ref__${n}">📋 ${n}</option>`; }).join('') : ''}
                     </select>
                     <div id="clubStatDisplay" style="margin-top:12px;"></div>
