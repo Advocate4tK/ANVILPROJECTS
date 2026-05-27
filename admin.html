@@ -1153,7 +1153,7 @@
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,    { maxRecords: 200 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,    { maxRecords: 500 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.ASSIGNORS, { maxRecords: 100 }),
-                    supabaseClient.client.from('tournaments').select('id, key, name, status').order('from_date', { ascending: false }),
+                    supabaseClient.client.from('tournaments').select('id, key, name, status, club, from_date, to_date, director, director_email').order('from_date', { ascending: false }),
                 ]);
                 const allTournaments = (tournamentsRes.data || []);
 
@@ -1646,97 +1646,51 @@
                             return;
                         }
 
-                        // ── Tournament entry ──────────────────────────────────
-                        if (clubName === '__tourney_glastonbury') {
-                            const glastRec = clubRecordByName['Glastonbury'];
-                            const gf  = glastRec?.fields || {};
-                            const cid = glastRec?.id;
+                        // ── Tournament entry (generic — any __tourney_* key) ──
+                        if (clubName.startsWith('__tourney_')) {
+                            const tKey = clubName.replace('__tourney_', '');
+                            const t    = allTournaments.find(x => x.key === tKey) || {};
+                            const director   = t.director       || '—';
+                            const dirEmail   = t.director_email || '';
+                            const hostedBy   = t.club           || '';
+                            const dateRange  = t.from_date
+                                ? (t.to_date && t.to_date !== t.from_date
+                                    ? `${t.from_date} → ${t.to_date}`
+                                    : t.from_date)
+                                : 'Dates TBD';
+                            const tVenues    = Array.isArray(t.venues) ? t.venues : [];
+                            const venueCount = tVenues.length;
+                            const fieldCount = tVenues.reduce((s, v) => s + (v.fields ? v.fields.length : 0), 0);
 
-                            // Contacts
-                            const director   = gf['PRESIDENT'] || gf['President'] || gf['President Name'] || gf['Contact Name'] || gf['Contact'] || '—';
-                            const dirEmail   = gf['President Email'] || gf['Email'] || gf['Contact Email'] || '';
-                            const dirPhone   = gf['President Phone'] || gf['Phone'] || gf['Contact Phone'] || '';
-                            const tAdmin     = gf['Club Admin'] || gf['Tournament Admin'] || '';
-                            const tAdmEmail  = gf['Club Admin Email'] || gf['Tournament Admin Email'] || '';
-                            const tAdmPhone  = gf['Club Admin Phone'] || gf['Tournament Admin Phone'] || '';
-                            const tAssignor      = gf['assignor'] || gf['Assignor'] || '';
-                            const tAssignorEmail = gf['Assignor Email'] || '';
-                            const tAssignorPhone = gf['Assignor Phone'] || '';
-
-                            // Game stats — tournament games only
-                            const tGames = allGames.filter(g => (g.fields['game_type'] || '').toLowerCase() === 'tournament');
-                            const totalGames   = tGames.length;
-                            const thisWeek     = tGames.filter(g => { const d = new Date(g.fields['Date']); return d >= startOfWeek && d <= endOfWeek; }).length;
-                            const unassigned   = tGames.filter(g => { const d = new Date(g.fields['Date']); return d >= startOfWeek && d <= endOfWeek && (!g.fields['Center Referee'] || (Array.isArray(g.fields['Center Referee']) && g.fields['Center Referee'].length === 0)); }).length;
-
-                            // Venues & fields — shared with Glastonbury club
-                            const venueCount = cid ? (venueCountByClubId[cid] || 0) : 0;
-                            const fieldCount = cid ? (fieldCountByClubId[cid] || 0) : 0;
-
-                            // Last upload
-                            const lastUpload    = (cid ? lastUploadByClubId[cid] : null) || lastUploadByClubId['name:Glastonbury Spring Warmup Tournament'] || null;
-                            const lastUploadStr = lastUpload ? (() => {
-                                const d = new Date(lastUpload.time);
-                                return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
-                                    + ' at ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
-                            })() : null;
-
-                            const tSubmitUrl = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}club-game-submit.html?club=glastonbury-tournament`;
                             stat.innerHTML = `
-                            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-bottom:12px;">
+                            <div style="background:linear-gradient(135deg,#4a0072,#1a0030); color:white; border-radius:8px; padding:10px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; letter-spacing:0.5px;">🏆 ${t.name || tKey}</div>
+                                <div style="font-size:0.8rem; color:rgba(255,255,255,0.7);">📅 ${dateRange}</div>
+                                ${hostedBy ? `<div style="font-size:0.8rem; color:rgba(255,255,255,0.7);">Hosted by: ${hostedBy}</div>` : ''}
+                                <div style="margin-left:auto; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.5);">${(t.status||'upcoming').toUpperCase()}</div>
+                            </div>
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-bottom:10px;">
                                 <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
                                     <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Tournament Director</div>
                                     <div style="font-weight:700; color:#09142a; font-size:0.95rem;">${director}</div>
-                                    ${dirPhone ? `<div style="font-size:0.8rem; color:#666; margin-top:3px;">📞 ${dirPhone}</div>` : ''}
                                     ${dirEmail ? `<div style="font-size:0.8rem; margin-top:2px;"><a href="mailto:${dirEmail}" style="color:#3498db; text-decoration:none;">✉️ ${dirEmail}</a></div>` : ''}
                                 </div>
                                 <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Tournament Admin</div>
-                                    <div style="font-weight:700; color:#09142a; font-size:0.95rem;">${tAdmin || '—'}</div>
-                                    ${tAdmPhone ? `<div style="font-size:0.8rem; color:#666; margin-top:3px;">📞 ${tAdmPhone}</div>` : ''}
-                                    ${tAdmEmail ? `<div style="font-size:0.8rem; margin-top:2px;"><a href="mailto:${tAdmEmail}" style="color:#3498db; text-decoration:none;">✉️ ${tAdmEmail}</a></div>` : ''}
-                                </div>
-                                <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Assignor</div>
-                                    <div style="font-weight:700; color:#09142a; font-size:0.95rem;">${tAssignor || '—'}</div>
-                                    ${tAssignorPhone ? `<div style="font-size:0.8rem; color:#666; margin-top:3px;">📞 ${tAssignorPhone}</div>` : ''}
-                                    ${tAssignorEmail ? `<div style="font-size:0.8rem; margin-top:2px;"><a href="mailto:${tAssignorEmail}" style="color:#3498db; text-decoration:none;">✉️ ${tAssignorEmail}</a></div>` : ''}
-                                </div>
-                                <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Games This Week</div>
-                                    <div style="font-size:1.6rem; font-weight:800; color:#09142a; line-height:1;">${thisWeek}</div>
-                                    <div style="font-size:0.8rem; margin-top:4px;">
-                                        ${unassigned > 0
-                                            ? `<span style="color:#e94560; font-weight:600;">${unassigned} unassigned</span>`
-                                            : `<span style="color:#27ae60;">✅ All assigned</span>`}
-                                    </div>
-                                </div>
-                                <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Venues &amp; Fields</div>
-                                    <div style="font-weight:700; color:#09142a; font-size:0.95rem;">${venueCount} venue${venueCount !== 1 ? 's' : ''}</div>
+                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Venues on File</div>
+                                    <div style="font-size:1.4rem; font-weight:800; color:#09142a; line-height:1;">${venueCount}</div>
                                     <div style="font-size:0.8rem; color:#666;">${fieldCount} field${fieldCount !== 1 ? 's' : ''}</div>
                                 </div>
                                 <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Total Games on File</div>
-                                    <div style="font-size:1.6rem; font-weight:800; color:#09142a; line-height:1;">${totalGames}</div>
+                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Status</div>
+                                    <div style="font-weight:700; color:${t.status === 'completed' ? '#888' : '#00c853'}; font-size:0.95rem;">${(t.status||'upcoming').toUpperCase()}</div>
                                 </div>
                             </div>
-                            <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:8px;">Game Submission Page — Tournament Officials</div>
-                                <div style="margin-bottom:12px;">
-                                    <span style="font-size:0.8rem; color:#555; font-weight:600;">Last games pushed: </span>
-                                    ${lastUploadStr
-                                        ? `<span style="font-size:0.8rem; color:#09142a; font-weight:700;">${lastUploadStr}</span>${lastUpload.uploader ? `<span style="font-size:0.8rem; color:#555;"> by <strong>${lastUpload.uploader}</strong></span>` : ''}`
-                                        : `<span style="font-size:0.8rem; color:#aaa;">No upload on record</span>`}
+                            ${venueCount ? `<div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
+                                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:8px;">Venues</div>
+                                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                                    ${tVenues.map(v => `<span style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:4px; padding:3px 8px; font-size:0.8rem; color:#0369a1;">📍 ${v.name}</span>`).join('')}
                                 </div>
-                                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                    <button onclick="navigator.clipboard.writeText('${tSubmitUrl}').then(()=>{ this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy Link',1500); })"
-                                        style="background:#e8f4fd; border:1px solid #3498db; color:#3498db; border-radius:6px; padding:4px 10px; font-size:0.8rem; cursor:pointer; white-space:nowrap; flex-shrink:0;">📋 Copy Link</button>
-                                    <a href="${tSubmitUrl}" target="_blank"
-                                        style="background:#eafaf1; border:1px solid #27ae60; color:#27ae60; border-radius:6px; padding:4px 10px; font-size:0.8rem; text-decoration:none; white-space:nowrap; flex-shrink:0;">↗ Open Page</a>
-                                    <a href="${tSubmitUrl}" target="_blank" style="font-size:0.78rem; color:#3498db; text-decoration:underline; word-break:break-all;">${tSubmitUrl}</a>
-                                </div>
-                            </div>`;
+                            </div>` : ''}`;
                             return;
                         }
 
