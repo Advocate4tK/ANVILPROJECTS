@@ -665,6 +665,15 @@
                         <div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Full public name shown on the club's scheduling page. Leave blank to use Club Name.</div>
                     </div>
 
+                    <!-- Hosted by (tournament mode only) -->
+                    <div id="tourneyHostBlock" style="display:none; margin-bottom:16px;">
+                        <div class="fg" style="margin-bottom:0;">
+                            <label>Hosted by (Club / Organization)</label>
+                            <input type="text" id="tourneyHostClub" placeholder="e.g. RHAM Youth Soccer">
+                            <div style="font-size:0.75rem; color:#aaa; margin-top:4px;">The club or org putting on this tournament.</div>
+                        </div>
+                    </div>
+
                     <!-- Tournament dates (shown only for Tournament/Event type) -->
                     <div id="tournamentDates" style="display:none; margin-bottom:16px;">
                         <div class="form-row">
@@ -992,9 +1001,11 @@
         document.getElementById('adminSectionTitle').textContent = cfg.admin;
         document.getElementById('adminSectionDesc').textContent  = cfg.adminDesc;
 
-        // Show/hide tournament date fields
+        // Show/hide tournament-only fields
         const tDates = document.getElementById('tournamentDates');
         if (tDates) tDates.style.display = cfg.dates ? '' : 'none';
+        const tHost = document.getElementById('tourneyHostBlock');
+        if (tHost) tHost.style.display = cfg.dates ? '' : 'none';
 
         // Update Create button
         const createBtn = document.getElementById('createBtn');
@@ -1164,11 +1175,9 @@
         const adminLast  = document.getElementById('adminLast').value.trim();
         const adminEmail = document.getElementById('adminEmail').value.trim();
         const adminPhone = document.getElementById('adminPhone').value.trim();
-        const slug       = clubName.toLowerCase().replace(/[\s-]+/g, '-').replace(/[^a-z0-9-]/g, '');
-        const url        = `https://referee-tool.com/club-game-submit.html?club=${slug}`;
 
         let venueHtml = '';
-        document.querySelectorAll('.venue-block').forEach((vb, i) => {
+        document.querySelectorAll('.venue-block').forEach((vb) => {
             const vName  = vb.querySelector('.venue-name-input').value.trim();
             const vAddr  = vb.querySelector('.venue-addr-input').value.trim();
             const vCity  = vb.querySelector('.venue-city-input').value.trim();
@@ -1182,10 +1191,38 @@
                     <div class="review-venue-name">📍 ${vName}</div>
                     ${addrLine ? `<div style="font-size:0.8rem; color:#888; margin-bottom:8px;">${addrLine}</div>` : ''}
                     <div>${fields.map(f => `<span class="review-field-tag">${f}</span>`).join('')}</div>
-                    <div style="font-size:0.72rem; color:#aaa; margin-top:6px; font-family:'JetBrains Mono',monospace;">CS Venue ID: assigned via CA Import</div>
                 </div>`;
         });
 
+        if (window._entityType === 'tournament') {
+            const fromDate   = document.getElementById('tourneyFrom').value;
+            const toDate     = document.getElementById('tourneyTo').value;
+            const hostClub   = document.getElementById('tourneyHostClub').value.trim();
+            const slug       = clubName.toLowerCase().replace(/[\s-]+/g, '-').replace(/[^a-z0-9-]/g, '');
+            const dateRange  = fromDate && toDate && fromDate !== toDate
+                ? `${fromDate} → ${toDate}` : (fromDate || '—');
+            document.getElementById('reviewContent').innerHTML = `
+                <div class="review-club-header" style="background:linear-gradient(135deg,#4a0072,#1a0030);">
+                    <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:rgba(255,255,255,0.5); margin-bottom:4px;">🏆 New Tournament</div>
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.6rem; font-weight:800; letter-spacing:0.5px; margin-bottom:8px;">${clubName}</div>
+                    ${hostClub ? `<div style="font-size:0.82rem; color:rgba(255,255,255,0.7); margin-bottom:4px;">Hosted by: ${hostClub}</div>` : ''}
+                    <div style="font-size:0.88rem; color:rgba(255,255,255,0.9); margin-bottom:4px;">📅 ${dateRange}</div>
+                    <div style="font-size:0.82rem; color:rgba(255,255,255,0.7);">
+                        <strong>Director:</strong> ${(presFirst || presLast) ? `${presFirst} ${presLast}`.trim() : 'N/A'}
+                        ${presEmail ? ` · ${presEmail}` : ''}
+                    </div>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:6px; font-family:'DM Sans',sans-serif;">Tournament Key</div>
+                    <div class="url-box"><span>${slug}</span></div>
+                </div>
+                <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:8px; font-family:'DM Sans',sans-serif;">Venues &amp; Fields</div>
+                ${venueHtml}`;
+            return;
+        }
+
+        const slug = clubName.toLowerCase().replace(/[\s-]+/g, '-').replace(/[^a-z0-9-]/g, '');
+        const url  = `https://referee-tool.com/club-game-submit.html?club=${slug}`;
         document.getElementById('reviewContent').innerHTML = `
             <div class="review-club-header">
                 <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:rgba(255,255,255,0.5); margin-bottom:4px;">New Club</div>
@@ -1237,8 +1274,56 @@
         };
 
         try {
-            const isRef      = _clubTypeMode === 'reference';
             const clubName   = document.getElementById('clubName').value.trim();
+
+            // ── Tournament path — writes to tournaments table, not Airtable ──
+            if (window._entityType === 'tournament') {
+                const fromDate  = document.getElementById('tourneyFrom').value || null;
+                const toDate    = document.getElementById('tourneyTo').value || fromDate;
+                const hostClub  = document.getElementById('tourneyHostClub').value.trim() || null;
+                const presNA    = document.getElementById('presNA')?.checked;
+                const director  = presNA ? null : [document.getElementById('presFirst').value.trim(), document.getElementById('presLast').value.trim()].filter(Boolean).join(' ') || null;
+                const dirEmail  = presNA ? null : document.getElementById('presEmail').value.trim() || null;
+                const key       = clubName.toLowerCase().replace(/[\s-]+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+                const venues = [];
+                document.querySelectorAll('.venue-block').forEach(vb => {
+                    const vName = vb.querySelector('.venue-name-input').value.trim();
+                    if (!vName) return;
+                    const fields = [...vb.querySelectorAll('.field-name-input')].map(f => f.value.trim()).filter(Boolean);
+                    const addr = [
+                        vb.querySelector('.venue-addr-input').value.trim(),
+                        vb.querySelector('.venue-city-input').value.trim(),
+                        vb.querySelector('.venue-state-input').value.trim(),
+                        vb.querySelector('.venue-zip-input').value.trim()
+                    ].filter(Boolean).join(', ');
+                    venues.push({ name: vName, address: addr || null, fields });
+                });
+
+                log('Creating tournament record…', 'info');
+                const row = { key, name: clubName, status: 'upcoming' };
+                if (hostClub)  row.club       = hostClub;
+                if (fromDate)  row.from_date  = fromDate;
+                if (toDate)    row.to_date    = toDate;
+                if (venues.length) row.venues = venues;
+                if (director)  row.director   = director;
+                if (dirEmail)  row.director_email = dirEmail;
+
+                const { data: tRec, error: tErr } = await supabaseClient.client
+                    .from('tournaments').insert(row).select().single();
+                if (tErr) throw new Error(tErr.message);
+
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+                log(`✅ Tournament "${clubName}" created — key: ${key}`, 'ok');
+                if (venues.length) log(`📍 ${venues.length} venue(s) saved.`, 'ok');
+                createBtn.textContent = '✓ Created';
+                createBtn.style.background = '#00c853';
+                document.getElementById('backBtn2').style.display = 'none';
+                await loadClubsForRemove();
+                return;
+            }
+
+            const isRef      = _clubTypeMode === 'reference';
             const adminFirst = isRef ? '' : document.getElementById('adminFirst').value.trim();
             const adminLast  = isRef ? '' : document.getElementById('adminLast').value.trim();
             const presNA     = document.getElementById('presNA')?.checked;
