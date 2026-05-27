@@ -102,14 +102,20 @@
 
         <div class="tool-card" style="border-top:4px solid #0369a1;">
             <div style="display:flex; align-items:center; justify-content:space-between;">
-                <div>
-                    <h2 style="margin-bottom:6px;">Availability Form</h2>
-                    <p style="margin:0;">Payment method requirements (Venmo / check) are configured per club in <a href="manage-clubs.html" style="color:#0369a1; font-weight:700;">Club Management → Referee Pay</a>.</p>
+                <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="toggleSection('clubAvailBody','clubAvailArrow')">
+                    <span id="clubAvailArrow" style="color:#00c853; font-size:1rem; display:inline-block; transition:transform 0.2s;">▶</span>
+                    <h2 style="margin:0;">Availability Form — Active Clubs</h2>
                 </div>
                 <a href="referee-availability-form.html?preview=true" target="_blank"
-                    style="background:#09142a; color:#fff; padding:8px 18px; border-radius:8px; font-weight:700; font-size:0.85rem; text-decoration:none; font-family:'DM Sans',sans-serif; white-space:nowrap; flex-shrink:0; margin-left:20px;">
+                    style="background:#09142a; color:#fff; padding:6px 14px; border-radius:8px; font-weight:700; font-size:0.82rem; text-decoration:none; font-family:'DM Sans',sans-serif; white-space:nowrap; flex-shrink:0; margin-left:20px;">
                     👁 Preview Form
                 </a>
+            </div>
+            <div id="clubAvailBody" style="display:none; margin-top:18px;">
+                <p>Clubs currently on the availability form. Payment method settings are managed in <a href="manage-clubs.html" style="color:#0369a1; font-weight:700;">Club Management → Referee Pay</a>.</p>
+                <div class="club-check-list" id="availClubList">
+                    <p style="color:#aaa; font-size:0.85rem;">Loading…</p>
+                </div>
             </div>
         </div>
 
@@ -312,6 +318,7 @@
 
     let _openingsLoaded = false;
     let _recLoaded = false;
+    let _clubAvailLoaded = false;
 
     function toggleSection(bodyId, arrowId) {
         const body  = document.getElementById(bodyId);
@@ -319,8 +326,43 @@
         const open  = body.style.display === 'none';
         body.style.display    = open ? '' : 'none';
         arrow.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
-        if (open && bodyId === 'openingsBody' && !_openingsLoaded) { _openingsLoaded = true; loadOpeningsClubs(); }
-        if (open && bodyId === 'recBody'      && !_recLoaded)      { _recLoaded      = true; loadRecOrgs();       }
+        if (open && bodyId === 'openingsBody'  && !_openingsLoaded)  { _openingsLoaded  = true; loadOpeningsClubs(); }
+        if (open && bodyId === 'recBody'       && !_recLoaded)       { _recLoaded       = true; loadRecOrgs();       }
+        if (open && bodyId === 'clubAvailBody' && !_clubAvailLoaded) { _clubAvailLoaded = true; loadAvailClubs();    }
+    }
+
+    async function loadAvailClubs() {
+        const [formRes, clubsRes] = await Promise.all([
+            supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
+            supabaseClient.client.from('clubs').select('name, payment_methods').order('name')
+        ]);
+        let cfg = {};
+        try { cfg = JSON.parse(formRes.data?.value || '{}'); } catch(e) {}
+        const allClubs = clubsRes.data || [];
+
+        const rtClubs = allClubs.filter(c => {
+            const ft = cfg[c.name]?.formType;
+            return !ft || ft === 'referee-tool';
+        });
+
+        const wrap = document.getElementById('availClubList');
+        if (!rtClubs.length) {
+            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No clubs configured for Referee Tool yet.</p>';
+            return;
+        }
+        wrap.innerHTML = rtClubs.map(c => {
+            const methods = (c.payment_methods || '').split(',').map(s => s.trim()).filter(Boolean);
+            const payBadge = methods.length
+                ? `<span style="font-size:0.72rem; font-weight:700; background:#fff8e1; color:#92400e; border:1px solid #f59e0b; border-radius:4px; padding:1px 7px; margin-left:8px;">💳 ${methods.join(' / ').toUpperCase()}</span>`
+                : '';
+            return `
+            <div class="club-row">
+                <div class="club-main-row" style="cursor:default;">
+                    <span style="color:#00c853; font-size:0.85rem;">✓</span>
+                    ${c.name}${payBadge}
+                </div>
+            </div>`;
+        }).join('');
     }
 </script>
 </body>
