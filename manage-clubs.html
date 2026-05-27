@@ -321,6 +321,21 @@
             <a href="admin.html" class="btn-back">← Back to Admin Portal</a>
         </div>
 
+        <!-- Club Status — Master Switch -->
+        <div style="margin-bottom:24px;">
+            <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #00c853;">
+                <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">🟢 Club Status</h2>
+                <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Enable a club to make it active across the Referee Tool — availability form and public surfaces. Disabled clubs exist in the system but are invisible everywhere else. Pay rates and crew rules are always editable regardless of status.</p>
+                <div id="clubStatusList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:20px;">
+                    <p style="color:#aaa; font-size:0.85rem;">Loading…</p>
+                </div>
+                <div style="display:flex; align-items:center; gap:14px;">
+                    <button onclick="saveClubStatus()" style="background:#00c853; color:#09142a; border:none; padding:10px 28px; border-radius:8px; font-weight:800; font-size:1rem; text-transform:uppercase; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px;">Save Status</button>
+                    <span id="clubStatusMsg" style="display:none; font-size:0.82rem; color:#1a6b3a; font-weight:700; font-family:'DM Sans',sans-serif;">✓ Saved</span>
+                </div>
+            </div>
+        </div>
+
         <!-- Edit Club Contacts — PRIMARY section, shown first -->
         <div id="contactsSection" style="margin-bottom:24px;">
             <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #3b82f6;">
@@ -875,7 +890,44 @@
 
     window.addEventListener('DOMContentLoaded', () => {
         loadClubsForRemove(); // populates editClubSelect + contactsClubSelect + removeClubSelect
+        loadClubStatus();
     });
+
+    async function loadClubStatus() {
+        const wrap = document.getElementById('clubStatusList');
+        try {
+            const { data, error } = await supabaseClient.client
+                .from('clubs').select('id, name, "Club Name", enabled').order('name');
+            if (error) throw error;
+            const clubs = (data || [])
+                .map(r => ({ id: r.id, name: r['Club Name'] || r.name || '(unnamed)', enabled: !!r.enabled }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            if (!clubs.length) { wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No clubs found.</p>'; return; }
+            wrap.innerHTML = clubs.map(c => `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px;
+                    border:1px solid ${c.enabled ? '#bbf7d0' : '#e2d9ce'}; border-radius:8px;
+                    background:${c.enabled ? '#f0fdf4' : '#fafafa'};">
+                    <span style="font-family:'DM Sans',sans-serif; font-size:0.92rem; color:#1f2328; font-weight:${c.enabled ? '700' : '400'};">${c.name}</span>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:0.72rem; font-weight:800; font-family:'Barlow Condensed',sans-serif; letter-spacing:1px; text-transform:uppercase; color:${c.enabled ? '#15803d' : '#bbb'};">${c.enabled ? 'LIVE' : 'OFFLINE'}</span>
+                        <input type="checkbox" data-club-id="${c.id}" ${c.enabled ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;accent-color:#00c853;">
+                    </div>
+                </div>`).join('');
+        } catch(e) {
+            wrap.innerHTML = '<p style="color:#e74c3c; font-size:0.85rem;">⚠ Could not load — run the enabled column SQL in Supabase first.</p>';
+        }
+    }
+
+    async function saveClubStatus() {
+        const checks = document.querySelectorAll('#clubStatusList input[type=checkbox]');
+        await Promise.all([...checks].map(cb =>
+            supabaseClient.client.from('clubs').update({ enabled: cb.checked }).eq('id', parseInt(cb.dataset.clubId))
+        ));
+        const msg = document.getElementById('clubStatusMsg');
+        msg.style.display = 'inline';
+        setTimeout(() => msg.style.display = 'none', 2000);
+        loadClubStatus();
+    }
 
     // ── Step Navigation ───────────────────────────────────────────────────────
     function goToStep(n) {
