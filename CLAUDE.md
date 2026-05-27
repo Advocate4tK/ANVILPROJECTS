@@ -4,6 +4,8 @@
 Read these files before doing anything else:
 - `.claude-memory/PROJECT_STATE.md` — current project state, decisions, terminology
 - `.claude-memory/POSTGRES_STATE.md` — Postgres migration status
+- `.claude-memory/FIXES_LOG.md` — bugs already fixed + regressions to watch; READ THIS BEFORE INVESTIGATING ANY BUG
+- `.claude-memory/TOURNAMENT.md` — tournament memory (read if doing tournament work)
 - `../.claude-memory/USER_PERSONALITY.md` — personality/relationship context (lives at ANVIL PROJECTS level)
 
 ## LAST THING EVERY SESSION

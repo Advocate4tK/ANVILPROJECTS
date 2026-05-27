@@ -1365,24 +1365,40 @@
 
     async function loadClubsForRemove() {
         try {
-            const { data, error } = await supabaseClient.client.from('clubs').select('id, name, "Club Name", "Display Name"').order('name');
-            if (error) throw new Error(error.message);
-            allClubRecords = (data || [])
+            const [clubsRes, tournsRes] = await Promise.all([
+                supabaseClient.client.from('clubs').select('id, name, "Club Name", "Display Name"').order('name'),
+                supabaseClient.client.from('tournaments').select('id, name').order('name')
+            ]);
+            if (clubsRes.error) throw new Error(clubsRes.error.message);
+            allClubRecords = (clubsRes.data || [])
                 .map(r => ({ id: r.id, name: r['Club Name'] || r.name || '(unnamed)', displayName: r['Display Name'] || '' }))
                 .sort((a, b) => a.name.localeCompare(b.name));
-            const opts = '<option value="">— Select a club —</option>'
-                + allClubRecords.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            const tournRecords = (tournsRes.data || [])
+                .map(r => ({ id: r.id, name: r.name }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            const clubOpts = '<optgroup label="Clubs">'
+                + allClubRecords.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+                + '</optgroup>';
+            const tournOpts = tournRecords.length
+                ? '<optgroup label="Tournaments">'
+                  + tournRecords.map(t => `<option value="t:${t.id}">🏆 ${t.name}</option>`).join('')
+                  + '</optgroup>'
+                : '';
+            const opts = '<option value="">— Select —</option>' + clubOpts + tournOpts;
+
             document.getElementById('removeClubSelect').innerHTML   = opts;
             document.getElementById('editClubSelect').innerHTML     = opts;
             document.getElementById('contactsClubSelect').innerHTML = opts;
             document.getElementById('payClubSelect').innerHTML      = opts;
             document.getElementById('crewClubSel').innerHTML        = opts;
         } catch(e) {
-            document.getElementById('removeClubSelect').innerHTML   = '<option value="">⚠ Could not load clubs</option>';
-            document.getElementById('editClubSelect').innerHTML     = '<option value="">⚠ Could not load clubs</option>';
-            document.getElementById('contactsClubSelect').innerHTML = '<option value="">⚠ Could not load clubs</option>';
-            document.getElementById('payClubSelect').innerHTML      = '<option value="">⚠ Could not load clubs</option>';
-            document.getElementById('crewClubSel').innerHTML        = '<option value="">⚠ Could not load clubs</option>';
+            const err = '<option value="">⚠ Could not load</option>';
+            document.getElementById('removeClubSelect').innerHTML   = err;
+            document.getElementById('editClubSelect').innerHTML     = err;
+            document.getElementById('contactsClubSelect').innerHTML = err;
+            document.getElementById('payClubSelect').innerHTML      = err;
+            document.getElementById('crewClubSel').innerHTML        = err;
         }
     }
 
