@@ -355,14 +355,16 @@
                 </div>
 
                 <div id="contactsForm" style="display:none;">
-                    <!-- President -->
-                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">President</div>
+                    <!-- President / Director -->
+                    <div id="cPresLabel" style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">President</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:20px;">
                         <div class="fg" style="margin:0;"><label>Name</label><input type="text" id="cPresName" placeholder="First Last"></div>
                         <div class="fg" style="margin:0;"><label>Email</label><input type="email" id="cPresEmail" placeholder="email@club.org"></div>
                         <div class="fg" style="margin:0;"><label>Phone</label><input type="tel" id="cPresPhone" placeholder="(860) 555-1234"></div>
                     </div>
 
+                    <!-- Organization Admin + Payment Coordinator — hidden for tournaments -->
+                    <div id="contactsClubOnlySection">
                     <!-- Organization Admin -->
                     <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">Organization Admin (Scheduling Contact)</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:20px;">
@@ -378,6 +380,7 @@
                         <div class="fg" style="margin:0;"><label>Email</label><input type="email" id="cPayCoordEmail" placeholder="pay@club.org"></div>
                         <div class="fg" style="margin:0;"><label>Phone</label><input type="tel" id="cPayCoordPhone" placeholder="(860) 555-1234"></div>
                         <div class="fg" style="margin:0;"><label style="color:#c0392b; font-weight:800;">🔒 Portal PIN</label><input type="text" id="cPayCoordPin" placeholder="e.g. 4821" maxlength="12" autocomplete="off" style="border-color:#c0392b; background:#fff5f5; font-weight:700; letter-spacing:2px;"></div>
+                    </div>
                     </div>
 
                     <!-- Assignor -->
@@ -1936,44 +1939,61 @@
 
     // ── Club Contacts Editor ──────────────────────────────────────────────────
     async function loadContactsForClub() {
-        const clubId = document.getElementById('contactsClubSelect').value;
+        const rawId  = document.getElementById('contactsClubSelect').value;
         const form   = document.getElementById('contactsForm');
         const msg    = document.getElementById('contactsSaveMsg');
         msg.style.display = 'none';
-        if (!clubId) { form.style.display = 'none'; return; }
+        if (!rawId) { form.style.display = 'none'; return; }
+
+        const isTournament = rawId.startsWith('t:');
+        const entityId     = isTournament ? rawId.slice(2) : rawId;
+
+        document.getElementById('contactsClubOnlySection').style.display = isTournament ? 'none' : '';
+        document.getElementById('cPresLabel').textContent = isTournament ? 'Tournament Director' : 'President';
 
         try {
-            const { data, error } = await supabaseClient.client
-                .from('clubs')
-                .select('president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, payment_coordinator_phone, payment_portal_pin, assignor, "Assignor Email", "Assignor Phone"')
-                .eq('id', clubId)
-                .single();
-            if (error) throw new Error(error.message);
-
-            document.getElementById('cPresName').value      = data.president || '';
-            document.getElementById('cPresEmail').value     = data['President Email'] || '';
-            document.getElementById('cPresPhone').value     = data['President Phone'] || '';
-            document.getElementById('cAdminName').value     = data['Club Admin'] || '';
-            document.getElementById('cAdminEmail').value    = data['Club Admin Email'] || '';
-            document.getElementById('cAdminPhone').value    = data['Club Admin Phone'] || '';
-            document.getElementById('cPayCoordName').value  = data.payment_coordinator || '';
-            document.getElementById('cPayCoordEmail').value = data.payment_coordinator_email || '';
-            document.getElementById('cPayCoordPhone').value = data.payment_coordinator_phone || '';
-            document.getElementById('cPayCoordPin').value   = data.payment_portal_pin || '';
-            document.getElementById('cAssignorName').value  = data.assignor || '';
-            document.getElementById('cAssignorEmail').value = data['Assignor Email'] || '';
-            document.getElementById('cAssignorPhone').value = data['Assignor Phone'] || '';
-
+            if (isTournament) {
+                const { data, error } = await supabaseClient.client
+                    .from('tournaments').select('director, director_email').eq('id', entityId).single();
+                if (error) throw new Error(error.message);
+                document.getElementById('cPresName').value      = data.director       || '';
+                document.getElementById('cPresEmail').value     = data.director_email || '';
+                document.getElementById('cPresPhone').value     = '';
+                document.getElementById('cAssignorName').value  = '';
+                document.getElementById('cAssignorEmail').value = '';
+                document.getElementById('cAssignorPhone').value = '';
+            } else {
+                const { data, error } = await supabaseClient.client
+                    .from('clubs')
+                    .select('president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, payment_coordinator_phone, payment_portal_pin, assignor, "Assignor Email", "Assignor Phone"')
+                    .eq('id', entityId).single();
+                if (error) throw new Error(error.message);
+                document.getElementById('cPresName').value      = data.president || '';
+                document.getElementById('cPresEmail').value     = data['President Email'] || '';
+                document.getElementById('cPresPhone').value     = data['President Phone'] || '';
+                document.getElementById('cAdminName').value     = data['Club Admin'] || '';
+                document.getElementById('cAdminEmail').value    = data['Club Admin Email'] || '';
+                document.getElementById('cAdminPhone').value    = data['Club Admin Phone'] || '';
+                document.getElementById('cPayCoordName').value  = data.payment_coordinator || '';
+                document.getElementById('cPayCoordEmail').value = data.payment_coordinator_email || '';
+                document.getElementById('cPayCoordPhone').value = data.payment_coordinator_phone || '';
+                document.getElementById('cPayCoordPin').value   = data.payment_portal_pin || '';
+                document.getElementById('cAssignorName').value  = data.assignor || '';
+                document.getElementById('cAssignorEmail').value = data['Assignor Email'] || '';
+                document.getElementById('cAssignorPhone').value = data['Assignor Phone'] || '';
+            }
             form.style.display = 'block';
         } catch(e) {
-            alert('Could not load club contacts: ' + e.message);
+            alert('Could not load contacts: ' + e.message);
         }
     }
 
     async function saveContacts() {
-        const clubId = document.getElementById('contactsClubSelect').value;
-        if (!clubId) { alert('Select a club first.'); return; }
+        const rawId = document.getElementById('contactsClubSelect').value;
+        if (!rawId) { alert('Select an entity first.'); return; }
 
+        const isTournament = rawId.startsWith('t:');
+        const entityId     = isTournament ? rawId.slice(2) : rawId;
         const btn = document.getElementById('saveContactsBtn');
         const msg = document.getElementById('contactsSaveMsg');
         btn.disabled = true;
@@ -1981,9 +2001,14 @@
         msg.style.display = 'none';
 
         try {
-            const { error } = await supabaseClient.client
-                .from('clubs')
-                .update({
+            if (isTournament) {
+                const { error } = await supabaseClient.client.from('tournaments').update({
+                    director:       document.getElementById('cPresName').value.trim() || null,
+                    director_email: document.getElementById('cPresEmail').value.trim() || null,
+                }).eq('id', entityId);
+                if (error) throw new Error(error.message);
+            } else {
+                const { error } = await supabaseClient.client.from('clubs').update({
                     president:                  document.getElementById('cPresName').value.trim(),
                     'President Email':          document.getElementById('cPresEmail').value.trim(),
                     'President Phone':          document.getElementById('cPresPhone').value.trim(),
@@ -1997,10 +2022,9 @@
                     assignor:                   document.getElementById('cAssignorName').value.trim(),
                     'Assignor Email':           document.getElementById('cAssignorEmail').value.trim(),
                     'Assignor Phone':           document.getElementById('cAssignorPhone').value.trim(),
-                })
-                .eq('id', clubId);
-            if (error) throw new Error(error.message);
-
+                }).eq('id', entityId);
+                if (error) throw new Error(error.message);
+            }
             msg.style.display = 'block';
             msg.style.color   = '#15803d';
             msg.textContent   = '✅ Contacts saved.';
