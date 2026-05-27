@@ -630,6 +630,25 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+
+            // Preview mode — ?preview=true shows full form without entry step, no submission
+            if (new URLSearchParams(window.location.search).get('preview') === 'true') {
+                document.getElementById('entryFieldset').style.display = 'none';
+                const fb = document.getElementById('formBody');
+                fb.style.display = 'block';
+                requestAnimationFrame(() => fb.classList.add('unlocked'));
+                document.getElementById('contactSection').style.display = 'block';
+                const avSec = document.getElementById('availabilitySection');
+                avSec.style.display = 'block';
+                avSec.style.opacity = '1';
+                const submitBtn = document.getElementById('submitBtn');
+                if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '⚠ Preview Mode — Submission Disabled'; submitBtn.style.opacity = '0.5'; }
+                const banner = document.createElement('div');
+                banner.style.cssText = "background:#f59e0b;color:#09142a;text-align:center;padding:10px 16px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1rem;letter-spacing:1px;text-transform:uppercase;border-radius:8px;margin-bottom:20px;";
+                banner.textContent = '👁 PREVIEW MODE — View only. No data will be submitted.';
+                fb.insertBefore(banner, fb.firstChild);
+            }
+
             const container = document.getElementById('availabilityDays');
 
             // Pre-fill dates from ?dates=2026-05-09,2026-05-10 URL param
@@ -648,10 +667,15 @@
                 container.appendChild(createDayRow(1));
             }
 
-            // Load referee-tool clubs dynamically from openings_form_config setting
-            supabaseClient.client.from('settings').select('value').eq('key','openings_form_config').maybeSingle().then(({ data }) => {
+            // Load referee-tool clubs and pay-clubs config from DB
+            Promise.all([
+                supabaseClient.client.from('settings').select('value').eq('key','openings_form_config').maybeSingle(),
+                supabaseClient.client.from('settings').select('value').eq('key','avail_pay_clubs').maybeSingle()
+            ]).then(([formRes, payRes]) => {
                 let cfg = {};
-                try { cfg = JSON.parse(data?.value || '{}'); } catch(e) {}
+                let PAY_CLUBS = ['Griswold', 'East Haddam'];
+                try { cfg      = JSON.parse(formRes.data?.value || '{}'); } catch(e) {}
+                try { PAY_CLUBS = JSON.parse(payRes.data?.value || '["Griswold","East Haddam"]'); } catch(e) {}
                 const rtClubs = Object.entries(cfg)
                     .filter(([, v]) => v.formType === 'referee-tool')
                     .map(([name]) => name)
@@ -660,15 +684,14 @@
                 box.innerHTML = rtClubs.length
                     ? rtClubs.map(club => `<label><input type="checkbox" name="locations" value="${club}"> ${club}</label>`).join('')
                     : '<small style="color:#c00;">No clubs configured. Contact your assignor.</small>';
-                attachLocationListeners();
+                attachLocationListeners(PAY_CLUBS);
             });
 
-            function attachLocationListeners() {
+            function attachLocationListeners(PAY_CLUBS) {
                 // Clear any browser-restored checkbox state
                 document.querySelectorAll('input[name="locations"]').forEach(cb => cb.checked = false);
 
-                // Show/hide payment section when Griswold or East Haddam is checked
-                const PAY_CLUBS = ['Griswold', 'East Haddam'];
+                // Show/hide payment section for clubs configured in avail_pay_clubs setting
                 function updateClubPaySection() {
                     const anyChecked = PAY_CLUBS.some(name => {
                         const cb = document.querySelector(`input[name="locations"][value="${name}"]`);

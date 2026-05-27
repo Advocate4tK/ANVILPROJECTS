@@ -101,12 +101,41 @@
         </div>
 
         <div class="tool-card" style="border-top:4px solid #0369a1;">
-            <h2>Availability Form — Active Clubs &amp; Events</h2>
-            <p>Control which clubs, organizations, and tournaments appear on the referee availability form. Set session blocks (dates/times refs can mark availability) and toggle each entry active or inactive.</p>
-            <div class="coming-soon-block">
-                <div class="cs-icon">🔧</div>
-                <strong>Coming Soon</strong>
-                Clubs, tournaments, and events will be managed here — including RHAMBOREE 2026 and future events. Session blocks (e.g. June 13 AM / June 13 PM) will be configured per event.
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0;">
+                <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="toggleSection('clubAvailBody','clubAvailArrow')">
+                    <span id="clubAvailArrow" style="color:#00c853; font-size:1rem; display:inline-block; transition:transform 0.2s;">▶</span>
+                    <h2 style="margin:0;">Club Availability Settings</h2>
+                </div>
+                <a href="referee-availability-form.html?preview=true" target="_blank"
+                    style="background:#09142a; color:#fff; padding:6px 14px; border-radius:8px; font-weight:700; font-size:0.82rem; text-decoration:none; font-family:'DM Sans',sans-serif; white-space:nowrap;">
+                    👁 Preview Form
+                </a>
+            </div>
+            <div id="clubAvailBody" style="display:none; margin-top:18px;">
+                <p>Control which clubs require referees to enter a payment method (Venmo or check) on the availability form.</p>
+                <div class="club-check-list" id="payClubChecks">
+                    <p style="color:#aaa; font-size:0.85rem;">Loading…</p>
+                </div>
+                <p style="font-size:0.78rem; color:#aaa; margin-top:-8px; margin-bottom:16px;">Club list is determined by the <strong>Avail Form</strong> setting in the Public Openings Board section below.</p>
+                <div style="display:flex; align-items:center;">
+                    <button class="btn btn-secondary" onclick="savePayClubs()">Save</button>
+                    <span class="save-msg" id="payClubsSaveMsg">✓ Saved</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="tool-card" style="border-top:4px solid #8e44ad;">
+            <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="toggleSection('tournAvailBody','tournAvailArrow')">
+                <span id="tournAvailArrow" style="color:#00c853; font-size:1rem; display:inline-block; transition:transform 0.2s;">▶</span>
+                <h2 style="margin:0;">Tournaments &amp; Events</h2>
+            </div>
+            <div id="tournAvailBody" style="display:none; margin-top:18px;">
+                <p>Configure tournaments and events that appear on the availability form, with their session blocks (AM / PM slots, specific dates).</p>
+                <div class="coming-soon-block">
+                    <div class="cs-icon">🏆</div>
+                    <strong>RHAMBOREE 2026 — Coming Soon</strong>
+                    Once Eric provides venue and session details, RHAMBOREE 2026 (June 13) will be configured here with AM and PM session blocks.
+                </div>
             </div>
         </div>
 
@@ -294,6 +323,7 @@
 
     let _openingsLoaded = false;
     let _recLoaded = false;
+    let _clubAvailLoaded = false;
 
     function toggleSection(bodyId, arrowId) {
         const body  = document.getElementById(bodyId);
@@ -301,8 +331,48 @@
         const open  = body.style.display === 'none';
         body.style.display    = open ? '' : 'none';
         arrow.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
-        if (open && bodyId === 'openingsBody' && !_openingsLoaded) { _openingsLoaded = true; loadOpeningsClubs(); }
-        if (open && bodyId === 'recBody'      && !_recLoaded)      { _recLoaded = true;      loadRecOrgs();       }
+        if (open && bodyId === 'openingsBody'  && !_openingsLoaded)  { _openingsLoaded  = true; loadOpeningsClubs(); }
+        if (open && bodyId === 'recBody'       && !_recLoaded)       { _recLoaded       = true; loadRecOrgs();       }
+        if (open && bodyId === 'clubAvailBody' && !_clubAvailLoaded) { _clubAvailLoaded = true; loadPayClubs();      }
+    }
+
+    async function loadPayClubs() {
+        const [formRes, payRes] = await Promise.all([
+            supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
+            supabaseClient.client.from('settings').select('value').eq('key', 'avail_pay_clubs').maybeSingle()
+        ]);
+        let cfg = {};
+        let payClubs = ['Griswold', 'East Haddam'];
+        try { cfg      = JSON.parse(formRes.data?.value || '{}'); } catch(e) {}
+        try { payClubs = JSON.parse(payRes.data?.value  || '["Griswold","East Haddam"]'); } catch(e) {}
+
+        const rtClubs = Object.entries(cfg)
+            .filter(([, v]) => v.formType === 'referee-tool')
+            .map(([name]) => name)
+            .sort();
+
+        const wrap = document.getElementById('payClubChecks');
+        if (!rtClubs.length) {
+            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No clubs configured for Referee Tool yet. Set them in the Openings Board section below.</p>';
+            return;
+        }
+        wrap.innerHTML = rtClubs.map(club => `
+            <div class="club-row">
+                <label class="club-main-row">
+                    <input type="checkbox" value="${club}" ${payClubs.includes(club) ? 'checked' : ''}>
+                    ${club} — requires payment method (Venmo / check)
+                </label>
+            </div>`).join('');
+    }
+
+    async function savePayClubs() {
+        const checks = document.querySelectorAll('#payClubChecks input[type=checkbox]');
+        const selected = [...checks].filter(c => c.checked).map(c => c.value);
+        await supabaseClient.client.from('settings')
+            .upsert({ key: 'avail_pay_clubs', value: JSON.stringify(selected) });
+        const msg = document.getElementById('payClubsSaveMsg');
+        msg.style.display = 'inline';
+        setTimeout(() => msg.style.display = 'none', 2000);
     }
 </script>
 </body>
