@@ -337,23 +337,26 @@
     }
 
     async function loadPayClubs() {
-        const [formRes, payRes] = await Promise.all([
+        const [clubsRes, formRes, payRes] = await Promise.all([
+            supabaseClient.client.from('clubs').select('name').order('name'),
             supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
             supabaseClient.client.from('settings').select('value').eq('key', 'avail_pay_clubs').maybeSingle()
         ]);
+        const allClubs = (clubsRes.data || []).map(c => c.name);
         let cfg = {};
         let payClubs = ['Griswold', 'East Haddam'];
         try { cfg      = JSON.parse(formRes.data?.value || '{}'); } catch(e) {}
         try { payClubs = JSON.parse(payRes.data?.value  || '["Griswold","East Haddam"]'); } catch(e) {}
 
-        const rtClubs = Object.entries(cfg)
-            .filter(([, v]) => v.formType === 'referee-tool')
-            .map(([name]) => name)
-            .sort();
+        // Clubs on the avail form = clubs using Referee Tool (default if not explicitly set)
+        const rtClubs = allClubs.filter(name => {
+            const ft = cfg[name]?.formType;
+            return !ft || ft === 'referee-tool';
+        });
 
         const wrap = document.getElementById('payClubChecks');
         if (!rtClubs.length) {
-            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No clubs configured for Referee Tool yet. Set them in the Openings Board section below.</p>';
+            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No clubs found.</p>';
             return;
         }
         wrap.innerHTML = rtClubs.map(club => `
