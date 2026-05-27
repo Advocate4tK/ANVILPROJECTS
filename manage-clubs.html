@@ -1087,15 +1087,24 @@
 
     function _populateVenueFields(venueIdx, venueCAId) {
         const container = document.getElementById('fields-' + venueIdx);
+        const status    = document.getElementById('fields-status-' + venueIdx);
         container.innerHTML = '';
         fieldCounts[venueIdx] = 0;
         const fieldNames = venueCAId ? (_wizardFieldMap[venueCAId] || []) : [];
-        if (fieldNames.length === 0) { addField(venueIdx); return; }
         fieldNames.forEach(fn => {
             addField(venueIdx);
             const inputs = container.querySelectorAll('.field-name-input');
             inputs[inputs.length - 1].value = fn;
         });
+        if (status) {
+            if (fieldNames.length > 0) {
+                status.textContent = `✓ ${fieldNames.length} field${fieldNames.length > 1 ? 's' : ''} loaded`;
+                status.style.display = '';
+            } else {
+                status.textContent = '';
+                status.style.display = 'none';
+            }
+        }
     }
 
     function _populateVenueSelect(sel) {
@@ -1180,10 +1189,7 @@
         let valid = true;
         vBlocks.forEach((vb, i) => {
             const vName = vb.querySelector('.venue-name-input').value.trim();
-            if (!vName) { alert(`Venue ${i+1} needs a name.`); valid = false; }
-            const fields = vb.querySelectorAll('.field-name-input');
-            const hasField = [...fields].some(f => f.value.trim());
-            if (!hasField) { alert(`Venue ${i+1} needs at least one field.`); valid = false; }
+            if (!vName) { alert(`Venue ${i+1}: please select a venue.`); valid = false; }
         });
         if (!valid) return;
         buildReview();
@@ -1250,16 +1256,13 @@
                 </div>
             </div>
 
-            <div style="margin-top:14px; padding-top:14px; border-top:1px solid #e2d9ce;">
-                <div style="font-size:0.78rem; font-weight:700; color:#09142a; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px; font-family:'DM Sans',sans-serif;">Fields <span style="color:#e74c3c">*</span></div>
-                <div class="fields-list" id="fields-${idx}"></div>
-                <button class="btn-add-field" onclick="addField(${idx})">+ Add Field</button>
-            </div>`;
+            <!-- Fields load silently — confirmation shown after venue selected -->
+            <div id="fields-status-${idx}" style="display:none; font-size:0.78rem; color:#00c853; margin-top:4px;"></div>
+            <div class="fields-list" id="fields-${idx}" style="display:none;"></div>`;
         document.getElementById('venueList').appendChild(div);
         // Populate select if venues already loaded
         const sel = div.querySelector('.venue-select');
         if (_wizardVenuesLoaded && sel) _populateVenueSelect(sel);
-        addField(idx); // seed first field
         renumberVenues();
     }
 
