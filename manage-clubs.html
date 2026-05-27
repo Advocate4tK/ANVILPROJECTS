@@ -1048,6 +1048,79 @@
         }
     }
 
+    let _wizardVenues = [];
+    let _wizardVenuesLoaded = false;
+
+    async function loadWizardVenues() {
+        if (_wizardVenuesLoaded) return;
+        try {
+            const { data, error } = await supabaseClient.client
+                .from('venues').select('id, "Venue Name", address, city, state, zip').order('"Venue Name"');
+            if (!error) {
+                _wizardVenues = (data || []).map(v => ({
+                    id:      v.id,
+                    name:    v['Venue Name'] || v.name || '',
+                    address: v.address || '',
+                    city:    v.city    || '',
+                    state:   v.state   || 'CT',
+                    zip:     v.zip     ? String(v.zip) : ''
+                })).filter(v => v.name);
+                _wizardVenuesLoaded = true;
+                document.querySelectorAll('.venue-select').forEach(sel => _populateVenueSelect(sel));
+            }
+        } catch(e) { /* non-fatal — user can still type manually */ }
+    }
+
+    function _populateVenueSelect(sel) {
+        const current = sel.value;
+        const opts = ['<option value="">— Select existing venue —</option>']
+            .concat(_wizardVenues.map(v => `<option value="${v.id}">${v.name}</option>`))
+            .concat(['<option value="__new__">＋ Enter new venue...</option>']);
+        sel.innerHTML = opts.join('');
+        if (current) sel.value = current;
+    }
+
+    function onWizardVenueChange(idx) {
+        const sel      = document.querySelector(`#venue-${idx} .venue-select`);
+        const newBlock = document.getElementById(`venue-new-${idx}`);
+        const preview  = document.getElementById(`venue-preview-${idx}`);
+        const val      = sel.value;
+
+        if (val === '__new__') {
+            newBlock.style.display = '';
+            preview.style.display  = 'none';
+            _setVenueHidden(idx, '', '', '', 'CT', '');
+        } else if (val) {
+            const v = _wizardVenues.find(v => String(v.id) === val);
+            if (v) {
+                newBlock.style.display = 'none';
+                preview.style.display  = '';
+                preview.textContent    = [v.address, v.city, v.state, v.zip].filter(Boolean).join(', ') || 'No address on file';
+                _setVenueHidden(idx, v.name, v.address, v.city, v.state, v.zip);
+            }
+        } else {
+            newBlock.style.display = 'none';
+            preview.style.display  = 'none';
+            _setVenueHidden(idx, '', '', '', 'CT', '');
+        }
+    }
+
+    function _setVenueHidden(idx, name, addr, city, state, zip) {
+        const vb = document.getElementById('venue-' + idx);
+        vb.querySelector('.venue-name-input').value  = name;
+        vb.querySelector('.venue-addr-input').value  = addr;
+        vb.querySelector('.venue-city-input').value  = city;
+        vb.querySelector('.venue-state-input').value = state || 'CT';
+        vb.querySelector('.venue-zip-input').value   = zip;
+    }
+
+    function syncVenueField(idx, field, value) {
+        const vb = document.getElementById('venue-' + idx);
+        const map = { name: '.venue-name-input', addr: '.venue-addr-input', city: '.venue-city-input', state: '.venue-state-input', zip: '.venue-zip-input' };
+        const el = vb.querySelector(map[field]);
+        if (el) el.value = value;
+    }
+
     function goToStep2() {
         const clubName  = document.getElementById('clubName').value.trim();
         const presNA    = document.getElementById('presNA')?.checked;
@@ -1057,6 +1130,7 @@
             alert('Club name and president name are required.');
             return;
         }
+        loadWizardVenues();
         if (_clubTypeMode === 'managed') {
             const adminFirst = document.getElementById('adminFirst').value.trim();
             const adminLast  = document.getElementById('adminLast').value.trim();
@@ -1100,36 +1174,63 @@
                 <div class="venue-block-title">Venue ${idx + 1}</div>
                 <button class="btn-remove-venue" onclick="removeVenue(${idx})">Remove Venue</button>
             </div>
+
+            <!-- Hidden source-of-truth inputs — read by buildReview & createClub -->
+            <input type="hidden" class="venue-name-input">
+            <input type="hidden" class="venue-addr-input">
+            <input type="hidden" class="venue-city-input">
+            <input type="hidden" class="venue-state-input" value="CT">
+            <input type="hidden" class="venue-zip-input">
+
+            <!-- Dropdown: existing venues + new -->
             <div class="fg">
-                <label>Venue Name <span style="color:#e74c3c">*</span></label>
-                <input type="text" class="venue-name-input" placeholder="e.g. Glastonbury High School">
+                <label>Venue <span style="color:#e74c3c">*</span></label>
+                <select class="venue-select" onchange="onWizardVenueChange(${idx})">
+                    <option value="">— Select existing venue —</option>
+                    <option value="__new__">＋ Enter new venue...</option>
+                </select>
             </div>
-            <div class="form-row">
-                <div class="fg" style="margin-bottom:0;">
-                    <label>Address</label>
-                    <input type="text" class="venue-addr-input" placeholder="330 Hubbard Street">
+
+            <!-- Address preview when existing venue picked -->
+            <div id="venue-preview-${idx}" style="display:none; background:#f0fff4; border:1px solid #00c853; border-radius:6px; padding:7px 12px; font-size:0.81rem; color:#555; margin-top:-6px; margin-bottom:10px;"></div>
+
+            <!-- Text inputs shown only when 'new venue' is selected -->
+            <div id="venue-new-${idx}" style="display:none;">
+                <div class="fg">
+                    <label>Venue Name <span style="color:#e74c3c">*</span></label>
+                    <input type="text" placeholder="e.g. Blackledge" oninput="syncVenueField(${idx},'name',this.value)">
                 </div>
-                <div class="fg" style="margin-bottom:0;">
-                    <label>City</label>
-                    <input type="text" class="venue-city-input" placeholder="Glastonbury">
+                <div class="form-row">
+                    <div class="fg" style="margin-bottom:0;">
+                        <label>Address</label>
+                        <input type="text" placeholder="123 Main St" oninput="syncVenueField(${idx},'addr',this.value)">
+                    </div>
+                    <div class="fg" style="margin-bottom:0;">
+                        <label>City</label>
+                        <input type="text" placeholder="Hebron" oninput="syncVenueField(${idx},'city',this.value)">
+                    </div>
+                </div>
+                <div class="form-row" style="margin-top:12px;">
+                    <div class="fg" style="margin-bottom:0;">
+                        <label>State</label>
+                        <input type="text" value="CT" maxlength="2" style="text-transform:uppercase;" oninput="syncVenueField(${idx},'state',this.value)">
+                    </div>
+                    <div class="fg" style="margin-bottom:0;">
+                        <label>Zip</label>
+                        <input type="text" placeholder="06248" maxlength="5" oninput="syncVenueField(${idx},'zip',this.value)">
+                    </div>
                 </div>
             </div>
-            <div class="form-row" style="margin-top:12px;">
-                <div class="fg" style="margin-bottom:0;">
-                    <label>State</label>
-                    <input type="text" class="venue-state-input" value="CT" maxlength="2" style="text-transform:uppercase;">
-                </div>
-                <div class="fg" style="margin-bottom:0;">
-                    <label>Zip</label>
-                    <input type="text" class="venue-zip-input" placeholder="06033" maxlength="5">
-                </div>
-            </div>
+
             <div style="margin-top:14px; padding-top:14px; border-top:1px solid #e2d9ce;">
                 <div style="font-size:0.78rem; font-weight:700; color:#09142a; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px; font-family:'DM Sans',sans-serif;">Fields <span style="color:#e74c3c">*</span></div>
                 <div class="fields-list" id="fields-${idx}"></div>
                 <button class="btn-add-field" onclick="addField(${idx})">+ Add Field</button>
             </div>`;
         document.getElementById('venueList').appendChild(div);
+        // Populate select if venues already loaded
+        const sel = div.querySelector('.venue-select');
+        if (_wizardVenuesLoaded && sel) _populateVenueSelect(sel);
         addField(idx); // seed first field
         renumberVenues();
     }
