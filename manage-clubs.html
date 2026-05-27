@@ -670,11 +670,18 @@
 
                     <!-- Hosted by (tournament mode only) -->
                     <div id="tourneyHostBlock" style="display:none; margin-bottom:16px;">
-                        <div class="fg" style="margin-bottom:0;">
+                        <div class="fg" style="margin-bottom:8px;">
                             <label>Hosted by (Club / Organization)</label>
-                            <input type="text" id="tourneyHostClub" placeholder="e.g. RHAM Youth Soccer">
+                            <select id="tourneyHostClubSel" onchange="onHostClubChange()">
+                                <option value="">— Select club —</option>
+                                <option value="__other__">Other / Not listed...</option>
+                            </select>
+                        </div>
+                        <div id="tourneyHostOtherBlock" style="display:none;">
+                            <input type="text" id="tourneyHostClub" placeholder="e.g. RHAM Youth Soccer" style="margin-top:4px;">
                             <div style="font-size:0.75rem; color:#aaa; margin-top:4px;">The club or org putting on this tournament.</div>
                         </div>
+                        <input type="hidden" id="tourneyHostClubName">
                     </div>
 
                     <!-- Tournament dates (shown only for Tournament/Event type) -->
@@ -784,6 +791,20 @@
                 <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #09142a;">
                     <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">Venues &amp; Fields</h2>
                     <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Each venue needs at least one field. Central Assign IDs are added later via CA Import.</p>
+
+                    <!-- Club venue import banner (tournament mode only) -->
+                    <div id="venueImportBanner" style="display:none; background:#f0f9ff; border:1px solid #0369a1; border-radius:8px; padding:14px 16px; margin-bottom:16px;">
+                        <div style="font-size:0.88rem; font-weight:700; color:#0369a1; margin-bottom:10px;" id="venueImportTitle"></div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button onclick="importAllVenues()" style="background:#0369a1; color:#fff; border:none; padding:8px 18px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer;">Bring All</button>
+                            <button onclick="importChooseVenues()" style="background:#fff; color:#0369a1; border:2px solid #0369a1; padding:8px 18px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer;">Choose Venues</button>
+                        </div>
+                        <!-- Choose panel -->
+                        <div id="venueChoosePanel" style="display:none; margin-top:12px; border-top:1px solid #bae6fd; padding-top:12px;">
+                            <div id="venueCheckboxList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;"></div>
+                            <button onclick="confirmVenueChoices()" style="background:#0369a1; color:#fff; border:none; padding:7px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer;">Add Selected →</button>
+                        </div>
+                    </div>
 
                     <div id="venueList"></div>
 
@@ -1009,10 +1030,94 @@
         if (tDates) tDates.style.display = cfg.dates ? '' : 'none';
         const tHost = document.getElementById('tourneyHostBlock');
         if (tHost) tHost.style.display = cfg.dates ? '' : 'none';
+        if (cfg.dates) _populateHostClubSelect();
 
         // Update Create button
         const createBtn = document.getElementById('createBtn');
         if (createBtn) createBtn.textContent = cfg.createBtn;
+    }
+
+    let _hostClubShortName = '';
+    let _hostClubVenues    = [];
+
+    function _populateHostClubSelect() {
+        const sel = document.getElementById('tourneyHostClubSel');
+        if (!sel || allClubRecords.length === 0) return;
+        const opts = ['<option value="">— Select hosting club —</option>']
+            .concat(allClubRecords.map(c => `<option value="${c.id}" data-short="${c.shortName}">${c.name}</option>`))
+            .concat(['<option value="__other__">Other / Not listed...</option>']);
+        sel.innerHTML = opts.join('');
+    }
+
+    function onHostClubChange() {
+        const sel   = document.getElementById('tourneyHostClubSel');
+        const opt   = sel.options[sel.selectedIndex];
+        const other = document.getElementById('tourneyHostOtherBlock');
+        if (sel.value === '__other__') {
+            other.style.display = '';
+            _hostClubShortName  = '';
+            document.getElementById('tourneyHostClubName').value = '';
+        } else if (sel.value) {
+            other.style.display = 'none';
+            _hostClubShortName  = opt.dataset.short || '';
+            document.getElementById('tourneyHostClubName').value = opt.text;
+            document.getElementById('tourneyHostClub').value     = opt.text;
+        } else {
+            other.style.display = 'none';
+            _hostClubShortName  = '';
+            document.getElementById('tourneyHostClubName').value = '';
+        }
+    }
+
+    function showVenueImportBanner() {
+        const banner = document.getElementById('venueImportBanner');
+        if (!banner || !_hostClubShortName || window._entityType !== 'tournament') return;
+        _hostClubVenues = _wizardVenues.filter(v =>
+            v.clubName && v.clubName.toLowerCase() === _hostClubShortName.toLowerCase()
+        );
+        if (_hostClubVenues.length === 0) { banner.style.display = 'none'; return; }
+        document.getElementById('venueImportTitle').textContent =
+            `🏟 Found ${_hostClubVenues.length} venue${_hostClubVenues.length > 1 ? 's' : ''} for ${_hostClubShortName}`;
+        banner.style.display = '';
+        document.getElementById('venueChoosePanel').style.display = 'none';
+    }
+
+    function importAllVenues() {
+        document.getElementById('venueList').innerHTML = '';
+        venueCount = 0;
+        _hostClubVenues.forEach(v => _addVenueToWizard(v));
+        document.getElementById('venueImportBanner').style.display = 'none';
+    }
+
+    function importChooseVenues() {
+        const panel = document.getElementById('venueChoosePanel');
+        const list  = document.getElementById('venueCheckboxList');
+        list.innerHTML = _hostClubVenues.map((v, i) =>
+            `<label style="display:flex; align-items:center; gap:8px; font-size:0.88rem; cursor:pointer;">
+                <input type="checkbox" data-venue-idx="${i}" checked style="width:15px;height:15px;">
+                ${v.name}${v.city ? ' — ' + v.city : ''}
+            </label>`
+        ).join('');
+        panel.style.display = '';
+    }
+
+    function confirmVenueChoices() {
+        const checked = [...document.querySelectorAll('#venueCheckboxList input[type="checkbox"]:checked')];
+        if (!checked.length) { alert('Select at least one venue.'); return; }
+        document.getElementById('venueList').innerHTML = '';
+        venueCount = 0;
+        checked.forEach(cb => _addVenueToWizard(_hostClubVenues[parseInt(cb.dataset.venueIdx)]));
+        document.getElementById('venueImportBanner').style.display = 'none';
+    }
+
+    function _addVenueToWizard(venue) {
+        addVenue();
+        const idx = venueCount - 1;
+        const sel = document.querySelector('#venue-' + idx + ' .venue-select');
+        if (sel) {
+            sel.value = String(venue.id);
+            onWizardVenueChange(idx);
+        }
     }
 
     function setClubType(type) {
@@ -1059,7 +1164,7 @@
         if (_wizardVenuesLoaded) return;
         try {
             const [venueRes, fieldRes] = await Promise.all([
-                supabaseClient.client.from('venues').select('id, "Venue Name", "Venue ID", address, city, state, zip').order('"Venue Name"'),
+                supabaseClient.client.from('venues').select('id, "Venue Name", "Venue ID", address, city, state, zip, club_name').order('"Venue Name"'),
                 supabaseClient.client.from('fields').select('"Field Name", "Venue ID"')
             ]);
             if (!venueRes.error) {
@@ -1067,10 +1172,11 @@
                     id:        v.id,
                     venueCAId: v['Venue ID'],
                     name:      v['Venue Name'] || '',
-                    address:   v.address || '',
-                    city:      v.city    || '',
-                    state:     v.state   || 'CT',
-                    zip:       v.zip     ? String(v.zip) : ''
+                    address:   v.address   || '',
+                    city:      v.city      || '',
+                    state:     v.state     || 'CT',
+                    zip:       v.zip       ? String(v.zip) : '',
+                    clubName:  v.club_name || ''
                 })).filter(v => v.name);
             }
             if (!fieldRes.error) {
@@ -1170,7 +1276,7 @@
             alert('Club name and president name are required.');
             return;
         }
-        loadWizardVenues();
+        loadWizardVenues().then(() => showVenueImportBanner());
         if (_clubTypeMode === 'managed') {
             const adminFirst = document.getElementById('adminFirst').value.trim();
             const adminLast  = document.getElementById('adminLast').value.trim();
@@ -1415,7 +1521,7 @@
             if (window._entityType === 'tournament') {
                 const fromDate  = document.getElementById('tourneyFrom').value || null;
                 const toDate    = document.getElementById('tourneyTo').value || fromDate;
-                const hostClub  = document.getElementById('tourneyHostClub').value.trim() || null;
+                const hostClub  = (document.getElementById('tourneyHostClubName').value || document.getElementById('tourneyHostClub').value || '').trim() || null;
                 const presNA    = document.getElementById('presNA')?.checked;
                 const director  = presNA ? null : [document.getElementById('presFirst').value.trim(), document.getElementById('presLast').value.trim()].filter(Boolean).join(' ') || null;
                 const dirEmail  = presNA ? null : document.getElementById('presEmail').value.trim() || null;
@@ -1591,7 +1697,7 @@
             ]);
             if (clubsRes.error) throw new Error(clubsRes.error.message);
             allClubRecords = (clubsRes.data || [])
-                .map(r => ({ id: r.id, name: r['Club Name'] || r.name || '(unnamed)', displayName: r['Display Name'] || '' }))
+                .map(r => ({ id: r.id, name: r['Club Name'] || r.name || '(unnamed)', shortName: r.name || '', displayName: r['Display Name'] || '' }))
                 .sort((a, b) => a.name.localeCompare(b.name));
             const tournRecords = (tournsRes.data || [])
                 .map(r => ({ id: r.id, name: r.name }))
