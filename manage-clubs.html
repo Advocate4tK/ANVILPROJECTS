@@ -1049,26 +1049,53 @@
     }
 
     let _wizardVenues = [];
+    let _wizardFieldMap = {}; // venueCAId → [field names]
     let _wizardVenuesLoaded = false;
 
     async function loadWizardVenues() {
         if (_wizardVenuesLoaded) return;
         try {
-            const { data, error } = await supabaseClient.client
-                .from('venues').select('id, "Venue Name", address, city, state, zip').order('"Venue Name"');
-            if (!error) {
-                _wizardVenues = (data || []).map(v => ({
-                    id:      v.id,
-                    name:    v['Venue Name'] || v.name || '',
-                    address: v.address || '',
-                    city:    v.city    || '',
-                    state:   v.state   || 'CT',
-                    zip:     v.zip     ? String(v.zip) : ''
+            const [venueRes, fieldRes] = await Promise.all([
+                supabaseClient.client.from('venues').select('id, "Venue Name", "Venue ID", address, city, state, zip').order('"Venue Name"'),
+                supabaseClient.client.from('fields').select('"Field Name", "Venue ID"')
+            ]);
+            if (!venueRes.error) {
+                _wizardVenues = (venueRes.data || []).map(v => ({
+                    id:        v.id,
+                    venueCAId: v['Venue ID'],
+                    name:      v['Venue Name'] || '',
+                    address:   v.address || '',
+                    city:      v.city    || '',
+                    state:     v.state   || 'CT',
+                    zip:       v.zip     ? String(v.zip) : ''
                 })).filter(v => v.name);
-                _wizardVenuesLoaded = true;
-                document.querySelectorAll('.venue-select').forEach(sel => _populateVenueSelect(sel));
             }
+            if (!fieldRes.error) {
+                _wizardFieldMap = {};
+                (fieldRes.data || []).forEach(f => {
+                    const caId = f['Venue ID'];
+                    const fn   = (f['Field Name'] || '').trim();
+                    if (!caId || !fn) return;
+                    if (!_wizardFieldMap[caId]) _wizardFieldMap[caId] = [];
+                    if (!_wizardFieldMap[caId].includes(fn)) _wizardFieldMap[caId].push(fn);
+                });
+            }
+            _wizardVenuesLoaded = true;
+            document.querySelectorAll('.venue-select').forEach(sel => _populateVenueSelect(sel));
         } catch(e) { /* non-fatal — user can still type manually */ }
+    }
+
+    function _populateVenueFields(venueIdx, venueCAId) {
+        const container = document.getElementById('fields-' + venueIdx);
+        container.innerHTML = '';
+        fieldCounts[venueIdx] = 0;
+        const fieldNames = venueCAId ? (_wizardFieldMap[venueCAId] || []) : [];
+        if (fieldNames.length === 0) { addField(venueIdx); return; }
+        fieldNames.forEach(fn => {
+            addField(venueIdx);
+            const inputs = container.querySelectorAll('.field-name-input');
+            inputs[inputs.length - 1].value = fn;
+        });
     }
 
     function _populateVenueSelect(sel) {
@@ -1097,6 +1124,7 @@
                 preview.style.display  = '';
                 preview.textContent    = [v.address, v.city, v.state, v.zip].filter(Boolean).join(', ') || 'No address on file';
                 _setVenueHidden(idx, v.name, v.address, v.city, v.state, v.zip);
+                _populateVenueFields(idx, v.venueCAId);
             }
         } else {
             newBlock.style.display = 'none';
