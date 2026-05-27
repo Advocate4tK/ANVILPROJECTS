@@ -1153,7 +1153,7 @@
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,    { maxRecords: 200 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,    { maxRecords: 500 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.ASSIGNORS, { maxRecords: 100 }),
-                    supabaseClient.client.from('tournaments').select('id, key, name, status, club, from_date, to_date, director, director_email, venues').order('from_date', { ascending: false }),
+                    supabaseClient.client.from('tournaments').select('id, key, name, status, club, from_date, to_date, director, director_email, event_admin, event_admin_phone, event_admin_email, payment_coordinator, payment_coordinator_phone, payment_coordinator_email, assignor, assignor_phone, assignor_email, pay_rates, venues').order('from_date', { ascending: false }),
                 ]);
                 const allTournaments = (tournamentsRes.data || []);
 
@@ -1648,49 +1648,105 @@
 
                         // ── Tournament entry (generic — any __tourney_* key) ──
                         if (clubName.startsWith('__tourney_')) {
-                            const tKey = clubName.replace('__tourney_', '');
-                            const t    = allTournaments.find(x => x.key === tKey) || {};
-                            const director   = t.director       || '—';
-                            const dirEmail   = t.director_email || '';
-                            const hostedBy   = t.club           || '';
-                            const dateRange  = t.from_date
-                                ? (t.to_date && t.to_date !== t.from_date
-                                    ? `${t.from_date} → ${t.to_date}`
-                                    : t.from_date)
+                            const tKey         = clubName.replace('__tourney_', '');
+                            const t            = allTournaments.find(x => x.key === tKey) || {};
+                            const director     = t.director                  || '—';
+                            const dirEmail     = t.director_email            || '';
+                            const eventAdmin   = t.event_admin               || '—';
+                            const eaPhone      = t.event_admin_phone         || '';
+                            const eaEmail      = t.event_admin_email         || '';
+                            const payCoord     = t.payment_coordinator       || '—';
+                            const payPhone     = t.payment_coordinator_phone || '';
+                            const payEmail     = t.payment_coordinator_email || '';
+                            const tAssignor    = t.assignor                  || '—';
+                            const assPhone     = t.assignor_phone            || '';
+                            const assEmail     = t.assignor_email            || '';
+                            const hostedBy     = t.club || '';
+                            const dateRange    = t.from_date
+                                ? (t.to_date && t.to_date !== t.from_date ? `${t.from_date} → ${t.to_date}` : t.from_date)
                                 : 'Dates TBD';
-                            const tVenues    = Array.isArray(t.venues) ? t.venues : [];
-                            const venueCount = tVenues.length;
-                            const fieldCount = tVenues.reduce((s, v) => s + (v.fields ? v.fields.length : 0), 0);
+                            const tVenues      = Array.isArray(t.venues) ? t.venues : [];
+                            const venueCount   = tVenues.length;
+                            const fieldCount   = tVenues.reduce((s, v) => s + (v.fields ? v.fields.length : 0), 0);
+                            const payRates     = Array.isArray(t.pay_rates) ? t.pay_rates : [];
+                            const statusColor  = t.status === 'active' ? '#00c853' : t.status === 'completed' ? '#888' : '#f59e0b';
+
+                            const payRatesHtml = payRates.length ? `
+                            <div style="border-top:1px solid #edf0f7;">
+                                <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+                                    <thead><tr style="background:#f4f6fa;">
+                                        <th style="padding:8px 18px; text-align:left; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Age Group</th>
+                                        <th style="padding:8px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Center</th>
+                                        <th style="padding:8px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">AR</th>
+                                        <th style="padding:8px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Solo CR</th>
+                                    </tr></thead>
+                                    <tbody>${payRates.map((r, i) => `<tr style="${i % 2 === 1 ? 'background:#fafbfd;' : ''}">
+                                        <td style="padding:8px 18px; font-weight:600; color:#09142a;">${r.age_group || ''}</td>
+                                        <td style="padding:8px 12px; text-align:center; color:#00c853; font-weight:700;">${r.center ? '$' + r.center : '—'}</td>
+                                        <td style="padding:8px 12px; text-align:center; color:#3498db; font-weight:700;">${r.ar ? '$' + r.ar : '—'}</td>
+                                        <td style="padding:8px 12px; text-align:center; color:#9b59b6; font-weight:700;">${r.solo_cr ? '$' + r.solo_cr : '—'}</td>
+                                    </tr>`).join('')}</tbody>
+                                </table>
+                            </div>` : '';
+
+                            const portalUrl = `https://referee-tool.com/club-game-submit.html?tournament=${tKey}`;
 
                             stat.innerHTML = `
-                            <div style="background:linear-gradient(135deg,#4a0072,#1a0030); color:white; border-radius:8px; padding:10px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; letter-spacing:0.5px;">🏆 ${t.name || tKey}</div>
-                                <div style="font-size:0.8rem; color:rgba(255,255,255,0.7);">📅 ${dateRange}</div>
-                                ${hostedBy ? `<div style="font-size:0.8rem; color:rgba(255,255,255,0.7);">Hosted by: ${hostedBy}</div>` : ''}
-                                <div style="margin-left:auto; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.5);">${(t.status||'upcoming').toUpperCase()}</div>
-                            </div>
-                            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-bottom:10px;">
-                                <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Tournament Director</div>
-                                    <div style="font-weight:700; color:#09142a; font-size:0.95rem;">${director}</div>
-                                    ${dirEmail ? `<div style="font-size:0.8rem; margin-top:2px;"><a href="mailto:${dirEmail}" style="color:#3498db; text-decoration:none;">✉️ ${dirEmail}</a></div>` : ''}
+                            <div style="background:white; border:1px solid #dde3f0; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+                                <div style="background:linear-gradient(135deg,#4a0072,#1a0030); padding:12px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                        <span style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#fff;">🏆 ${t.name || tKey}</span>
+                                        <span style="font-size:0.78rem; color:rgba(255,255,255,0.7);">📅 ${dateRange}</span>
+                                        ${hostedBy ? `<span style="font-size:0.78rem; color:rgba(255,255,255,0.6);">Hosted by: ${hostedBy}</span>` : ''}
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <span style="font-size:0.72rem; color:rgba(255,255,255,0.55);">${venueCount} venue${venueCount !== 1 ? 's' : ''} · ${fieldCount} field${fieldCount !== 1 ? 's' : ''}</span>
+                                        <span style="font-size:0.72rem; background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.85); padding:2px 10px; border-radius:12px; font-weight:700; text-transform:uppercase;">${(t.status || 'upcoming').toUpperCase()}</span>
+                                    </div>
                                 </div>
-                                <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Venues on File</div>
-                                    <div style="font-size:1.4rem; font-weight:800; color:#09142a; line-height:1;">${venueCount}</div>
-                                    <div style="font-size:0.8rem; color:#666;">${fieldCount} field${fieldCount !== 1 ? 's' : ''}</div>
+                                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); border-bottom:1px solid #edf0f7;">
+                                    <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
+                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Tournament Director</div>
+                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${director}</div>
+                                        ${dirEmail ? `<div style="font-size:0.78rem; margin-top:3px;"><a href="mailto:${dirEmail}" style="color:#3498db; text-decoration:none;">✉️ ${dirEmail}</a></div>` : ''}
+                                    </div>
+                                    <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
+                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Event Admin</div>
+                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${eventAdmin}</div>
+                                        ${eaPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${eaPhone}</div>` : ''}
+                                        ${eaEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${eaEmail}" style="color:#3498db; text-decoration:none;">✉️ ${eaEmail}</a></div>` : ''}
+                                    </div>
+                                    <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
+                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Payment Coordinator</div>
+                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${payCoord}</div>
+                                        ${payPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${payPhone}</div>` : ''}
+                                        ${payEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${payEmail}" style="color:#3498db; text-decoration:none;">✉️ ${payEmail}</a></div>` : ''}
+                                    </div>
+                                    <div style="padding:14px 18px;">
+                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Assignor</div>
+                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${tAssignor}</div>
+                                        ${assPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${assPhone}</div>` : ''}
+                                        ${assEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${assEmail}" style="color:#3498db; text-decoration:none;">✉️ ${assEmail}</a></div>` : ''}
+                                    </div>
                                 </div>
-                                <div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:4px;">Status</div>
-                                    <div style="font-weight:700; color:${t.status === 'completed' ? '#888' : '#00c853'}; font-size:0.95rem;">${(t.status||'upcoming').toUpperCase()}</div>
+                                ${payRatesHtml}
+                                <div style="padding:12px 18px; background:#fafbfd; border-top:1px solid #edf0f7;">
+                                    <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:10px;">Portals &amp; Links</div>
+                                    <div style="display:flex; flex-direction:column; gap:7px;">
+                                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                            <span style="font-size:0.8rem; font-weight:600; color:#333; min-width:130px;">Tournament Portal</span>
+                                            <button onclick="navigator.clipboard.writeText('${portalUrl}').then(()=>{this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy Link',1500)})" style="font-size:0.75rem; background:#e8f4fd; border:1px solid #3498db; color:#2980b9; border-radius:6px; padding:3px 10px; cursor:pointer; font-family:inherit; font-weight:700;">📋 Copy Link</button>
+                                            <a href="${portalUrl}" target="_blank" style="font-size:0.75rem; background:#eafaf1; border:1px solid #27ae60; color:#27ae60; border-radius:6px; padding:3px 10px; text-decoration:none; font-weight:700;">↗ Open</a>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            ${venueCount ? `<div style="background:white; border:1px solid #dde3f0; border-radius:8px; padding:12px 16px;">
-                                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.6px; color:#aaa; margin-bottom:8px;">Venues</div>
-                                <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                                    ${tVenues.map(v => `<span style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:4px; padding:3px 8px; font-size:0.8rem; color:#0369a1;">📍 ${v.name}</span>`).join('')}
-                                </div>
-                            </div>` : ''}`;
+                                ${venueCount ? `<div style="padding:12px 18px; border-top:1px solid #edf0f7;">
+                                    <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; margin-bottom:8px;">Venues on File</div>
+                                    <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                                        ${tVenues.map(v => `<span style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:4px; padding:3px 8px; font-size:0.8rem; color:#0369a1;">📍 ${v.name}</span>`).join('')}
+                                    </div>
+                                </div>` : ''}
+                            </div>`;
                             return;
                         }
 

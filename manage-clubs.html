@@ -363,10 +363,10 @@
                         <div class="fg" style="margin:0;"><label>Phone</label><input type="tel" id="cPresPhone" placeholder="(860) 555-1234"></div>
                     </div>
 
-                    <!-- Organization Admin + Payment Coordinator — hidden for tournaments -->
+                    <!-- Organization Admin + Payment Coordinator -->
                     <div id="contactsClubOnlySection">
                     <!-- Organization Admin -->
-                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">Organization Admin (Scheduling Contact)</div>
+                    <div id="cAdminLabel" style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">Organization Admin (Scheduling Contact)</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:20px;">
                         <div class="fg" style="margin:0;"><label>Name</label><input type="text" id="cAdminName" placeholder="First Last"></div>
                         <div class="fg" style="margin:0;"><label>Email</label><input type="email" id="cAdminEmail" placeholder="admin@club.org"></div>
@@ -2054,20 +2054,28 @@
         const isTournament = rawId.startsWith('t:');
         const entityId     = isTournament ? rawId.slice(2) : rawId;
 
-        document.getElementById('contactsClubOnlySection').style.display = isTournament ? 'none' : '';
-        document.getElementById('cPresLabel').textContent = isTournament ? 'Tournament Director' : 'President';
+        document.getElementById('contactsClubOnlySection').style.display = '';
+        document.getElementById('cPresLabel').textContent   = isTournament ? 'Tournament Director' : 'President';
+        document.getElementById('cAdminLabel').textContent  = isTournament ? 'Event Admin' : 'Organization Admin (Scheduling Contact)';
 
         try {
             if (isTournament) {
                 const { data, error } = await supabaseClient.client
-                    .from('tournaments').select('director, director_email').eq('id', entityId).single();
+                    .from('tournaments').select('director, director_email, event_admin, event_admin_phone, event_admin_email, payment_coordinator, payment_coordinator_phone, payment_coordinator_email, assignor, assignor_phone, assignor_email').eq('id', entityId).single();
                 if (error) throw new Error(error.message);
-                document.getElementById('cPresName').value      = data.director       || '';
-                document.getElementById('cPresEmail').value     = data.director_email || '';
-                document.getElementById('cPresPhone').value     = '';
-                document.getElementById('cAssignorName').value  = '';
-                document.getElementById('cAssignorEmail').value = '';
-                document.getElementById('cAssignorPhone').value = '';
+                document.getElementById('cPresName').value       = data.director                   || '';
+                document.getElementById('cPresEmail').value      = data.director_email             || '';
+                document.getElementById('cPresPhone').value      = '';
+                document.getElementById('cAdminName').value      = data.event_admin                || '';
+                document.getElementById('cAdminEmail').value     = data.event_admin_email          || '';
+                document.getElementById('cAdminPhone').value     = data.event_admin_phone          || '';
+                document.getElementById('cPayCoordName').value   = data.payment_coordinator        || '';
+                document.getElementById('cPayCoordEmail').value  = data.payment_coordinator_email  || '';
+                document.getElementById('cPayCoordPhone').value  = data.payment_coordinator_phone  || '';
+                document.getElementById('cPayCoordPin').value    = '';
+                document.getElementById('cAssignorName').value   = data.assignor                   || '';
+                document.getElementById('cAssignorEmail').value  = data.assignor_email             || '';
+                document.getElementById('cAssignorPhone').value  = data.assignor_phone             || '';
             } else {
                 const { data, error } = await supabaseClient.client
                     .from('clubs')
@@ -2109,8 +2117,17 @@
         try {
             if (isTournament) {
                 const { error } = await supabaseClient.client.from('tournaments').update({
-                    director:       document.getElementById('cPresName').value.trim() || null,
-                    director_email: document.getElementById('cPresEmail').value.trim() || null,
+                    director:                    document.getElementById('cPresName').value.trim()      || null,
+                    director_email:              document.getElementById('cPresEmail').value.trim()      || null,
+                    event_admin:                 document.getElementById('cAdminName').value.trim()      || null,
+                    event_admin_email:           document.getElementById('cAdminEmail').value.trim()     || null,
+                    event_admin_phone:           document.getElementById('cAdminPhone').value.trim()     || null,
+                    payment_coordinator:         document.getElementById('cPayCoordName').value.trim()   || null,
+                    payment_coordinator_email:   document.getElementById('cPayCoordEmail').value.trim()  || null,
+                    payment_coordinator_phone:   document.getElementById('cPayCoordPhone').value.trim()  || null,
+                    assignor:                    document.getElementById('cAssignorName').value.trim()   || null,
+                    assignor_email:              document.getElementById('cAssignorEmail').value.trim()  || null,
+                    assignor_phone:              document.getElementById('cAssignorPhone').value.trim()  || null,
                 }).eq('id', entityId);
                 if (error) throw new Error(error.message);
             } else {
