@@ -321,6 +321,21 @@
             <a href="admin.html" class="btn-back">← Back to Admin Portal</a>
         </div>
 
+        <!-- Entity Overview — Master Selector -->
+        <div style="margin-bottom:24px;">
+            <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #09142a;">
+                <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">⚽ Clubs / Events Being Served</h2>
+                <p style="font-size:0.84rem; color:#888; margin-bottom:16px;">Select any entity to view its full profile. All section dropdowns below will sync automatically.</p>
+                <div class="fg" style="max-width:380px; margin-bottom:16px;">
+                    <label>Select Entity</label>
+                    <select id="ccMasterSelect" onchange="ccLoadEntityCard()">
+                        <option value="">— Select a Club or Event —</option>
+                    </select>
+                </div>
+                <div id="ccEntityCard"></div>
+            </div>
+        </div>
+
         <!-- Club Status — Master Switch -->
         <div style="margin-bottom:24px;">
             <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #00c853;">
@@ -980,8 +995,197 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
-        loadClubsForRemove(); // populates editClubSelect + contactsClubSelect + removeClubSelect
+        loadClubsForRemove(); // populates ccMasterSelect + editClubSelect + contactsClubSelect + removeClubSelect + pay + crew
     });
+
+    // ── Master Entity Selector ────────────────────────────────────────────────
+
+    function syncMasterSelect(rawId) {
+        const el = document.getElementById('ccMasterSelect');
+        if (el && el.value !== rawId) el.value = rawId;
+    }
+
+    async function ccLoadEntityCard() {
+        const rawId = document.getElementById('ccMasterSelect').value;
+        const card  = document.getElementById('ccEntityCard');
+        if (!rawId) { card.innerHTML = ''; return; }
+
+        // Sync all section selects (value only — don't fire handlers)
+        ['contactsClubSelect','editClubSelect','payClubSelect','crewClubSel','removeClubSelect'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = rawId;
+        });
+
+        card.innerHTML = '<div style="color:#aaa; font-size:0.85rem; padding:8px 0;">Loading…</div>';
+        const isTournament = rawId.startsWith('t:');
+        const entityId     = isTournament ? rawId.slice(2) : rawId;
+
+        try {
+            if (isTournament) {
+                const { data: t, error } = await supabaseClient.client
+                    .from('tournaments')
+                    .select('id, key, name, club, from_date, to_date, status, director, director_email, event_admin, event_admin_phone, event_admin_email, payment_coordinator, payment_coordinator_phone, payment_coordinator_email, assignor, assignor_phone, assignor_email, age_groups, venues')
+                    .eq('id', entityId).single();
+                if (error) throw new Error(error.message);
+                card.innerHTML = ccBuildTournamentCard(t);
+            } else {
+                const [clubRes, ratesRes] = await Promise.all([
+                    supabaseClient.client.from('clubs')
+                        .select('id, name, "Club Name", president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, payment_coordinator_phone, assignor, "Assignor Email", "Assignor Phone", payment_portal_enabled')
+                        .eq('id', parseInt(entityId)).single(),
+                    supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(entityId)).order('age_group')
+                ]);
+                if (clubRes.error) throw new Error(clubRes.error.message);
+                const c = clubRes.data;
+                const venueRes = await supabaseClient.client
+                    .from('venues').select('id').eq('club_name', c['Club Name'] || c.name || '');
+                card.innerHTML = ccBuildClubCard(c, ratesRes.data || [], (venueRes.data || []).length);
+            }
+        } catch(e) {
+            card.innerHTML = `<div style="color:#e74c3c; font-family:'DM Sans',sans-serif; font-size:0.85rem; padding:6px 0;">Could not load: ${e.message}</div>`;
+        }
+    }
+
+    function ccContact(label, name, phone, email) {
+        return `<div style="padding:14px 18px; border-right:1px solid #edf0f7;">
+            <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">${label}</div>
+            <div style="font-weight:700; color:#09142a; font-size:0.88rem;">${name || '—'}</div>
+            ${phone ? `<div style="font-size:0.76rem; color:#555; margin-top:3px;">📞 ${phone}</div>` : ''}
+            ${email ? `<div style="font-size:0.76rem; margin-top:2px;"><a href="mailto:${email}" style="color:#3498db; text-decoration:none;">✉️ ${email}</a></div>` : ''}
+        </div>`;
+    }
+
+    function ccPortalRow(label, url) {
+        if (!url) return '';
+        return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="font-size:0.78rem; font-weight:600; color:#333; min-width:120px; flex-shrink:0;">${label}</span>
+            <button onclick="navigator.clipboard.writeText('${url}').then(()=>{this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy Link',1500)})"
+                style="font-size:0.74rem; background:#e8f4fd; border:1px solid #3498db; color:#2980b9; border-radius:6px; padding:3px 10px; cursor:pointer; font-family:inherit; font-weight:700;">📋 Copy Link</button>
+            <a href="${url}" target="_blank"
+                style="font-size:0.74rem; background:#eafaf1; border:1px solid #27ae60; color:#27ae60; border-radius:6px; padding:3px 10px; text-decoration:none; font-weight:700;">↗ Open</a>
+        </div>`;
+    }
+
+    function ccBuildTournamentCard(t) {
+        const dateRange = t.from_date
+            ? (t.to_date && t.to_date !== t.from_date ? `${t.from_date} → ${t.to_date}` : t.from_date)
+            : 'Dates TBD';
+        const tVenues   = Array.isArray(t.venues) ? t.venues : [];
+        const ageGroups = Array.isArray(t.age_groups) ? t.age_groups : [];
+        const portalUrl = `https://referee-tool.com/club-game-submit.html?tournament=${t.key}`;
+
+        const ageTable = ageGroups.length ? `
+            <div style="border-top:1px solid #edf0f7;">
+                <div style="padding:10px 18px 4px; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Age Groups &amp; Pay Rates</div>
+                <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+                    <thead><tr style="background:#f4f6fa;">
+                        <th style="padding:6px 18px; text-align:left; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Age Group</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Format</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Half</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#00c853;">Center</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#3498db;">AR</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#9b59b6;">Solo CR</th>
+                    </tr></thead>
+                    <tbody>${ageGroups.map((r,i) => `<tr style="${i%2===1?'background:#fafbfd;':''}">
+                        <td style="padding:6px 18px; font-weight:600; color:#09142a;">${r.age_group||''}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#555;">${r.format||'—'}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#555;">${r.half_length?'2×'+r.half_length+'m':'—'}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#00c853; font-weight:700;">${r.center?'$'+r.center:'—'}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#3498db; font-weight:700;">${r.ar?'$'+r.ar:'—'}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#9b59b6; font-weight:700;">${r.solo_cr?'$'+r.solo_cr:'—'}</td>
+                    </tr>`).join('')}</tbody>
+                </table>
+            </div>` : '';
+
+        const venueChips = tVenues.length
+            ? `<div style="padding:12px 18px; border-top:1px solid #edf0f7;">
+                <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; margin-bottom:8px;">Venues on File</div>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                    ${tVenues.map(v=>`<span style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:4px; padding:3px 8px; font-size:0.78rem; color:#0369a1;">📍 ${v.name}</span>`).join('')}
+                </div>
+              </div>` : '';
+
+        return `<div style="background:white; border:1px solid #dde3f0; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+            <div style="background:linear-gradient(135deg,#4a0072,#1a0030); padding:12px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <span style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#fff;">🏆 ${t.name||t.key}</span>
+                    <span style="font-size:0.78rem; color:rgba(255,255,255,0.7);">📅 ${dateRange}</span>
+                    ${t.club ? `<span style="font-size:0.78rem; color:rgba(255,255,255,0.6);">Hosted by: ${t.club}</span>` : ''}
+                </div>
+                <span style="font-size:0.72rem; background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.85); padding:2px 10px; border-radius:12px; font-weight:700; text-transform:uppercase;">${(t.status||'upcoming').toUpperCase()}</span>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); border-bottom:1px solid #edf0f7;">
+                ${ccContact('Tournament Director', t.director, '', t.director_email)}
+                ${ccContact('Event Admin', t.event_admin, t.event_admin_phone, t.event_admin_email)}
+                ${ccContact('Payment Coordinator', t.payment_coordinator, t.payment_coordinator_phone, t.payment_coordinator_email)}
+                ${ccContact('Assignor', t.assignor, t.assignor_phone, t.assignor_email)}
+            </div>
+            ${ageTable}
+            <div style="padding:12px 18px; background:#fafbfd; border-top:1px solid #edf0f7; display:flex; flex-direction:column; gap:7px;">
+                <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:4px;">Portals &amp; Links</div>
+                ${ccPortalRow('Tournament Portal', portalUrl)}
+            </div>
+            ${venueChips}
+        </div>`;
+    }
+
+    function ccBuildClubCard(c, rates, venueCount) {
+        const clubName  = c['Club Name'] || c.name || '';
+        const slug      = clubName.toLowerCase().replace(/\s+/g,'-');
+        const submitUrl = `https://referee-tool.com/club-game-submit.html?club=${slug}`;
+        const payUrl    = c.payment_portal_enabled ? `${submitUrl}&pay=portal` : '';
+
+        const hasRec  = rates.filter(r => !r.game_type || r.game_type === 'rec');
+        const hasComp = rates.filter(r => r.game_type === 'comp');
+        const rateRow = r => `<tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:6px 14px; font-weight:700; font-size:0.86rem; color:#09142a;">${r.age_group}</td>
+            <td style="padding:6px 14px; text-align:center; color:#1a7a1a; font-weight:700;">$${r.center}</td>
+            <td style="padding:6px 14px; text-align:center; color:${r.ar!=null?'#1a7a1a':'#ccc'}; font-weight:700;">${r.ar!=null?'$'+r.ar:'—'}</td>
+            <td style="padding:6px 14px; text-align:center; color:${r.solo!=null?'#1a7a1a':'#ccc'}; font-weight:700;">${r.solo!=null?'$'+r.solo:'—'}</td>
+        </tr>`;
+        const rateTable = (rows, label, bg) => rows.length ? `
+            <div style="flex:1; min-width:200px;">
+                <div style="padding:5px 14px; font-size:0.65rem; text-transform:uppercase; letter-spacing:1px; font-weight:800; color:#fff; background:${bg};">${label}</div>
+                <table style="width:100%; border-collapse:collapse; font-size:0.86rem;">
+                    <thead><tr style="background:#f7f8fc;">
+                        <th style="text-align:left; padding:5px 14px; color:#444; font-size:0.65rem; text-transform:uppercase; border-bottom:1px solid #edf0f7;">Age</th>
+                        <th style="text-align:center; padding:5px 14px; color:#444; font-size:0.65rem; text-transform:uppercase; border-bottom:1px solid #edf0f7;">Center</th>
+                        <th style="text-align:center; padding:5px 14px; color:#444; font-size:0.65rem; text-transform:uppercase; border-bottom:1px solid #edf0f7;">AR</th>
+                        <th style="text-align:center; padding:5px 14px; color:#444; font-size:0.65rem; text-transform:uppercase; border-bottom:1px solid #edf0f7;">Solo CR</th>
+                    </tr></thead>
+                    <tbody>${rows.map(rateRow).join('')}</tbody>
+                </table>
+            </div>` : '';
+
+        const paySection = rates.length ? `
+            <div style="border-top:1px solid #edf0f7;">
+                <div style="padding:8px 18px 4px; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Pay Rates</div>
+                <div style="display:flex; flex-wrap:wrap; border-top:1px solid #edf0f7; margin-top:6px;">
+                    ${rateTable(hasRec,  'Rec',  '#09142a')}
+                    ${hasComp.length ? `<div style="width:1px; background:#edf0f7;"></div>` : ''}
+                    ${rateTable(hasComp, 'Comp', '#7c3aed')}
+                </div>
+            </div>` : '';
+
+        return `<div style="background:white; border:1px solid #dde3f0; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+            <div style="background:#09142a; padding:12px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <span style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#fff;">${clubName}</span>
+                <span style="font-size:0.75rem; color:#aac4e0;">${venueCount} venue${venueCount!==1?'s':''}</span>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); border-bottom:1px solid #edf0f7;">
+                ${ccContact('President', c.president, c['President Phone'], c['President Email'])}
+                ${ccContact('Club Admin', c['Club Admin'], c['Club Admin Phone'], c['Club Admin Email'])}
+                ${ccContact('Payment Coordinator', c.payment_coordinator, c.payment_coordinator_phone, c.payment_coordinator_email)}
+                ${ccContact('Assignor', c.assignor, c['Assignor Phone'], c['Assignor Email'])}
+            </div>
+            ${paySection}
+            <div style="padding:12px 18px; background:#fafbfd; border-top:1px solid #edf0f7; display:flex; flex-direction:column; gap:7px;">
+                <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:4px;">Portals &amp; Links</div>
+                ${ccPortalRow('Club Portal', submitUrl)}
+                ${ccPortalRow('Pay Portal', payUrl)}
+            </div>
+        </div>`;
+    }
 
     let _clubStatusLoaded = false;
     function toggleClubStatus() {
@@ -1894,6 +2098,7 @@
                 : '';
             const opts = '<option value="">— Select —</option>' + clubOpts + tournOpts;
 
+            document.getElementById('ccMasterSelect').innerHTML    = opts;
             document.getElementById('removeClubSelect').innerHTML   = opts;
             document.getElementById('editClubSelect').innerHTML     = opts;
             document.getElementById('contactsClubSelect').innerHTML = opts;
@@ -1901,6 +2106,7 @@
             document.getElementById('crewClubSel').innerHTML        = opts;
         } catch(e) {
             const err = '<option value="">⚠ Could not load</option>';
+            document.getElementById('ccMasterSelect').innerHTML    = err;
             document.getElementById('removeClubSelect').innerHTML   = err;
             document.getElementById('editClubSelect').innerHTML     = err;
             document.getElementById('contactsClubSelect').innerHTML = err;
@@ -1910,6 +2116,7 @@
     }
 
     function clearInspection() {
+        syncMasterSelect(document.getElementById('removeClubSelect').value);
         document.getElementById('inspectionResults').style.display = 'none';
         document.getElementById('confirmRemove').checked = false;
         document.getElementById('removeLog').style.display = 'none';
@@ -2078,6 +2285,7 @@
 
     async function onEditClubChange() {
         const rawId = document.getElementById('editClubSelect').value;
+        syncMasterSelect(rawId);
         const currentEl = document.getElementById('editCurrentVenues');
         const builderEl = document.getElementById('editVenueBuilder');
         const logEl     = document.getElementById('editLog');
@@ -2278,6 +2486,7 @@
     // ── Club Contacts Editor ──────────────────────────────────────────────────
     async function loadContactsForClub() {
         const rawId  = document.getElementById('contactsClubSelect').value;
+        syncMasterSelect(rawId);
         const form   = document.getElementById('contactsForm');
         const msg    = document.getElementById('contactsSaveMsg');
         msg.style.display = 'none';
@@ -2414,6 +2623,7 @@
 
     async function loadPayRates() {
         const rawId   = document.getElementById('payClubSelect').value;
+        syncMasterSelect(rawId);
         const section = document.getElementById('payRatesSection');
         const msg     = document.getElementById('payRatesMsg');
         msg.style.display = 'none';
@@ -2551,6 +2761,7 @@
 
     async function loadCrewRules() {
         const rawId = document.getElementById('crewClubSel').value;
+        syncMasterSelect(rawId);
         const body  = document.getElementById('crewRulesBody');
         const msg   = document.getElementById('crewRulesMsg');
         msg.style.display = 'none';
