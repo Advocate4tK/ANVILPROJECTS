@@ -464,6 +464,8 @@
                 </div>
 
                 <div id="payRatesSection" style="display:none;">
+                    <!-- Club-only settings (hidden for tournaments) -->
+                    <div id="payClubOnlyParts">
                     <!-- Managed by Referee Tool toggle -->
                     <div style="margin-bottom:20px; padding:14px 18px; background:#f0fdf4; border:1.5px solid #22c55e; border-radius:10px;">
                         <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
@@ -520,7 +522,24 @@
                         </select>
                         <div style="font-size:0.76rem; color:#888; font-family:'DM Sans',sans-serif;">Non-weather cancellations at or after this point → refs get paid</div>
                     </div>
+                    </div><!-- /payClubOnlyParts -->
 
+                    <!-- Tournament pay rates (shown only for tournaments) -->
+                    <div id="payTourneyParts" style="display:none; margin-bottom:6px;">
+                        <table style="width:100%; border-collapse:collapse; font-family:'DM Sans',sans-serif; font-size:0.88rem; border:1px solid #e2d9ce;">
+                            <thead><tr style="background:#7c3aed; color:#fff;">
+                                <th style="text-align:left; padding:7px 10px; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Age Group</th>
+                                <th style="padding:7px 10px; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Center</th>
+                                <th style="padding:7px 10px; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">AR</th>
+                                <th style="padding:7px 10px; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Solo CR</th>
+                            </tr></thead>
+                            <tbody id="payTourneyBody"></tbody>
+                        </table>
+                        <div style="font-size:0.74rem; color:#aaa; margin-top:6px; margin-bottom:16px;">Leave blank if that position is not paid for this age group.</div>
+                    </div>
+
+                    <!-- Club Rec/Comp tables (hidden for tournaments) -->
+                    <div id="payRecCompWrap">
                     <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:6px;">
                         <!-- Rec -->
                         <div style="flex:1; min-width:260px;">
@@ -550,6 +569,8 @@
                         </div>
                     </div>
                     <div style="font-size:0.74rem; color:#aaa; margin-bottom:16px;">Leave blank if that position is not paid for this age group.</div>
+                    </div><!-- /payRecCompWrap -->
+
                     <button onclick="savePayRates()" id="savePayBtn"
                         style="background:#7c3aed; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:800; font-size:0.95rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">
                         Update Changes ↗
@@ -2358,41 +2379,59 @@
     }
 
     async function loadPayRates() {
-        const clubId  = document.getElementById('payClubSelect').value;
+        const rawId   = document.getElementById('payClubSelect').value;
         const section = document.getElementById('payRatesSection');
         const msg     = document.getElementById('payRatesMsg');
         msg.style.display = 'none';
-        if (!clubId) { section.style.display = 'none'; return; }
+        if (!rawId) { section.style.display = 'none'; return; }
         section.style.display = 'block';
+        const isTournament = rawId.startsWith('t:');
+        const entityId     = isTournament ? rawId.slice(2) : rawId;
+        document.getElementById('payClubOnlyParts').style.display = isTournament ? 'none' : 'block';
+        document.getElementById('payTourneyParts').style.display  = isTournament ? 'block' : 'none';
+        document.getElementById('payRecCompWrap').style.display   = isTournament ? 'none' : 'block';
         const loading = '<tr><td colspan="4" style="padding:12px; color:#aaa; font-family:\'DM Sans\',sans-serif;">Loading…</td></tr>';
-        document.getElementById('payRatesBodyRec').innerHTML  = loading;
-        document.getElementById('payRatesBodyComp').innerHTML = loading;
         try {
+            if (isTournament) {
+                document.getElementById('payTourneyBody').innerHTML = loading;
+                const { data, error } = await supabaseClient.client
+                    .from('tournaments').select('age_groups').eq('id', entityId).single();
+                if (error) throw new Error(error.message);
+                const ags = Array.isArray(data.age_groups) ? data.age_groups : [];
+                const inp = 'style="width:70px; padding:4px 6px; border:1.5px solid #e2d9ce; border-radius:5px; font-family:\'DM Sans\',sans-serif; font-size:0.85rem; text-align:right;"';
+                document.getElementById('payTourneyBody').innerHTML = ags.length
+                    ? ags.map((ag, i) => `<tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 10px; font-weight:700; font-size:0.88rem; color:#09142a;">${ag.age_group}${ag.format ? ` <span style="font-weight:400;color:#888;font-size:0.8rem;">· ${ag.format}</span>` : ''}</td>
+                        <td style="text-align:center; padding:6px 10px;"><input type="number" id="pay_cr_t${i}" value="${ag.center ?? ''}" ${inp}></td>
+                        <td style="text-align:center; padding:6px 10px;"><input type="number" id="pay_ar_t${i}" value="${ag.ar ?? ''}" ${inp}></td>
+                        <td style="text-align:center; padding:6px 10px;"><input type="number" id="pay_solo_t${i}" value="${ag.solo_cr ?? ''}" ${inp}></td>
+                    </tr>`).join('')
+                    : '<tr><td colspan="4" style="padding:12px;color:#aaa;font-family:\'DM Sans\',sans-serif;">No age groups defined — add them in the wizard first.</td></tr>';
+                return;
+            }
+            document.getElementById('payRatesBodyRec').innerHTML  = loading;
+            document.getElementById('payRatesBodyComp').innerHTML = loading;
             const [ratesRes, clubRes] = await Promise.all([
-                supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(clubId)),
-                supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day, payment_portal_enabled, payment_portal_start_date').eq('id', parseInt(clubId)).single()
+                supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(entityId)),
+                supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day, payment_portal_enabled, payment_portal_start_date').eq('id', parseInt(entityId)).single()
             ]);
             if (ratesRes.error) throw new Error(ratesRes.error.message);
             const existing = {};
             (ratesRes.data || []).forEach(r => { existing[r.age_group] = r; });
             document.getElementById('payRatesBodyRec').innerHTML  = buildPayRows(REC_AGE_GROUPS,  existing);
             document.getElementById('payRatesBodyComp').innerHTML = buildPayRows(COMP_AGE_GROUPS, existing);
-            // Pre-check payment method boxes
             const methods = (clubRes.data?.payment_methods || '').split(',').map(s => s.trim()).filter(Boolean);
             ['venmo','check','cashapp','cash','dd','zelle'].forEach(m => {
                 const cb = document.getElementById('paytype_' + m);
                 if (cb) cb.checked = methods.includes(m);
             });
-            // Set cancellation cutoff day
             const cutoffSel = document.getElementById('cancellationCutoffDay');
             if (cutoffSel) cutoffSel.value = clubRes.data?.cancellation_cutoff_day || 'thursday';
-            // Set Managed by Referee Tool + portal start date
             const portalCb = document.getElementById('payPortalEnabled');
             const portalEnabled = !!clubRes.data?.payment_portal_enabled;
             if (portalCb) portalCb.checked = portalEnabled;
             const startDateEl = document.getElementById('payPortalStartDate');
             if (startDateEl) startDateEl.value = clubRes.data?.payment_portal_start_date || '';
-            // Show portal link if enabled
             const clubName = document.getElementById('payClubSelect').selectedOptions[0]?.text || '';
             const clubSlug = clubName.toLowerCase().replace(/\s+/g, '-');
             const linkDiv  = document.getElementById('payPortalLink');
@@ -2404,20 +2443,44 @@
             }
         } catch(e) {
             const err = `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
-            document.getElementById('payRatesBodyRec').innerHTML  = err;
-            document.getElementById('payRatesBodyComp').innerHTML = err;
+            if (isTournament) {
+                document.getElementById('payTourneyBody').innerHTML = err;
+            } else {
+                document.getElementById('payRatesBodyRec').innerHTML  = err;
+                document.getElementById('payRatesBodyComp').innerHTML = err;
+            }
         }
     }
 
     async function savePayRates() {
-        const clubId = document.getElementById('payClubSelect').value;
-        if (!clubId) return;
+        const rawId = document.getElementById('payClubSelect').value;
+        if (!rawId) return;
         const btn = document.getElementById('savePayBtn');
         const msg = document.getElementById('payRatesMsg');
         btn.disabled = true; btn.textContent = 'Saving…'; msg.style.display = 'none';
+        const isTournament = rawId.startsWith('t:');
+        const entityId     = isTournament ? rawId.slice(2) : rawId;
         try {
+            if (isTournament) {
+                const { data, error } = await supabaseClient.client
+                    .from('tournaments').select('age_groups').eq('id', entityId).single();
+                if (error) throw new Error(error.message);
+                const ags = Array.isArray(data.age_groups) ? data.age_groups : [];
+                const updated = ags.map((ag, i) => ({
+                    ...ag,
+                    center:  parseFloat(document.getElementById(`pay_cr_t${i}`)?.value)   || null,
+                    ar:      parseFloat(document.getElementById(`pay_ar_t${i}`)?.value)   || null,
+                    solo_cr: parseFloat(document.getElementById(`pay_solo_t${i}`)?.value) || null
+                }));
+                const { error: upErr } = await supabaseClient.client
+                    .from('tournaments').update({ age_groups: updated }).eq('id', entityId);
+                if (upErr) throw new Error(upErr.message);
+                msg.textContent = `✅ Saved — ${updated.length} age group${updated.length !== 1 ? 's' : ''} configured.`;
+                msg.style.color = '#15803d'; msg.style.display = 'block';
+                return;
+            }
             const { error: delErr } = await supabaseClient.client
-                .from('pay_rates').delete().eq('club_id', parseInt(clubId));
+                .from('pay_rates').delete().eq('club_id', parseInt(entityId));
             if (delErr) throw new Error(delErr.message);
             const rows = [];
             for (const ag of [...REC_AGE_GROUPS, ...COMP_AGE_GROUPS]) {
@@ -2426,20 +2489,19 @@
                 const arV   = document.getElementById(`pay_ar_${key}`)?.value.trim();
                 const soloV = document.getElementById(`pay_solo_${key}`)?.value.trim();
                 if (!crV) continue;
-                rows.push({ club_id: parseInt(clubId), age_group: ag, center: parseFloat(crV), ar: arV ? parseFloat(arV) : null, solo: soloV ? parseFloat(soloV) : null });
+                rows.push({ club_id: parseInt(entityId), age_group: ag, center: parseFloat(crV), ar: arV ? parseFloat(arV) : null, solo: soloV ? parseFloat(soloV) : null });
             }
             if (rows.length > 0) {
                 const { error: insErr } = await supabaseClient.client.from('pay_rates').insert(rows);
                 if (insErr) throw new Error(insErr.message);
             }
-            // Save payment methods + cancellation cutoff
             const methods = ['venmo','check','cashapp','cash','dd','zelle']
                 .filter(m => document.getElementById('paytype_' + m)?.checked)
                 .join(',');
             const cutoffDay = document.getElementById('cancellationCutoffDay')?.value || 'thursday';
             const portalEnabled   = document.getElementById('payPortalEnabled')?.checked || false;
             const portalStartDate = document.getElementById('payPortalStartDate')?.value || null;
-            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null, cancellation_cutoff_day: cutoffDay, payment_portal_enabled: portalEnabled, payment_portal_start_date: portalStartDate }).eq('id', parseInt(clubId));
+            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null, cancellation_cutoff_day: cutoffDay, payment_portal_enabled: portalEnabled, payment_portal_start_date: portalStartDate }).eq('id', parseInt(entityId));
             msg.textContent = `✅ Saved — ${rows.length} age group${rows.length !== 1 ? 's' : ''} configured.`;
             msg.style.color = '#15803d'; msg.style.display = 'block';
         } catch(e) {
