@@ -877,7 +877,7 @@
         <div id="removeSection" style="margin-bottom:24px;">
             <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #e74c3c;">
                 <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#e74c3c; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">⚠ Remove Entity</h2>
-                <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Permanently deletes the entity, its venues, and its fields from Airtable. Games are <strong>not</strong> deleted but will lose their link.</p>
+                <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Permanently deletes the entity and its associated venue/field records. Games are <strong>not</strong> deleted.</p>
 
                 <div class="fg" style="max-width:380px;">
                     <label>Select Entity to Remove</label>
@@ -1875,31 +1875,58 @@
     }
 
     async function inspectClub() {
-        const clubId = document.getElementById('removeClubSelect').value;
-        if (!clubId) { alert('Select a club first.'); return; }
+        const rawId = document.getElementById('removeClubSelect').value;
+        if (!rawId) { alert('Select an entity first.'); return; }
         const btn = document.getElementById('inspectBtn');
         btn.disabled = true; btn.textContent = 'Inspecting…';
         clearInspection();
 
+        const isTournament = rawId.startsWith('t:');
+        const entityId     = isTournament ? rawId.slice(2) : rawId;
+
         try {
-            const clubName = allClubRecords.find(c => String(c.id) === String(clubId))?.name || 'Unknown';
+            if (isTournament) {
+                const { data: t, error } = await supabaseClient.client
+                    .from('tournaments').select('name, from_date, to_date, status, venues, age_groups').eq('id', entityId).single();
+                if (error) throw new Error(error.message);
+                const tVenues   = Array.isArray(t.venues) ? t.venues : [];
+                const tAgs      = Array.isArray(t.age_groups) ? t.age_groups : [];
+                const dateRange = t.from_date
+                    ? (t.to_date && t.to_date !== t.from_date ? `${t.from_date} → ${t.to_date}` : t.from_date)
+                    : 'Dates TBD';
 
-            // Load venues linked to this club (via club_name text column)
-            const { data: venueData, error: venueErr } = await supabaseClient.client
-                .from('venues').select('*').eq('club_name', clubName);
-            if (venueErr) throw new Error(venueErr.message);
-            const venues = venueData || [];
+                window._removeTarget = { isTournament: true, entityId, entityName: t.name };
 
-            // Load fields — fetch all, group by Venue ID client-side
-            const { data: allFieldRows2 } = await supabaseClient.client
-                .from('fields').select('id, name, "Field Name", "Venue ID"');
+                document.getElementById('inspectionSummary').innerHTML = `
+                    <div style="background:#f4f0fa; border:1px solid #c4b5fd; border-radius:10px; padding:16px 20px; font-size:0.88rem;">
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; color:#4a0072; text-transform:uppercase; margin-bottom:6px;">🏆 ${t.name}</div>
+                        <div style="color:#555; margin-bottom:10px;">📅 ${dateRange} · ${(t.status||'upcoming').toUpperCase()}</div>
+                        <div style="display:flex; gap:24px; flex-wrap:wrap;">
+                            <span>🏟 <strong>${tVenues.length}</strong> venue${tVenues.length !== 1 ? 's' : ''} (JSONB)</span>
+                            <span>⚽ <strong>${tAgs.length}</strong> age group${tAgs.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div style="margin-top:10px; font-size:0.8rem; color:#7c3aed; font-weight:600;">Only the tournament record will be deleted — no venue/field rows are affected.</div>
+                    </div>`;
+                document.getElementById('activeGamesWarning').style.display = 'none';
+                document.getElementById('inspectionResults').style.display = 'block';
+                return;
+            }
+
+            // ── Club path ──
+            const clubName = allClubRecords.find(c => String(c.id) === String(entityId))?.name || 'Unknown';
+
+            const [venueRes, fieldRes] = await Promise.all([
+                supabaseClient.client.from('venues').select('id, "Venue Name", "Venue ID"').eq('club_name', clubName),
+                supabaseClient.client.from('fields').select('id, "Field Name", "Venue ID"')
+            ]);
+            if (venueRes.error) throw new Error(venueRes.error.message);
+
+            const venues = venueRes.data || [];
+            const allFields = fieldRes.data || [];
             const fieldsByVid = {};
-            (allFieldRows2 || []).forEach(f => {
+            allFields.forEach(f => {
                 const vid = f['Venue ID'];
-                if (vid != null) {
-                    if (!fieldsByVid[vid]) fieldsByVid[vid] = [];
-                    fieldsByVid[vid].push(f);
-                }
+                if (vid != null) { if (!fieldsByVid[vid]) fieldsByVid[vid] = []; fieldsByVid[vid].push(f); }
             });
 
             let totalFields = 0;
@@ -1908,57 +1935,42 @@
                 const fields = (v['Venue ID'] && fieldsByVid[v['Venue ID']]) ? fieldsByVid[v['Venue ID']] : [];
                 totalFields += fields.length;
                 venueDetails.push({
-                    id: v.id,
-                    name: v['Venue Name'] || v.name || '(unnamed)',
+                    id: v.id, caId: v['Venue ID'],
+                    name: v['Venue Name'] || '(unnamed)',
                     fieldIds: fields.map(f => f.id),
-                    fieldNames: fields.map(f => f['Field Name'] || f.name || '(unnamed)')
+                    fieldNames: fields.map(f => f['Field Name'] || '(unnamed)')
                 });
             }
 
-            // Check for games tied to this club (Source Club field)
-            const games = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, {
-                filterByFormula: `{Source Club} = "${clubName}"`,
-                maxRecords: 500
-            });
+            window._removeTarget = { isTournament: false, entityId, entityName: clubName, venueDetails };
 
-            // Store for use during deletion
-            window._removeTarget = { clubId, clubName, venueDetails };
-
-            // Summary HTML
-            const summaryHtml = `
+            document.getElementById('inspectionSummary').innerHTML = `
                 <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-radius:10px; padding:16px 20px; font-size:0.88rem;">
                     <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; color:#09142a; text-transform:uppercase; margin-bottom:10px;">${clubName}</div>
                     <div style="display:flex; gap:24px; flex-wrap:wrap;">
                         <span>🏟 <strong>${venues.length}</strong> venue${venues.length !== 1 ? 's' : ''}</span>
                         <span>📋 <strong>${totalFields}</strong> field${totalFields !== 1 ? 's' : ''}</span>
-                        <span style="color:${games.length > 0 ? '#e74c3c' : '#00c853'};">
-                            ⚽ <strong>${games.length}</strong> game${games.length !== 1 ? 's' : ''} in system
-                        </span>
                     </div>
-                    ${venueDetails.length > 0 ? `
-                    <div style="margin-top:12px; font-size:0.8rem; color:#666;">
+                    ${venueDetails.length > 0 ? `<div style="margin-top:12px; font-size:0.8rem; color:#666;">
                         ${venueDetails.map(v => `<div style="margin-bottom:4px;">📍 ${v.name} — ${v.fieldNames.join(', ') || 'no fields'}</div>`).join('')}
                     </div>` : ''}
                 </div>`;
-
-            document.getElementById('inspectionSummary').innerHTML = summaryHtml;
-            document.getElementById('activeGamesWarning').style.display = games.length > 0 ? 'block' : 'none';
+            document.getElementById('activeGamesWarning').style.display = 'none';
             document.getElementById('inspectionResults').style.display = 'block';
 
         } catch(e) {
             alert('Inspection failed: ' + e.message);
         } finally {
-            btn.disabled = false; btn.textContent = 'Inspect Club →';
+            btn.disabled = false; btn.textContent = 'Inspect →';
         }
     }
 
     async function removeClub() {
         if (!window._removeTarget) return;
-        const { clubId, clubName, venueDetails } = window._removeTarget;
-        const btn    = document.getElementById('removeClubBtn');
-        const logEl  = document.getElementById('removeLog');
+        const { isTournament, entityId, entityName, venueDetails } = window._removeTarget;
+        const btn   = document.getElementById('removeClubBtn');
+        const logEl = document.getElementById('removeLog');
         btn.disabled = true;
-        document.getElementById('backBtn2') && (document.getElementById('backBtn2').disabled = true);
         logEl.style.display = 'block';
         logEl.innerHTML = '';
 
@@ -1968,33 +1980,38 @@
         };
 
         try {
-            // 1. Delete fields first
-            for (const venue of venueDetails) {
-                for (const fieldId of venue.fieldIds) {
-                    log(`  Deleting field from ${venue.name}…`, 'info');
-                    await airtableClient.deleteRecord(CONFIG.AIRTABLE_TABLES.FIELDS, fieldId);
-                    log(`  ✓ Field deleted`, 'ok');
+            if (isTournament) {
+                log(`Deleting tournament: ${entityName}…`, 'info');
+                const { error } = await supabaseClient.client.from('tournaments').delete().eq('id', entityId);
+                if (error) throw new Error(error.message);
+                log(`✅ Tournament "${entityName}" deleted.`, 'ok');
+            } else {
+                // 1. Delete fields for each venue (by CA Venue ID)
+                for (const venue of venueDetails) {
+                    if (venue.caId && venue.fieldIds.length) {
+                        log(`  Deleting ${venue.fieldIds.length} field(s) at ${venue.name}…`, 'info');
+                        const { error } = await supabaseClient.client.from('fields').delete().eq('"Venue ID"', venue.caId);
+                        if (error) throw new Error(error.message);
+                        log(`  ✓ Fields deleted`, 'ok');
+                    }
                 }
+
+                // 2. Delete venues
+                if (venueDetails.length) {
+                    log(`Deleting ${venueDetails.length} venue(s)…`, 'info');
+                    const { error } = await supabaseClient.client.from('venues').delete().eq('club_name', entityName);
+                    if (error) throw new Error(error.message);
+                    log(`✓ Venues deleted`, 'ok');
+                }
+
+                // 3. Delete club record
+                log(`Deleting club record: ${entityName}…`, 'info');
+                const { error } = await supabaseClient.client.from('clubs').delete().eq('id', entityId);
+                if (error) throw new Error(error.message);
+                log(`✅ "${entityName}" removed.`, 'ok');
             }
 
-            // 2. Delete venues
-            for (const venue of venueDetails) {
-                log(`Deleting venue: ${venue.name}…`, 'info');
-                await airtableClient.deleteRecord(CONFIG.AIRTABLE_TABLES.VENUES, venue.id);
-                log(`✓ Venue deleted — ${venue.name}`, 'ok');
-            }
-
-            // 3. Delete club record
-            log(`Deleting club record: ${clubName}…`, 'info');
-            await airtableClient.deleteRecord(CONFIG.AIRTABLE_TABLES.CLUBS, clubId);
-            log(`✓ Club deleted — ${clubName}`, 'ok');
-
-            log('', '');
             log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
-            log(`✅ "${clubName}" has been removed.`, 'ok');
-            log('Note: existing games were not deleted but Source Club field is now stale.', 'info');
-
-            // Refresh the dropdown
             await loadClubsForRemove();
             clearInspection();
 
