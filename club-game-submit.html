@@ -1039,11 +1039,15 @@
         };
 
         // Set club-specific localStorage keys so history doesn't bleed across clubs
-        const urlParam = new URLSearchParams(window.location.search).get('club');
+        const urlParam   = new URLSearchParams(window.location.search).get('club');
+        const tournParam = new URLSearchParams(window.location.search).get('tournament');
         if (urlParam) {
             const slug = urlParam.toLowerCase().replace(/[^a-z0-9]/g, '-');
             HISTORY_KEY   = `clubGameSubmitHistory_${slug}`;
             SUBMITTER_KEY = `cgsSubmitter_${slug}`;
+        } else if (tournParam) {
+            HISTORY_KEY   = `clubGameSubmitHistory_t_${tournParam}`;
+            SUBMITTER_KEY = `cgsSubmitter_t_${tournParam}`;
         }
 
         // Migrate old generic keys into club-specific ones (one-time migration)
@@ -1131,6 +1135,80 @@
             } else {
                 document.getElementById('clubSelectWrap').style.display = 'none';
                 document.getElementById('clubNotFoundMsg').style.display = 'block';
+            }
+        } else if (tournParam) {
+            // ── Tournament portal (?tournament=rhamboree) ──
+            const tKey = tournParam.toLowerCase();
+            const { data: t, error: tErr } = await supabaseClient.client
+                .from('tournaments')
+                .select('id, key, name, status, from_date, to_date, venues, age_groups')
+                .eq('key', tKey).single();
+
+            if (tErr || !t) {
+                document.getElementById('clubSelectWrap').style.display = 'none';
+                document.getElementById('clubNotFoundMsg').style.display = 'block';
+            } else {
+                // Inject tournament venues/fields into allVenues/allFields
+                const tVenues = Array.isArray(t.venues) ? t.venues : [];
+                allVenues = tVenues.map((v, i) => ({
+                    id:    `t-venue-${i}`,
+                    numId: null,
+                    name:  v.name || `Venue ${i + 1}`
+                }));
+                allFields = tVenues.flatMap((v, i) =>
+                    (v.fields || []).map(fName => ({
+                        id:      `t-field-${i}-${fName}`,
+                        numId:   null,
+                        name:    fName,
+                        venueId: `t-venue-${i}`
+                    }))
+                );
+
+                // Override age group dropdown with tournament's age groups
+                const tAgs = Array.isArray(t.age_groups) ? t.age_groups : [];
+                if (tAgs.length) {
+                    const ageEl = document.getElementById('gAge');
+                    if (ageEl) {
+                        ageEl.innerHTML = '<option value="">— Select —</option>'
+                            + tAgs.map(a => `<option value="${a.age_group}">${a.age_group}${a.format ? ' · ' + a.format : ''}</option>`).join('');
+                    }
+                }
+
+                // Lock Game Type to Tournament
+                const gtWrap = document.getElementById('gGameType')?.closest('.field-group');
+                if (gtWrap) gtWrap.style.display = 'none';
+                const gtEl = document.getElementById('gGameType');
+                if (gtEl) gtEl.innerHTML = '<option value="Tournament" selected>Tournament</option>';
+
+                // Build date range for subtitle
+                const dateRange = t.from_date
+                    ? (t.to_date && t.to_date !== t.from_date ? `${t.from_date} → ${t.to_date}` : t.from_date)
+                    : '';
+
+                // Hide dropdown, show locked name with tournament branding
+                document.getElementById('clubSelectWrap').style.display = 'none';
+                const lockedWrap = document.getElementById('clubLockedWrap');
+                lockedWrap.style.display = 'flex';
+                const nameEl = document.getElementById('clubLockedName');
+                nameEl.textContent  = t.name;
+                nameEl.style.color  = '#7c3aed';
+                document.getElementById('clubLockedSub').textContent = dateRange ? `Tournament · ${dateRange}` : 'Tournament Portal';
+                document.getElementById('clubLockedLogo').style.display = 'none';
+
+                // Pre-doorway name
+                const pdName = document.getElementById('preDoorwayName');
+                if (pdName) pdName.textContent = t.name;
+                document.getElementById('preDoorwayClubName').style.display = 'block';
+
+                // Page title + subtitle
+                document.title = `${t.name} — Tournament Portal`;
+                const subEl = document.getElementById('pageSubtitle');
+                if (subEl) { subEl.textContent = dateRange; subEl.style.cssText = ''; }
+
+                // Leave clubSelect empty so populateVenues shows all tournament venues
+                document.getElementById('clubSelect').innerHTML = '<option value=""></option>';
+                populateVenues();
+                updateCreateBtn();
             }
         } else {
             // No param — show dropdown (admin/testing mode)
