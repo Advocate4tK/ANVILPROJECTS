@@ -562,6 +562,17 @@
                             <a id="csvTemplateLinkAnchor" href="referee-tool-games-upload-template.csv" download style="color:var(--accent-dark); font-weight:700;">⬇ Download Referee Tool Template</a>
                         </span>
                     </div>
+                    <!-- Venue/field selector for CSV batch -->
+                    <div style="margin-bottom:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <label style="font-weight:700; font-size:0.88rem; color:var(--deep);">Venue:</label>
+                        <select id="csvVenueSel" onchange="onCsvVenueChange()" style="font-family:'DM Sans',sans-serif; font-size:0.88rem; padding:6px 14px; border:2px solid var(--deep); border-radius:6px; background:white; color:var(--deep); cursor:pointer;">
+                            <option value="">— Select venue —</option>
+                        </select>
+                        <select id="csvFieldSel" disabled style="font-family:'DM Sans',sans-serif; font-size:0.88rem; padding:6px 14px; border:2px solid var(--deep); border-radius:6px; background:white; color:var(--deep); cursor:pointer;">
+                            <option value="">— All fields —</option>
+                        </select>
+                        <span style="font-size:0.78rem; color:var(--muted);">Overrides Venue/Field columns in the CSV</span>
+                    </div>
                     <div class="csv-drop-zone" id="csvDropZone">
                         <div style="font-size:40px; margin-bottom:8px;">📂</div>
                         <p><strong>Drag &amp; drop your CSV file here</strong></p>
@@ -1163,6 +1174,15 @@
                         venueId: `t-venue-${i}`
                     }))
                 );
+                // Cross-ref venues table for CA numeric IDs
+                const tVenueNames = allVenues.map(v => v.name).filter(Boolean);
+                if (tVenueNames.length) {
+                    const { data: caVenues } = await supabaseClient.client
+                        .from('venues').select('"Venue Name", "Venue ID"').in('"Venue Name"', tVenueNames);
+                    const caIdMap = {};
+                    (caVenues || []).forEach(r => { caIdMap[r['Venue Name']] = r['Venue ID']; });
+                    allVenues.forEach(v => { v.numId = caIdMap[v.name] || null; });
+                }
 
                 // Override age group dropdown with tournament's age groups
                 const tAgs = Array.isArray(t.age_groups) ? t.age_groups : [];
@@ -1341,7 +1361,30 @@
 
         venueEl.innerHTML = '<option value="">— Select venue —</option>'
             + filtered.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+
+        // Sync CSV venue selector with same scoped list
+        const csvVSel = document.getElementById('csvVenueSel');
+        if (csvVSel) {
+            csvVSel.innerHTML = '<option value="">— Select venue —</option>'
+                + filtered.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+            const csvFSel = document.getElementById('csvFieldSel');
+            if (csvFSel) { csvFSel.innerHTML = '<option value="">— All fields —</option>'; csvFSel.disabled = true; }
+        }
         populateFields();
+    }
+
+    function onCsvVenueChange() {
+        const venueId = document.getElementById('csvVenueSel').value;
+        const csvFSel = document.getElementById('csvFieldSel');
+        if (!venueId) {
+            csvFSel.innerHTML = '<option value="">— All fields —</option>';
+            csvFSel.disabled = true;
+            return;
+        }
+        const fields = allFields.filter(f => f.venueId === venueId);
+        csvFSel.innerHTML = '<option value="">— All fields —</option>'
+            + fields.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+        csvFSel.disabled = fields.length === 0;
     }
 
     function populateFields() {
@@ -2411,8 +2454,9 @@
         const gender = (row['Gender'] || '').trim().toLowerCase();
         if (!gender)                          errors.push('Missing Gender');
         else if (!VALID_GENDERS.includes(gender)) errors.push(`Invalid Gender "${row['Gender']}" — use: Female or Male`);
-        if (!row['Venue'])  errors.push('Missing Venue');
-        if (!row['Field'])  errors.push('Missing Field');
+        const csvVenueOverride = document.getElementById('csvVenueSel')?.value;
+        if (!csvVenueOverride && !row['Venue']) errors.push('Missing Venue');
+        if (!csvVenueOverride && !row['Field']) errors.push('Missing Field');
         const gameType = (row['Game Type'] || '').trim().toLowerCase();
         if (!gameType)                              errors.push('Missing Game Type');
         else if (!['rec','comp'].includes(gameType)) errors.push(`Invalid Game Type "${row['Game Type']}" — use: Rec or Comp`);
@@ -2583,8 +2627,15 @@
             const genderRaw  = (row['Gender'] || '').trim().toLowerCase();
             const normGender = (genderRaw === 'f' || genderRaw === 'female') ? 'Female' : 'Male';
             const gameType   = normalizeGameType(row['Game Type'] || '');
-            const venueMatch = matchVenue(row['Venue'] || '');
-            const fieldMatch = venueMatch ? matchField(row['Field'] || '', venueMatch.id) : matchField(row['Field'] || '', null);
+            // Use CSV venue selector override if set, otherwise fuzzy-match from row
+            const csvVenueOverrideId = document.getElementById('csvVenueSel')?.value;
+            const csvFieldOverrideId = document.getElementById('csvFieldSel')?.value;
+            const venueMatch = csvVenueOverrideId
+                ? allVenues.find(v => v.id === csvVenueOverrideId)
+                : matchVenue(row['Venue'] || '');
+            const fieldMatch = csvFieldOverrideId
+                ? allFields.find(f => f.id === csvFieldOverrideId)
+                : (venueMatch ? matchField(row['Field'] || '', venueMatch.id) : matchField(row['Field'] || '', null));
             stagedGames.push({
                 date:      normalizeDate(row['Date']),
                 time:      normalizeTime(row['Time']),
