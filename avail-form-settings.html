@@ -379,6 +379,16 @@
     let _allTournaments = [];
     let _tournBlocks    = {};
 
+    function _statusPill(status) {
+        const pills = {
+            active:    { bg:'#eafaf1', color:'#1a6b3a', border:'#27ae60', label:'● Live' },
+            upcoming:  { bg:'#eef6ff', color:'#1e4db7', border:'#3b82f6', label:'◌ Upcoming' },
+            completed: { bg:'#f3f4f6', color:'#6b7280', border:'#9ca3af', label:'✓ Closed' },
+        };
+        const p = pills[status] || pills.upcoming;
+        return `<span style="font-size:0.7rem; font-weight:700; background:${p.bg}; color:${p.color}; border:1px solid ${p.border}; border-radius:4px; padding:1px 7px; margin-left:8px;">${p.label}</span>`;
+    }
+
     function _getDefaultBlocks(t) {
         const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         const WDAYS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -394,11 +404,83 @@
         return blocks;
     }
 
+    function _buildBlockRow(key, i, b) {
+        return `
+            <div style="display:flex; align-items:center; gap:12px; padding:7px 0; border-bottom:1px solid #f0f0f0;">
+                <span style="flex:0 0 100px; font-size:0.8rem; color:#777; font-weight:500;">${b.label}</span>
+                <input type="text" value="${b.session.replace(/"/g,'&quot;')}"
+                    oninput="_updateTournBlock('${key}',${i},'session',this.value)"
+                    placeholder="Name"
+                    style="width:74px; border:1px solid #ddd; border-radius:4px; padding:3px 7px; font-size:0.82rem; flex-shrink:0;">
+                <input type="time" value="${b.start_time}"
+                    oninput="_updateTournBlock('${key}',${i},'start_time',this.value)"
+                    style="width:108px; border:1px solid #ddd; border-radius:4px; padding:3px 8px; font-size:0.82rem; flex-shrink:0;">
+                <input type="time" value="${b.end_time}"
+                    oninput="_updateTournBlock('${key}',${i},'end_time',this.value)"
+                    style="width:108px; border:1px solid #ddd; border-radius:4px; padding:3px 8px; font-size:0.82rem; flex-shrink:0;">
+                <button onclick="_removeTournBlock('${key}',${i})"
+                    title="Remove session"
+                    style="background:none; border:none; color:#e74c3c; font-size:1rem; cursor:pointer; padding:0 2px; flex-shrink:0; line-height:1;">✕</button>
+            </div>`;
+    }
+
+    function _buildBlocksInner(key) {
+        const blocks = _tournBlocks[key] || [];
+        const colHeader = `
+            <div style="display:flex; align-items:center; gap:12px; padding:4px 0 6px; border-bottom:2px solid #e8e8e8; margin-bottom:2px;">
+                <span style="flex:0 0 100px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px;">Date</span>
+                <span style="width:74px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px; flex-shrink:0;">Session</span>
+                <span style="width:108px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px; flex-shrink:0;">Start</span>
+                <span style="width:108px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px; flex-shrink:0;">End</span>
+            </div>`;
+        const rows   = blocks.map((b, i) => _buildBlockRow(key, i, b)).join('');
+        const addBtn = `
+            <div style="padding-top:10px;">
+                <button onclick="_addTournBlock('${key}')"
+                    style="background:none; border:1px dashed #bbb; color:#777; border-radius:6px; padding:4px 14px; font-size:0.78rem; cursor:pointer; font-family:inherit;">+ Add Session</button>
+            </div>`;
+        return colHeader + rows + addBtn;
+    }
+
+    function _reRenderBlocks(key) {
+        const wrap = document.getElementById('blocks_' + key);
+        if (wrap) wrap.innerHTML = _buildBlocksInner(key);
+        const badge = document.getElementById('badge_' + key);
+        if (badge) {
+            const n = (_tournBlocks[key] || []).length;
+            badge.textContent = n + ' session' + (n !== 1 ? 's' : '');
+        }
+    }
+
+    window._updateTournBlock = function(key, i, field, val) {
+        if (_tournBlocks[key] && _tournBlocks[key][i]) _tournBlocks[key][i][field] = val;
+    };
+
+    window._addTournBlock = function(key) {
+        const blocks = _tournBlocks[key] || [];
+        const last   = blocks[blocks.length - 1];
+        blocks.push({
+            date:       last ? last.date      : '',
+            label:      last ? last.label     : '',
+            session:    'Session',
+            start_time: last ? last.end_time  : '08:00',
+            end_time:   '20:00',
+        });
+        _tournBlocks[key] = blocks;
+        _reRenderBlocks(key);
+    };
+
+    window._removeTournBlock = function(key, i) {
+        if (!_tournBlocks[key]) return;
+        _tournBlocks[key].splice(i, 1);
+        _reRenderBlocks(key);
+    };
+
     async function loadTournAvail() {
         const wrap = document.getElementById('tournListWrap');
         const { data: tourneys, error } = await supabaseClient.client
             .from('tournaments')
-            .select('id, key, name, from_date, to_date, avail_enabled, session_blocks')
+            .select('id, key, name, from_date, to_date, status, avail_enabled, session_blocks')
             .order('from_date');
 
         if (error || !tourneys || !tourneys.length) {
@@ -421,33 +503,14 @@
         });
 
         wrap.innerHTML = tourneys.map(t => {
-            const enabled   = t.avail_enabled || false;
-            const blocks    = _tournBlocks[t.key];
-            const dateRange = t.to_date && t.to_date !== t.from_date
+            const enabled      = t.avail_enabled || false;
+            const blocks       = _tournBlocks[t.key];
+            const dateRange    = t.to_date && t.to_date !== t.from_date
                 ? `${fmtDate(t.from_date)} – ${fmtDate(t.to_date)}`
                 : fmtDate(t.from_date);
             const sessionCount = blocks.length;
-
-            const colHeader = `
-                <div style="display:flex; align-items:center; gap:14px; padding:4px 0 6px; border-bottom:2px solid #e8e8e8; margin-bottom:2px;">
-                    <span style="flex:0 0 160px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px;">Session</span>
-                    <span style="width:120px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px; flex-shrink:0;">Start</span>
-                    <span style="width:120px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px; flex-shrink:0;">End</span>
-                </div>`;
-
-            const blocksHtml = blocks.map((b, i) => `
-                <div style="display:flex; align-items:center; gap:14px; padding:7px 0; border-bottom:1px solid #f0f0f0;">
-                    <span style="flex:0 0 160px; font-size:0.85rem; color:#333; font-weight:600;">${b.label} — ${b.session}</span>
-                    <input type="time" value="${b.start_time}"
-                        oninput="_updateTournBlock('${t.key}',${i},'start_time',this.value)"
-                        style="width:120px; border:1px solid #ddd; border-radius:4px; padding:3px 8px; font-size:0.82rem; flex-shrink:0;">
-                    <input type="time" value="${b.end_time}"
-                        oninput="_updateTournBlock('${t.key}',${i},'end_time',this.value)"
-                        style="width:120px; border:1px solid #ddd; border-radius:4px; padding:3px 8px; font-size:0.82rem; flex-shrink:0;">
-                </div>`).join('');
-
-            const formUrl    = `https://referee-tool.com/referee-availability-form.html?tournament=${encodeURIComponent(t.key)}`;
-            const previewUrl = `${formUrl}&preview=true`;
+            const formUrl      = `https://referee-tool.com/referee-availability-form.html?tournament=${encodeURIComponent(t.key)}`;
+            const previewUrl   = `${formUrl}&preview=true`;
             return `
             <div class="club-row" style="margin-bottom:10px;">
                 <div class="club-main-row" style="justify-content:space-between;">
@@ -456,7 +519,8 @@
                             onchange="toggleTournBlocks('${t.key}', this.checked)">
                         <strong>${t.name}</strong>
                         <span style="color:#888; font-size:0.82rem; margin-left:6px;">${dateRange}</span>
-                        ${enabled ? `<span style="font-size:0.7rem; font-weight:700; background:#eafaf1; color:#1a6b3a; border:1px solid #27ae60; border-radius:4px; padding:1px 7px; margin-left:4px;">${sessionCount} sessions</span>` : ''}
+                        ${_statusPill(t.status)}
+                        <span id="badge_${t.key}" style="font-size:0.7rem; font-weight:700; background:#eafaf1; color:#1a6b3a; border:1px solid #27ae60; border-radius:4px; padding:1px 7px; margin-left:4px; display:${enabled ? 'inline' : 'none'};">${sessionCount} session${sessionCount !== 1 ? 's' : ''}</span>
                     </label>
                     <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
                         <button onclick="navigator.clipboard.writeText('${formUrl}').then(()=>{ this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy',1500); })"
@@ -468,8 +532,7 @@
                     </div>
                 </div>
                 <div id="blocks_${t.key}" style="display:${enabled ? 'block' : 'none'}; padding:10px 16px 12px 42px; background:#fafafa; border-top:1px solid #ede8e2;">
-                    ${colHeader}
-                    ${blocksHtml}
+                    ${_buildBlocksInner(t.key)}
                 </div>
             </div>`;
         }).join('');
@@ -477,13 +540,11 @@
         document.getElementById('tournSaveRow').style.display = 'flex';
     }
 
-    window._updateTournBlock = function(key, i, field, val) {
-        if (_tournBlocks[key] && _tournBlocks[key][i]) _tournBlocks[key][i][field] = val;
-    };
-
     window.toggleTournBlocks = function(key, show) {
-        const el = document.getElementById('blocks_' + key);
-        if (el) el.style.display = show ? 'block' : 'none';
+        const el    = document.getElementById('blocks_' + key);
+        const badge = document.getElementById('badge_'  + key);
+        if (el)    el.style.display    = show ? 'block'  : 'none';
+        if (badge) badge.style.display = show ? 'inline' : 'none';
     };
 
     async function saveTournAvail() {
