@@ -139,6 +139,9 @@
                 });
 
                 const sel = document.getElementById('clubSelect');
+
+                const clubGroup = document.createElement('optgroup');
+                clubGroup.label = 'Clubs';
                 clubs.forEach(c => {
                     const name = c.fields['Club Name'] || c.fields['Name'] || '';
                     const url  = c.fields['Club Game Upload'] || '';
@@ -147,10 +150,28 @@
                     const opt = document.createElement('option');
                     opt.value = url;
                     opt.textContent = name;
-                    sel.appendChild(opt);
+                    clubGroup.appendChild(opt);
                 });
+                if (clubGroup.children.length) sel.appendChild(clubGroup);
 
-                document.getElementById('selectorHint').textContent = `${sel.options.length - 1} clubs`;
+                // Load tournaments
+                const { data: tourns } = await supabaseClient.client
+                    .from('tournaments').select('id, key, name').order('name');
+                if (tourns && tourns.length) {
+                    const tournGroup = document.createElement('optgroup');
+                    tournGroup.label = 'Tournaments & Events';
+                    tourns.forEach(t => {
+                        if (!t.key || !t.name) return;
+                        const opt = document.createElement('option');
+                        opt.value = `club-game-submit.html?tournament=${t.key}`;
+                        opt.textContent = t.name;
+                        tournGroup.appendChild(opt);
+                    });
+                    if (tournGroup.children.length) sel.appendChild(tournGroup);
+                }
+
+                const total = sel.querySelectorAll('option').length;
+                document.getElementById('selectorHint').textContent = `${total} entities`;
             } catch (err) {
                 document.getElementById('selectorHint').textContent = 'Failed to load';
                 console.error(err);
