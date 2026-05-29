@@ -5658,7 +5658,22 @@
                         : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, gameOpts),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, refOpts),
                     window.tournamentMode
-                        ? Promise.resolve([])
+                        ? supabaseClient.client.from('availability')
+                            .select('*')
+                            .eq('tournament_key', new URLSearchParams(window.location.search).get('tournament'))
+                            .then(({data, error}) => {
+                                if (error || !data) return [];
+                                return data.map(r => ({ id: r.id, fields: {
+                                    'Referee Name':       r['Referee Name'] || '',
+                                    'Date':               r['date'] || '',
+                                    'Start Time':         r['Start Time'] || '',
+                                    'End Time':           r['End Time'] || '',
+                                    'Preferred Locations': r['Preferred Locations'] || '',
+                                    'notes':              r['notes'] || r['Notes'] || '',
+                                    'available':          true,
+                                    'tournament_key':     r['tournament_key'] || '',
+                                }}));
+                            })
                         : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, availOpts),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 })
                 ]);

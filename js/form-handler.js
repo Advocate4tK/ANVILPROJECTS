@@ -98,12 +98,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 // Save profile fields that live in availabilitySection (visible to all refs)
-                const years = document.getElementById('yearsReffing')?.value;
-                const cert  = document.getElementById('certificationLevel')?.value;
+                const years  = document.getElementById('yearsReffing')?.value;
+                const cert   = document.getElementById('certificationLevel')?.value;
                 const gender = document.getElementById('refereeGender')?.value;
-                if (years)  refUpdates['Years Reffing']       = years;
-                if (cert)   refUpdates['Certification Level'] = cert;
-                if (gender) refUpdates['Gender']              = gender;
+                const arOnly = document.getElementById('arOnly')?.value;
+                const ageGroupsArr = getCheckboxValues('ageGroups');
+                if (years)              refUpdates['Years Reffing']       = years;
+                if (cert)               refUpdates['Certification Level'] = cert;
+                if (gender)             refUpdates['Gender']              = gender;
+                if (arOnly)             refUpdates['Position Preference'] = arOnly === 'Yes' ? 'AR Only' : '';
+                if (ageGroupsArr.length) refUpdates['Age Groups Preferred'] = ageGroupsArr.join(', ');
 
                 // Save Club Preference from location checkboxes
                 // Send as array (works for Airtable multi-select); fall back to
@@ -212,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Start Time':        cb.dataset.start,
                     'End Time':          cb.dataset.end,
                     'Max Games':         '1',
-                    'Notes':             document.getElementById('notes').value.trim() || '',
+                    'Notes':             `${cb.dataset.label} ${cb.dataset.session}`,
                     'Status':            'New',
                     'Preferred Locations': '',
                     'tournament_key':    cb.dataset.tkey,
