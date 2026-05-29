@@ -27,7 +27,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!document.getElementById('refereeGender')?.value)       missing.push('Gender');
         if (!window._tournamentMode) {
             if (!document.querySelectorAll('input[name="locations"]:checked').length)  missing.push('Preferred Locations (at least one)');
-            if (!document.querySelectorAll('input[name="ageGroups"]:checked').length)  missing.push('Preferred Age Groups (at least one)');
             // Venmo — required if Griswold or East Haddam selected, no payment on file, and venmo method chosen
             const checkedLocs = [...document.querySelectorAll('input[name="locations"]:checked')].map(c => c.value);
             const needsPay = ['Griswold','East Haddam'].some(c => checkedLocs.includes(c));
@@ -38,8 +37,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!venmoVal) missing.push('Venmo handle (required for Griswold / East Haddam)');
                 }
             }
-            if (!document.getElementById('arOnly')?.value)          missing.push('AR Only preference');
         }
+        if (!document.querySelectorAll('input[name="ageGroups"]:checked').length)  missing.push('Preferred Age Groups (at least one)');
+        if (!document.getElementById('arOnly')?.value)                             missing.push('AR Only preference');
 
         const dayRows      = document.querySelectorAll('.day-row');
         const tournSessions = document.querySelectorAll('input[name="tournament_sessions"]:checked');
@@ -326,16 +326,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             }
-            const ageGroups = getCheckboxValues('ageGroups');
-            if (ageGroups.length === 0) {
-                showMessage('error', 'Please select at least one preferred age group.');
-                return false;
-            }
-            const arOnly = document.getElementById('arOnly').value;
-            if (!arOnly) {
-                showMessage('error', 'Please select an option for AR Only.');
-                return false;
-            }
+        }
+
+        const ageGroups = getCheckboxValues('ageGroups');
+        if (ageGroups.length === 0) {
+            showMessage('error', 'Please select at least one preferred age group.');
+            return false;
+        }
+        const arOnly = document.getElementById('arOnly').value;
+        if (!arOnly) {
+            showMessage('error', 'Please select an option for AR Only.');
+            return false;
         }
 
         // Validate each day row
