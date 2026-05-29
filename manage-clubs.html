@@ -2321,12 +2321,22 @@
                     listEl.innerHTML = '<span style="color:#aaa; font-style:italic; font-family:\'DM Sans\',sans-serif;">No venues on file for this tournament.</span>';
                     return;
                 }
+                // Cross-reference venues table for authoritative address data
+                const venueNames = venues.map(v => v.name).filter(Boolean);
+                const { data: venueRows } = await supabaseClient.client
+                    .from('venues').select('"Venue Name", address, city, state').in('"Venue Name"', venueNames);
+                const venueAddrMap = {};
+                (venueRows || []).forEach(r => {
+                    const parts = [r.address, r.city, r.state].filter(Boolean).join(', ');
+                    if (parts) venueAddrMap[r['Venue Name']] = parts;
+                });
                 listEl.innerHTML = venues.map(v => {
+                    const address = venueAddrMap[v.name] || v.address || '';
                     const fields = Array.isArray(v.fields) && v.fields.length
                         ? v.fields.map(f => `<span style="display:inline-block; background:#f3eaff; border:1px solid #c8a0e8; border-radius:10px; padding:1px 9px; font-size:0.75rem; color:#6c3483; margin:2px 3px 2px 0;">${f}</span>`).join('')
                         : '<span style="color:#aaa; font-size:0.8rem;">No fields</span>';
                     return `<div style="margin-bottom:12px; padding:10px 14px; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px;">
-                        <div style="font-weight:700; font-size:0.88rem; color:#09142a; margin-bottom:4px;">📍 ${v.name}${v.address ? `<span style="font-weight:400; color:#888; font-size:0.8rem; margin-left:8px;">${v.address}</span>` : ''}</div>
+                        <div style="font-weight:700; font-size:0.88rem; color:#09142a; margin-bottom:4px;">📍 ${v.name}${address ? `<span style="font-weight:400; color:#888; font-size:0.8rem; margin-left:8px;">${address}</span>` : ''}</div>
                         <div>${fields}</div>
                     </div>`;
                 }).join('');
