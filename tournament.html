@@ -109,6 +109,28 @@
         .badge-pending   { background: #fef9e7; color: #7d6608; }
         .badge-active    { background: #d6eaf8; color: #1a5276; }
         .loading-msg { text-align: center; color: #888; font-size: 0.9rem; padding: 20px; }
+
+        /* ── Wizard form ── */
+        .wiz-label { font-size:0.82rem; font-weight:700; color:#555; display:block; margin-bottom:5px; }
+        .wiz-input {
+            width:100%; padding:8px 12px; border:1.5px solid #d0b3f0; border-radius:8px;
+            font-size:0.88rem; font-family:inherit; box-sizing:border-box;
+        }
+        .wiz-input:focus { outline:none; border-color:#8e44ad; }
+        .wiz-section-header {
+            display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
+        }
+        .wiz-add-btn {
+            background:#f3eaff; color:#6c3483; border:1.5px solid #c8a0e8; border-radius:6px;
+            padding:4px 14px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:inherit;
+        }
+        .wiz-add-btn:hover { background:#e8d5f5; }
+        .wiz-remove-btn {
+            background:none; border:none; color:#e94560; font-size:1.1rem;
+            cursor:pointer; padding:0 4px; line-height:1; flex-shrink:0;
+        }
+        .wiz-hint { font-size:0.73rem; color:#aaa; margin:5px 0 0; }
+        .wiz-col-head { font-size:0.72rem; font-weight:700; color:#888; }
     </style>
 </head>
 <body>
@@ -138,32 +160,72 @@
             </div>
 
             <!-- New Tournament panel (hidden by default) -->
-            <div id="newTournamentPanel" style="display:none; background:white; border:2px solid #8e44ad; border-radius:14px; padding:28px 28px; margin-bottom:24px;">
-                <h3 style="color:#6c3483; margin:0 0 18px 0;">New Tournament</h3>
-                <div style="display:grid; gap:14px; max-width:500px;">
-                    <div>
-                        <label style="font-size:0.82rem; font-weight:700; color:#555; display:block; margin-bottom:5px;">Tournament Name</label>
-                        <input id="newTName" type="text" placeholder="e.g. Glastonbury Spring Warmup 2026"
-                            style="width:100%; padding:8px 12px; border:1.5px solid #d0b3f0; border-radius:8px; font-size:0.9rem; font-family:inherit; box-sizing:border-box;">
-                    </div>
-                    <div style="display:flex; gap:12px;">
-                        <div style="flex:1;">
-                            <label style="font-size:0.82rem; font-weight:700; color:#555; display:block; margin-bottom:5px;">Start Date</label>
-                            <input id="newTFrom" type="date" style="width:100%; padding:8px 12px; border:1.5px solid #d0b3f0; border-radius:8px; font-size:0.9rem; font-family:inherit; box-sizing:border-box;">
+            <div id="newTournamentPanel" style="display:none; background:white; border:2px solid #8e44ad; border-radius:14px; padding:28px; margin-bottom:24px;">
+                <h3 style="color:#6c3483; margin:0 0 20px 0;">New Tournament</h3>
+                <div style="display:grid; gap:16px; max-width:720px;">
+
+                    <!-- Name + Key -->
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <div style="flex:2; min-width:200px;">
+                            <label class="wiz-label">Tournament Name *</label>
+                            <input id="newTName" type="text" class="wiz-input" placeholder="e.g. RHAMBOREE 2026" oninput="autoGenKey()">
                         </div>
-                        <div style="flex:1;">
-                            <label style="font-size:0.82rem; font-weight:700; color:#555; display:block; margin-bottom:5px;">End Date</label>
-                            <input id="newTTo" type="date" style="width:100%; padding:8px 12px; border:1.5px solid #d0b3f0; border-radius:8px; font-size:0.9rem; font-family:inherit; box-sizing:border-box;">
+                        <div style="flex:1; min-width:160px;">
+                            <label class="wiz-label">URL Key * <span style="font-weight:400; color:#aaa;">(auto-generated)</span></label>
+                            <input id="newTKey" type="text" class="wiz-input" placeholder="e.g. rhamboree-2026" style="font-family:monospace; font-size:0.82rem;">
                         </div>
                     </div>
-                    <div>
-                        <label style="font-size:0.82rem; font-weight:700; color:#555; display:block; margin-bottom:5px;">Club / Organizer</label>
-                        <input id="newTClub" type="text" placeholder="e.g. Glastonbury"
-                            style="width:100%; padding:8px 12px; border:1.5px solid #d0b3f0; border-radius:8px; font-size:0.9rem; font-family:inherit; box-sizing:border-box;">
+
+                    <!-- Dates + Club -->
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <div style="flex:1; min-width:140px;">
+                            <label class="wiz-label">Start Date *</label>
+                            <input id="newTFrom" type="date" class="wiz-input">
+                        </div>
+                        <div style="flex:1; min-width:140px;">
+                            <label class="wiz-label">End Date <span style="font-weight:400; color:#aaa;">(rain / multi-day)</span></label>
+                            <input id="newTTo" type="date" class="wiz-input">
+                        </div>
+                        <div style="flex:1; min-width:160px;">
+                            <label class="wiz-label">Club / Organizer *</label>
+                            <input id="newTClub" type="text" class="wiz-input" placeholder="e.g. RHAM">
+                        </div>
                     </div>
-                    <div style="display:flex; gap:10px; margin-top:6px;">
-                        <button onclick="launchNewTournament()" style="background:#8e44ad; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:0.9rem; font-weight:700; cursor:pointer; font-family:inherit;">Open Workstation →</button>
+
+                    <!-- Venues -->
+                    <div>
+                        <div class="wiz-section-header">
+                            <label class="wiz-label" style="margin:0;">Venues</label>
+                            <button type="button" class="wiz-add-btn" onclick="addVenueRow()">+ Add Venue</button>
+                        </div>
+                        <div id="venueRows" style="display:grid; gap:6px;"></div>
+                        <p class="wiz-hint">Enter venue names exactly as they appear in the CA system — CA IDs are matched automatically from the venues table.</p>
+                    </div>
+
+                    <!-- Age Groups -->
+                    <div>
+                        <div class="wiz-section-header">
+                            <label class="wiz-label" style="margin:0;">Age Groups &amp; Pay Rates</label>
+                            <button type="button" class="wiz-add-btn" onclick="addAgeRow()">+ Add Age Group</button>
+                        </div>
+                        <div id="ageGroupRows" style="display:grid; gap:6px;">
+                            <div style="display:grid; grid-template-columns:1fr 80px 65px 65px 75px 28px; gap:6px; padding:0 2px;">
+                                <span class="wiz-col-head">Age Group</span>
+                                <span class="wiz-col-head">Format</span>
+                                <span class="wiz-col-head">CR $</span>
+                                <span class="wiz-col-head">AR $</span>
+                                <span class="wiz-col-head">Solo CR $</span>
+                                <span></span>
+                            </div>
+                        </div>
+                        <p class="wiz-hint">Solo CR = CR + AR (auto-calculated). Leave AR blank for U8-style single-referee games.</p>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:4px;">
+                        <button onclick="launchNewTournament()" style="background:#8e44ad; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:0.9rem; font-weight:700; cursor:pointer; font-family:inherit;">Save &amp; Open Workstation →</button>
                         <button onclick="document.getElementById('newTournamentPanel').style.display='none'" style="background:#f5f5f5; color:#555; border:1px solid #ddd; border-radius:8px; padding:10px 18px; font-size:0.9rem; cursor:pointer; font-family:inherit;">Cancel</button>
+                        <span id="newTSaveStatus" style="font-size:0.82rem; color:#6c3483; font-weight:600;"></span>
                     </div>
                 </div>
             </div>
@@ -247,36 +309,100 @@
         if (arrow) arrow.textContent = archiveOpen ? '▲ hide' : '▼ show';
     }
 
-    async function launchNewTournament() {
-        const name  = document.getElementById('newTName').value.trim();
-        const from  = document.getElementById('newTFrom').value;
-        const to    = document.getElementById('newTTo').value;
-        const club  = document.getElementById('newTClub').value.trim();
-        if (!from || !club) { alert('Club and start date are required.'); return; }
-        const year  = from.slice(0, 4);
-        const key   = `${club.toLowerCase()}-${year}`;
-        const tName = name || `${club} Spring Warmup ${year}`;
+    function autoGenKey() {
+        const name = document.getElementById('newTName').value.trim();
+        const key  = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        document.getElementById('newTKey').value = key;
+    }
 
-        // Persist to tournaments table so hub shows it immediately
-        const db = supabaseClient ? supabaseClient.client : null;
+    function addVenueRow(name = '') {
+        const container = document.getElementById('venueRows');
+        const row = document.createElement('div');
+        row.className = 'venue-row';
+        row.style.cssText = 'display:flex; gap:6px; align-items:center;';
+        row.innerHTML = `
+            <input class="venue-name wiz-input" type="text" value="${name.replace(/"/g,'&quot;')}" placeholder="e.g. Lions Fairgrounds" style="flex:1;">
+            <button type="button" class="wiz-remove-btn" onclick="this.closest('.venue-row').remove()">✕</button>`;
+        container.appendChild(row);
+        row.querySelector('.venue-name').focus();
+    }
+
+    function addAgeRow(ag = '', fmt = '11v11', cr = '', ar = '', solo = '') {
+        const container = document.getElementById('ageGroupRows');
+        const row = document.createElement('div');
+        row.className = 'age-row';
+        row.style.cssText = 'display:grid; grid-template-columns:1fr 80px 65px 65px 75px 28px; gap:6px; align-items:center;';
+        const numInp = (cls, val, ph) =>
+            `<input class="${cls} wiz-input" type="number" min="0" step="0.01" value="${val}" placeholder="${ph}" style="padding:6px 8px; font-size:0.85rem;">`;
+        row.innerHTML = `
+            <input class="ag-name wiz-input" type="text" value="${ag}" placeholder="e.g. U12" style="padding:6px 8px; font-size:0.85rem;">
+            <select class="ag-format wiz-input" style="padding:6px 4px; font-size:0.82rem;">
+                <option value="7v7" ${fmt==='7v7'?'selected':''}>7v7</option>
+                <option value="9v9" ${fmt==='9v9'?'selected':''}>9v9</option>
+                <option value="11v11" ${fmt==='11v11'?'selected':''}>11v11</option>
+            </select>
+            ${numInp('ag-cr',   cr,   '0')}
+            ${numInp('ag-ar',   ar,   '—')}
+            ${numInp('ag-solo', solo, 'auto')}
+            <button type="button" class="wiz-remove-btn" onclick="this.closest('.age-row').remove()">✕</button>`;
+        container.appendChild(row);
+    }
+
+    async function launchNewTournament() {
+        const name = document.getElementById('newTName').value.trim();
+        const key  = document.getElementById('newTKey').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-|-$/g, '');
+        const from = document.getElementById('newTFrom').value;
+        const to   = document.getElementById('newTTo').value;
+        const club = document.getElementById('newTClub').value.trim();
+        const statusEl = document.getElementById('newTSaveStatus');
+
+        if (!name || !key || !from || !club) {
+            alert('Name, key, club, and start date are required.');
+            return;
+        }
+
+        // Build venues JSONB
+        const venues = [];
+        document.querySelectorAll('.venue-row').forEach(row => {
+            const vName = (row.querySelector('.venue-name')?.value || '').trim();
+            if (vName) venues.push({ name: vName, fields: [] });
+        });
+
+        // Build age_groups JSONB
+        const age_groups = [];
+        document.querySelectorAll('.age-row').forEach(row => {
+            const ag   = (row.querySelector('.ag-name')?.value || '').trim();
+            const fmt  = row.querySelector('.ag-format')?.value || '11v11';
+            const cr   = parseFloat(row.querySelector('.ag-cr')?.value)   || 0;
+            const ar   = parseFloat(row.querySelector('.ag-ar')?.value)   || 0;
+            const soloRaw = parseFloat(row.querySelector('.ag-solo')?.value);
+            const solo = isNaN(soloRaw) ? (ar ? cr + ar : cr) : soloRaw;
+            if (ag) age_groups.push({ age_group: ag, format: fmt, center: cr, ar, solo_cr: solo, ar1: ar > 0, ar2: ar > 0 });
+        });
+
+        statusEl.textContent = 'Saving…';
+        const db = supabaseClient?.client;
         if (db) {
-            await db.from('tournaments').upsert(
-                { key, name: tName, club, from_date: from || null, to_date: to || null, status: 'upcoming' },
+            const { error } = await db.from('tournaments').upsert(
+                { key, name, club, from_date: from, to_date: to || null, status: 'upcoming', venues, age_groups },
                 { onConflict: 'key' }
             );
+            if (error) { statusEl.textContent = 'Error: ' + error.message; return; }
         }
 
         window.location.href = `assignor-workstation.html?tournament=${encodeURIComponent(key)}`;
     }
 
-    function spawnFromPrior(club, priorYear, firstName, lastName, tourneyName) {
-        const nextYear = String(parseInt(priorYear) + 1);
-        // Bump dates +1 year
-        const bumpYear = d => d ? d.replace(/^\d{4}/, nextYear) : '';
-        document.getElementById('newTName').value  = tourneyName.replace(priorYear, nextYear);
-        document.getElementById('newTClub').value  = allowedClubs ? allowedClubs[0] : club;
-        document.getElementById('newTFrom').value  = bumpYear(firstName);
-        document.getElementById('newTTo').value    = bumpYear(lastName);
+    function spawnFromPrior(club, priorYear, fromDate, toDate, tourneyName) {
+        const nextYear  = String(parseInt(priorYear) + 1);
+        const bumpYear  = d => d ? d.replace(/^\d{4}/, nextYear) : '';
+        const newName   = tourneyName.replace(priorYear, nextYear);
+        document.getElementById('newTName').value = newName;
+        document.getElementById('newTKey').value  = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        document.getElementById('newTClub').value = allowedClubs ? allowedClubs[0] : club;
+        document.getElementById('newTFrom').value = bumpYear(fromDate);
+        document.getElementById('newTTo').value   = bumpYear(toDate);
+        document.getElementById('newTSaveStatus').textContent = '';
         const panel = document.getElementById('newTournamentPanel');
         panel.style.display = 'block';
         panel.scrollIntoView({ behavior: 'smooth' });

@@ -5076,58 +5076,56 @@
                 // Auto-load so the assignor goes straight to work
                 loadAll();
             } else if (new URLSearchParams(window.location.search).get('tournament')) {
-                // Tournament mode — pre-set dates to tournament range, auto-load
+                // Tournament mode — fetch config from DB, auto-set dates
                 const tKey = new URLSearchParams(window.location.search).get('tournament');
-                // Tournament config registry.
-                // venueLabel: how this tournament refers to venues in the UI (default 'Venue').
-                // siteLookup: display-only map of resolved venue name → label prefix shown to the assignor.
-                //   These are purely cosmetic — the DB and CA always use the numeric Venue ID.
-                //   Glastonbury uses 'Site N' numbering; other tournaments may use 'Field N' or plain venue name.
+
+                // Glastonbury-specific site numbering — kept in code since it's cosmetic + complex
                 const GLASTONBURY_SITE_LOOKUP = {
                     'Addison Park': 1, 'Buckingham Park': 2, 'GEHMS': 3, 'GHS': 4,
                     'Gideon Welles': 5, 'Hebron Ave School': 6, 'Abraham Avenue School': 6,
                     'Irish American Home': 7, 'Knox Lane': 8, 'Nayaug School': 9,
                     'Riverfront Park': 10, 'Rotary': 11, 'Smith Middle School': 12,
-                    // Full-name aliases for venues stored with expanded names in Supabase
-                    'Glastonbury High School': 4,
-                    'Riverfront Park (Glastonbury)': 10,
-                    'Irish American Hibernian': 7,
-                    'Veteran\'s Park (Hebron)': 6,
+                    'Glastonbury High School': 4, 'Riverfront Park (Glastonbury)': 10,
+                    'Irish American Hibernian': 7, 'Veteran\'s Park (Hebron)': 6,
                 };
-                const TOURNAMENTS = {
-                    'rhamboree': {
-                        label: 'RHAMBOREE 2026', logo: null,
-                        from: '2026-06-13', to: '2026-06-14',
-                        venueLabel: 'Venue', siteLookup: null,
-                        days: [
-                            {label:'Sat Jun 13', date:'2026-06-13'},
-                            {label:'Sun Jun 14 (Rain)', date:'2026-06-14'},
-                        ],
-                    },
-                    'glastonbury-2025': {
-                        label: 'Glastonbury Spring Warmup 2025', logo: 'PICS/Glast.png',
-                        from: '2025-04-25', to: '2025-04-27',
-                        venueLabel: 'Site',           // display term; DB/CA always use 'Venue ID'
-                        siteLookup: GLASTONBURY_SITE_LOOKUP,
-                        sourceClub: 'GLASTONBURY',
-                        days: [{label:'Fri Apr 25',date:'2025-04-25'},{label:'Sat Apr 26',date:'2025-04-26'},{label:'Sun Apr 27',date:'2025-04-27'}],
-                    },
-                    'glastonbury-2026': {
-                        label: 'Glastonbury Spring Warmup 2026', logo: 'PICS/Glast.png',
-                        from: '2026-04-24', to: '2026-04-26',
-                        venueLabel: 'Site',
-                        siteLookup: GLASTONBURY_SITE_LOOKUP,
-                        sourceClub: 'GLASTONBURY',
-                        days: [{label:'Fri Apr 24',date:'2026-04-24'},{label:'Sat Apr 25',date:'2026-04-25'},{label:'Sun Apr 26',date:'2026-04-26'}],
-                    },
-                };
-                window.tournamentMode = TOURNAMENTS[tKey] || null;
-                if (window.tournamentMode) {
-                    document.getElementById('dateFrom').value = window.tournamentMode.from;
-                    document.getElementById('dateTo').value   = window.tournamentMode.to;
-                    const _sl = document.getElementById('scheduleViewLink');
-                    if (_sl) _sl.href = `club-game-submit.html?tournament=${encodeURIComponent(tKey)}&assignor=true&view=schedule`;
-                }
+
+                // Fetch tournament row from DB — no more hardcoded registry
+                (async () => {
+                    try {
+                        const { data: tRow } = await supabaseClient.client
+                            .from('tournaments').select('*').eq('key', tKey).single();
+                        if (!tRow) return;
+
+                        // Build day tabs from from_date → to_date
+                        const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        const WDAYS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                        const days   = [];
+                        const start  = new Date(tRow.from_date + 'T12:00:00');
+                        const end    = new Date((tRow.to_date || tRow.from_date) + 'T12:00:00');
+                        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                            const iso = d.toISOString().slice(0, 10);
+                            days.push({ label: `${WDAYS[d.getDay()]} ${MONTHS[d.getMonth()]} ${d.getDate()}`, date: iso });
+                        }
+
+                        // Glastonbury-specific overrides
+                        const isGlast = tRow.key.startsWith('glastonbury');
+                        window.tournamentMode = {
+                            label:      tRow.name,
+                            logo:       isGlast ? 'PICS/Glast.png' : null,
+                            from:       tRow.from_date,
+                            to:         tRow.to_date || tRow.from_date,
+                            venueLabel: isGlast ? 'Site' : 'Venue',
+                            siteLookup: isGlast ? GLASTONBURY_SITE_LOOKUP : null,
+                            sourceClub: isGlast ? 'GLASTONBURY' : null,
+                            days,
+                        };
+
+                        document.getElementById('dateFrom').value = window.tournamentMode.from;
+                        document.getElementById('dateTo').value   = window.tournamentMode.to;
+                        const _sl = document.getElementById('scheduleViewLink');
+                        if (_sl) _sl.href = `club-game-submit.html?tournament=${encodeURIComponent(tKey)}&assignor=true&view=schedule`;
+                    } catch(e) { console.error('Tournament config fetch failed:', e); }
+                })();
                 // loadAll fires from openWorkstation() after profile is selected
             } else if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
                 setDateRange('this-week', null);
