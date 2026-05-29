@@ -40,9 +40,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (!document.getElementById('arOnly')?.value)              missing.push('AR Only preference');
 
-        const dayRows = document.querySelectorAll('.day-row');
-        if (!dayRows.length) {
-            missing.push('At least one availability date');
+        const dayRows      = document.querySelectorAll('.day-row');
+        const tournSessions = document.querySelectorAll('input[name="tournament_sessions"]:checked');
+        if (!dayRows.length && !tournSessions.length) {
+            missing.push('At least one availability date or tournament session');
         } else {
             dayRows.forEach((row, i) => {
                 const n = i + 1;
@@ -164,8 +165,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            const dayRows = document.querySelectorAll('.day-row');
-            if (!dayRows.length) throw new Error('No availability dates found — please add at least one date before submitting.');
+            const dayRows        = document.querySelectorAll('.day-row');
+            const tournChecked   = [...document.querySelectorAll('input[name="tournament_sessions"]:checked')];
+            if (!dayRows.length && !tournChecked.length) throw new Error('No availability dates or tournament sessions selected.');
 
             // Delete existing records only for the specific dates being submitted
             // (leaves other dates untouched — upsert behavior per-date)
@@ -190,6 +192,32 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             await Promise.all(submissions);
+
+            // Save tournament session availability
+            if (tournChecked.length) {
+                const refName = `${firstName} ${lastName}`;
+                // Delete existing tournament sessions for these tournaments before re-inserting
+                const tKeys = [...new Set(tournChecked.map(cb => cb.dataset.tkey))];
+                for (const tKey of tKeys) {
+                    await supabaseClient.client.from('availability')
+                        .delete()
+                        .eq('Referee Name', refName)
+                        .eq('tournament_key', tKey)
+                        .gte('date', new Date().toISOString().split('T')[0]);
+                }
+                const tournSubmissions = tournChecked.map(cb => airtableClient.createAvailability({
+                    'Referee Name':      refName,
+                    'Date':              cb.dataset.date,
+                    'Start Time':        cb.dataset.start,
+                    'End Time':          cb.dataset.end,
+                    'Max Games':         '1',
+                    'Notes':             document.getElementById('notes').value.trim() || '',
+                    'Status':            'New',
+                    'Preferred Locations': '',
+                    'tournament_key':    cb.dataset.tkey,
+                }));
+                await Promise.all(tournSubmissions);
+            }
 
             // Send confirmation email (non-blocking — availability already saved)
             try {

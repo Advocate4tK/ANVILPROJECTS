@@ -126,10 +126,13 @@
             </div>
             <div id="tournAvailBody" style="display:none; margin-top:18px;">
                 <p>Configure tournaments and events that appear on the availability form, with their session blocks (AM / PM slots, specific dates).</p>
-                <div class="coming-soon-block">
-                    <div class="cs-icon">🏆</div>
-                    <strong>RHAMBOREE 2026 — Coming Soon</strong>
-                    Once Eric provides venue and session details, RHAMBOREE 2026 (June 13) will be configured here with AM and PM session blocks.
+                <p>Toggle tournaments on to make them appear on the referee availability form. Configure AM/PM session blocks for each day.</p>
+                <div id="tournListWrap">
+                    <p style="color:#aaa; font-size:0.85rem;">Loading…</p>
+                </div>
+                <div style="display:none; margin-top:16px; align-items:center; gap:12px;" id="tournSaveRow">
+                    <button class="btn btn-secondary" onclick="saveTournAvail()">Save</button>
+                    <span class="save-msg" id="tournSaveMsg">✓ Saved</span>
                 </div>
             </div>
         </div>
@@ -316,9 +319,10 @@
         setTimeout(() => msg.style.display = 'none', 2000);
     }
 
-    let _openingsLoaded = false;
-    let _recLoaded = false;
-    let _clubAvailLoaded = false;
+    let _openingsLoaded   = false;
+    let _recLoaded        = false;
+    let _clubAvailLoaded  = false;
+    let _tournAvailLoaded = false;
 
     function toggleSection(bodyId, arrowId) {
         const body  = document.getElementById(bodyId);
@@ -326,9 +330,10 @@
         const open  = body.style.display === 'none';
         body.style.display    = open ? '' : 'none';
         arrow.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
-        if (open && bodyId === 'openingsBody'  && !_openingsLoaded)  { _openingsLoaded  = true; loadOpeningsClubs(); }
-        if (open && bodyId === 'recBody'       && !_recLoaded)       { _recLoaded       = true; loadRecOrgs();       }
-        if (open && bodyId === 'clubAvailBody' && !_clubAvailLoaded) { _clubAvailLoaded = true; loadAvailClubs();    }
+        if (open && bodyId === 'openingsBody'   && !_openingsLoaded)   { _openingsLoaded   = true; loadOpeningsClubs(); }
+        if (open && bodyId === 'recBody'        && !_recLoaded)        { _recLoaded        = true; loadRecOrgs();       }
+        if (open && bodyId === 'clubAvailBody'  && !_clubAvailLoaded)  { _clubAvailLoaded  = true; loadAvailClubs();    }
+        if (open && bodyId === 'tournAvailBody' && !_tournAvailLoaded) { _tournAvailLoaded = true; loadTournAvail();    }
     }
 
     async function loadAvailClubs() {
@@ -363,6 +368,112 @@
                 </div>
             </div>`;
         }).join('');
+    }
+
+    // ── Tournament Availability ──────────────────────────────────────────────
+    let _allTournaments = [];
+    let _tournBlocks    = {};
+
+    function _getDefaultBlocks(t) {
+        const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const WDAYS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const blocks = [];
+        const start  = new Date(t.from_date + 'T12:00:00');
+        const end    = new Date((t.to_date || t.from_date) + 'T12:00:00');
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            const iso    = d.toISOString().slice(0, 10);
+            const dlabel = `${WDAYS[d.getDay()]} ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+            blocks.push({ date: iso, label: dlabel, session: 'AM', start_time: '07:00', end_time: '12:00' });
+            blocks.push({ date: iso, label: dlabel, session: 'PM', start_time: '12:00', end_time: '18:00' });
+        }
+        return blocks;
+    }
+
+    async function loadTournAvail() {
+        const wrap = document.getElementById('tournListWrap');
+        const { data: tourneys, error } = await supabaseClient.client
+            .from('tournaments')
+            .select('id, key, name, from_date, to_date, avail_enabled, session_blocks')
+            .order('from_date');
+
+        if (error || !tourneys || !tourneys.length) {
+            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No tournaments found. Create one in the <a href="tournament.html" style="color:#0369a1;">Tournament Manager</a>.</p>';
+            return;
+        }
+
+        _allTournaments = tourneys;
+
+        const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const WDAYS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        function fmtDate(iso) {
+            const d = new Date(iso + 'T12:00:00');
+            return `${WDAYS[d.getDay()]} ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+        }
+
+        tourneys.forEach(t => {
+            _tournBlocks[t.key] = (t.session_blocks && t.session_blocks.length)
+                ? t.session_blocks : _getDefaultBlocks(t);
+        });
+
+        wrap.innerHTML = tourneys.map(t => {
+            const enabled   = t.avail_enabled || false;
+            const blocks    = _tournBlocks[t.key];
+            const dateRange = t.to_date && t.to_date !== t.from_date
+                ? `${fmtDate(t.from_date)} – ${fmtDate(t.to_date)}`
+                : fmtDate(t.from_date);
+
+            const blocksHtml = blocks.map((b, i) => `
+                <div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid #f0f0f0; flex-wrap:wrap;">
+                    <span style="min-width:160px; font-size:0.85rem; color:#333;">${b.label} — ${b.session}</span>
+                    <label style="font-size:0.82rem; color:#888;">Start</label>
+                    <input type="time" value="${b.start_time}"
+                        oninput="_updateTournBlock('${t.key}',${i},'start_time',this.value)"
+                        style="border:1px solid #ddd; border-radius:4px; padding:3px 6px; font-size:0.82rem;">
+                    <label style="font-size:0.82rem; color:#888;">End</label>
+                    <input type="time" value="${b.end_time}"
+                        oninput="_updateTournBlock('${t.key}',${i},'end_time',this.value)"
+                        style="border:1px solid #ddd; border-radius:4px; padding:3px 6px; font-size:0.82rem;">
+                </div>`).join('');
+
+            return `
+            <div class="club-row" style="margin-bottom:12px;">
+                <label class="club-main-row">
+                    <input type="checkbox" id="te_${t.key}" value="${t.key}" ${enabled ? 'checked' : ''}
+                        onchange="toggleTournBlocks('${t.key}', this.checked)">
+                    <strong>${t.name}</strong>
+                    <span style="color:#888; font-size:0.82rem; margin-left:8px;">${dateRange}</span>
+                </label>
+                <div id="blocks_${t.key}" style="display:${enabled ? 'block' : 'none'}; padding:8px 14px 12px 42px; background:#fafafa; border-top:1px solid #ede8e2;">
+                    <p style="font-size:0.8rem; color:#888; margin:0 0 8px;">Refs choose which sessions to sign up for on the availability form:</p>
+                    ${blocksHtml}
+                </div>
+            </div>`;
+        }).join('');
+
+        document.getElementById('tournSaveRow').style.display = 'flex';
+    }
+
+    window._updateTournBlock = function(key, i, field, val) {
+        if (_tournBlocks[key] && _tournBlocks[key][i]) _tournBlocks[key][i][field] = val;
+    };
+
+    window.toggleTournBlocks = function(key, show) {
+        const el = document.getElementById('blocks_' + key);
+        if (el) el.style.display = show ? 'block' : 'none';
+    };
+
+    async function saveTournAvail() {
+        const promises = _allTournaments.map(t => {
+            const cb      = document.getElementById('te_' + t.key);
+            const enabled = cb ? cb.checked : false;
+            return supabaseClient.client.from('tournaments')
+                .update({ avail_enabled: enabled, session_blocks: _tournBlocks[t.key] || [] })
+                .eq('key', t.key);
+        });
+        await Promise.all(promises);
+        const msg = document.getElementById('tournSaveMsg');
+        msg.style.display = 'inline';
+        setTimeout(() => msg.style.display = 'none', 2000);
     }
 </script>
 </body>
