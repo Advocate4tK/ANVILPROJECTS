@@ -38,8 +38,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         }
-        if (!document.querySelectorAll('input[name="ageGroups"]:checked').length)  missing.push('Preferred Age Groups (at least one)');
-        if (!document.getElementById('arOnly')?.value)                             missing.push('AR Only preference');
+        if (window._tournamentMode) {
+            if (!document.querySelectorAll('input[name="ageGroups"]:checked').length)  missing.push('Preferred Age Groups (at least one)');
+            if (!document.getElementById('arOnly')?.value)                             missing.push('AR Only preference');
+        }
 
         const dayRows      = document.querySelectorAll('.day-row');
         const tournSessions = document.querySelectorAll('input[name="tournament_sessions"]:checked');
@@ -332,15 +334,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        const ageGroups = getCheckboxValues('ageGroups');
-        if (ageGroups.length === 0) {
-            showMessage('error', 'Please select at least one preferred age group.');
-            return false;
-        }
-        const arOnly = document.getElementById('arOnly').value;
-        if (!arOnly) {
-            showMessage('error', 'Please select an option for AR Only.');
-            return false;
+        if (window._tournamentMode) {
+            const ageGroups = getCheckboxValues('ageGroups');
+            if (ageGroups.length === 0) {
+                showMessage('error', 'Please select at least one preferred age group.');
+                return false;
+            }
+            const arOnly = document.getElementById('arOnly').value;
+            if (!arOnly) {
+                showMessage('error', 'Please select an option for AR Only.');
+                return false;
+            }
         }
 
         // Validate each day row
