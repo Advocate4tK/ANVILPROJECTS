@@ -22,9 +22,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function checkFormReady() {
         const missing = [];
 
-        if (!document.getElementById('yearsReffing')?.value)        missing.push('Years Reffing');
-        if (!document.getElementById('certificationLevel')?.value)  missing.push('Certification Level');
-        if (!document.getElementById('refereeGender')?.value)       missing.push('Gender');
+        const yearsEl  = document.getElementById('yearsReffing');
+        const certEl   = document.getElementById('certificationLevel');
+        const genderEl = document.getElementById('refereeGender');
+        if (yearsEl  && yearsEl.offsetParent  !== null && !yearsEl.value)  missing.push('Years Reffing');
+        if (certEl   && certEl.offsetParent   !== null && !certEl.value)   missing.push('Certification Level');
+        if (genderEl && genderEl.offsetParent !== null && !genderEl.value) missing.push('Gender');
         if (!window._tournamentMode) {
             if (!document.querySelectorAll('input[name="locations"]:checked').length)  missing.push('Preferred Locations (at least one)');
             // Venmo — required if Griswold or East Haddam selected, no payment on file, and venmo method chosen
@@ -294,22 +297,22 @@ document.addEventListener('DOMContentLoaded', function() {
      * Validate form data
      */
     function validateForm() {
-        const years  = document.getElementById('yearsReffing')?.value;
-        const cert   = document.getElementById('certificationLevel')?.value;
-        const gender = document.getElementById('refereeGender')?.value;
-        if (!years) {
+        const yearsVEl  = document.getElementById('yearsReffing');
+        const certVEl   = document.getElementById('certificationLevel');
+        const genderVEl = document.getElementById('refereeGender');
+        if (yearsVEl  && yearsVEl.offsetParent  !== null && !yearsVEl.value) {
             showMessage('error', 'Please select your years reffing.');
-            document.getElementById('yearsReffing')?.focus();
+            yearsVEl.focus();
             return false;
         }
-        if (!cert) {
+        if (certVEl   && certVEl.offsetParent   !== null && !certVEl.value) {
             showMessage('error', 'Please select your certification level.');
-            document.getElementById('certificationLevel')?.focus();
+            certVEl.focus();
             return false;
         }
-        if (!gender) {
+        if (genderVEl && genderVEl.offsetParent !== null && !genderVEl.value) {
             showMessage('error', 'Please select your gender.');
-            document.getElementById('refereeGender')?.focus();
+            genderVEl.focus();
             return false;
         }
 
