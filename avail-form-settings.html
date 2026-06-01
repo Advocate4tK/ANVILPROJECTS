@@ -119,8 +119,12 @@
                     <a href="https://referee-tool.com/referee-availability-form.html" target="_blank"
                         style="background:#eafaf1; border:1px solid #27ae60; color:#27ae60; border-radius:6px; padding:4px 10px; font-size:0.78rem; text-decoration:none; white-space:nowrap;">↗ Open Form</a>
                 </div>
-                <div class="club-check-list" id="availClubList">
+                <div id="availClubList" style="margin-bottom:12px;">
                     <p style="color:#aaa; font-size:0.85rem;">Loading…</p>
+                </div>
+                <div id="availClubSaveRow" style="display:none; align-items:center; gap:12px; margin-top:4px;">
+                    <button id="availClubSaveBtn" onclick="saveAvailClubs()" style="background:#00c853; color:#09142a; border:none; padding:8px 24px; border-radius:8px; font-weight:800; font-size:0.9rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">Save</button>
+                    <span id="availClubSaveMsg" style="display:none; font-size:0.82rem; color:#1a6b3a; font-weight:700; font-family:'DM Sans',sans-serif;">✓ Saved</span>
                 </div>
             </div>
         </div>
@@ -342,37 +346,58 @@
     }
 
     async function loadAvailClubs() {
-        const [formRes, clubsRes] = await Promise.all([
-            supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
-            supabaseClient.client.from('clubs').select('name, payment_methods, enabled').eq('enabled', true).order('name')
-        ]);
-        let cfg = {};
-        try { cfg = JSON.parse(formRes.data?.value || '{}'); } catch(e) {}
+        const clubsRes = await supabaseClient.client
+            .from('clubs').select('id, name, payment_methods, avail_form_enabled').eq('enabled', true).order('name');
         const allClubs = clubsRes.data || [];
 
-        const rtClubs = allClubs.filter(c => {
-            const ft = cfg[c.name]?.formType;
-            return !ft || ft === 'referee-tool';
-        });
-
         const wrap = document.getElementById('availClubList');
-        if (!rtClubs.length) {
-            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No clubs configured for Referee Tool yet.</p>';
+        if (!allClubs.length) {
+            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No live clubs found. Enable clubs in Entity Status first.</p>';
+            document.getElementById('availClubSaveRow').style.display = 'none';
             return;
         }
-        wrap.innerHTML = rtClubs.map(c => {
+        wrap.innerHTML = allClubs.map(c => {
             const methods = (c.payment_methods || '').split(',').map(s => s.trim()).filter(Boolean);
             const payBadge = methods.length
                 ? `<span style="font-size:0.72rem; font-weight:700; background:#fff8e1; color:#92400e; border:1px solid #f59e0b; border-radius:4px; padding:1px 7px; margin-left:8px;">💳 ${methods.join(' / ').toUpperCase()}</span>`
                 : '';
+            const checked = !!c.avail_form_enabled;
             return `
-            <div class="club-row">
-                <div class="club-main-row" style="cursor:default;">
-                    <span style="color:#00c853; font-size:0.85rem;">✓</span>
-                    ${c.name}${payBadge}
+            <div class="club-row" style="border:1px solid ${checked ? '#bbf7d0' : '#e2d9ce'}; border-radius:8px; padding:10px 14px; margin-bottom:6px; background:${checked ? '#f0fdf4' : '#fafafa'};">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                    <span style="font-family:'DM Sans',sans-serif; font-size:0.92rem; color:#1f2328; font-weight:${checked ? '700' : '400'};">${c.name}${payBadge}</span>
+                    <input type="checkbox" data-club-id="${c.id}" ${checked ? 'checked' : ''} onchange="onAvailClubToggle(this)"
+                        style="width:18px;height:18px;cursor:pointer;accent-color:#00c853;">
                 </div>
             </div>`;
         }).join('');
+        document.getElementById('availClubSaveRow').style.display = 'flex';
+    }
+
+    function onAvailClubToggle(cb) {
+        const row = cb.closest('.club-row');
+        const checked = cb.checked;
+        row.style.border      = `1px solid ${checked ? '#bbf7d0' : '#e2d9ce'}`;
+        row.style.background  = checked ? '#f0fdf4' : '#fafafa';
+        row.querySelector('span').style.fontWeight = checked ? '700' : '400';
+    }
+
+    async function saveAvailClubs() {
+        const btn = document.getElementById('availClubSaveBtn');
+        const msg = document.getElementById('availClubSaveMsg');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        msg.style.display = 'none';
+        const checks = document.querySelectorAll('#availClubList input[type=checkbox]');
+        await Promise.all([...checks].map(cb =>
+            supabaseClient.client.from('clubs')
+                .update({ avail_form_enabled: cb.checked })
+                .eq('id', parseInt(cb.dataset.clubId))
+        ));
+        btn.disabled = false;
+        btn.textContent = 'Save';
+        msg.style.display = 'inline';
+        setTimeout(() => msg.style.display = 'none', 2000);
     }
 
     // ── Tournament Availability ──────────────────────────────────────────────
