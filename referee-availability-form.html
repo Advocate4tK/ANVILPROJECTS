@@ -692,15 +692,11 @@
                 supabaseClient.client.from('clubs').select('name, payment_methods').eq('enabled', true).eq('avail_form_enabled', true),
                 (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks').eq('avail_enabled', true).order('from_date'); if (tParam) { q = q.eq('key', tParam); } else { q = q.eq('status', 'active'); } return q; })()
             ]).then(([formRes, clubsRes, tournRes]) => {
-                let cfg = {};
-                try { cfg = JSON.parse(formRes.data?.value || '{}'); } catch(e) {}
-                const PAY_CLUBS = (clubsRes.data || [])
+                const allClubs = (clubsRes.data || []).sort((a, b) => a.name.localeCompare(b.name));
+                const PAY_CLUBS = allClubs
                     .filter(c => c.payment_methods && /venmo|check/i.test(c.payment_methods))
                     .map(c => c.name);
-                const rtClubs = Object.entries(cfg)
-                    .filter(([, v]) => v.formType === 'referee-tool')
-                    .map(([name]) => name)
-                    .sort();
+                const rtClubs = allClubs.map(c => c.name);
                 const box = document.getElementById('locationCheckboxes');
                 box.innerHTML = rtClubs.length
                     ? rtClubs.map(club => `<label><input type="checkbox" name="locations" value="${club}"> ${club}</label>`).join('')
