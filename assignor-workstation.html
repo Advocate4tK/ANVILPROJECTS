@@ -5251,6 +5251,11 @@
             const targetClubs = isAllClubs ? [...clubsList] : [...selectedClubs];
 
             // Only games with at least one open slot
+            const _crewSoloOnly = (source, age) => {
+                const ageBase = (age||'').replace(/\s+(Girls?|Boys?|Coed)$/i, '').trim();
+                const crew = window._crewRules?.[source]?.[ageBase];
+                return crew ? (!crew.ar1 && !crew.ar2) : (ageBase === 'U8');
+            };
             const openGames = allGames.filter(g => {
                 const f   = g.fields;
                 if (cancelledGameIds.has(g.id) || f['Game Status'] === 'Cancelled') return false;
@@ -5258,8 +5263,8 @@
                 const cr  = resolveRefName(f['Center Referee']);
                 const ar1 = resolveRefName(f['AR 1']);
                 const ar2 = resolveRefName(f['AR 2']);
-                const isU8 = age === 'U8';
-                const fullyAssigned = isU8 ? !!cr : (!!cr && !!ar1 && !!ar2);
+                const soloOnly = _crewSoloOnly(f['Source Club'] || '', age);
+                const fullyAssigned = soloOnly ? !!cr : (!!cr && !!ar1 && !!ar2);
                 if (fullyAssigned) return false;
                 if (!isAllClubs && !selectedClubs.has(f['Source Club'])) return false;
                 return true;
@@ -5383,13 +5388,14 @@
                         const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
                         const age = f['Age Group'] || '';
                         const gender = f['Gender'] || '';
-                        const isU8 = (age||'').startsWith('U8');
+                        const soloOnly = _crewSoloOnly(f['Source Club'] || '', age);
+                        const displayGender = (!gender || age.toLowerCase().includes(gender.toLowerCase())) ? '' : (' ' + gender);
                         const openSlots = [];
                         if (!f['Center Referee']?.trim()) openSlots.push('CR');
-                        if (!isU8 && !f['AR 1']?.trim()) openSlots.push('AR');
-                        if (!isU8 && !f['AR 2']?.trim()) openSlots.push('AR');
+                        if (!soloOnly && !f['AR 1']?.trim()) openSlots.push('AR');
+                        if (!soloOnly && !f['AR 2']?.trim()) openSlots.push('AR');
                         const positions = openSlots.join(' | ');
-                        return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age} ${gender}    ${vName}      ${positions}`;
+                        return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age}${displayGender}    ${vName}      ${positions}`;
                     }).join('\n');
 
                     const openCount = games.length;
