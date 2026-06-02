@@ -517,7 +517,8 @@
                 </div>
                 <span class="badge-status badge-${status}">${statusLabel}</span>
                 <button onclick="spawnFromPrior(${spawnArgs})" class="action-btn outline" style="white-space:nowrap;" title="Pre-fill New Tournament from this one, bumped to ${nextYear}">+ ${nextYear}</button>
-                <a href="assignor-workstation.html?tournament=${encodeURIComponent(t.key)}" class="action-btn primary" style="white-space:nowrap;">Open →</a>`;
+                <a href="assignor-workstation.html?tournament=${encodeURIComponent(t.key)}" class="action-btn primary" style="white-space:nowrap;">Open →</a>
+                <button onclick="deleteTournament('${t.key}', '${t.name.replace(/'/g, "\\'")}')" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:8px; padding:8px 14px; font-weight:700; font-size:0.82rem; cursor:pointer; font-family:'DM Sans',sans-serif; white-space:nowrap;">🗑 Delete</button>`;
 
             if (status === 'completed') archiveCards.push(card);
             else currentCards.push(card); // 'recent' intentionally stays in current
@@ -528,6 +529,13 @@
 
         if (archiveCards.length) archiveCards.forEach(c => archiveList.appendChild(c));
         else archiveList.innerHTML = '<div class="loading-msg">No past tournaments.</div>';
+    }
+
+    async function deleteTournament(key, name) {
+        if (!confirm(`Are you sure you want to delete "${name}"?\n\nThis will permanently remove the tournament record. Games are NOT deleted.`)) return;
+        const { error } = await supabaseClient.client.from('tournaments').delete().eq('key', key);
+        if (error) { alert('Delete failed: ' + error.message); return; }
+        await loadTournaments();
     }
 
     // Auto-load current/upcoming on page open
