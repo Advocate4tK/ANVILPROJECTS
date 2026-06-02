@@ -451,6 +451,27 @@
 
     function _buildBlocksInner(key) {
         const blocks = _tournBlocks[key] || [];
+        const mode   = _tournModes[key] || 'sessions';
+        const modeToggle = `
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #e8e8e8;">
+                <span style="font-size:0.72rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:1px;">Availability Mode:</span>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.82rem; font-family:'DM Sans',sans-serif; font-weight:${mode==='sessions'?'700':'400'}; color:${mode==='sessions'?'#09142a':'#888'};">
+                    <input type="radio" name="tmode_${key}" value="sessions" ${mode==='sessions'?'checked':''} onchange="_setTournMode('${key}','sessions')"> Session Blocks
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.82rem; font-family:'DM Sans',sans-serif; font-weight:${mode==='window'?'700':'400'}; color:${mode==='window'?'#09142a':'#888'};">
+                    <input type="radio" name="tmode_${key}" value="window" ${mode==='window'?'checked':''} onchange="_setTournMode('${key}','window')"> Time Window (arrival/departure)
+                </label>
+            </div>`;
+        if (mode === 'window') {
+            const days = [...new Map(blocks.map(b => [b.date, b])).values()];
+            const earliest = blocks.reduce((a,b) => (a.start_time < b.start_time ? a : b), blocks[0] || {}).start_time || '07:00';
+            const latest   = blocks.reduce((a,b) => (a.end_time   > b.end_time   ? a : b), blocks[0] || {}).end_time   || '18:00';
+            const windowInfo = `<div style="font-size:0.8rem; color:#555; font-family:'DM Sans',sans-serif; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:8px 12px;">
+                📅 ${days.map(d=>d.label||d.date).join(', ')} &nbsp;·&nbsp; Window: ${_fmt12(earliest)} – ${_fmt12(latest)}<br>
+                <span style="color:#888; font-size:0.76rem;">Refs will pick their arrival and departure times in 30-min increments within this window.</span>
+            </div>`;
+            return modeToggle + windowInfo;
+        }
         const colHeader = `
             <div style="display:flex; align-items:center; gap:12px; padding:4px 0 6px; border-bottom:2px solid #e8e8e8; margin-bottom:2px;">
                 <span style="flex:0 0 100px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px;">Date</span>
@@ -464,8 +485,19 @@
                 <button onclick="_addTournBlock('${key}')"
                     style="background:#f0f7ff; border:1px solid #3b82f6; color:#1e4db7; border-radius:6px; padding:5px 16px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit;">+ Add Session</button>
             </div>`;
-        return colHeader + rows + addBtn;
+        return modeToggle + colHeader + rows + addBtn;
     }
+
+    function _fmt12(t) {
+        if (!t) return '';
+        const [h, m] = t.split(':').map(Number);
+        return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
+    }
+
+    window._setTournMode = function(key, mode) {
+        _tournModes[key] = mode;
+        _reRenderBlocks(key);
+    };
 
     function _reRenderBlocks(key) {
         const wrap = document.getElementById('blocks_' + key);
@@ -501,11 +533,13 @@
         _reRenderBlocks(key);
     };
 
+    let _tournModes = {}; // key → 'sessions' | 'window'
+
     async function loadTournAvail() {
         const wrap = document.getElementById('tournListWrap');
         const { data: tourneys, error } = await supabaseClient.client
             .from('tournaments')
-            .select('id, key, name, from_date, to_date, status, avail_enabled, session_blocks')
+            .select('id, key, name, from_date, to_date, status, avail_enabled, session_blocks, avail_mode')
             .order('from_date');
 
         if (error || !tourneys || !tourneys.length) {
@@ -525,6 +559,7 @@
         tourneys.forEach(t => {
             _tournBlocks[t.key] = (t.session_blocks && t.session_blocks.length)
                 ? t.session_blocks : _getDefaultBlocks(t);
+            _tournModes[t.key]  = t.avail_mode || 'sessions';
         });
 
         wrap.innerHTML = tourneys.map(t => {
@@ -577,7 +612,7 @@
             const cb      = document.getElementById('te_' + t.key);
             const enabled = cb ? cb.checked : false;
             return supabaseClient.client.from('tournaments')
-                .update({ avail_enabled: enabled, session_blocks: _tournBlocks[t.key] || [] })
+                .update({ avail_enabled: enabled, session_blocks: _tournBlocks[t.key] || [], avail_mode: _tournModes[t.key] || 'sessions' })
                 .eq('key', t.key);
         });
         await Promise.all(promises);

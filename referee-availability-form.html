@@ -690,7 +690,7 @@
             Promise.all([
                 supabaseClient.client.from('settings').select('value').eq('key','openings_form_config').maybeSingle(),
                 supabaseClient.client.from('clubs').select('name, payment_methods').eq('enabled', true).eq('avail_form_enabled', true),
-                (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks').eq('avail_enabled', true).order('from_date'); if (tParam) { q = q.eq('key', tParam); } else { q = q.eq('status', 'active'); } return q; })()
+                (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks, avail_mode').eq('avail_enabled', true).order('from_date'); if (tParam) { q = q.eq('key', tParam); } else { q = q.eq('status', 'active'); } return q; })()
             ]).then(([formRes, clubsRes, tournRes]) => {
                 const allClubs = (clubsRes.data || []).sort((a, b) => a.name.localeCompare(b.name));
                 const PAY_CLUBS = allClubs
@@ -732,23 +732,67 @@
                     return blocks;
                 }
 
+                function genTimeOpts(startH, startM, endH, endM, selectedVal) {
+                    const opts = [];
+                    let h = startH, m = startM;
+                    while (h < endH || (h === endH && m <= endM)) {
+                        const val  = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+                        const disp = `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
+                        opts.push(`<option value="${val}"${val===selectedVal?' selected':''}>${disp}</option>`);
+                        m += 30; if (m >= 60) { m -= 60; h++; }
+                    }
+                    return opts.join('');
+                }
+
+                const selStyle = 'border:1px solid #d1d5db; border-radius:6px; padding:6px 10px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; cursor:pointer; background:#fff; color:#09142a;';
+
                 const wrap = document.getElementById('tournamentSessionsWrap');
                 wrap.innerHTML = tourneys.map(t => {
-                    const blocks   = getBlocks(t);
-                    const blockHtml = blocks.map(b => `
-                        <label style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #eee; cursor:pointer;">
-                            <input type="checkbox" name="tournament_sessions"
-                                data-tkey="${t.key}"
-                                data-date="${b.date}"
-                                data-session="${b.session}"
-                                data-label="${b.label}"
-                                data-start="${b.start_time}"
-                                data-end="${b.end_time}">
-                            <span style="font-size:0.88rem;">
-                                <strong>${b.label}</strong> — ${b.session}
-                                <span style="color:#888; font-size:0.83rem;">(${fmtTime(b.start_time)} – ${fmtTime(b.end_time)})</span>
-                            </span>
-                        </label>`).join('');
+                    const mode   = t.avail_mode || 'sessions';
+                    const blocks = getBlocks(t);
+                    let blockHtml = '';
+                    if (mode === 'window') {
+                        const days = [...new Map(blocks.map(b => [b.date, b])).values()];
+                        const earliest = blocks.reduce((a,b) => a.start_time < b.start_time ? a : b, blocks[0] || {}).start_time || '07:00';
+                        const latest   = blocks.reduce((a,b) => a.end_time   > b.end_time   ? a : b, blocks[0] || {}).end_time   || '18:00';
+                        const [eh, em] = earliest.split(':').map(Number);
+                        const [lh, lm] = latest.split(':').map(Number);
+                        blockHtml = days.map(d => `
+                            <div style="padding:10px 0; border-bottom:1px solid #eee;">
+                                <div style="font-weight:700; font-size:0.88rem; color:#09142a; margin-bottom:10px;">${d.label}</div>
+                                <div style="display:flex; flex-wrap:wrap; gap:18px; align-items:center;">
+                                    <label style="font-size:0.85rem; font-family:'DM Sans',sans-serif; display:flex; align-items:center; gap:8px;">
+                                        <span style="color:#555;">I can arrive by:</span>
+                                        <select name="tourn_arrive" data-tkey="${t.key}" data-date="${d.date}" data-label="${d.label}" style="${selStyle}">
+                                            <option value="">-- select --</option>
+                                            ${genTimeOpts(eh, em, lh, lm >= 30 ? lm - 30 : 30, lm >= 30 ? lh : lh - 1, '')}
+                                        </select>
+                                    </label>
+                                    <label style="font-size:0.85rem; font-family:'DM Sans',sans-serif; display:flex; align-items:center; gap:8px;">
+                                        <span style="color:#555;">I need to leave by:</span>
+                                        <select name="tourn_depart" data-tkey="${t.key}" data-date="${d.date}" data-label="${d.label}" style="${selStyle}">
+                                            <option value="">-- select --</option>
+                                            ${genTimeOpts(em + 30 < 60 ? eh : eh + 1, (em + 30) % 60, lh, lm, '')}
+                                        </select>
+                                    </label>
+                                </div>
+                            </div>`).join('');
+                    } else {
+                        blockHtml = blocks.map(b => `
+                            <label style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #eee; cursor:pointer;">
+                                <input type="checkbox" name="tournament_sessions"
+                                    data-tkey="${t.key}"
+                                    data-date="${b.date}"
+                                    data-session="${b.session}"
+                                    data-label="${b.label}"
+                                    data-start="${b.start_time}"
+                                    data-end="${b.end_time}">
+                                <span style="font-size:0.88rem;">
+                                    <strong>${b.label}</strong> — ${b.session}
+                                    <span style="color:#888; font-size:0.83rem;">(${fmtTime(b.start_time)} – ${fmtTime(b.end_time)})</span>
+                                </span>
+                            </label>`).join('');
+                    }
                     return `
                     <div style="margin-bottom:18px;">
                         <div style="font-weight:700; font-size:0.95rem; color:#09142a; margin-bottom:6px; padding-bottom:6px; border-bottom:2px solid #e94560;">
