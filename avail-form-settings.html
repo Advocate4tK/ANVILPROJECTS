@@ -210,24 +210,24 @@
 
     let OPENINGS_ALL_CLUBS = [];
 
+    let _openingsTournaments = [];
+
     async function loadOpeningsClubs() {
-        const [clubsRes, settingsRes, formRes] = await Promise.all([
+        const [clubsRes, settingsRes, formRes, tournRes] = await Promise.all([
             supabaseClient.client.from('clubs').select('name').order('name'),
             supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
-            supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle()
+            supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
+            supabaseClient.client.from('tournaments').select('key, name, status').order('name')
         ]);
         OPENINGS_ALL_CLUBS = (clubsRes.data || []).map(c => c.name);
+        _openingsTournaments = tournRes.data || [];
         let active = [];
         let formConfig = {};
         try { active     = JSON.parse(settingsRes.data?.value || '[]'); } catch(e) {}
         try { formConfig = JSON.parse(formRes.data?.value     || '{}'); } catch(e) {}
 
         const wrap = document.getElementById('openingsClubChecks');
-        if (!OPENINGS_ALL_CLUBS.length) {
-            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No managed clubs found.</p>';
-            return;
-        }
-        wrap.innerHTML = OPENINGS_ALL_CLUBS.map(club => {
+        const clubHtml = OPENINGS_ALL_CLUBS.map(club => {
             const cfg = formConfig[club] || {};
             const ft  = cfg.formType || 'referee-tool';
             return `
@@ -257,6 +257,19 @@
                 </div>
             </div>`;
         }).join('');
+
+        const tournHtml = _openingsTournaments.length ? `
+            <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#7c3aed; margin:14px 0 8px;">🏆 Tournaments</div>
+            ${_openingsTournaments.map(t => `
+            <div class="club-row">
+                <label class="club-main-row">
+                    <input type="checkbox" class="tourn-openings-cb" data-key="${t.key}" ${t.status === 'active' ? 'checked' : ''}>
+                    ${t.name}
+                    <span style="font-size:0.7rem; font-weight:700; background:${t.status==='active'?'#eafaf1':'#fef9c3'}; color:${t.status==='active'?'#166534':'#92400e'}; border:1px solid ${t.status==='active'?'#86efac':'#fde68a'}; border-radius:4px; padding:1px 7px; margin-left:8px;">${t.status.toUpperCase()}</span>
+                </label>
+            </div>`).join('')}` : '';
+
+        wrap.innerHTML = (clubHtml || '<p style="color:#aaa; font-size:0.85rem;">No managed clubs found.</p>') + tournHtml;
     }
 
     function toggleJotformUrl(club, val) {
@@ -282,11 +295,18 @@
             formConfig[club] = entry;
         });
 
+        const tournUpdates = [...document.querySelectorAll('.tourn-openings-cb')].map(cb =>
+            supabaseClient.client.from('tournaments')
+                .update({ status: cb.checked ? 'active' : 'upcoming' })
+                .eq('key', cb.dataset.key)
+        );
+
         await Promise.all([
             supabaseClient.client.from('settings')
                 .update({ value: JSON.stringify(selected)    }).eq('key', 'openings_clubs'),
             supabaseClient.client.from('settings')
-                .update({ value: JSON.stringify(formConfig)  }).eq('key', 'openings_form_config')
+                .update({ value: JSON.stringify(formConfig)  }).eq('key', 'openings_form_config'),
+            ...tournUpdates
         ]);
 
         const msg = document.getElementById('openingsSaveMsg');
