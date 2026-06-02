@@ -546,9 +546,9 @@
             <button class="filter-btn" onclick="setWeekFilter('all', this)">All</button>
         </div>
         <div class="club-selector" id="clubSelector">
-            <span class="club-selector-label">Club</span>
+            <span class="club-selector-label">Club/Event</span>
             <div class="club-rotator-wrap">
-                <div class="club-rotator-name" id="clubRotatorName">All Clubs</div>
+                <div class="club-rotator-name" id="clubRotatorName">All</div>
             </div>
             <span class="club-selector-arrow">▼</span>
             <select id="clubSelectNative" onchange="onClubSelectChange(this)">
@@ -584,9 +584,10 @@
 <script src="js/supabase-client.js"></script>
 <script>
 
-    let CLUBS = ['Griswold', 'East Haddam']; // overridden by settings table on load
-    let _formConfig   = {};
-    let _recOrgs      = []; // active recreation orgs from settings
+    let CLUBS        = ['Griswold', 'East Haddam']; // overridden by settings table on load
+    let TOURNAMENTS  = []; // active tournaments with avail_enabled = true
+    let _formConfig  = {};
+    let _recOrgs     = []; // active recreation orgs from settings
 
     let _allOpenGames = [];
     let _weekFilter   = 'this';
@@ -872,26 +873,29 @@
             const _now = new Date();
             const today = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0') + '-' + String(_now.getDate()).padStart(2,'0');
 
-            // Fetch active clubs + per-club form routing + rec orgs from settings
-            const [settingRes, formConfigRes, recOrgsRes] = await Promise.all([
+            // Fetch active clubs + tournaments + form routing + rec orgs
+            const [settingRes, formConfigRes, recOrgsRes, tournRes] = await Promise.all([
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
-                supabaseClient.client.from('settings').select('value').eq('key', 'openings_recreation_orgs').maybeSingle()
+                supabaseClient.client.from('settings').select('value').eq('key', 'openings_recreation_orgs').maybeSingle(),
+                supabaseClient.client.from('tournaments').select('key, name').eq('avail_enabled', true).eq('status', 'active').order('name')
             ]);
             if (settingRes.data?.value) {
                 try { CLUBS = JSON.parse(settingRes.data.value); } catch(e) {}
             }
             try { _formConfig = JSON.parse(formConfigRes.data?.value || '{}'); } catch(e) { _formConfig = {}; }
             try { _recOrgs    = JSON.parse(recOrgsRes.data?.value    || '[]'); } catch(e) { _recOrgs = []; }
+            TOURNAMENTS = tournRes.data || [];
 
-            // Build club selector dropdown + rotator
-            const allFilterClubs = [...CLUBS, ...(_recOrgs.length ? ['RECREATION'] : [])];
+            // Build selector dropdown + rotator
+            const allFilterClubs = [...CLUBS, ...(_recOrgs.length ? ['RECREATION'] : []), ...TOURNAMENTS.map(t => t.name)];
             const savedClub = _clubFilter;
             _clubFilter = (savedClub === 'all' || allFilterClubs.includes(savedClub)) ? savedClub : 'all';
             const sel = document.getElementById('clubSelectNative');
-            sel.innerHTML = `<option value="all">All Clubs</option>` +
+            sel.innerHTML = `<option value="all">All</option>` +
                 CLUBS.map(c => `<option value="${c}">${c}</option>`).join('') +
-                (_recOrgs.length ? `<option value="RECREATION">Recreation</option>` : '');
+                (_recOrgs.length ? `<option value="RECREATION">Recreation</option>` : '') +
+                (TOURNAMENTS.length ? TOURNAMENTS.map(t => `<option value="${t.name}">🏆 ${t.name}</option>`).join('') : '');
             sel.value = _clubFilter;
             const selector = document.getElementById('clubSelector');
             if (_clubFilter !== 'all') {
@@ -900,31 +904,27 @@
                 stopRotator();
             } else {
                 selector.classList.remove('has-selection');
-                document.getElementById('clubRotatorName').textContent = 'All Clubs';
+                document.getElementById('clubRotatorName').textContent = 'All';
             }
             setRotatorClubs(allFilterClubs.map(c => c === 'RECREATION' ? 'Recreation' : c));
 
-            const [venueRes, ...clubResults] = await Promise.all([
+            const [venueRes, ...allResults] = await Promise.all([
                 supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name').limit(500),
                 ...CLUBS.map(club =>
-                    supabaseClient.client
-                        .from('games')
-                        .select('*')
-                        .eq('Source Club', club)
-                        .gte('date', today)
-                        .order('date', { ascending: true })
-                        .limit(500)
+                    supabaseClient.client.from('games').select('*')
+                        .eq('Source Club', club).gte('date', today)
+                        .order('date', { ascending: true }).limit(500)
                 ),
                 ...(_recOrgs.length ? [
-                    supabaseClient.client
-                        .from('games')
-                        .select('*')
-                        .eq('Source Club', 'RECREATION')
-                        .in('organization', _recOrgs)
-                        .gte('date', today)
-                        .order('date', { ascending: true })
-                        .limit(500)
-                ] : [])
+                    supabaseClient.client.from('games').select('*')
+                        .eq('Source Club', 'RECREATION').in('organization', _recOrgs)
+                        .gte('date', today).order('date', { ascending: true }).limit(500)
+                ] : []),
+                ...TOURNAMENTS.map(t =>
+                    supabaseClient.client.from('tournament_games').select('*')
+                        .eq('Source Club', t.name).gte('date', today)
+                        .order('date', { ascending: true }).limit(500)
+                )
             ]);
 
             // Build venue lookup
@@ -936,7 +936,7 @@
             });
 
             // Merge + filter + sort
-            const allGames = clubResults.flatMap(r => r.data || []);
+            const allGames = allResults.flatMap(r => r.data || []);
             _allOpenGames = allGames
                 .filter(g => (g['Game Status'] || '') !== 'Cancelled' && (g['Game Status'] || '') !== 'Filled')
                 .filter(hasOpenSlot)
