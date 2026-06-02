@@ -732,19 +732,53 @@
                     return blocks;
                 }
 
-                function genTimeOpts(startH, startM, endH, endM, selectedVal) {
+                window._genTimeOpts = function(startH, startM, endH, endM) {
                     const opts = [];
                     let h = startH, m = startM;
                     while (h < endH || (h === endH && m <= endM)) {
                         const val  = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
                         const disp = `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
-                        opts.push(`<option value="${val}"${val===selectedVal?' selected':''}>${disp}</option>`);
+                        opts.push(`<option value="${val}">${disp}</option>`);
                         m += 30; if (m >= 60) { m -= 60; h++; }
                     }
                     return opts.join('');
-                }
+                };
 
-                const selStyle = 'border:1px solid #d1d5db; border-radius:6px; padding:6px 10px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; cursor:pointer; background:#fff; color:#09142a;';
+                window._tournWindowCfg = {};
+
+                window._buildTwRow = function(tkey, date, label) {
+                    const cfg = window._tournWindowCfg[tkey + '_' + date];
+                    if (!cfg) return '';
+                    const [eh,em] = cfg.earliest.split(':').map(Number);
+                    const [lh,lm] = cfg.latest.split(':').map(Number);
+                    let aEH = lh, aEM = lm - 30; if (aEM < 0) { aEM += 60; aEH--; }
+                    let dSH = eh, dSM = em + 30; if (dSM >= 60) { dSM -= 60; dSH++; }
+                    const sel = 'border:1px solid #6ee7b7; border-radius:6px; padding:7px 10px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; cursor:pointer; background:#fff; color:#09142a; min-width:130px;';
+                    return `<div class="tw-row" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 14px; background:#f0fdf4; border:1px solid #86efac; border-radius:10px; margin-bottom:8px;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <span style="font-size:0.82rem; color:#166534; font-family:'DM Sans',sans-serif; font-weight:600; white-space:nowrap;">Arrive by</span>
+                            <select name="tourn_arrive" data-tkey="${tkey}" data-date="${date}" data-label="${label}" style="${sel}">
+                                <option value="">-- time --</option>
+                                ${window._genTimeOpts(eh,em,aEH,aEM)}
+                            </select>
+                            <span style="font-size:0.82rem; color:#166534; font-family:'DM Sans',sans-serif; font-weight:600; white-space:nowrap;">→ Leave by</span>
+                            <select name="tourn_depart" data-tkey="${tkey}" data-date="${date}" data-label="${label}" style="${sel}">
+                                <option value="">-- time --</option>
+                                ${window._genTimeOpts(dSH,dSM,lh,lm)}
+                            </select>
+                        </div>
+                        <button type="button" onclick="this.closest('.tw-row').remove();" style="background:#fee2e2; border:1px solid #fca5a5; color:#b91c1c; border-radius:6px; padding:4px 10px; font-size:0.8rem; cursor:pointer; font-weight:700; margin-left:auto;">✕ Remove</button>
+                    </div>`;
+                };
+
+                window._addTournWindow = function(tkey, date, label) {
+                    const container = document.getElementById('tw_' + tkey + '_' + date);
+                    if (!container) return;
+                    const div = document.createElement('div');
+                    div.innerHTML = window._buildTwRow(tkey, date, label);
+                    const addBtn = container.querySelector('.tw-add-btn');
+                    container.insertBefore(div.firstChild, addBtn);
+                };
 
                 const wrap = document.getElementById('tournamentSessionsWrap');
                 wrap.innerHTML = tourneys.map(t => {
@@ -752,29 +786,20 @@
                     const blocks = getBlocks(t);
                     let blockHtml = '';
                     if (mode === 'window') {
-                        const days = [...new Map(blocks.map(b => [b.date, b])).values()];
-                        const earliest = blocks.reduce((a,b) => a.start_time < b.start_time ? a : b, blocks[0] || {}).start_time || '07:00';
-                        const latest   = blocks.reduce((a,b) => a.end_time   > b.end_time   ? a : b, blocks[0] || {}).end_time   || '18:00';
-                        const [eh, em] = earliest.split(':').map(Number);
-                        const [lh, lm] = latest.split(':').map(Number);
+                        const days     = [...new Map(blocks.map(b => [b.date, b])).values()];
+                        const earliest = blocks.reduce((a,b) => a.start_time < b.start_time ? a : b, blocks[0]||{}).start_time || '07:00';
+                        const latest   = blocks.reduce((a,b) => a.end_time   > b.end_time   ? a : b, blocks[0]||{}).end_time   || '18:00';
+                        days.forEach(d => { window._tournWindowCfg[t.key+'_'+d.date] = { earliest, latest }; });
                         blockHtml = days.map(d => `
-                            <div style="padding:10px 0; border-bottom:1px solid #eee;">
-                                <div style="font-weight:700; font-size:0.88rem; color:#09142a; margin-bottom:10px;">${d.label}</div>
-                                <div style="display:flex; flex-wrap:wrap; gap:18px; align-items:center;">
-                                    <label style="font-size:0.85rem; font-family:'DM Sans',sans-serif; display:flex; align-items:center; gap:8px;">
-                                        <span style="color:#555;">I can arrive by:</span>
-                                        <select name="tourn_arrive" data-tkey="${t.key}" data-date="${d.date}" data-label="${d.label}" style="${selStyle}">
-                                            <option value="">-- select --</option>
-                                            ${genTimeOpts(eh, em, lh, lm >= 30 ? lm - 30 : 30, lm >= 30 ? lh : lh - 1, '')}
-                                        </select>
-                                    </label>
-                                    <label style="font-size:0.85rem; font-family:'DM Sans',sans-serif; display:flex; align-items:center; gap:8px;">
-                                        <span style="color:#555;">I need to leave by:</span>
-                                        <select name="tourn_depart" data-tkey="${t.key}" data-date="${d.date}" data-label="${d.label}" style="${selStyle}">
-                                            <option value="">-- select --</option>
-                                            ${genTimeOpts(em + 30 < 60 ? eh : eh + 1, (em + 30) % 60, lh, lm, '')}
-                                        </select>
-                                    </label>
+                            <div style="padding:12px 0; border-bottom:1px solid #eee;">
+                                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                                    <span style="font-weight:700; font-size:0.92rem; color:#09142a; font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:0.5px;">${d.label}</span>
+                                    <span style="font-size:0.75rem; color:#6b7280; font-family:'DM Sans',sans-serif;">${fmtTime(earliest)} – ${fmtTime(latest)}</span>
+                                </div>
+                                <div id="tw_${t.key}_${d.date}">
+                                    ${window._buildTwRow(t.key, d.date, d.label)}
+                                    <button type="button" class="tw-add-btn" onclick="_addTournWindow('${t.key}','${d.date}','${d.label}')"
+                                        style="background:#00c853; border:none; color:#09142a; border-radius:8px; padding:6px 16px; font-size:0.82rem; font-weight:800; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase; margin-top:4px;">+ Add Window</button>
                                 </div>
                             </div>`).join('');
                     } else {

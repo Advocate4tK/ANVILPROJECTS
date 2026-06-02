@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const dayRows       = document.querySelectorAll('.day-row');
         const tournSessions = document.querySelectorAll('input[name="tournament_sessions"]:checked');
-        const tournWindows  = [...document.querySelectorAll('select[name="tourn_arrive"]')].filter(s => s.value);
+        const tournWindows  = [...document.querySelectorAll('.tw-row')].filter(r => r.querySelector('select[name="tourn_arrive"]')?.value);
         if (!dayRows.length && !tournSessions.length && !tournWindows.length) {
             missing.push('At least one availability date or tournament time window');
         } else {
@@ -178,7 +178,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const dayRows        = document.querySelectorAll('.day-row');
             const tournChecked   = [...document.querySelectorAll('input[name="tournament_sessions"]:checked')];
-            const tournWindows   = [...document.querySelectorAll('select[name="tourn_arrive"]')].filter(s => s.value);
+            const tournWindows   = [...document.querySelectorAll('.tw-row')].filter(r => r.querySelector('select[name="tourn_arrive"]')?.value);
             if (!dayRows.length && !tournChecked.length && !tournWindows.length) throw new Error('No availability dates or tournament sessions selected.');
 
             // Delete existing records only for the specific dates being submitted
@@ -230,18 +230,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Preferred Locations': '',
                     'tournament_key':      cb.dataset.tkey,
                 }));
-                const windowSubs = tournWindows.map(s => {
-                    const departSel = document.querySelector(`select[name="tourn_depart"][data-tkey="${s.dataset.tkey}"][data-date="${s.dataset.date}"]`);
+                const windowSubs = tournWindows.map(row => {
+                    const arrive    = row.querySelector('select[name="tourn_arrive"]');
+                    const depart    = row.querySelector('select[name="tourn_depart"]');
+                    const tkey      = arrive.dataset.tkey;
+                    const date      = arrive.dataset.date;
+                    const label     = arrive.dataset.label;
+                    const arriveVal = arrive.value;
+                    const departVal = depart?.value || '18:00';
+                    const arrTxt    = arrive.options[arrive.selectedIndex]?.text || arriveVal;
+                    const depTxt    = depart?.options[depart.selectedIndex]?.text || departVal;
                     return airtableClient.createAvailability({
                         'Referee Name':        refName,
-                        'Date':                s.dataset.date,
-                        'Start Time':          s.value,
-                        'End Time':            departSel?.value || '18:00',
+                        'Date':                date,
+                        'Start Time':          arriveVal,
+                        'End Time':            departVal,
                         'Max Games':           '1',
-                        'Notes':               `${s.dataset.label} — Arrive: ${s.options[s.selectedIndex]?.text}, Leave: ${departSel?.options[departSel.selectedIndex]?.text || ''}`,
+                        'Notes':               `${label} — Arrive: ${arrTxt}, Leave: ${depTxt}`,
                         'Status':              'New',
                         'Preferred Locations': '',
-                        'tournament_key':      s.dataset.tkey,
+                        'tournament_key':      tkey,
                     });
                 });
                 await Promise.all([...sessionSubs, ...windowSubs]);
