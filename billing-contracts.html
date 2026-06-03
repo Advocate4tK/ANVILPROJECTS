@@ -203,7 +203,20 @@
             <button class="modal-close" onclick="closeViewContract()">×</button>
         </div>
         <div id="viewContractSigned" style="display:none; background:#dcfce7; border:1px solid #86efac; border-radius:8px; padding:10px 16px; margin-bottom:16px; font-size:0.84rem; color:#14532d; font-weight:600;"></div>
-        <div id="viewContractBody" style="max-height:60vh; overflow-y:auto; border:1px solid #e2d9ce; border-radius:8px; padding:24px 28px; background:white; font-family:'DM Sans',sans-serif; font-size:0.85rem; line-height:1.7; color:#09142a;"></div>
+        <div id="viewContractBody" style="max-height:52vh; overflow-y:auto; border:1px solid #e2d9ce; border-radius:8px; padding:24px 28px; background:white; font-family:'DM Sans',sans-serif; font-size:0.85rem; line-height:1.7; color:#09142a;"></div>
+
+        <!-- Assignor signature -->
+        <div id="assignorSigSection" style="display:none; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px; padding:16px 20px; margin-top:14px;">
+            <div style="font-size:0.78rem; font-weight:700; color:#09142a; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:10px;">Sign as Assignor</div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <input type="text" id="assignorSigName" placeholder="Your full name" style="padding:7px 11px; border:1.5px solid #e2d9ce; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.88rem; flex:1; min-width:180px;">
+                <button onclick="signAsAssignor()" style="background:#09142a; color:white; border:none; padding:8px 22px; border-radius:8px; font-weight:800; font-size:0.88rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">Sign &amp; Send to Club →</button>
+                <span id="assignorSigError" style="display:none; color:#dc2626; font-size:0.82rem;"></span>
+            </div>
+            <div style="font-size:0.72rem; color:#aaa; margin-top:8px;">By signing, you confirm the terms are correct and authorize the contract to be sent to the club for their signature.</div>
+        </div>
+        <div id="assignorSigDone" style="display:none; background:#dcfce7; border:1px solid #86efac; border-radius:8px; padding:10px 16px; margin-top:14px; font-size:0.84rem; color:#14532d; font-weight:600;"></div>
+
         <div class="modal-footer">
             <button class="btn-action" onclick="closeViewContract()">Close</button>
             <button class="btn-action" onclick="printContract()">⬇ Download / Print</button>
@@ -454,11 +467,13 @@
             const inv = invoiceMap[club.id];
             const clubName = club['Club Name'] || club.name || '—';
 
-            const contractBadge = c
-                ? (c.contract_signed_at
-                    ? `<span class="pill pill-signed">✓ Signed</span>`
-                    : `<span class="pill pill-unsigned">Unsigned</span>`)
-                : `<span class="pill pill-none">No Contract</span>`;
+            const contractBadge = !c
+                ? `<span class="pill pill-none">No Contract</span>`
+                : (!c.assignor_signed_at
+                    ? `<span class="pill pill-none">Draft</span>`
+                    : (!c.contract_signed_at
+                        ? `<span class="pill pill-unsigned">Awaiting Client</span>`
+                        : `<span class="pill pill-signed">✓ Executed</span>`));
 
             const invoiceBadge = inv
                 ? (inv.status === 'paid' ? `<span class="pill pill-paid">✓ Paid</span>`
@@ -474,11 +489,12 @@
             const modelLabel = c ? (c.billing_model === 'per_team' ? 'Per Team / Season' : c.billing_model === 'per_game' ? 'Per Game / Season' : 'Flat Rate') : '';
             const tiers = (c && Array.isArray(c.rate_tiers)) ? c.rate_tiers : [];
 
-            const signedBadge = c
-                ? (c.contract_signed_at
-                    ? `<span class="pill pill-signed">✓ Signed</span>`
-                    : `<span class="pill pill-unsigned">Unsigned</span>`)
-                : '';
+            const signedBadge = !c ? '' :
+                (!c.assignor_signed_at
+                    ? `<span class="pill pill-none">Draft</span>`
+                    : (!c.contract_signed_at
+                        ? `<span class="pill pill-unsigned">Awaiting Client Signature</span>`
+                        : `<span class="pill pill-signed">✓ Fully Executed</span>`));
 
             // Team count inputs — one per rate tier
             const teamCountInputs = c && c.billing_model === 'per_team' && tiers.length
@@ -535,8 +551,8 @@
                                     ${c.billing_contact_name ? `<span style="font-size:0.78rem;color:#555;">· ${c.billing_contact_name}</span>` : ''}
                                     ${signedBadge}
                                     <button class="btn-action" onclick="openViewContract(${club.id})" style="margin-left:auto;">View Contract</button>
-                                    ${c.contract_signed_at
-                                        ? `<span style="font-size:0.72rem;color:#aaa;font-style:italic;">Locked — signed</span>`
+                                    ${(c.assignor_signed_at || c.contract_signed_at)
+                                        ? `<span style="font-size:0.72rem;color:#aaa;font-style:italic;">Locked</span>`
                                         : `<button class="btn-action" onclick="openContractModal(${club.id})">Edit Contract</button>`
                                     }
                                 </div>
@@ -650,11 +666,47 @@
         }
 
         document.getElementById('viewContractBody').innerHTML = generateContractHTML(club, contract, season);
+
+        // Assignor signature controls
+        const sigSection = document.getElementById('assignorSigSection');
+        const sigDone    = document.getElementById('assignorSigDone');
+        if (contract.assignor_signed_at) {
+            sigSection.style.display = 'none';
+            sigDone.style.display = 'block';
+            sigDone.textContent = `✓ Signed by ${contract.assignor_signed_by} on ${new Date(contract.assignor_signed_at).toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'})}`;
+        } else {
+            sigSection.style.display = 'block';
+            sigDone.style.display = 'none';
+            document.getElementById('assignorSigName').value = 'Tod Smith';
+        }
         document.getElementById('viewContractModal').classList.add('open');
+        document.getElementById('viewContractModal').dataset.contractId = contract.id;
     }
 
     function closeViewContract() {
         document.getElementById('viewContractModal').classList.remove('open');
+    }
+
+    async function signAsAssignor() {
+        const name     = (document.getElementById('assignorSigName').value || '').trim();
+        const errEl    = document.getElementById('assignorSigError');
+        const contractId = document.getElementById('viewContractModal').dataset.contractId;
+        if (!name)       { errEl.textContent = 'Enter your name.'; errEl.style.display = 'inline'; return; }
+        if (!contractId) { errEl.textContent = 'No contract loaded.'; errEl.style.display = 'inline'; return; }
+        errEl.style.display = 'none';
+
+        const { error } = await supabaseClient.client
+            .from('club_contracts')
+            .update({ assignor_signed_by: name, assignor_signed_at: new Date().toISOString() })
+            .eq('id', parseInt(contractId));
+
+        if (error) { errEl.textContent = 'Error: ' + error.message; errEl.style.display = 'inline'; return; }
+
+        document.getElementById('assignorSigSection').style.display = 'none';
+        const doneEl = document.getElementById('assignorSigDone');
+        doneEl.style.display = 'block';
+        doneEl.textContent = `✓ Signed by ${name} on ${new Date().toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'})}`;
+        await loadPage();
     }
 
     function printContract() {
@@ -671,6 +723,10 @@
             if (t.age_group === 'U8')      return `<li>$${t.rate} per U8 team, per season</li>`;
             return `<li>$${t.rate} per ${t.age_group} team, per season</li>`;
         }).join('');
+
+        const assignorSigLine = contract.assignor_signed_at
+            ? `<div><strong>Assignors:</strong> ${contract.assignor_signed_by} &amp; Eric Baughman — <em>Digitally signed ${new Date(contract.assignor_signed_at).toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'})}</em></div>`
+            : `<div><strong>Assignors:</strong> Tod Smith &amp; Eric Baughman — <em>Signature pending</em></div>`;
 
         const signatureBlock = contract.contract_signed_at
             ? `<div style="margin-top:28px; padding:16px; background:#f0fdf4; border:1px solid #86efac; border-radius:8px;">
@@ -759,6 +815,13 @@
             <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
             <p><strong>12. Entire Agreement</strong><br>
             This Agreement constitutes the entire agreement between the parties and may be modified only in writing signed by both parties.</p>
+            <div style="margin-top:20px; padding:14px; background:#f8f6f2; border-radius:8px; font-size:0.82rem; color:#555;">
+                ${assignorSigLine}
+                ${contract.contract_signed_at
+                    ? `<div style="margin-top:6px;"><strong>Client:</strong> ${contract.signed_by_name}${contract.signed_by_title ? ', ' + contract.signed_by_title : ''} — <em>Digitally signed ${new Date(contract.contract_signed_at).toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'})}</em></div>`
+                    : `<div style="margin-top:6px;"><strong>Client:</strong> <em>Signature pending</em></div>`
+                }
+            </div>
             ${signatureBlock}
         </div>`;
     }
