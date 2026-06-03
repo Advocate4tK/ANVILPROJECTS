@@ -177,7 +177,6 @@
                             <th>Contract</th>
                             <th>Invoice</th>
                             <th>Total Due</th>
-                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="clubTableBody">
@@ -286,7 +285,7 @@
             <div class="invoice-box">
                 <div class="inv-header">
                     <div class="inv-from">
-                        <div class="inv-from-name">Eric Baughman &amp; Tod Smith</div>
+                        <div class="inv-from-name">Tod Smith &amp; Eric Baughman</div>
                         <div class="inv-from-addr" id="invFromAddr" contenteditable="true"
                             style="outline:none; border-bottom:1px dashed #ccc; cursor:text;"
                             title="Click to edit address">29 Yorkshire Terrace Apt 02, Shrewsbury, MA 01545</div>
@@ -429,9 +428,10 @@
     function renderTable() {
         const tbody = document.getElementById('clubTableBody');
         if (!allClubs.length) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:32px;font-style:italic;">No active clubs found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#aaa;padding:32px;font-style:italic;">No active clubs found.</td></tr>';
             return;
         }
+        const season = document.getElementById('seasonSelect').value;
         tbody.innerHTML = allClubs.map(club => {
             const c   = contracts[club.id];
             const inv = invoiceMap[club.id];
@@ -453,53 +453,81 @@
                 ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#16a34a;">$${Number(inv.total_due).toFixed(2)}</span>`
                 : '—';
 
-            // Expanded detail panel
+            // ── Expanded detail panel ──────────────────────────────────────────
             const modelLabel = c ? (c.billing_model === 'per_team' ? 'Per Team / Season' : c.billing_model === 'per_game' ? 'Per Game / Season' : 'Flat Rate') : '';
-            const rateTiersHtml = c && Array.isArray(c.rate_tiers) && c.rate_tiers.length
-                ? c.rate_tiers.map(t => `<span style="display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:2px 10px;font-size:0.8rem;font-weight:700;color:#0369a1;margin-right:6px;">${t.age_group === 'default' ? 'Default' : t.age_group}: $${t.rate}</span>`).join('')
-                : '<span style="color:#aaa;font-size:0.82rem;font-style:italic;">No rates set</span>';
+            const tiers = (c && Array.isArray(c.rate_tiers)) ? c.rate_tiers : [];
 
-            const signedRow = c
+            const signedBadge = c
                 ? (c.contract_signed_at
-                    ? `<span style="background:#dcfce7;color:#14532d;font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:10px;">✓ Signed ${new Date(c.contract_signed_at).toLocaleDateString()}</span>`
-                    : `<span style="background:#fef3c7;color:#92400e;font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:10px;">Unsigned</span>`)
+                    ? `<span class="pill pill-signed">✓ Signed</span>`
+                    : `<span class="pill pill-unsigned">Unsigned</span>`)
+                : '';
+
+            // Team count inputs — one per rate tier
+            const teamCountInputs = c && c.billing_model === 'per_team' && tiers.length
+                ? `<div style="margin:14px 0 10px;">
+                    <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:8px;">Teams This Season</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;" id="team-counts-${club.id}">
+                        ${tiers.map((t, i) => `
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:0.82rem;font-weight:700;color:#09142a;min-width:120px;">${t.age_group === 'default' ? 'Default (U9+)' : t.age_group} teams</span>
+                            <input type="number" min="0" id="tc-${club.id}-${i}" placeholder="0"
+                                style="width:64px;padding:5px 8px;border:1.5px solid #e2d9ce;border-radius:7px;font-family:'DM Sans',sans-serif;font-size:0.88rem;text-align:center;"
+                                oninput="recalcPreview(${club.id})">
+                            <span style="font-size:0.8rem;color:#555;">× $${t.rate}</span>
+                            <span id="tc-sub-${club.id}-${i}" style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:#16a34a;min-width:50px;">$0</span>
+                        </div>`).join('')}
+                    </div>
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e2d9ce;display:flex;align-items:center;gap:12px;">
+                        <span style="font-size:0.82rem;font-weight:700;color:#09142a;">Total:</span>
+                        <span id="tc-total-${club.id}" style="font-family:'JetBrains Mono',monospace;font-size:1rem;font-weight:800;color:#16a34a;">$0.00</span>
+                    </div>
+                  </div>`
+                : c && c.billing_model === 'per_game'
+                ? `<div style="margin:14px 0 10px;">
+                    <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:8px;">Games This Season</div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <input type="number" min="0" id="tc-${club.id}-0" placeholder="0"
+                            style="width:80px;padding:5px 8px;border:1.5px solid #e2d9ce;border-radius:7px;font-family:'DM Sans',sans-serif;font-size:0.88rem;text-align:center;"
+                            oninput="recalcPreview(${club.id})">
+                        <span style="font-size:0.8rem;color:#555;">× $${tiers[0]?.rate || 0} / game</span>
+                        <span id="tc-total-${club.id}" style="font-family:'JetBrains Mono',monospace;font-size:1rem;font-weight:800;color:#16a34a;">$0.00</span>
+                    </div>
+                  </div>`
+                : '';
+
+            const invoiceAction = inv
+                ? `<div style="display:flex;align-items:center;gap:10px;margin-top:12px;">
+                    ${invoiceBadge}
+                    <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#16a34a;">$${Number(inv.total_due).toFixed(2)}</span>
+                    <button class="btn-action blue" onclick="openInvoiceModal(${club.id})">View Invoice</button>
+                   </div>`
+                : c
+                ? `<button class="btn-action blue" onclick="generateFromCounts(${club.id})" style="margin-top:4px;">Generate Invoice →</button>`
                 : '';
 
             const detailPanel = `
                 <tr id="detail-${club.id}" style="display:none;">
-                    <td colspan="5" style="background:#f7f8ff;padding:0;border-bottom:2px solid #e2d9ce;">
-                        <div style="padding:16px 20px;display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;">
-
-                            <!-- Contract section -->
-                            <div style="flex:1;min-width:240px;">
-                                <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:8px;">Contract Terms</div>
-                                ${c ? `
-                                    <div style="font-size:0.82rem;font-weight:700;color:#09142a;margin-bottom:6px;">${modelLabel}</div>
-                                    <div style="margin-bottom:8px;">${rateTiersHtml}</div>
-                                    ${c.payment_terms ? `<div style="font-size:0.78rem;color:#555;margin-bottom:6px;">Terms: ${c.payment_terms}</div>` : ''}
-                                    ${c.billing_contact_name ? `<div style="font-size:0.78rem;color:#555;margin-bottom:6px;">Billing: ${c.billing_contact_name}${c.billing_contact_email ? ` · ${c.billing_contact_email}` : ''}</div>` : ''}
-                                    <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-                                        ${signedRow}
-                                        <button class="btn-action" onclick="openContractModal(${club.id});toggleRow(${club.id})">Edit Contract</button>
-                                    </div>
-                                ` : `
-                                    <div style="color:#aaa;font-size:0.82rem;font-style:italic;margin-bottom:10px;">No contract set up yet.</div>
-                                    <button class="btn-action blue" onclick="openContractModal(${club.id});toggleRow(${club.id})">+ Set Up Contract</button>
-                                `}
-                            </div>
-
-                            <!-- Invoice section -->
-                            <div style="flex:1;min-width:240px;">
-                                <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:8px;">Invoice — ${document.getElementById('seasonSelect').value}</div>
-                                ${inv ? `
-                                    <div style="margin-bottom:8px;">${invoiceBadge} <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#16a34a;font-size:0.88rem;margin-left:8px;">${totalDue}</span></div>
-                                    <button class="btn-action blue" onclick="openInvoiceModal(${club.id});toggleRow(${club.id})">View Invoice</button>
-                                ` : c ? `
-                                    <div style="color:#aaa;font-size:0.82rem;font-style:italic;margin-bottom:10px;">No invoice generated yet.</div>
-                                    <button class="btn-action blue" onclick="openInvoiceModal(${club.id});toggleRow(${club.id})">Generate Invoice</button>
-                                ` : `<div style="color:#aaa;font-size:0.82rem;font-style:italic;">Set up contract first.</div>`}
-                            </div>
-
+                    <td colspan="4" style="background:#f7f8ff;padding:0;border-bottom:2px solid #e2d9ce;">
+                        <div style="padding:18px 22px;max-width:680px;">
+                            ${c ? `
+                                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+                                    <span style="font-size:0.88rem;font-weight:700;color:#09142a;">${modelLabel}</span>
+                                    ${tiers.map(t => `<span style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:2px 10px;font-size:0.78rem;font-weight:700;color:#0369a1;">${t.age_group === 'default' ? 'Default' : t.age_group}: $${t.rate}</span>`).join('')}
+                                    ${c.payment_terms ? `<span style="font-size:0.78rem;color:#555;">${c.payment_terms}</span>` : ''}
+                                    ${c.billing_contact_name ? `<span style="font-size:0.78rem;color:#555;">· ${c.billing_contact_name}</span>` : ''}
+                                    ${signedBadge}
+                                    <button class="btn-action" onclick="openContractModal(${club.id})" style="margin-left:auto;">Edit Contract</button>
+                                </div>
+                                <div style="border-top:1px solid #e2d9ce;padding-top:12px;">
+                                    <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:4px;">Invoice — ${season}</div>
+                                    ${teamCountInputs}
+                                    ${invoiceAction}
+                                </div>
+                            ` : `
+                                <div style="color:#aaa;font-size:0.82rem;font-style:italic;margin-bottom:10px;">No contract set up yet.</div>
+                                <button class="btn-action blue" onclick="openContractModal(${club.id})">+ Set Up Contract</button>
+                            `}
                         </div>
                     </td>
                 </tr>`;
@@ -511,14 +539,62 @@
                 <td>${contractBadge}</td>
                 <td>${invoiceBadge}</td>
                 <td>${totalDue}</td>
-                <td onclick="event.stopPropagation();">
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                        <button class="btn-action" onclick="openContractModal(${club.id})">${c ? 'Edit Contract' : '+ Contract'}</button>
-                        ${c ? `<button class="btn-action blue" onclick="openInvoiceModal(${club.id})">${inv ? 'View Invoice' : 'Generate Invoice'}</button>` : ''}
-                    </div>
-                </td>
             </tr>${detailPanel}`;
         }).join('');
+    }
+
+    function recalcPreview(clubId) {
+        const c = contracts[clubId];
+        if (!c || !Array.isArray(c.rate_tiers)) return;
+        const tiers = c.rate_tiers;
+        let total = 0;
+        if (c.billing_model === 'per_team') {
+            tiers.forEach((t, i) => {
+                const qty = parseInt(document.getElementById(`tc-${clubId}-${i}`)?.value) || 0;
+                const sub = qty * t.rate;
+                total += sub;
+                const subEl = document.getElementById(`tc-sub-${clubId}-${i}`);
+                if (subEl) subEl.textContent = `$${sub}`;
+            });
+        } else {
+            const qty = parseInt(document.getElementById(`tc-${clubId}-0`)?.value) || 0;
+            total = qty * (tiers[0]?.rate || 0);
+        }
+        const totalEl = document.getElementById(`tc-total-${clubId}`);
+        if (totalEl) totalEl.textContent = `$${total.toFixed(2)}`;
+    }
+
+    async function generateFromCounts(clubId) {
+        const c      = contracts[clubId];
+        const club   = allClubs.find(x => x.id === clubId);
+        const season = document.getElementById('seasonSelect').value;
+        if (!c || !club) return;
+
+        const tiers = c.rate_tiers || [];
+        const lineItems = [];
+
+        if (c.billing_model === 'per_team') {
+            tiers.forEach((t, i) => {
+                const qty = parseInt(document.getElementById(`tc-${clubId}-${i}`)?.value) || 0;
+                if (qty > 0) {
+                    lineItems.push({
+                        qty,
+                        description: `${t.age_group === 'default' ? 'U9 and older' : t.age_group} team${qty !== 1 ? 's' : ''} — ${season}`,
+                        unit_price: t.rate,
+                        total: qty * t.rate
+                    });
+                }
+            });
+        } else if (c.billing_model === 'per_game') {
+            const qty = parseInt(document.getElementById(`tc-${clubId}-0`)?.value) || 0;
+            if (qty > 0) {
+                lineItems.push({ qty, description: `Games assigned — ${season}`, unit_price: tiers[0]?.rate || 0, total: qty * (tiers[0]?.rate || 0) });
+            }
+        } else {
+            lineItems.push({ qty: 1, description: `${season} flat fee`, unit_price: tiers[0]?.rate || 0, total: tiers[0]?.rate || 0 });
+        }
+
+        await openInvoiceModal(clubId, lineItems);
     }
 
     function toggleRow(clubId) {
@@ -622,7 +698,7 @@
     // INVOICE MODAL
     // ════════════════════════════════════════════════════════════════════════
 
-    async function openInvoiceModal(clubId) {
+    async function openInvoiceModal(clubId, prebuiltLineItems = null) {
         // Open immediately — populate after
         document.getElementById('invoiceModal').classList.add('open');
 
@@ -660,7 +736,7 @@
                 document.getElementById('invPushBtn').style.display = '';
                 document.getElementById('invPaidBtn').style.display = 'none';
 
-                const lineItems = contract ? await calculateLineItems(club, contract, season) : [];
+                const lineItems = prebuiltLineItems || (contract ? await calculateLineItems(club, contract, season) : []);
                 renderLineItemsPreview(lineItems);
                 renderLineItemsEditor(lineItems);
             }
