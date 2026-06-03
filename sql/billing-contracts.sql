@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS club_contracts (
     billing_contact_name  text,
     billing_contact_email text,
     billing_address       text,
+    payment_terms         text NOT NULL DEFAULT 'Net 15 Days',  -- Net 15 Days | Net 30 Days | Due on Receipt
     contract_type         text NOT NULL DEFAULT 'standard',  -- standard | custom
     notes                 text,
     signed_by_name        text,
