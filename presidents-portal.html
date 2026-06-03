@@ -183,6 +183,12 @@
                 <div class="stat-card blue"><div class="stat-val" id="statCoverage">—</div><div class="stat-lbl">Games Assigned</div></div>
             </div>
 
+            <!-- Contract section -->
+            <div class="section-head">📄 Referee Assigning Agreement</div>
+            <div id="contractSection" style="margin-bottom:24px;">
+                <p style="color:#888; font-size:0.85rem;">Loading…</p>
+            </div>
+
             <!-- Payments section -->
             <div class="section-head">💳 Referee Payments <span class="section-count" id="payCount">0</span></div>
             <div id="paymentsContent"><p style="color:#888; font-size:0.85rem;">Loading…</p></div>
@@ -269,6 +275,124 @@ async function attemptLogin() {
     document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
 });
 
+// ── Contract Section ─────────────────────────────────────────────────────────
+const CURRENT_SEASON = 'Spring 2026';
+
+async function loadContractSection(club) {
+    const el = document.getElementById('contractSection');
+    try {
+        const { data: contract } = await supabaseClient.client
+            .from('club_contracts')
+            .select('*')
+            .eq('club_id', club.id)
+            .eq('season', CURRENT_SEASON)
+            .maybeSingle();
+
+        if (!contract) {
+            el.innerHTML = `<p style="color:#aaa; font-size:0.85rem; font-style:italic;">No contract on file for ${CURRENT_SEASON}. Contact your assignor.</p>`;
+            return;
+        }
+
+        if (contract.contract_signed_at) {
+            el.innerHTML = `
+                <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:10px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <div style="font-weight:700; color:#14532d; margin-bottom:4px;">✓ ${CURRENT_SEASON} Agreement Signed</div>
+                        <div style="font-size:0.82rem; color:#555;">Signed by ${contract.signed_by_name}${contract.signed_by_title ? ', ' + contract.signed_by_title : ''} on ${new Date(contract.contract_signed_at).toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'})}</div>
+                    </div>
+                    <button onclick="viewContractPortal()" style="background:#14532d; color:white; border:none; padding:8px 18px; border-radius:8px; font-weight:700; font-size:0.82rem; cursor:pointer; font-family:'DM Sans',sans-serif;">View Contract</button>
+                </div>
+                <div id="contractTextPortal" style="display:none; margin-top:12px; border:1px solid #e2d9ce; border-radius:8px; padding:24px; background:white; font-size:0.85rem; line-height:1.7; max-height:400px; overflow-y:auto;"></div>`;
+            window._portalContract = contract;
+            window._portalClub     = club;
+        } else {
+            el.innerHTML = `
+                <div style="background:#fef3c7; border:1px solid #fcd34d; border-radius:10px; padding:16px 20px; margin-bottom:16px;">
+                    <div style="font-weight:700; color:#92400e; margin-bottom:4px;">⚠ ${CURRENT_SEASON} Agreement Requires Your Signature</div>
+                    <div style="font-size:0.82rem; color:#78350f;">Please review the agreement below and sign to confirm your club's participation.</div>
+                </div>
+                <div style="border:1px solid #e2d9ce; border-radius:8px; padding:24px; background:white; font-size:0.85rem; line-height:1.7; max-height:380px; overflow-y:auto; margin-bottom:16px;" id="contractTextUnsigned"></div>
+                <div style="background:white; border:1px solid #e2d9ce; border-radius:10px; padding:20px;">
+                    <div style="font-size:0.82rem; font-weight:700; color:#09142a; margin-bottom:12px;">By signing below you agree to the terms of this Agreement:</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                        <div>
+                            <label style="font-size:0.75rem; font-weight:700; color:#555; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px;">Full Name <span style="color:#e74c3c;">*</span></label>
+                            <input type="text" id="sigName" style="width:100%; padding:8px 11px; border:1.5px solid #e2d9ce; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.88rem; box-sizing:border-box;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem; font-weight:700; color:#555; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px;">Title / Role</label>
+                            <input type="text" id="sigTitle" placeholder="President, Athletic Director…" style="width:100%; padding:8px 11px; border:1.5px solid #e2d9ce; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.88rem; box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <div style="font-size:0.75rem; color:#888; margin-bottom:12px;">By clicking "I Agree and Sign", you are electronically signing this Agreement on behalf of ${club['Club Name'] || club.name || 'your club'}. This electronic signature is legally binding.</div>
+                    <button onclick="signContract(${contract.id})" style="background:#09142a; color:white; border:none; padding:10px 28px; border-radius:8px; font-weight:800; font-size:0.92rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">I Agree and Sign →</button>
+                    <span id="sigError" style="display:none; color:#dc2626; font-size:0.82rem; margin-left:12px;"></span>
+                </div>`;
+            window._portalContract = contract;
+            window._portalClub     = club;
+            document.getElementById('contractTextUnsigned').innerHTML = buildContractBody(club, contract);
+        }
+    } catch(e) {
+        el.innerHTML = `<p style="color:#aaa; font-size:0.85rem; font-style:italic;">Could not load contract.</p>`;
+    }
+}
+
+function viewContractPortal() {
+    const el = document.getElementById('contractTextPortal');
+    if (!el) return;
+    if (el.style.display === 'none') {
+        el.innerHTML = buildContractBody(window._portalClub, window._portalContract);
+        el.style.display = 'block';
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+async function signContract(contractId) {
+    const name  = (document.getElementById('sigName')?.value || '').trim();
+    const title = (document.getElementById('sigTitle')?.value || '').trim();
+    const errEl = document.getElementById('sigError');
+    if (!name) { errEl.textContent = 'Please enter your full name.'; errEl.style.display = 'inline'; return; }
+    errEl.style.display = 'none';
+
+    const { error } = await supabaseClient.client
+        .from('club_contracts')
+        .update({ signed_by_name: name, signed_by_title: title || null, contract_signed_at: new Date().toISOString() })
+        .eq('id', contractId);
+
+    if (error) { errEl.textContent = 'Error saving signature: ' + error.message; errEl.style.display = 'inline'; return; }
+
+    loadContractSection(window._portalClub);
+}
+
+function buildContractBody(club, contract) {
+    const clubName = club['Club Name'] || club.name || '';
+    const tiers    = contract.rate_tiers || [];
+    const season   = CURRENT_SEASON;
+    const effDate  = contract.effective_date || new Date().toLocaleDateString('en-US');
+    const feeLines = tiers.map(t => {
+        if (t.age_group === 'default') return `<li>$${t.rate} per U9 and older team, per season</li>`;
+        if (t.age_group === 'U8')      return `<li>$${t.rate} per U8 team, per season</li>`;
+        return `<li>$${t.rate} per ${t.age_group} team, per season</li>`;
+    }).join('');
+
+    return `<div style="font-family:'DM Sans',sans-serif; font-size:0.85rem; line-height:1.7; color:#09142a;">
+        <div style="text-align:center; margin-bottom:16px;">
+            <div style="font-size:1rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">Referee Assigning Services Agreement</div>
+            <div style="font-size:0.88rem; font-weight:700; margin-top:4px;">${clubName} — ${season}</div>
+        </div>
+        <p>This Referee Assigning Services Agreement ("Agreement") is entered into by and between Tod Smith and Eric Baughman ("Assignors") and <strong>${clubName}</strong> ("Client"), effective as of ${effDate}.</p>
+        <p><strong>1. Scope of Services</strong><br>Assignors agree to provide referee assigning services for Client's soccer matches during the ${season} season. Services include assigning referees for all scheduled league, friendly, and Cup matches provided by Client.</p>
+        <p><strong>2. Fees and Payment</strong></p><ol><li>Client agrees to pay Assignors the following seasonal fees:<ul>${feeLines}</ul></li><li>Fees are payable during the final week of the season.</li><li>Invoices unpaid more than 14 days after issuance may result in suspension of future referee assignments.</li></ol>
+        <p><strong>3. Deliverables</strong></p><ol><li>Assignors shall make every reasonable effort to assign 1–3 referees to all scheduled matches. Referee availability is not guaranteed.</li><li>Assignors will accommodate unlimited schedule changes provided notice requirements are met.</li><li>Assignors will notify coaches within 24 hours of kickoff if referees cannot be obtained.</li><li>Assignors may utilize referees from outside the NECONN area to ensure coverage and mentorship.</li><li>Assignors will actively work to grow and develop the local referee pool.</li></ol>
+        <p><strong>4. Client Responsibilities</strong></p><ol><li>Client shall provide a complete game schedule no later than seven (7) days prior to match dates.</li><li>Teams must confirm match details with opponents no later than Wednesday at 11:59 PM of the match week.</li><li>All schedule changes must be communicated to Assignors as soon as possible.</li></ol>
+        <p><strong>5. Cancellations and Payment Obligations</strong></p><ol><li>Referees must receive a minimum of two (2) hours' notice of any match cancellation.</li><li>If a referee is not notified and travels to the field, the referee shall be paid the full match fee.</li><li>Any referee assigned to a match cancelled after Wednesday at 11:59 PM shall be paid in full.</li><li>Financial responsibility for late cancellation referee payments rests with the Client.</li></ol>
+        <p><strong>6. Authority and Match Safety</strong><br>Referees retain full authority under USSF rules to suspend or terminate matches for referee abuse, unsafe conditions, or serious misconduct.</p>
+        <p><strong>7–12. Additional Terms</strong><br>Referees are independent contractors. Client indemnifies Assignors from claims arising from Client's failure to meet obligations. Either party may terminate with written notice. Governed by CJSA and CSRP rules for Connecticut. This constitutes the entire agreement.</p>
+        ${contract.contract_signed_at ? `<div style="margin-top:16px; padding:12px; background:#f0fdf4; border-radius:8px; font-size:0.82rem; color:#14532d; font-weight:700;">✓ Signed by ${contract.signed_by_name}${contract.signed_by_title ? ', ' + contract.signed_by_title : ''} on ${new Date(contract.contract_signed_at).toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'})}</div>` : ''}
+    </div>`;
+}
+
 function logout() {
     _clubRecord = null;
     _clubId     = null;
@@ -333,6 +457,9 @@ function getChangeTs(notes) {
 async function loadDashboard(club) {
     const clubName = club.name || '';
     const today    = new Date().toISOString().split('T')[0];
+
+    // Load contract for current season
+    loadContractSection(club);
 
     try {
         const [rawGames, ratesResult, refPayResult] = await Promise.all([

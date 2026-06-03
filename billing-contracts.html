@@ -194,8 +194,25 @@
 
 
 <!-- ══════════════════════════════════════════
-     CONTRACT MODAL
+     VIEW CONTRACT MODAL
 ══════════════════════════════════════════ -->
+<div class="modal-overlay" id="viewContractModal">
+    <div class="modal-card" style="max-width:760px;">
+        <div class="modal-header">
+            <div class="modal-title" id="viewContractTitle">Contract</div>
+            <button class="modal-close" onclick="closeViewContract()">×</button>
+        </div>
+        <div id="viewContractSigned" style="display:none; background:#dcfce7; border:1px solid #86efac; border-radius:8px; padding:10px 16px; margin-bottom:16px; font-size:0.84rem; color:#14532d; font-weight:600;"></div>
+        <div id="viewContractBody" style="max-height:60vh; overflow-y:auto; border:1px solid #e2d9ce; border-radius:8px; padding:24px 28px; background:white; font-family:'DM Sans',sans-serif; font-size:0.85rem; line-height:1.7; color:#09142a;"></div>
+        <div class="modal-footer">
+            <button class="btn-action" onclick="closeViewContract()">Close</button>
+            <button class="btn-action" onclick="printContract()">⬇ Download / Print</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     CONTRACT MODAL
 <div class="modal-overlay" id="contractModal">
     <div class="modal-card">
         <div class="modal-header">
@@ -517,7 +534,11 @@
                                     ${c.payment_terms ? `<span style="font-size:0.78rem;color:#555;">${c.payment_terms}</span>` : ''}
                                     ${c.billing_contact_name ? `<span style="font-size:0.78rem;color:#555;">· ${c.billing_contact_name}</span>` : ''}
                                     ${signedBadge}
-                                    <button class="btn-action" onclick="openContractModal(${club.id})" style="margin-left:auto;">Edit Contract</button>
+                                    <button class="btn-action" onclick="openViewContract(${club.id})" style="margin-left:auto;">View Contract</button>
+                                    ${c.contract_signed_at
+                                        ? `<span style="font-size:0.72rem;color:#aaa;font-style:italic;">Locked — signed</span>`
+                                        : `<button class="btn-action" onclick="openContractModal(${club.id})">Edit Contract</button>`
+                                    }
                                 </div>
                                 <div style="border-top:1px solid #e2d9ce;padding-top:12px;">
                                     <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:4px;">Invoice — ${season}</div>
@@ -608,6 +629,140 @@
 
 
     // ════════════════════════════════════════════════════════════════════════
+    // ── View Contract ────────────────────────────────────────────────────────
+
+    function openViewContract(clubId) {
+        const club     = allClubs.find(c => c.id === clubId);
+        const contract = contracts[clubId];
+        if (!club || !contract) return;
+
+        const season   = document.getElementById('seasonSelect').value;
+        const clubName = club['Club Name'] || club.name || '';
+
+        document.getElementById('viewContractTitle').textContent = `Contract — ${clubName} — ${season}`;
+
+        const signedEl = document.getElementById('viewContractSigned');
+        if (contract.contract_signed_at) {
+            signedEl.style.display = 'block';
+            signedEl.textContent = `✓ Digitally signed by ${contract.signed_by_name}${contract.signed_by_title ? ', ' + contract.signed_by_title : ''} on ${new Date(contract.contract_signed_at).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })}`;
+        } else {
+            signedEl.style.display = 'none';
+        }
+
+        document.getElementById('viewContractBody').innerHTML = generateContractHTML(club, contract, season);
+        document.getElementById('viewContractModal').classList.add('open');
+    }
+
+    function closeViewContract() {
+        document.getElementById('viewContractModal').classList.remove('open');
+    }
+
+    function printContract() {
+        window.print();
+    }
+
+    function generateContractHTML(club, contract, season) {
+        const clubName = club['Club Name'] || club.name || '';
+        const tiers    = contract.rate_tiers || [];
+        const effDate  = contract.effective_date || new Date().toLocaleDateString('en-US');
+
+        const feeLines = tiers.map(t => {
+            if (t.age_group === 'default') return `<li>$${t.rate} per U9 and older team, per season</li>`;
+            if (t.age_group === 'U8')      return `<li>$${t.rate} per U8 team, per season</li>`;
+            return `<li>$${t.rate} per ${t.age_group} team, per season</li>`;
+        }).join('');
+
+        const signatureBlock = contract.contract_signed_at
+            ? `<div style="margin-top:28px; padding:16px; background:#f0fdf4; border:1px solid #86efac; border-radius:8px;">
+                <div style="font-weight:700; color:#14532d; margin-bottom:8px;">Digitally Signed</div>
+                <div style="font-size:0.85rem; color:#09142a;"><strong>Client:</strong> ${contract.signed_by_name}${contract.signed_by_title ? ', ' + contract.signed_by_title : ''}</div>
+                <div style="font-size:0.82rem; color:#555; margin-top:4px;">Signed on ${new Date(contract.contract_signed_at).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' })}</div>
+                <div style="font-size:0.82rem; color:#555; margin-top:2px;"><strong>Assignors:</strong> Tod Smith &amp; Eric Baughman</div>
+               </div>`
+            : `<div style="margin-top:28px; border-top:1px solid #e2d9ce; padding-top:20px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; font-size:0.85rem;">
+                    <div>
+                        <div style="font-weight:700; margin-bottom:12px;">Assignor(s):</div>
+                        <div style="border-bottom:1px solid #09142a; margin-bottom:6px; padding-bottom:24px;"></div>
+                        <div>Signature</div>
+                        <div style="margin-top:12px;">Tod Smith &amp; Eric Baughman</div>
+                        <div style="border-bottom:1px solid #09142a; margin-top:16px; margin-bottom:6px; padding-bottom:24px;"></div>
+                        <div>Date</div>
+                    </div>
+                    <div>
+                        <div style="font-weight:700; margin-bottom:12px;">Client:</div>
+                        <div style="border-bottom:1px solid #09142a; margin-bottom:6px; padding-bottom:24px;"></div>
+                        <div>Signature</div>
+                        <div style="margin-top:12px;">${clubName}</div>
+                        <div style="border-bottom:1px solid #09142a; margin-top:16px; margin-bottom:6px; padding-bottom:24px;"></div>
+                        <div>Name &amp; Title</div>
+                        <div style="border-bottom:1px solid #09142a; margin-top:16px; margin-bottom:6px; padding-bottom:24px;"></div>
+                        <div>Date</div>
+                    </div>
+                </div>
+               </div>`;
+
+        return `
+        <div style="font-family:'DM Sans',sans-serif; font-size:0.85rem; line-height:1.7; color:#09142a;">
+            <div style="text-align:center; margin-bottom:20px;">
+                <div style="font-size:1rem; font-weight:800; font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:1px;">Referee Assigning Services Agreement</div>
+                <div style="font-size:0.9rem; font-weight:700; margin-top:4px;">${clubName} — ${season}</div>
+            </div>
+            <p>This Referee Assigning Services Agreement ("Agreement") is entered into by and between Tod Smith and Eric Baughman ("Assignors") and <strong>${clubName}</strong> ("Client"), effective as of ${effDate}.</p>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>1. Scope of Services</strong><br>
+            Assignors agree to provide referee assigning services for Client's soccer matches during the ${season} season, subject to the terms and conditions of this Agreement. Services include assigning referees for all scheduled league, friendly, and Cup matches provided by Client.</p>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>2. Fees and Payment</strong></p>
+            <ol><li>Client agrees to pay Assignors the following seasonal fees:<ul>${feeLines}</ul></li>
+            <li>Fees are payable during the final week of the season, unless otherwise agreed in writing.</li>
+            <li>Invoices unpaid more than fourteen (14) days after issuance may result in suspension of future referee assignments.</li></ol>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>3. Deliverables</strong></p>
+            <ol><li>Assignors shall make every reasonable effort to assign one (1) to three (3) referees to all scheduled matches, depending on availability and competition requirements. Referee availability is not guaranteed.</li>
+            <li>Assignors will accommodate unlimited schedule changes, including Cup matches, provided the notice requirements outlined in this Agreement are met.</li>
+            <li>Assignors will notify teams and/or coaches as soon as reasonably possible, and when feasible within twenty-four (24) hours of kickoff, if referees cannot be obtained for a scheduled match.</li>
+            <li>Assignors may utilize referees from outside the NECONN area to ensure match coverage and provide mentorship opportunities for younger referees.</li>
+            <li>Assignors will actively work to grow and develop the local referee pool.</li></ol>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>4. Client Responsibilities and Expectations</strong></p>
+            <ol><li>Client shall provide Assignors with a complete game schedule no later than seven (7) days prior to the match dates.</li>
+            <li>Teams and coaches must confirm match details (date, time, and location) with their opponents no later than Wednesday at 11:59 PM of the week of the match.</li>
+            <li>Client, coach, or designated scheduler shall notify Assignors once game confirmations have been completed.</li>
+            <li>All schedule changes must be communicated to Assignors as soon as possible.</li>
+            <li>Failure to meet the above deadlines may result in referees not being assigned.</li></ol>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>5. Schedule Changes, Cancellations, and Payment Obligations</strong></p>
+            <ol><li>Client will pay referees in a timely manner. Details to be agreed upon with Assignors.</li>
+            <li>Referees must receive a minimum of two (2) hours' notice of any match changes or cancellations due to weather or other extenuating circumstances.</li>
+            <li>If a referee is not properly notified and travels to the field, the referee shall be paid the full match fee.</li>
+            <li>Any referee assigned and confirmed for a match changed or cancelled after Wednesday at 11:59 PM (for reasons other than weather or emergency) shall be paid in full.</li>
+            <li>Financial responsibility for referee payments resulting from late changes or cancellations shall rest with the Client.</li></ol>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>6. Authority and Match Safety</strong><br>
+            Referees assigned under this Agreement retain full authority under USSF and applicable competition rules to suspend or terminate matches due to referee abuse, unsafe playing conditions, or serious misconduct. Matches terminated for these reasons shall be considered complete for payment purposes.</p>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>7. Non-Binding Recommendations</strong><br>
+            The following items are recommendations only and are not contractual obligations unless separately agreed upon in writing: providing AR compensation at U9+; implementing a referee bonus program; reimbursement of certification and uniform costs; mileage reimbursement for travel over 45 minutes; scheduling back-to-back matches when possible.</p>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>8. Independent Contractor Status</strong><br>
+            Referees assigned under this Agreement are independent contractors and not employees of Assignors or Client.</p>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>9. Indemnification</strong><br>
+            Client agrees to indemnify and hold harmless Assignors from claims, losses, or expenses arising from Client's failure to meet scheduling, notification, or payment obligations under this Agreement.</p>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>10. Termination</strong><br>
+            Either party may terminate this Agreement with written notice. Termination shall not relieve Client of payment obligations incurred prior to termination.</p>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>11. Governing Law</strong><br>
+            This Agreement shall be governed by the rules enforced by CJSA and CSRP for the State of Connecticut.</p>
+            <hr style="border:none;border-top:1px solid #e2d9ce;margin:14px 0;">
+            <p><strong>12. Entire Agreement</strong><br>
+            This Agreement constitutes the entire agreement between the parties and may be modified only in writing signed by both parties.</p>
+            ${signatureBlock}
+        </div>`;
+    }
+
     // CONTRACT MODAL
     // ════════════════════════════════════════════════════════════════════════
 
