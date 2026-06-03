@@ -435,6 +435,7 @@
         tbody.innerHTML = allClubs.map(club => {
             const c   = contracts[club.id];
             const inv = invoiceMap[club.id];
+            const clubName = club['Club Name'] || club.name || '—';
 
             const contractBadge = c
                 ? (c.contract_signed_at
@@ -452,20 +453,81 @@
                 ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#16a34a;">$${Number(inv.total_due).toFixed(2)}</span>`
                 : '—';
 
-            const actions = `
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                    <button class="btn-action" onclick="openContractModal(${club.id})">${c ? 'Edit Contract' : '+ Contract'}</button>
-                    ${c ? `<button class="btn-action blue" onclick="openInvoiceModal(${club.id})">${inv ? 'View Invoice' : 'Generate Invoice'}</button>` : ''}
-                </div>`;
+            // Expanded detail panel
+            const modelLabel = c ? (c.billing_model === 'per_team' ? 'Per Team / Season' : c.billing_model === 'per_game' ? 'Per Game / Season' : 'Flat Rate') : '';
+            const rateTiersHtml = c && Array.isArray(c.rate_tiers) && c.rate_tiers.length
+                ? c.rate_tiers.map(t => `<span style="display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:2px 10px;font-size:0.8rem;font-weight:700;color:#0369a1;margin-right:6px;">${t.age_group === 'default' ? 'Default' : t.age_group}: $${t.rate}</span>`).join('')
+                : '<span style="color:#aaa;font-size:0.82rem;font-style:italic;">No rates set</span>';
 
-            return `<tr>
-                <td class="club-name-cell">${club['Club Name'] || club.name || '—'}</td>
+            const signedRow = c
+                ? (c.contract_signed_at
+                    ? `<span style="background:#dcfce7;color:#14532d;font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:10px;">✓ Signed ${new Date(c.contract_signed_at).toLocaleDateString()}</span>`
+                    : `<span style="background:#fef3c7;color:#92400e;font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:10px;">Unsigned</span>`)
+                : '';
+
+            const detailPanel = `
+                <tr id="detail-${club.id}" style="display:none;">
+                    <td colspan="5" style="background:#f7f8ff;padding:0;border-bottom:2px solid #e2d9ce;">
+                        <div style="padding:16px 20px;display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;">
+
+                            <!-- Contract section -->
+                            <div style="flex:1;min-width:240px;">
+                                <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:8px;">Contract Terms</div>
+                                ${c ? `
+                                    <div style="font-size:0.82rem;font-weight:700;color:#09142a;margin-bottom:6px;">${modelLabel}</div>
+                                    <div style="margin-bottom:8px;">${rateTiersHtml}</div>
+                                    ${c.payment_terms ? `<div style="font-size:0.78rem;color:#555;margin-bottom:6px;">Terms: ${c.payment_terms}</div>` : ''}
+                                    ${c.billing_contact_name ? `<div style="font-size:0.78rem;color:#555;margin-bottom:6px;">Billing: ${c.billing_contact_name}${c.billing_contact_email ? ` · ${c.billing_contact_email}` : ''}</div>` : ''}
+                                    <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+                                        ${signedRow}
+                                        <button class="btn-action" onclick="openContractModal(${club.id});toggleRow(${club.id})">Edit Contract</button>
+                                    </div>
+                                ` : `
+                                    <div style="color:#aaa;font-size:0.82rem;font-style:italic;margin-bottom:10px;">No contract set up yet.</div>
+                                    <button class="btn-action blue" onclick="openContractModal(${club.id});toggleRow(${club.id})">+ Set Up Contract</button>
+                                `}
+                            </div>
+
+                            <!-- Invoice section -->
+                            <div style="flex:1;min-width:240px;">
+                                <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:8px;">Invoice — ${document.getElementById('seasonSelect').value}</div>
+                                ${inv ? `
+                                    <div style="margin-bottom:8px;">${invoiceBadge} <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#16a34a;font-size:0.88rem;margin-left:8px;">${totalDue}</span></div>
+                                    <button class="btn-action blue" onclick="openInvoiceModal(${club.id});toggleRow(${club.id})">View Invoice</button>
+                                ` : c ? `
+                                    <div style="color:#aaa;font-size:0.82rem;font-style:italic;margin-bottom:10px;">No invoice generated yet.</div>
+                                    <button class="btn-action blue" onclick="openInvoiceModal(${club.id});toggleRow(${club.id})">Generate Invoice</button>
+                                ` : `<div style="color:#aaa;font-size:0.82rem;font-style:italic;">Set up contract first.</div>`}
+                            </div>
+
+                        </div>
+                    </td>
+                </tr>`;
+
+            return `<tr onclick="toggleRow(${club.id})" style="cursor:pointer;">
+                <td class="club-name-cell">
+                    <span id="arrow-${club.id}" style="color:#00c853;font-size:0.75rem;margin-right:8px;display:inline-block;transition:transform 0.2s;">▶</span>${clubName}
+                </td>
                 <td>${contractBadge}</td>
                 <td>${invoiceBadge}</td>
                 <td>${totalDue}</td>
-                <td>${actions}</td>
-            </tr>`;
+                <td onclick="event.stopPropagation();">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <button class="btn-action" onclick="openContractModal(${club.id})">${c ? 'Edit Contract' : '+ Contract'}</button>
+                        ${c ? `<button class="btn-action blue" onclick="openInvoiceModal(${club.id})">${inv ? 'View Invoice' : 'Generate Invoice'}</button>` : ''}
+                    </div>
+                </td>
+            </tr>${detailPanel}`;
         }).join('');
+    }
+
+    function toggleRow(clubId) {
+        const detail = document.getElementById('detail-' + clubId);
+        const arrow  = document.getElementById('arrow-' + clubId);
+        if (!detail) return;
+        const open = detail.style.display === 'none' || detail.style.display === '';
+        detail.style.display = open ? 'table-row' : 'none';
+        if (arrow) arrow.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
     }
 
 
