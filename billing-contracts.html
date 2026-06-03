@@ -396,23 +396,34 @@
         const season = document.getElementById('seasonSelect').value;
         document.getElementById('seasonStatus').textContent = 'Loading…';
 
-        const [clubRes, contractRes, invoiceRes] = await Promise.all([
-            supabaseClient.client.from('clubs')
+        try {
+            // Load clubs first — must not fail
+            const clubRes = await supabaseClient.client.from('clubs')
                 .select('id, name, "Club Name", "Source Club", president, "President Email", enabled')
-                .order('"Club Name"'),
-            supabaseClient.client.from('club_contracts').select('*').eq('season', season),
-            supabaseClient.client.from('invoices').select('*').eq('season', season)
-        ]);
+                .order('"Club Name"');
+            allClubs = (clubRes.data || []).filter(c => c['Club Name'] && c.enabled);
 
-        allClubs = (clubRes.data || []).filter(c => c['Club Name'] && c.enabled);
-        contracts  = {};
-        (contractRes.data || []).forEach(c => { contracts[c.club_id] = c; });
-        invoiceMap = {};
-        (invoiceRes.data || []).forEach(i => { invoiceMap[i.club_id] = i; });
+            // Billing tables — load independently, fail silently if not ready yet
+            contracts  = {};
+            invoiceMap = {};
+            try {
+                const [contractRes, invoiceRes] = await Promise.all([
+                    supabaseClient.client.from('club_contracts').select('*').eq('season', season),
+                    supabaseClient.client.from('invoices').select('*').eq('season', season)
+                ]);
+                (contractRes.data || []).forEach(c => { contracts[c.club_id] = c; });
+                (invoiceRes.data || []).forEach(i => { invoiceMap[i.club_id] = i; });
+            } catch(e) {
+                console.warn('Billing tables not ready yet:', e.message);
+            }
 
-        document.getElementById('clubCount').textContent = allClubs.length + ' clubs';
-        document.getElementById('seasonStatus').textContent = '';
-        renderTable();
+            document.getElementById('clubCount').textContent = allClubs.length + ' clubs';
+            document.getElementById('seasonStatus').textContent = '';
+            renderTable();
+        } catch(e) {
+            document.getElementById('seasonStatus').textContent = 'Error loading clubs';
+            console.error('loadPage error:', e);
+        }
     }
 
     function renderTable() {
