@@ -380,7 +380,7 @@
         const client = supabaseClient.client;
         const { data: { session } } = await client.auth.getSession();
         if (!session) { window.location.href = 'admin.html'; return; }
-        const { data: rec } = await client.from('assignors').select('role').eq('auth_user_id', session.user.id).single();
+        const { data: rec } = await supabaseClient.client.from('assignors').select('role').eq('auth_user_id', session.user.id).single();
         if (!rec || rec.role !== 'Admin') { window.location.href = 'admin.html'; }
     })();
 
@@ -608,9 +608,9 @@
         };
 
         if (existingId) {
-            await client.from('club_contracts').update(payload).eq('id', parseInt(existingId));
+            await supabaseClient.client.from('club_contracts').update(payload).eq('id', parseInt(existingId));
         } else {
-            await client.from('club_contracts').insert(payload);
+            await supabaseClient.client.from('club_contracts').insert(payload);
         }
 
         closeContractModal();
@@ -623,48 +623,52 @@
     // ════════════════════════════════════════════════════════════════════════
 
     async function openInvoiceModal(clubId) {
-        const club     = allClubs.find(c => c.id === clubId);
-        const contract = contracts[clubId];
-        const season   = document.getElementById('seasonSelect').value;
-        const existing = invoiceMap[clubId];
-
-        const invClubName = club['Club Name'] || club.name || '';
-        document.getElementById('invoiceModalTitle').textContent = 'Invoice — ' + invClubName;
-        document.getElementById('iClubId').value    = clubId;
-        document.getElementById('iContractId').value = contract ? contract.id : '';
-
-        document.getElementById('invToName').textContent    = invClubName;
-        document.getElementById('invCustomerId').textContent = makeCustomerId(club['Club Name'] || '');
-        document.getElementById('invDate').textContent      = formatInvDate(new Date());
-
-        if (existing) {
-            document.getElementById('iInvoiceId').value = existing.id;
-            document.getElementById('invNumber').textContent = existing.invoice_number || '—';
-            document.getElementById('invCommentsInput').value = existing.comments || '';
-            document.getElementById('invCommentsDisplay').textContent = existing.comments || '—';
-            renderLineItemsPreview(existing.line_items || []);
-            renderLineItemsEditor(existing.line_items || []);
-            const st = existing.status;
-            document.getElementById('invSaveBtn').style.display   = st === 'paid' ? 'none' : '';
-            document.getElementById('invPushBtn').style.display   = st === 'draft' ? '' : 'none';
-            document.getElementById('invPaidBtn').style.display   = st === 'sent'  ? '' : 'none';
-        } else {
-            document.getElementById('iInvoiceId').value = '';
-            const num = await nextInvoiceNumber();
-            document.getElementById('invNumber').textContent = num;
-            document.getElementById('invCommentsInput').value = '';
-            document.getElementById('invCommentsDisplay').textContent = '—';
-            document.getElementById('invSaveBtn').style.display  = '';
-            document.getElementById('invPushBtn').style.display  = '';
-            document.getElementById('invPaidBtn').style.display  = 'none';
-
-            const lineItems = contract ? await calculateLineItems(club, contract, season) : [];
-            renderLineItemsPreview(lineItems);
-            renderLineItemsEditor(lineItems);
-        }
-
-        syncTotals();
+        // Open immediately — populate after
         document.getElementById('invoiceModal').classList.add('open');
+
+        try {
+            const club     = allClubs.find(c => c.id === clubId);
+            const contract = contracts[clubId];
+            const season   = document.getElementById('seasonSelect').value;
+            const existing = invoiceMap[clubId];
+
+            const invClubName = club['Club Name'] || club.name || '';
+            document.getElementById('invoiceModalTitle').textContent = 'Invoice — ' + invClubName;
+            document.getElementById('iClubId').value     = clubId;
+            document.getElementById('iContractId').value = contract ? contract.id : '';
+            document.getElementById('invToName').textContent     = invClubName;
+            document.getElementById('invCustomerId').textContent = makeCustomerId(invClubName);
+            document.getElementById('invDate').textContent       = formatInvDate(new Date());
+
+            if (existing) {
+                document.getElementById('iInvoiceId').value = existing.id;
+                document.getElementById('invNumber').textContent = existing.invoice_number || '—';
+                document.getElementById('invCommentsInput').value = existing.comments || '';
+                document.getElementById('invCommentsDisplay').textContent = existing.comments || '—';
+                renderLineItemsPreview(existing.line_items || []);
+                renderLineItemsEditor(existing.line_items || []);
+                const st = existing.status;
+                document.getElementById('invSaveBtn').style.display = st === 'paid' ? 'none' : '';
+                document.getElementById('invPushBtn').style.display = st === 'draft' ? '' : 'none';
+                document.getElementById('invPaidBtn').style.display = st === 'sent'  ? '' : 'none';
+            } else {
+                document.getElementById('iInvoiceId').value = '';
+                document.getElementById('invNumber').textContent = await nextInvoiceNumber();
+                document.getElementById('invCommentsInput').value = '';
+                document.getElementById('invCommentsDisplay').textContent = '—';
+                document.getElementById('invSaveBtn').style.display = '';
+                document.getElementById('invPushBtn').style.display = '';
+                document.getElementById('invPaidBtn').style.display = 'none';
+
+                const lineItems = contract ? await calculateLineItems(club, contract, season) : [];
+                renderLineItemsPreview(lineItems);
+                renderLineItemsEditor(lineItems);
+            }
+
+            syncTotals();
+        } catch(e) {
+            console.error('openInvoiceModal error:', e);
+        }
     }
 
     function closeInvoiceModal() {
@@ -681,7 +685,7 @@
     }
 
     async function nextInvoiceNumber() {
-        const { data } = await client.from('invoices').select('invoice_number').order('id', { ascending: false }).limit(1);
+        const { data } = await supabaseClient.client.from('invoices').select('invoice_number').order('id', { ascending: false }).limit(1);
         if (!data || !data.length || !data[0].invoice_number) return '001';
         return String((parseInt(data[0].invoice_number) || 0) + 1).padStart(3, '0');
     }
@@ -855,9 +859,9 @@
 
         let result;
         if (existingId) {
-            result = await client.from('invoices').update(payload).eq('id', parseInt(existingId)).select().single();
+            result = await supabaseClient.client.from('invoices').update(payload).eq('id', parseInt(existingId)).select().single();
         } else {
-            result = await client.from('invoices').insert(payload).select().single();
+            result = await supabaseClient.client.from('invoices').insert(payload).select().single();
         }
 
         if (result.data) {
@@ -876,7 +880,7 @@
         }
         if (!id) return;
 
-        await client.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', parseInt(id));
+        await supabaseClient.client.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', parseInt(id));
         document.getElementById('invPushBtn').style.display = 'none';
         document.getElementById('invPaidBtn').style.display = '';
         await loadPage();
@@ -886,7 +890,7 @@
     async function markPaid() {
         const id = document.getElementById('iInvoiceId').value;
         if (!id) return;
-        await client.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', parseInt(id));
+        await supabaseClient.client.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', parseInt(id));
         document.getElementById('invPaidBtn').style.display  = 'none';
         document.getElementById('invSaveBtn').style.display  = 'none';
         document.getElementById('invPushBtn').style.display  = 'none';
