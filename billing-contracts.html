@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billing &amp; Contracts</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            background-color: #060e20 !important;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            ) !important;
+        }
+
+        /* ── Season bar ── */
+        .season-bar {
+            display: flex; align-items: center; gap: 14px; margin-bottom: 22px;
+            background: white; border-radius: 10px; padding: 13px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .season-bar label { font-size: 0.78rem; font-weight: 700; color: #09142a; text-transform: uppercase; letter-spacing: 0.5px; }
+        .season-bar select { padding: 6px 12px; border: 1.5px solid #e2d9ce; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: #09142a; font-weight: 600; cursor: pointer; }
+        .season-bar select:focus { outline: none; border-color: #152d55; }
+
+        /* ── Club table ── */
+        .billing-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .billing-table th { background: #09142a; color: rgba(255,255,255,0.8); padding: 9px 12px; text-align: left; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.74rem; letter-spacing: 0.3px; white-space: nowrap; }
+        .billing-table td { padding: 9px 12px; border-bottom: 1px solid rgba(0,0,0,0.06); vertical-align: middle; background: white; }
+        .billing-table tr:last-child td { border-bottom: none; }
+        .billing-table tbody tr:hover td { background: #f7f8ff; }
+        .club-name-cell { font-weight: 700; color: #09142a; }
+
+        /* ── Pills ── */
+        .pill { font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 10px; white-space: nowrap; display: inline-block; }
+        .pill-none     { background: #f1f5f9; color: #64748b; }
+        .pill-signed   { background: #dcfce7; color: #14532d; }
+        .pill-unsigned { background: #fef3c7; color: #92400e; }
+        .pill-draft    { background: #e0f2fe; color: #0c4a6e; }
+        .pill-sent     { background: #ede9fe; color: #4c1d95; }
+        .pill-paid     { background: #dcfce7; color: #14532d; }
+
+        /* ── Action buttons ── */
+        .btn-action { background: #f0ece6; border: 1px solid #e2d9ce; color: #09142a; font-family: 'DM Sans', sans-serif; font-size: 0.75rem; font-weight: 700; padding: 5px 12px; border-radius: 7px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+        .btn-action:hover { background: #09142a; color: white; }
+        .btn-action.blue  { background: #152d55; color: white; border-color: #152d55; }
+        .btn-action.blue:hover  { background: #0f3460; }
+        .btn-action.green { background: #16a34a; color: white; border-color: #16a34a; }
+        .btn-action.green:hover { background: #14532d; }
+        .btn-action.purple { background: #7c3aed; color: white; border-color: #7c3aed; }
+        .btn-action.purple:hover { background: #6d28d9; }
+
+        /* ── Modals ── */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 1000; overflow-y: auto; padding: 40px 20px; }
+        .modal-overlay.open { display: flex; align-items: flex-start; justify-content: center; }
+        .modal-card { background: white; border-radius: 14px; padding: 28px 30px; width: 100%; max-width: 640px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        .modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 2px solid #f0ece6; gap: 12px; }
+        .modal-title { font-family: 'Barlow Condensed', sans-serif; font-size: 1.25rem; font-weight: 800; color: #09142a; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; }
+        .modal-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #bbb; padding: 0; line-height: 1; flex-shrink: 0; }
+        .modal-close:hover { color: #09142a; }
+
+        /* ── Form ── */
+        .fg { margin-bottom: 14px; }
+        .fg label { display: block; font-size: 0.76rem; font-weight: 700; color: #09142a; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+        .fg input, .fg select, .fg textarea {
+            width: 100%; padding: 8px 11px; border: 1.5px solid #e2d9ce; border-radius: 8px;
+            font-family: 'DM Sans', sans-serif; font-size: 0.88rem; color: #09142a;
+            box-sizing: border-box; transition: border-color 0.15s;
+        }
+        .fg input:focus, .fg select:focus, .fg textarea:focus { outline: none; border-color: #152d55; }
+        .fg textarea { min-height: 68px; resize: vertical; }
+        .fg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .fg .hint { font-size: 0.72rem; color: #aaa; margin-top: 4px; }
+
+        /* ── Rate tiers ── */
+        .tier-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .tier-row .tier-ag { flex: 1; padding: 7px 10px; border: 1.5px solid #e2d9ce; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; }
+        .tier-row .tier-rate-input { width: 100px; padding: 7px 10px; border: 1.5px solid #e2d9ce; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; }
+        .tier-ag:focus, .tier-rate-input:focus { outline: none; border-color: #152d55; }
+        .tier-remove { background: none; border: none; color: #dc2626; cursor: pointer; font-size: 1rem; padding: 0 4px; flex-shrink: 0; }
+
+        /* ── Modal footer ── */
+        .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid #f0ece6; flex-wrap: wrap; align-items: center; }
+
+        /* ── Invoice box ── */
+        .invoice-box {
+            background: white; border: 1px solid #e2d9ce; border-radius: 10px;
+            padding: 32px 36px; margin-bottom: 18px; font-family: 'DM Sans', sans-serif;
+        }
+        .inv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; gap: 20px; }
+        .inv-from { font-size: 0.88rem; color: #09142a; line-height: 1.65; }
+        .inv-from-name { font-family: 'Barlow Condensed', sans-serif; font-size: 1.05rem; font-weight: 800; letter-spacing: 0.3px; }
+        .inv-from-addr { color: #555; }
+        .inv-meta { text-align: right; flex-shrink: 0; }
+        .inv-meta-label { font-family: 'Barlow Condensed', sans-serif; font-size: 1.5rem; font-weight: 800; color: #09142a; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .inv-meta-num { font-size: 0.78rem; color: #555; font-family: 'JetBrains Mono', monospace; line-height: 1.7; }
+        .inv-to { margin-bottom: 20px; }
+        .inv-section-label { font-size: 0.7rem; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .inv-to-name { font-weight: 700; color: #09142a; font-size: 0.92rem; }
+        .inv-to-id { font-size: 0.82rem; color: #555; }
+        .inv-comments-text { font-size: 0.84rem; color: #555; margin-top: 4px; }
+        .inv-divider { border: none; border-top: 1px solid #e2d9ce; margin: 20px 0; }
+        .inv-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 16px; }
+        .inv-table th { background: #09142a; color: white; padding: 7px 10px; text-align: left; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.3px; }
+        .inv-table th.right, .inv-table td.right { text-align: right; }
+        .inv-table td { padding: 8px 10px; border-bottom: 1px solid #f0ece6; }
+        .inv-table tr:last-child td { border-bottom: none; }
+        .inv-totals { margin-left: auto; width: fit-content; border-collapse: collapse; font-size: 0.85rem; }
+        .inv-totals td { padding: 3px 10px; }
+        .inv-totals td:last-child { text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+        .inv-totals .total-row td { font-weight: 800; font-size: 0.95rem; border-top: 2px solid #09142a; padding-top: 7px; }
+        .inv-payment { margin-top: 20px; font-size: 0.8rem; color: #555; }
+        .inv-thanks { text-align: center; margin-top: 18px; font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 1rem; color: #09142a; text-transform: uppercase; letter-spacing: 0.8px; }
+
+        /* ── Line item editor ── */
+        .li-grid-header { display: grid; grid-template-columns: 64px 1fr 90px 80px 28px; gap: 6px; margin-bottom: 4px; }
+        .li-grid-header span { font-size: 0.68rem; font-weight: 700; color: #aaa; text-transform: uppercase; }
+        .li-row { display: grid; grid-template-columns: 64px 1fr 90px 80px 28px; gap: 6px; margin-bottom: 6px; align-items: center; }
+        .li-row input { padding: 6px 8px; border: 1.5px solid #e2d9ce; border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; box-sizing: border-box; width: 100%; }
+        .li-row input:focus { outline: none; border-color: #152d55; }
+        .li-remove { background: none; border: none; color: #dc2626; cursor: pointer; font-size: 1rem; padding: 0; }
+
+        /* ── Print ── */
+        @media print {
+            body * { visibility: hidden !important; }
+            #printArea, #printArea * { visibility: visible !important; }
+            #printArea {
+                position: fixed; top: 0; left: 0; width: 100%;
+                padding: 36px 48px; box-sizing: border-box;
+                background: white !important;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div style="margin-bottom:6px;">
+            <a href="admin.html" style="color:rgba(255,255,255,0.55); text-decoration:none; font-size:0.78rem; font-weight:700;">← Admin Portal</a>
+        </div>
+        <h1>💰 Billing &amp; Contracts</h1>
+        <p class="subtitle">Club contracts, end-of-season invoices, payment tracking</p>
+    </header>
+    <main>
+
+        <!-- Season selector -->
+        <div class="season-bar">
+            <label for="seasonSelect">Season</label>
+            <select id="seasonSelect" onchange="loadPage()">
+                <option value="Spring 2025">Spring 2025</option>
+                <option value="Fall 2025">Fall 2025</option>
+                <option value="Spring 2026" selected>Spring 2026</option>
+                <option value="Fall 2026">Fall 2026</option>
+                <option value="Spring 2027">Spring 2027</option>
+                <option value="Fall 2027">Fall 2027</option>
+            </select>
+            <div id="seasonStatus" style="font-size:0.8rem; color:#aaa; margin-left:auto;"></div>
+        </div>
+
+        <!-- Club list -->
+        <div style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+            <div style="background:#152d55; padding:14px 20px; display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:white; text-transform:uppercase; letter-spacing:0.8px;">
+                    Club Contracts &amp; Invoices
+                </div>
+                <div id="clubCount" style="font-size:0.75rem; color:rgba(255,255,255,0.5);"></div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="billing-table">
+                    <thead>
+                        <tr>
+                            <th>Club</th>
+                            <th>Contract</th>
+                            <th>Invoice</th>
+                            <th>Total Due</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clubTableBody">
+                        <tr><td colspan="5" style="text-align:center;color:#aaa;padding:32px;font-style:italic;">Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+    <footer>
+        <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Tool by <a href="https://anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <a href="https://anvil-arts.com"><img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Anvil Arts"></a></p>
+    </footer>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     CONTRACT MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="contractModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title" id="contractModalTitle">Contract</div>
+            <button class="modal-close" onclick="closeContractModal()">×</button>
+        </div>
+
+        <div class="fg-row">
+            <div class="fg">
+                <label>Club</label>
+                <input type="text" id="cClubName" readonly style="background:#f8f6f2;">
+            </div>
+            <div class="fg">
+                <label>Season</label>
+                <input type="text" id="cSeason" readonly style="background:#f8f6f2;">
+            </div>
+        </div>
+
+        <div class="fg">
+            <label>Billing Model</label>
+            <select id="cBillingModel">
+                <option value="per_team">Per Team Per Season</option>
+                <option value="per_game">Per Game Per Season</option>
+                <option value="flat">Flat Season Rate</option>
+            </select>
+        </div>
+
+        <div class="fg">
+            <label>Rate Tiers</label>
+            <div class="hint" style="margin-bottom:8px;">Age group prefix (U8, U10…) or "default" for catch-all. Rate = $ per team/game.</div>
+            <div id="rateTiersContainer"></div>
+            <button class="btn-action" onclick="addRateTier()" style="margin-top:6px; font-size:0.8rem;">+ Add Tier</button>
+        </div>
+
+        <div class="fg-row">
+            <div class="fg">
+                <label>Billing Contact Name</label>
+                <input type="text" id="cContactName" placeholder="Star Ems">
+            </div>
+            <div class="fg">
+                <label>Billing Contact Email</label>
+                <input type="email" id="cContactEmail" placeholder="contact@club.org">
+            </div>
+        </div>
+
+        <div class="fg">
+            <label>Billing Address</label>
+            <input type="text" id="cBillingAddress" placeholder="PO Box 123, City, ST 00000">
+        </div>
+
+        <div class="fg">
+            <label>Contract Type</label>
+            <select id="cContractType">
+                <option value="standard">Standard Template</option>
+                <option value="custom">Custom / Negotiated</option>
+            </select>
+        </div>
+
+        <div class="fg">
+            <label>Notes</label>
+            <textarea id="cNotes" placeholder="Special terms, negotiated details…"></textarea>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-action" onclick="closeContractModal()">Cancel</button>
+            <button class="btn-action blue" onclick="saveContract()">Save Contract</button>
+        </div>
+
+        <input type="hidden" id="cContractId">
+        <input type="hidden" id="cClubId">
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     INVOICE MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="invoiceModal">
+    <div class="modal-card" style="max-width:720px;">
+        <div class="modal-header">
+            <div class="modal-title" id="invoiceModalTitle">Invoice</div>
+            <button class="modal-close" onclick="closeInvoiceModal()">×</button>
+        </div>
+
+        <!-- Invoice preview — this section prints -->
+        <div id="printArea">
+            <div class="invoice-box">
+                <div class="inv-header">
+                    <div class="inv-from">
+                        <div class="inv-from-name">Eric Baughman &amp; Tod Smith</div>
+                        <div class="inv-from-addr" id="invFromAddr" contenteditable="true"
+                            style="outline:none; border-bottom:1px dashed #ccc; cursor:text;"
+                            title="Click to edit address">29 Yorkshire Terrace Apt 02, Shrewsbury, MA 01545</div>
+                    </div>
+                    <div class="inv-meta">
+                        <div class="inv-meta-label">Invoice</div>
+                        <div class="inv-meta-num">INVOICE # <span id="invNumber">—</span></div>
+                        <div class="inv-meta-num">DATE: <span id="invDate">—</span></div>
+                    </div>
+                </div>
+
+                <div class="inv-to">
+                    <div class="inv-section-label">TO:</div>
+                    <div class="inv-to-name" id="invToName">—</div>
+                    <div class="inv-to-id">Customer ID: <span id="invCustomerId">—</span></div>
+                </div>
+
+                <div style="margin-bottom:20px;">
+                    <div class="inv-section-label">Comments:</div>
+                    <div class="inv-comments-text" id="invCommentsDisplay">—</div>
+                </div>
+
+                <table class="inv-table">
+                    <thead>
+                        <tr>
+                            <th style="width:60px;">Quantity</th>
+                            <th>Description</th>
+                            <th class="right" style="width:90px;">Unit Price</th>
+                            <th class="right" style="width:80px;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invLineItemsPreview"></tbody>
+                </table>
+
+                <div style="display:flex; justify-content:flex-end;">
+                    <table class="inv-totals">
+                        <tr><td>SUBTOTAL</td><td id="invSubtotal">$0.00</td></tr>
+                        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+                        <tr class="total-row"><td>TOTAL DUE</td><td id="invTotalDue">$0.00</td></tr>
+                    </table>
+                </div>
+
+                <div class="inv-payment">
+                    CHECK OR VENMO: @Advocate4tk
+                </div>
+                <div class="inv-thanks">Thank You For Your Business!</div>
+            </div>
+        </div>
+        <!-- end #printArea -->
+
+        <!-- Edit controls (not printed) -->
+        <div id="invEditControls">
+            <div class="fg">
+                <label>Comments</label>
+                <textarea id="invCommentsInput" placeholder="It was a pleasure working with your club…"
+                    oninput="document.getElementById('invCommentsDisplay').textContent = this.value.trim() || '—'"></textarea>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <div style="font-size:0.76rem; font-weight:700; color:#09142a; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">Line Items</div>
+                <div class="li-grid-header">
+                    <span>Qty</span><span>Description</span><span>Unit Price</span><span>Total</span><span></span>
+                </div>
+                <div id="lineItemsEditor"></div>
+                <button class="btn-action" onclick="addLineItem()" style="margin-top:6px; font-size:0.8rem;">+ Add Line Item</button>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-action" onclick="closeInvoiceModal()">Close</button>
+            <button class="btn-action" onclick="printInvoice()">⬇ Download PDF</button>
+            <button class="btn-action blue" id="invSaveBtn" onclick="saveInvoiceDraft()">Save Draft</button>
+            <button class="btn-action purple" id="invPushBtn" onclick="pushToPortal()">Push to Portal</button>
+            <button class="btn-action green" id="invPaidBtn" onclick="markPaid()" style="display:none;">✓ Mark Paid</button>
+        </div>
+
+        <input type="hidden" id="iInvoiceId">
+        <input type="hidden" id="iContractId">
+        <input type="hidden" id="iClubId">
+    </div>
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-client.js?v=12"></script>
+<script src="js/admin-auth.js"></script>
+<script>
+    var airtableClient = supabaseClient;
+    const client = supabaseClient.client;
+
+    // ── Auth check ──────────────────────────────────────────────────────────
+    (async () => {
+        const { data: { session } } = await client.auth.getSession();
+        if (!session) { window.location.href = 'admin.html'; return; }
+        const { data: rec } = await client.from('assignors').select('role').eq('auth_user_id', session.user.id).single();
+        if (!rec || rec.role !== 'Admin') { window.location.href = 'admin.html'; }
+    })();
+
+    // ── State ────────────────────────────────────────────────────────────────
+    let allClubs  = [];
+    let contracts = {};  // club_id → contract row
+    let invoiceMap = {}; // club_id → invoice row
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', loadPage);
+
+    async function loadPage() {
+        const season = document.getElementById('seasonSelect').value;
+        document.getElementById('seasonStatus').textContent = 'Loading…';
+
+        const [clubRes, contractRes, invoiceRes] = await Promise.all([
+            client.from('clubs')
+                .select('id, name, "Club Name", "Source Club", president, "President Email", enabled')
+                .order('"Club Name"'),
+            client.from('club_contracts').select('*').eq('season', season),
+            client.from('invoices').select('*').eq('season', season)
+        ]);
+
+        allClubs = (clubRes.data || []).filter(c => c['Club Name'] && c.enabled);
+        contracts  = {};
+        (contractRes.data || []).forEach(c => { contracts[c.club_id] = c; });
+        invoiceMap = {};
+        (invoiceRes.data || []).forEach(i => { invoiceMap[i.club_id] = i; });
+
+        document.getElementById('clubCount').textContent = allClubs.length + ' clubs';
+        document.getElementById('seasonStatus').textContent = '';
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('clubTableBody');
+        if (!allClubs.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:32px;font-style:italic;">No active clubs found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = allClubs.map(club => {
+            const c   = contracts[club.id];
+            const inv = invoiceMap[club.id];
+
+            const contractBadge = c
+                ? (c.contract_signed_at
+                    ? `<span class="pill pill-signed">✓ Signed</span>`
+                    : `<span class="pill pill-unsigned">Unsigned</span>`)
+                : `<span class="pill pill-none">No Contract</span>`;
+
+            const invoiceBadge = inv
+                ? (inv.status === 'paid' ? `<span class="pill pill-paid">✓ Paid</span>`
+                    : inv.status === 'sent' ? `<span class="pill pill-sent">Sent</span>`
+                    : `<span class="pill pill-draft">Draft</span>`)
+                : `<span class="pill pill-none">—</span>`;
+
+            const totalDue = inv
+                ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#16a34a;">$${Number(inv.total_due).toFixed(2)}</span>`
+                : '—';
+
+            const actions = `
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="btn-action" onclick="openContractModal(${club.id})">${c ? 'Edit Contract' : '+ Contract'}</button>
+                    ${c ? `<button class="btn-action blue" onclick="openInvoiceModal(${club.id})">${inv ? 'View Invoice' : 'Generate Invoice'}</button>` : ''}
+                </div>`;
+
+            return `<tr>
+                <td class="club-name-cell">${club['Club Name']}</td>
+                <td>${contractBadge}</td>
+                <td>${invoiceBadge}</td>
+                <td>${totalDue}</td>
+                <td>${actions}</td>
+            </tr>`;
+        }).join('');
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CONTRACT MODAL
+    // ════════════════════════════════════════════════════════════════════════
+
+    function openContractModal(clubId) {
+        const club     = allClubs.find(c => c.id === clubId);
+        const season   = document.getElementById('seasonSelect').value;
+        const existing = contracts[clubId];
+
+        document.getElementById('contractModalTitle').textContent = (club['Club Name'] || '') + ' — ' + season;
+        document.getElementById('cClubName').value  = club['Club Name'] || '';
+        document.getElementById('cSeason').value    = season;
+        document.getElementById('cClubId').value    = clubId;
+        document.getElementById('cContractId').value = existing ? existing.id : '';
+
+        document.getElementById('cBillingModel').value  = existing ? existing.billing_model  : 'per_team';
+        document.getElementById('cContactName').value   = existing ? (existing.billing_contact_name  || '') : (club.president || '');
+        document.getElementById('cContactEmail').value  = existing ? (existing.billing_contact_email || '') : (club['President Email'] || '');
+        document.getElementById('cBillingAddress').value = existing ? (existing.billing_address || '') : '';
+        document.getElementById('cContractType').value  = existing ? existing.contract_type : 'standard';
+        document.getElementById('cNotes').value         = existing ? (existing.notes || '') : '';
+
+        const defaultTiers = [{ age_group: 'U8', rate: 50 }, { age_group: 'default', rate: 80 }];
+        renderRateTiers(existing ? (existing.rate_tiers || defaultTiers) : defaultTiers);
+
+        document.getElementById('contractModal').classList.add('open');
+    }
+
+    function closeContractModal() {
+        document.getElementById('contractModal').classList.remove('open');
+    }
+
+    function renderRateTiers(tiers) {
+        document.getElementById('rateTiersContainer').innerHTML = tiers.map((t, i) => `
+            <div class="tier-row" id="tier-${i}">
+                <input type="text" class="tier-ag" placeholder="Age group (U8, default…)" value="${t.age_group || ''}">
+                <input type="number" class="tier-rate-input" placeholder="Rate $" value="${t.rate || ''}">
+                <button class="tier-remove" onclick="this.parentElement.remove()">✕</button>
+            </div>`).join('');
+    }
+
+    function addRateTier() {
+        const container = document.getElementById('rateTiersContainer');
+        const div = document.createElement('div');
+        div.className = 'tier-row';
+        div.innerHTML = `<input type="text" class="tier-ag" placeholder="Age group (U8, default…)">
+            <input type="number" class="tier-rate-input" placeholder="Rate $">
+            <button class="tier-remove" onclick="this.parentElement.remove()">✕</button>`;
+        container.appendChild(div);
+    }
+
+    function collectRateTiers() {
+        return Array.from(document.querySelectorAll('#rateTiersContainer .tier-row')).map(r => ({
+            age_group: r.querySelector('.tier-ag').value.trim(),
+            rate: parseFloat(r.querySelector('.tier-rate-input').value) || 0
+        })).filter(t => t.age_group);
+    }
+
+    async function saveContract() {
+        const clubId     = parseInt(document.getElementById('cClubId').value);
+        const existingId = document.getElementById('cContractId').value;
+        const season     = document.getElementById('seasonSelect').value;
+
+        const payload = {
+            club_id:               clubId,
+            season,
+            billing_model:         document.getElementById('cBillingModel').value,
+            rate_tiers:            collectRateTiers(),
+            billing_contact_name:  document.getElementById('cContactName').value.trim(),
+            billing_contact_email: document.getElementById('cContactEmail').value.trim(),
+            billing_address:       document.getElementById('cBillingAddress').value.trim(),
+            contract_type:         document.getElementById('cContractType').value,
+            notes:                 document.getElementById('cNotes').value.trim()
+        };
+
+        if (existingId) {
+            await client.from('club_contracts').update(payload).eq('id', parseInt(existingId));
+        } else {
+            await client.from('club_contracts').insert(payload);
+        }
+
+        closeContractModal();
+        await loadPage();
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════════
+    // INVOICE MODAL
+    // ════════════════════════════════════════════════════════════════════════
+
+    async function openInvoiceModal(clubId) {
+        const club     = allClubs.find(c => c.id === clubId);
+        const contract = contracts[clubId];
+        const season   = document.getElementById('seasonSelect').value;
+        const existing = invoiceMap[clubId];
+
+        document.getElementById('invoiceModalTitle').textContent = 'Invoice — ' + (club['Club Name'] || '');
+        document.getElementById('iClubId').value    = clubId;
+        document.getElementById('iContractId').value = contract ? contract.id : '';
+
+        document.getElementById('invToName').textContent    = club['Club Name'] || '';
+        document.getElementById('invCustomerId').textContent = makeCustomerId(club['Club Name'] || '');
+        document.getElementById('invDate').textContent      = formatInvDate(new Date());
+
+        if (existing) {
+            document.getElementById('iInvoiceId').value = existing.id;
+            document.getElementById('invNumber').textContent = existing.invoice_number || '—';
+            document.getElementById('invCommentsInput').value = existing.comments || '';
+            document.getElementById('invCommentsDisplay').textContent = existing.comments || '—';
+            renderLineItemsPreview(existing.line_items || []);
+            renderLineItemsEditor(existing.line_items || []);
+            const st = existing.status;
+            document.getElementById('invSaveBtn').style.display   = st === 'paid' ? 'none' : '';
+            document.getElementById('invPushBtn').style.display   = st === 'draft' ? '' : 'none';
+            document.getElementById('invPaidBtn').style.display   = st === 'sent'  ? '' : 'none';
+        } else {
+            document.getElementById('iInvoiceId').value = '';
+            const num = await nextInvoiceNumber();
+            document.getElementById('invNumber').textContent = num;
+            document.getElementById('invCommentsInput').value = '';
+            document.getElementById('invCommentsDisplay').textContent = '—';
+            document.getElementById('invSaveBtn').style.display  = '';
+            document.getElementById('invPushBtn').style.display  = '';
+            document.getElementById('invPaidBtn').style.display  = 'none';
+
+            const lineItems = contract ? await calculateLineItems(club, contract, season) : [];
+            renderLineItemsPreview(lineItems);
+            renderLineItemsEditor(lineItems);
+        }
+
+        syncTotals();
+        document.getElementById('invoiceModal').classList.add('open');
+    }
+
+    function closeInvoiceModal() {
+        document.getElementById('invoiceModal').classList.remove('open');
+    }
+
+    function makeCustomerId(name) {
+        return name.replace(/soccer club|sc\b|fc\b/gi, '').trim()
+            .split(/\s+/).filter(w => /[a-z]/i.test(w)).map(w => w[0].toUpperCase()).join('').slice(0, 6);
+    }
+
+    function formatInvDate(d) {
+        return `${d.getMonth()+1}-${d.getDate()}-${String(d.getFullYear()).slice(2)}`;
+    }
+
+    async function nextInvoiceNumber() {
+        const { data } = await client.from('invoices').select('invoice_number').order('id', { ascending: false }).limit(1);
+        if (!data || !data.length || !data[0].invoice_number) return '001';
+        return String((parseInt(data[0].invoice_number) || 0) + 1).padStart(3, '0');
+    }
+
+
+    // ── Line item calculation ────────────────────────────────────────────────
+
+    function seasonDates(season) {
+        const parts = season.split(' ');
+        const term = parts[0], year = parseInt(parts[1]);
+        return term === 'Spring'
+            ? { start: `${year}-01-01`, end: `${year}-06-30` }
+            : { start: `${year}-07-01`, end: `${year}-12-31` };
+    }
+
+    async function calculateLineItems(club, contract, season) {
+        const { start, end } = seasonDates(season);
+        const sourceClub = club['Source Club'] || club['Club Name'];
+
+        const { data: games } = await client
+            .from('games')
+            .select('"Age Group"')
+            .eq('"Source Club"', sourceClub)
+            .gte('date', start)
+            .lte('date', end);
+
+        if (!games || !games.length) return [];
+
+        const tiers = contract.rate_tiers || [];
+        const model = contract.billing_model;
+
+        if (model === 'per_team') {
+            const ageGroups = [...new Set(games.map(g => g['Age Group']).filter(Boolean))].sort();
+            return calcPerTeam(ageGroups, tiers, season);
+        }
+        if (model === 'per_game') {
+            return calcPerGame(games.length, tiers, season);
+        }
+        // flat
+        const rate = tiers[0] ? tiers[0].rate : 0;
+        return [{ qty: 1, description: `${season} season flat fee`, unit_price: rate, total: rate }];
+    }
+
+    function matchTier(ageGroup, tiers) {
+        const specific = tiers.filter(t => t.age_group !== 'default')
+            .find(t => ageGroup.startsWith(t.age_group));
+        return specific || tiers.find(t => t.age_group === 'default');
+    }
+
+    function calcPerTeam(ageGroups, tiers, season) {
+        const groups = {};
+        for (const ag of ageGroups) {
+            const tier = matchTier(ag, tiers);
+            if (!tier) continue;
+            const key = tier.age_group;
+            if (!groups[key]) groups[key] = {
+                count: 0, rate: tier.rate,
+                label: tier.age_group === 'default' ? 'U9 and older' : tier.age_group
+            };
+            groups[key].count++;
+        }
+        return Object.values(groups).map(g => ({
+            qty: g.count,
+            description: `${g.label} team${g.count !== 1 ? 's' : ''} — ${season}`,
+            unit_price: g.rate,
+            total: g.count * g.rate
+        }));
+    }
+
+    function calcPerGame(total, tiers, season) {
+        const rate = tiers[0] ? tiers[0].rate : 0;
+        return [{ qty: total, description: `Games assigned — ${season}`, unit_price: rate, total: total * rate }];
+    }
+
+
+    // ── Render helpers ───────────────────────────────────────────────────────
+
+    function renderLineItemsPreview(items) {
+        const tbody = document.getElementById('invLineItemsPreview');
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#aaa;padding:14px;font-style:italic;">No line items</td></tr>';
+            return;
+        }
+        tbody.innerHTML = items.map(li => `<tr>
+            <td>${li.qty}</td>
+            <td>${li.description}</td>
+            <td class="right">$${Number(li.unit_price).toFixed(2)}</td>
+            <td class="right" style="font-weight:700;">$${Number(li.total).toFixed(2)}</td>
+        </tr>`).join('');
+    }
+
+    function renderLineItemsEditor(items) {
+        if (!items.length) items = [{ qty: '', description: '', unit_price: '', total: '' }];
+        document.getElementById('lineItemsEditor').innerHTML = items.map((li, i) => `
+            <div class="li-row" id="li-${i}">
+                <input type="number" value="${li.qty}" placeholder="Qty" class="li-qty" onchange="recalcRow(this)">
+                <input type="text"   value="${li.description}" placeholder="Description" class="li-desc" oninput="syncPreview()">
+                <input type="number" value="${li.unit_price}" placeholder="Rate" step="0.01" class="li-price" onchange="recalcRow(this)">
+                <input type="number" value="${li.total}" placeholder="Total" step="0.01" class="li-total" readonly style="background:#f8f6f2;">
+                <button class="li-remove" onclick="this.closest('.li-row').remove(); syncPreview()">✕</button>
+            </div>`).join('');
+    }
+
+    function addLineItem() {
+        const container = document.getElementById('lineItemsEditor');
+        const div = document.createElement('div');
+        const i = container.querySelectorAll('.li-row').length;
+        div.className = 'li-row';
+        div.id = `li-${i}`;
+        div.innerHTML = `
+            <input type="number" placeholder="Qty" class="li-qty" onchange="recalcRow(this)">
+            <input type="text" placeholder="Description" class="li-desc" oninput="syncPreview()">
+            <input type="number" placeholder="Rate" step="0.01" class="li-price" onchange="recalcRow(this)">
+            <input type="number" placeholder="Total" step="0.01" class="li-total" readonly style="background:#f8f6f2;">
+            <button class="li-remove" onclick="this.closest('.li-row').remove(); syncPreview()">✕</button>`;
+        container.appendChild(div);
+    }
+
+    function recalcRow(input) {
+        const row   = input.closest('.li-row');
+        const qty   = parseFloat(row.querySelector('.li-qty').value)   || 0;
+        const price = parseFloat(row.querySelector('.li-price').value) || 0;
+        row.querySelector('.li-total').value = (qty * price).toFixed(2);
+        syncPreview();
+    }
+
+    function collectLineItems() {
+        return Array.from(document.querySelectorAll('#lineItemsEditor .li-row')).map(r => ({
+            qty:        parseFloat(r.querySelector('.li-qty').value)   || 0,
+            description: r.querySelector('.li-desc').value.trim(),
+            unit_price: parseFloat(r.querySelector('.li-price').value) || 0,
+            total:      parseFloat(r.querySelector('.li-total').value) || 0
+        })).filter(li => li.description || li.qty);
+    }
+
+    function syncPreview() {
+        renderLineItemsPreview(collectLineItems());
+        syncTotals();
+    }
+
+    function syncTotals() {
+        const rows = document.querySelectorAll('#lineItemsEditor .li-row');
+        let sub = 0;
+        rows.forEach(r => { sub += parseFloat(r.querySelector('.li-total').value) || 0; });
+        document.getElementById('invSubtotal').textContent = `$${sub.toFixed(2)}`;
+        document.getElementById('invTotalDue').textContent = `$${sub.toFixed(2)}`;
+    }
+
+
+    // ── Save / push / paid ───────────────────────────────────────────────────
+
+    async function saveInvoiceDraft() {
+        const clubId     = parseInt(document.getElementById('iClubId').value);
+        const contractId = document.getElementById('iContractId').value;
+        const season     = document.getElementById('seasonSelect').value;
+        const existingId = document.getElementById('iInvoiceId').value;
+        const lineItems  = collectLineItems();
+        const subtotal   = lineItems.reduce((s, li) => s + Number(li.total), 0);
+
+        const payload = {
+            club_id:       clubId,
+            contract_id:   contractId ? parseInt(contractId) : null,
+            season,
+            invoice_number: document.getElementById('invNumber').textContent,
+            line_items:    lineItems,
+            subtotal,
+            total_due:     subtotal,
+            comments:      document.getElementById('invCommentsInput').value.trim(),
+            status:        'draft'
+        };
+
+        let result;
+        if (existingId) {
+            result = await client.from('invoices').update(payload).eq('id', parseInt(existingId)).select().single();
+        } else {
+            result = await client.from('invoices').insert(payload).select().single();
+        }
+
+        if (result.data) {
+            document.getElementById('iInvoiceId').value = result.data.id;
+        }
+
+        await loadPage();
+        alert('Draft saved.');
+    }
+
+    async function pushToPortal() {
+        let id = document.getElementById('iInvoiceId').value;
+        if (!id) {
+            await saveInvoiceDraft();
+            id = document.getElementById('iInvoiceId').value;
+        }
+        if (!id) return;
+
+        await client.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', parseInt(id));
+        document.getElementById('invPushBtn').style.display = 'none';
+        document.getElementById('invPaidBtn').style.display = '';
+        await loadPage();
+        alert('Invoice pushed to presidents portal.');
+    }
+
+    async function markPaid() {
+        const id = document.getElementById('iInvoiceId').value;
+        if (!id) return;
+        await client.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', parseInt(id));
+        document.getElementById('invPaidBtn').style.display  = 'none';
+        document.getElementById('invSaveBtn').style.display  = 'none';
+        document.getElementById('invPushBtn').style.display  = 'none';
+        await loadPage();
+        alert('Marked as paid.');
+    }
+
+    function printInvoice() {
+        const comments = document.getElementById('invCommentsInput').value.trim();
+        document.getElementById('invCommentsDisplay').textContent = comments || '—';
+        syncPreview();
+        window.print();
+    }
+</script>
+</body>
+</html>
