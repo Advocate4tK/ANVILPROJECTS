@@ -986,7 +986,13 @@
         const entered = (document.getElementById('payPinInput').value || '').trim();
         if (entered === _clubPayPin) {
             closePayPin();
-            _doPortalGo('pay');
+            if (window._payPinCallback) {
+                const cb = window._payPinCallback;
+                window._payPinCallback = null;
+                cb();
+            } else {
+                _doPortalGo('pay');
+            }
         } else {
             document.getElementById('payPinError').textContent = 'Incorrect PIN. Try again.';
             document.getElementById('payPinInput').value = '';
@@ -1256,7 +1262,15 @@
 
         // Payment portal — any club with ?pay=portal
         if (params.get('pay') === 'portal') {
-            initPaymentMode();
+            if (_clubPayPin) {
+                // PIN required — show overlay, then load portal on success
+                const overlay = document.getElementById('payPinOverlay');
+                overlay.style.display = 'flex';
+                document.getElementById('payPinInput').focus();
+                window._payPinCallback = () => initPaymentMode();
+            } else {
+                initPaymentMode();
+            }
             return;
         }
 
