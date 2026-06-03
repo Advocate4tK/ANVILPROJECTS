@@ -2822,29 +2822,34 @@
                     ? supabaseClient.client.from('invoices').select('id, invoice_number, season, total_due, status').eq('club_id', _clubId).eq('status', 'sent').maybeSingle()
                     : Promise.resolve({ data: null })
             ]);
+            const clubPayMethods = (clubResult.data?.payment_methods || 'venmo,check')
+                .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
             // ── Invoice banner ───────────────────────────────────────────────
             const inv = invoiceResult?.data;
             const bannerEl = document.getElementById('invoiceBanner');
             if (inv && bannerEl) {
                 const amt = parseFloat(inv.total_due || 0).toFixed(2);
                 const clubDisplay = (currentClubRecord?.fields?.['Club Name'] || currentClubRecord?.fields?.['Name'] || 'Club').trim();
-                const venmoNote = encodeURIComponent(`${clubDisplay} ${inv.season || ''}`);
-                const venmoUrl  = `https://venmo.com/Advocate4tk?txn=pay&amount=${amt}&note=${venmoNote}`;
+                const venmoNote   = encodeURIComponent(`${clubDisplay} ${inv.season || ''}`);
+                const venmoUrl    = `https://venmo.com/?txn=pay&recipients=Advocate4tk&amount=${amt}&note=${venmoNote}`;
+                const showVenmo   = clubPayMethods.includes('venmo');
+                const showCheck   = clubPayMethods.includes('check');
+                const venmoBtn    = showVenmo ? `<a class="btn-venmo-link" href="${venmoUrl}" target="_blank"><span class="vl-badge">V</span><span class="vl-handle">@Advocate4tk</span></a>` : '';
+                const checkBtn    = showCheck  ? `<span class="pay-check-badge"><span class="vc-badge"><span class="vc-icon">✉️</span><span class="vc-label">check</span></span><span class="vc-note" style="color:#555;">Payable to Tod Smith</span></span>` : '';
                 bannerEl.innerHTML = `
                     <div id="invBannerBox" style="background:#16a34a; color:white; border-radius:12px; padding:18px 22px; margin-bottom:18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
                         <div>
                             <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; line-height:1.1;">Assignor Invoice #${inv.invoice_number} — ${inv.season || ''}</div>
                             <div style="font-size:1.5rem; font-weight:900; font-family:'JetBrains Mono',monospace; margin-top:4px;">$${amt} due</div>
                         </div>
-                        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                            <a href="${venmoUrl}" target="_blank" style="background:white; color:#16a34a; font-weight:800; font-size:0.9rem; padding:10px 18px; border-radius:8px; text-decoration:none; font-family:'DM Sans',sans-serif;">Pay via Venmo</a>
+                        <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+                            <div class="pay-action-cell">${venmoBtn}${checkBtn}</div>
                             <button onclick="markInvoicePaid(${inv.id})" style="background:rgba(0,0,0,0.25); color:white; border:2px solid rgba(255,255,255,0.6); font-weight:700; font-size:0.9rem; padding:10px 18px; border-radius:8px; cursor:pointer; font-family:'DM Sans',sans-serif;">✓ Mark as Paid</button>
                         </div>
                     </div>`;
             }
 
-            const clubPayMethods = (clubResult.data?.payment_methods || 'venmo,check')
-                .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
             const clubCutoffDay = (clubResult.data?.cancellation_cutoff_day || 'thursday').toLowerCase();
             const portalStartDate = clubResult.data?.payment_portal_start_date || null;
             const allGames = airtableClient._wrapAll(rawGrisGames.data || []);
