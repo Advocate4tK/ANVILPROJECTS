@@ -558,7 +558,7 @@
     </script>
     <script src="js/form-handler.js?v=4"></script>
     <script>
-        function buildTimeOptions() {
+        function buildTimeOptions(presetValue) {
             let options = '<option value="">Select time</option>';
             for (let h = 6; h <= 22; h++) {
                 [0, 15, 30, 45].forEach(m => {
@@ -566,14 +566,16 @@
                     const ampm = h < 12 ? 'AM' : 'PM';
                     const hh = String(h).padStart(2, '0');
                     const mm = String(m).padStart(2, '0');
+                    const val = `${hh}:${mm}`;
                     const display = `${hour12}:${mm} ${ampm}`;
-                    options += `<option value="${hh}:${mm}">${display}</option>`;
+                    const sel = presetValue === val ? ' selected' : '';
+                    options += `<option value="${val}"${sel}>${display}</option>`;
                 });
             }
             return options;
         }
 
-        function createDayRow(index, forceRemove) {
+        function createDayRow(index, forceRemove, presetStartTime) {
             const div = document.createElement('div');
             div.className = 'day-row';
             div.style.cssText = 'border:1px solid #ddd; border-radius:8px; padding:15px; margin-bottom:15px; background:#fafafa;';
@@ -589,7 +591,7 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Start Time <span class="required">*</span></label>
-                        <select name="startTime[]" required>${buildTimeOptions()}</select>
+                        <select name="startTime[]" required>${buildTimeOptions(presetStartTime || '')}</select>
                     </div>
                     <div class="form-group">
                         <label>End Time <span class="required">*</span></label>
@@ -677,23 +679,13 @@
                 ? urlDates.split(',').map(d => d.trim()).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d))
                 : [];
 
+            const presetTime = urlTime ? urlTime.substring(0, 5) : '';
             if (presetDates.length > 0) {
                 presetDates.forEach((date, i) => {
-                    const row = createDayRow(i + 1, presetDates.length > 1);
+                    const row = createDayRow(i + 1, presetDates.length > 1, presetTime);
                     row.querySelector('input[name="availableDate[]"]').value = date;
                     container.appendChild(row);
                 });
-                // Pre-fill start time after rows are in the DOM
-                if (urlTime) {
-                    const t = urlTime.substring(0, 5); // "HH:MM" — strip seconds
-                    setTimeout(() => {
-                        const selects = container.querySelectorAll('select');
-                        if (selects[0]) {
-                            const opt = Array.from(selects[0].options).find(o => o.value === t);
-                            if (opt) opt.selected = true;
-                        }
-                    }, 50);
-                }
             } else {
                 container.appendChild(createDayRow(1));
             }
