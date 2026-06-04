@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #f4f0eb; font-family: 'DM Sans', sans-serif; min-height: 100vh; padding: 32px 16px; }
+
+        .page-wrap { max-width: 760px; margin: 0 auto; }
+
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .top-bar h2 { font-family: 'Barlow Condensed', sans-serif; font-size: 1.3rem; font-weight: 800; color: #09142a; text-transform: uppercase; letter-spacing: 0.8px; }
+        .btn-print { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; background: #09142a; color: white; border: none; border-radius: 8px; font-size: 0.82rem; font-weight: 700; font-family: 'DM Sans', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; }
+        .btn-print:hover { background: #152d55; }
+
+        .invoice-box { background: white; border: 1px solid #e2d9ce; border-radius: 10px; padding: 32px 36px; }
+        .inv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; gap: 20px; }
+        .inv-from { font-size: 0.88rem; color: #09142a; line-height: 1.65; }
+        .inv-from-name { font-family: 'Barlow Condensed', sans-serif; font-size: 1.05rem; font-weight: 800; letter-spacing: 0.3px; }
+        .inv-from-addr { color: #555; }
+        .inv-meta { text-align: right; flex-shrink: 0; }
+        .inv-meta-label { font-family: 'Barlow Condensed', sans-serif; font-size: 1.5rem; font-weight: 800; color: #09142a; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .inv-meta-num { font-size: 0.78rem; color: #555; font-family: 'JetBrains Mono', monospace; line-height: 1.7; }
+        .inv-to { margin-bottom: 20px; }
+        .inv-section-label { font-size: 0.7rem; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .inv-to-name { font-weight: 700; color: #09142a; font-size: 0.92rem; }
+        .inv-to-id { font-size: 0.82rem; color: #555; }
+        .inv-comments-text { font-size: 0.84rem; color: #555; margin-top: 4px; }
+        .inv-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 16px; }
+        .inv-table th { background: #09142a; color: white; padding: 7px 10px; text-align: left; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.3px; }
+        .inv-table th.right, .inv-table td.right { text-align: right; }
+        .inv-table td { padding: 8px 10px; border-bottom: 1px solid #f0ece6; }
+        .inv-table tr:last-child td { border-bottom: none; }
+        .inv-totals { margin-left: auto; width: fit-content; border-collapse: collapse; font-size: 0.85rem; }
+        .inv-totals td { padding: 3px 10px; }
+        .inv-totals td:last-child { text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+        .inv-totals .total-row td { font-weight: 800; font-size: 0.95rem; border-top: 2px solid #09142a; padding-top: 7px; }
+        .inv-payment { margin-top: 20px; font-size: 0.8rem; color: #555; }
+        .inv-thanks { text-align: center; margin-top: 18px; font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 1rem; color: #09142a; text-transform: uppercase; letter-spacing: 0.8px; }
+
+        .loading { text-align: center; padding: 60px; color: #888; font-size: 0.9rem; }
+        .error { text-align: center; padding: 60px; color: #e74c3c; font-weight: 700; }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .top-bar { display: none; }
+            .invoice-box { border: none; border-radius: 0; padding: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="top-bar">
+        <h2>Invoice</h2>
+        <button class="btn-print" onclick="window.print()">⬇ Download / Print</button>
+    </div>
+    <div id="invoiceWrap"><p class="loading">Loading…</p></div>
+</div>
+
+<script src="config.js"></script>
+<script src="js/supabase-client.js?v=12"></script>
+<script>
+(async () => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    if (!id) { document.getElementById('invoiceWrap').innerHTML = '<p class="error">No invoice ID provided.</p>'; return; }
+
+    const { data: inv, error } = await supabaseClient.client
+        .from('invoices')
+        .select('*, clubs(id, name, "Club Name")')
+        .eq('id', parseInt(id))
+        .single();
+
+    if (error || !inv) { document.getElementById('invoiceWrap').innerHTML = '<p class="error">Invoice not found.</p>'; return; }
+
+    document.title = `Invoice #${inv.invoice_number}`;
+
+    const clubName = inv.clubs?.['Club Name'] || inv.clubs?.name || '—';
+    const lineItems = inv.line_items || [];
+    const lineRows = lineItems.map(li => `
+        <tr>
+            <td>${li.qty || 1}</td>
+            <td>${li.description || ''}</td>
+            <td class="right">$${parseFloat(li.unit_price || 0).toFixed(2)}</td>
+            <td class="right">$${parseFloat(li.total || 0).toFixed(2)}</td>
+        </tr>`).join('');
+
+    const sentDate = inv.sent_at ? new Date(inv.sent_at).toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'}) : '—';
+    const total = parseFloat(inv.total_due || 0).toFixed(2);
+    const subtotal = parseFloat(inv.subtotal || inv.total_due || 0).toFixed(2);
+
+    document.getElementById('invoiceWrap').innerHTML = `
+        <div class="invoice-box">
+            <div class="inv-header">
+                <div class="inv-from">
+                    <div class="inv-from-name">Tod L. Smith &amp; Eric Baughman</div>
+                    <div class="inv-from-addr">29 Yorkshire Terrace Apt 02, Shrewsbury, MA 01545</div>
+                </div>
+                <div class="inv-meta">
+                    <div class="inv-meta-label">Invoice</div>
+                    <div class="inv-meta-num">INVOICE # ${inv.invoice_number || '—'}</div>
+                    <div class="inv-meta-num">DATE: ${sentDate}</div>
+                    <div class="inv-meta-num">SEASON: ${inv.season || '—'}</div>
+                </div>
+            </div>
+            <div class="inv-to">
+                <div class="inv-section-label">To:</div>
+                <div class="inv-to-name">${clubName}</div>
+            </div>
+            ${inv.comments ? `<div style="margin-bottom:20px;"><div class="inv-section-label">Comments:</div><div class="inv-comments-text">${inv.comments}</div></div>` : ''}
+            <table class="inv-table">
+                <thead>
+                    <tr>
+                        <th style="width:60px;">Quantity</th>
+                        <th>Description</th>
+                        <th class="right" style="width:90px;">Unit Price</th>
+                        <th class="right" style="width:80px;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>${lineRows || '<tr><td colspan="4" style="color:#aaa; font-style:italic;">No line items</td></tr>'}</tbody>
+            </table>
+            <div style="display:flex; justify-content:flex-end;">
+                <table class="inv-totals">
+                    <tr><td>SUBTOTAL</td><td>$${subtotal}</td></tr>
+                    <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+                    <tr class="total-row"><td>TOTAL DUE</td><td>$${total}</td></tr>
+                </table>
+            </div>
+            <div class="inv-payment">CHECK OR VENMO: @Advocate4tk</div>
+            <div class="inv-thanks">Thank You For Your Business!</div>
+        </div>`;
+})();
+</script>
+</body>
+</html>
