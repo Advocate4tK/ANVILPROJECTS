@@ -5066,13 +5066,20 @@
 
         // ── Init ─────────────────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
+            const focusGameId  = new URLSearchParams(window.location.search).get('game');
+            const tournamentKey = new URLSearchParams(window.location.search).get('tournament');
+
+            // Tournament fetch MUST complete before openWorkstation() checks window.tournamentMode.
+            // Create a promise here; the tournament init block below resolves it.
+            // openWorkstation() awaits this promise so it never runs before the fetch completes.
+            if (tournamentKey) {
+                window._tournamentModeReady = new Promise(resolve => { window._resolveTournamentReady = resolve; });
+            }
+
             // Auth drives the profile — hide doorway immediately for non-admin users.
-            // loadProfiles() will auto-open from the auth session. Only Admin sees the picker.
             const doorway = document.getElementById('profileDoorway');
             if (doorway) doorway.style.display = 'none';
             loadProfiles();
-
-            const focusGameId = new URLSearchParams(window.location.search).get('game');
 
             if (focusGameId) {
                 // Show the banner immediately
@@ -5138,6 +5145,7 @@
                         const _sl = document.getElementById('scheduleViewLink');
                         if (_sl) _sl.href = `club-game-submit.html?tournament=${encodeURIComponent(tKey)}&assignor=true&view=schedule`;
                     } catch(e) { console.error('Tournament config fetch failed:', e); }
+                    finally { if (window._resolveTournamentReady) window._resolveTournamentReady(); }
                 })();
                 // loadAll fires from openWorkstation() after profile is selected
             } else if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
