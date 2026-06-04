@@ -1504,10 +1504,13 @@
                     }).join('')
                     : '<span class="staging-empty">No refs available this date</span>';
 
-                const isCancelled = cancelledGameIds.has(gid) || g.fields['Game Status'] === 'Cancelled';
+                const isCancelled        = cancelledGameIds.has(gid) || g.fields['Game Status'] === 'Cancelled';
+                const isChangeReq2       = (g.fields['Game Status'] || '') === 'Change Requested';
+                const isCancelReq2       = isChangeReq2 && /\[CANCELLATION REQUEST/i.test(g.fields['Notes'] || '');
                 html += `<div class="staging-row ${fullyAssigned ? 'fully-assigned' : ''} ${isCancelled ? 'cancelled' : ''}" id="srow-${gid}">
                     <div class="staging-card-area">
                         ${buildGameCardInner(g)}
+                        ${isCancelReq2 ? `<div style="margin-top:4px;padding:0 4px;"><span style="background:#dc2626;color:white;font-size:0.65rem;font-weight:800;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;">🚫 Cancellation Request</span></div>` : isChangeReq2 ? `<div style="margin-top:4px;padding:0 4px;"><span style="background:#f59e0b;color:white;font-size:0.65rem;font-weight:800;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;">⚠ Change Request</span></div>` : ''}
                     </div>
                     <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
                         <div style="padding:4px 8px 2px;display:flex;align-items:center;gap:6px;">
@@ -1545,8 +1548,10 @@
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
                 const fullyAssigned = cRef && (age === 'U8' || (ar1 && ar2));
-                const isCancelled   = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
-                const isU8          = age === 'U8';
+                const isCancelled      = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
+                const isChangeRequested = (f['Game Status'] || '') === 'Change Requested';
+                const isCancelRequest   = isChangeRequested && /\[CANCELLATION REQUEST/i.test(f['Notes'] || '');
+                const isU8             = age === 'U8';
 
                 // Available refs for this date in staged order, filtered by club preference
                 const gameDate  = f['Date'] || '';
@@ -1611,6 +1616,7 @@
                     <div class="cmd-game-info">
                         <div class="cg-title">${home} vs ${away}</div>
                         <div class="cg-meta">${date}${time ? ' @ ' + time : ''}${age ? ' · ' + age : ''}${club ? ' · ' + club : ''}</div>
+                        ${isCancelRequest ? `<div style="margin-top:4px;"><span style="background:#dc2626;color:white;font-size:0.68rem;font-weight:800;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;">🚫 Cancellation Request</span></div>` : isChangeRequested ? `<div style="margin-top:4px;"><span style="background:#f59e0b;color:white;font-size:0.68rem;font-weight:800;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;">⚠ Change Request</span></div>` : ''}
                     </div>
                     <div class="cmd-strips">
                         ${buildStrip('Center Referee', 'CR',  cRef, f['Center Referee'])}
@@ -6127,8 +6133,7 @@
             const filtered = allGames.filter(g => {
                 // When opened from schedule-changes, only show the focused game
                 if (focusGameId) return String(g.id) === String(focusGameId);
-                // In normal workstation view, hide change-requested games (handled by schedule-changes page)
-                if ((g.fields['Game Status'] || '') === 'Change Requested') return false;
+                // Change Requested games stay visible — hidden only after assignor acts (cancel/resolve)
                 // Cancelled games bypass most filters but still respect the club pill selection
                 const isCancelledGame = cancelledGameIds.has(g.id) || g.fields['Game Status'] === 'Cancelled';
                 if (isCancelledGame) {
