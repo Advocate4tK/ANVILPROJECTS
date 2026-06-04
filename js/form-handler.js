@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            const dayRows        = document.querySelectorAll('.day-row');
+            const dayRows        = window._tournamentMode ? [] : [...document.querySelectorAll('.day-row')];
             const tournChecked   = [...document.querySelectorAll('input[name="tournament_sessions"]:checked')];
             const tournWindows   = [...document.querySelectorAll('.tw-row')].filter(r => r.querySelector('select[name="tourn_arrive"]')?.value);
             if (!dayRows.length && !tournChecked.length && !tournWindows.length) throw new Error('No availability dates or tournament sessions selected.');
