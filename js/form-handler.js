@@ -49,16 +49,22 @@ document.addEventListener('DOMContentLoaded', function() {
         const dayRows       = document.querySelectorAll('.day-row');
         const tournSessions = document.querySelectorAll('input[name="tournament_sessions"]:checked');
         const tournWindows  = [...document.querySelectorAll('.tw-row')].filter(r => r.querySelector('select[name="tourn_arrive"]')?.value);
-        if (!dayRows.length && !tournSessions.length && !tournWindows.length) {
-            missing.push('At least one availability date or tournament time window');
+        if (window._tournamentMode) {
+            if (!tournSessions.length && !tournWindows.length) {
+                missing.push('At least one availability date or tournament time window');
+            }
         } else {
-            dayRows.forEach((row, i) => {
-                const n = i + 1;
-                if (!row.querySelector('input[name="availableDate[]"]')?.value) missing.push(`Day ${n}: Date`);
-                if (!row.querySelector('[name="startTime[]"]')?.value)          missing.push(`Day ${n}: Start Time`);
-                if (!row.querySelector('[name="endTime[]"]')?.value)            missing.push(`Day ${n}: End Time`);
-                if (!row.querySelector('input[name="maxGames[]"]')?.value)      missing.push(`Day ${n}: Max Games`);
-            });
+            if (!dayRows.length && !tournSessions.length && !tournWindows.length) {
+                missing.push('At least one availability date or tournament time window');
+            } else {
+                dayRows.forEach((row, i) => {
+                    const n = i + 1;
+                    if (!row.querySelector('input[name="availableDate[]"]')?.value) missing.push(`Day ${n}: Date`);
+                    if (!row.querySelector('[name="startTime[]"]')?.value)          missing.push(`Day ${n}: Start Time`);
+                    if (!row.querySelector('[name="endTime[]"]')?.value)            missing.push(`Day ${n}: End Time`);
+                    if (!row.querySelector('input[name="maxGames[]"]')?.value)      missing.push(`Day ${n}: Max Games`);
+                });
+            }
         }
 
         const prompt = document.getElementById('missingFieldsPrompt');
