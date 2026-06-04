@@ -382,8 +382,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // Validate each day row
-        const dayRows = document.querySelectorAll('.day-row');
+        // Validate each day row — skip in tournament mode (day rows are hidden)
+        const dayRows = window._tournamentMode ? [] : document.querySelectorAll('.day-row');
         for (let i = 0; i < dayRows.length; i++) {
             const row = dayRows[i];
             const date = row.querySelector('input[name="availableDate[]"]').value;
