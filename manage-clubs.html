@@ -518,7 +518,7 @@
                     </div>
 
                     <!-- Pay Types -->
-                    <div style="margin-bottom:20px;">
+                    <div id="payMethodsSection" style="margin-bottom:20px;">
                         <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; margin-bottom:8px;">Payment Methods Accepted</div>
                         <div style="display:flex; gap:16px; flex-wrap:wrap;">
                             <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;">
@@ -552,6 +552,19 @@
                         <div style="font-size:0.76rem; color:#888; font-family:'DM Sans',sans-serif;">Non-weather cancellations at or after this point → refs get paid</div>
                     </div>
                     </div><!-- /payClubOnlyParts -->
+
+                    <!-- Payment Methods — shown for ALL entities (clubs + tournaments) -->
+                    <div id="payMethodsAll" style="margin-bottom:20px; display:none;">
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; margin-bottom:8px;">Payment Methods Accepted</div>
+                        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                            <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;"><input type="checkbox" id="paytype_t_venmo" value="venmo" style="width:16px;height:16px;cursor:pointer;"> Venmo</label>
+                            <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;"><input type="checkbox" id="paytype_t_check" value="check" style="width:16px;height:16px;cursor:pointer;"> Check</label>
+                            <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;"><input type="checkbox" id="paytype_t_cashapp" value="cashapp" style="width:16px;height:16px;cursor:pointer;"> Cash App</label>
+                            <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;"><input type="checkbox" id="paytype_t_cash" value="cash" style="width:16px;height:16px;cursor:pointer;"> Cash at Field</label>
+                            <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;"><input type="checkbox" id="paytype_t_dd" value="dd" style="width:16px;height:16px;cursor:pointer;"> Direct Deposit</label>
+                            <label style="display:flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:#09142a; cursor:pointer;"><input type="checkbox" id="paytype_t_zelle" value="zelle" style="width:16px;height:16px;cursor:pointer;"> Zelle</label>
+                        </div>
+                    </div>
 
                     <!-- Tournament pay rates (shown only for tournaments) -->
                     <div id="payTourneyParts" style="display:none; margin-bottom:6px;">
@@ -3161,13 +3174,20 @@
         document.getElementById('payClubOnlyParts').style.display = isTournament ? 'none' : 'block';
         document.getElementById('payTourneyParts').style.display  = isTournament ? 'block' : 'none';
         document.getElementById('payRecCompWrap').style.display   = isTournament ? 'none' : 'block';
+        document.getElementById('payMethodsAll').style.display    = isTournament ? 'block' : 'none';
         const loading = '<tr><td colspan="4" style="padding:12px; color:#aaa; font-family:\'DM Sans\',sans-serif;">Loading…</td></tr>';
         try {
             if (isTournament) {
                 document.getElementById('payTourneyBody').innerHTML = loading;
                 const { data, error } = await supabaseClient.client
-                    .from('tournaments').select('age_groups').eq('id', entityId).single();
+                    .from('tournaments').select('age_groups, payment_methods').eq('id', entityId).single();
                 if (error) throw new Error(error.message);
+                // Load payment methods for tournament
+                const tMethods = (data.payment_methods || '').split(',').map(s => s.trim()).filter(Boolean);
+                ['venmo','check','cashapp','cash','dd','zelle'].forEach(m => {
+                    const cb = document.getElementById('paytype_t_' + m);
+                    if (cb) cb.checked = tMethods.includes(m);
+                });
                 const ags = Array.isArray(data.age_groups) ? data.age_groups : [];
                 const inp = 'style="width:70px; padding:4px 6px; border:1.5px solid #e2d9ce; border-radius:5px; font-family:\'DM Sans\',sans-serif; font-size:0.85rem; text-align:right;"';
                 document.getElementById('payTourneyBody').innerHTML = ags.length
@@ -3245,8 +3265,10 @@
                     ar:      parseFloat(document.getElementById(`pay_ar_t${i}`)?.value)   || null,
                     solo_cr: parseFloat(document.getElementById(`pay_solo_t${i}`)?.value) || null
                 }));
+                const tPayMethods = ['venmo','check','cashapp','cash','dd','zelle']
+                    .filter(m => document.getElementById('paytype_t_' + m)?.checked).join(',');
                 const { error: upErr } = await supabaseClient.client
-                    .from('tournaments').update({ age_groups: updated }).eq('id', entityId);
+                    .from('tournaments').update({ age_groups: updated, payment_methods: tPayMethods || null }).eq('id', entityId);
                 if (upErr) throw new Error(upErr.message);
                 msg.textContent = `✅ Saved — ${updated.length} age group${updated.length !== 1 ? 's' : ''} configured.`;
                 msg.style.color = '#15803d'; msg.style.display = 'block';
