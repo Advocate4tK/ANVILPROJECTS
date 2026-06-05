@@ -352,6 +352,17 @@
             #payContent { overflow-x: auto; }
         }
 
+        /* ── Pay portal — mobile cards ── */
+        .pay-card-m { display:flex; align-items:center; gap:10px; background:#dbeafe; border-radius:10px; padding:13px 14px; margin-bottom:9px; flex-wrap:wrap; transition:background 0.2s; }
+        .pay-card-m.paid { background:#bbf7d0; }
+        .pay-card-m-date { font-size:0.7rem; color:#666; white-space:nowrap; min-width:42px; }
+        .pay-card-m-ref { flex:1; font-weight:700; color:#1a2e4a; font-size:0.95rem; min-width:90px; }
+        .pay-card-m-amount { font-size:1.05rem; font-weight:800; color:#1a2e4a; font-family:'JetBrains Mono',monospace; white-space:nowrap; }
+        .pay-card-m-actions { display:flex; align-items:center; gap:10px; margin-left:auto; }
+        .pay-card-m-venmo { display:inline-flex; align-items:center; gap:8px; background:#3D95CE; border-radius:10px; padding:11px 16px; text-decoration:none; }
+        .pay-card-m-venmo .vl-badge { width:32px; height:32px; font-size:1.2rem; border-radius:6px; }
+        .pay-card-m-venmo span:last-child { font-size:0.88rem; font-weight:700; color:#fff; }
+
         /* ── Portal choice screen ── */
         .portal-choice { max-width:500px; margin:0 auto 24px; }
         .portal-choice h2 { color:#0f3460; font-size:1.1rem; margin-bottom:4px; }
@@ -3246,22 +3257,84 @@
                 return html;
             }
 
+            function buildGameCardsMobile(gameList, allowPay) {
+                let cards = '';
+                gameList.forEach(r => {
+                    const f = r.fields;
+                    const date = f['Date'] || '';
+                    const dateDisplay = date ? new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '—';
+                    const age = f['Age Group'] || '';
+                    const slots = [
+                        { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
+                        { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
+                        { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
+                    ].filter(s => s.name && s.name.toUpperCase() !== 'EMPTY');
+                    const isSolo = slots.length === 1 && slots[0].pos === 'CR';
+                    slots.forEach(slot => {
+                        const rf         = resolveRef(slot.name);
+                        const venmo      = rf['venmo'] || '';
+                        const payMethod  = rf['payment_method'] || 'venmo';
+                        const rate       = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                        const venmoHandle = venmo.replace(/^@/, '');
+                        const venmoNote  = encodeURIComponent(`${_payClubName} - ${slot.pos} ${date}`);
+                        const slotPaid   = !!(slotPaidMap[r.id] && slotPaidMap[r.id][slot.pos]) || !!paidAtById[r.id];
+                        const refDisplay = rf['name'] || slot.name;
+                        const zipRaw     = String(rf['Zip Code'] || '');
+                        const zip        = zipRaw && zipRaw.length === 4 ? '0' + zipRaw : zipRaw;
+                        const address    = [rf['address'], rf['city'], rf['state'], zip].filter(Boolean).join(', ');
+                        const cardId     = `mc_${r.id}_${slot.pos}`;
+
+                        const isCheck = payMethod === 'check' || !clubPayMethods.includes('venmo');
+                        let actionHtml = '';
+                        if (isCheck) {
+                            actionHtml = `<div>
+                                <span onclick="document.getElementById('${cardId}_addr').style.display=document.getElementById('${cardId}_addr').style.display==='none'?'block':'none'" style="font-weight:700; color:#1a2e4a; cursor:pointer; text-decoration:underline dotted; font-size:0.95rem;">${refDisplay} ▾</span>
+                                <div id="${cardId}_addr" style="display:none; margin-top:6px; font-size:0.8rem; color:#92400e; background:#fef3c7; border-radius:7px; padding:8px 12px; line-height:1.6;">${address || 'No address on file'}</div>
+                            </div>`;
+                        } else if (venmo && clubPayMethods.includes('venmo')) {
+                            actionHtml = `<a class="pay-card-m-venmo" href="venmo://paycharge?txn=pay&recipients=${venmoHandle}&amount=${rate}&note=${venmoNote}" target="_blank">
+                                <span class="vl-badge" style="display:inline-flex;align-items:center;justify-content:center;background:#3D95CE;border-radius:6px;color:white;font-size:1.2rem;font-weight:900;font-style:italic;width:32px;height:32px;">V</span>
+                                <span style="font-size:0.88rem;font-weight:700;color:#fff;">Pay via Venmo</span>
+                            </a>`;
+                        } else {
+                            actionHtml = `<span style="font-size:0.78rem;color:#94a3b8;">No payment info</span>`;
+                        }
+
+                        const cbHtml = allowPay
+                            ? `<button class="pay-slot-cb${slotPaid ? ' paid' : ''}" onclick="markRefSlotPaidMobile('${r.id}','${slot.pos}',this,'${cardId}')" data-amount="${rate}">${slotPaid ? '✓' : ''}</button>`
+                            : '';
+
+                        cards += `<div class="pay-card-m${slotPaid ? ' paid' : ''}" id="${cardId}">
+                            <div class="pay-card-m-date">${dateDisplay}</div>
+                            ${isCheck ? `<div style="flex:1; min-width:120px;">${actionHtml}</div>` : `<div class="pay-card-m-ref">${refDisplay}</div>`}
+                            <div class="pay-card-m-amount">$${rate}</div>
+                            <div class="pay-card-m-actions">${isCheck ? '' : actionHtml}${cbHtml}</div>
+                        </div>`;
+                    });
+                });
+                return cards || '<p style="color:#888;font-size:0.85rem;padding:8px 0;">None.</p>';
+            }
+
+            const _isMobile = window.innerWidth <= 640;
+
+            const _hdr = (txt, mt) => `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1.5px; margin:${mt} 0 ${_isMobile ? '10px' : '12px'};">${txt}</div>`;
+
             let html = '';
-            if (upcomingGames.length) {
-                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1.5px; margin:0 0 10px;">Upcoming</div>`;
+            if (upcomingGames.length && !_isMobile) {
+                html += _hdr('Upcoming', '0');
                 html += buildGameRows(upcomingGames, false, false);
             }
             if (cancelledPayGames.length) {
-                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#b91c1c; text-transform:uppercase; letter-spacing:1px; margin:${upcomingGames.length ? '14px' : '0'} 0 12px; display:flex; align-items:center; gap:8px;">📋 Cancelled — Refs Due Payment</div>`;
-                html += buildGameRows(cancelledPayGames, true, false);
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#b91c1c; text-transform:uppercase; letter-spacing:1px; margin:${upcomingGames.length && !_isMobile ? '14px' : '0'} 0 12px; display:flex; align-items:center; gap:8px;">📋 Cancelled — Refs Due Payment</div>`;
+                html += _isMobile ? buildGameCardsMobile(cancelledPayGames, true) : buildGameRows(cancelledPayGames, true, false);
             }
             if (needsPaymentGames.length) {
-                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1.5px; margin:${(upcomingGames.length || cancelledPayGames.length) ? '20px' : '0'} 0 12px;">Needs Payment</div>`;
-                html += buildGameRows(needsPaymentGames, true, false);
+                html += _hdr('Needs Payment', (cancelledPayGames.length || (upcomingGames.length && !_isMobile)) ? '20px' : '0');
+                html += _isMobile ? buildGameCardsMobile(needsPaymentGames, true) : buildGameRows(needsPaymentGames, true, false);
             }
             if (completedGames.length) {
-                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1.5px; margin:${(upcomingGames.length || cancelledPayGames.length || needsPaymentGames.length) ? '20px' : '0'} 0 12px;">Complete</div>`;
-                html += buildGameRows(completedGames, true, true);
+                html += _hdr('Complete', (needsPaymentGames.length || cancelledPayGames.length || (upcomingGames.length && !_isMobile)) ? '20px' : '0');
+                html += _isMobile ? buildGameCardsMobile(completedGames, true) : buildGameRows(completedGames, true, true);
             }
             if (!cancelledPayGames.length && !needsPaymentGames.length && !completedGames.length && !upcomingGames.length) {
                 html = '<p style="color:#888; font-size:0.85rem;">No games with assigned refs yet.</p>';
@@ -3336,6 +3409,33 @@
                 if (footerRow) footerRow.style.background = '#bbf7d0';
             }
         } catch(e) { /* non-critical — individual payments already saved */ }
+    }
+
+    async function markRefSlotPaidMobile(gameId, slot, btn, cardId) {
+        const wasPaid = btn.classList.contains('paid');
+        btn.disabled = true;
+        try {
+            const card = document.getElementById(cardId);
+            if (wasPaid) {
+                await supabaseClient.client.from('ref_payments').delete().eq('game_id', gameId).eq('slot', slot);
+                btn.classList.remove('paid');
+                btn.textContent = '';
+                if (card) card.classList.remove('paid');
+            } else {
+                const now    = new Date().toISOString();
+                const amount = parseFloat(btn.dataset.amount || 0);
+                await supabaseClient.client.from('ref_payments').upsert(
+                    { game_id: gameId, slot, paid_at: now, amount },
+                    { onConflict: 'game_id,slot' }
+                );
+                btn.classList.add('paid');
+                btn.textContent = '✓';
+                if (card) card.classList.add('paid');
+            }
+        } catch(e) {
+            alert('Could not save: ' + e.message);
+        }
+        btn.disabled = false;
     }
 
     async function markGamePaid(gameId, btn) {
