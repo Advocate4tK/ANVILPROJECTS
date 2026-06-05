@@ -947,7 +947,9 @@
         document.getElementById('submitterBadge').style.display = 'flex';
         if (!new URLSearchParams(window.location.search).has('assignor')) loadAssignorBanner();
         const [f1, ...rest] = currentSubmitter.split(' ');
-        localStorage.setItem(SUBMITTER_KEY, JSON.stringify({ first: f1, last: rest.join(' ') }));
+        if (currentSubmitter.toLowerCase() !== 'admin override') {
+            localStorage.setItem(SUBMITTER_KEY, JSON.stringify({ first: f1, last: rest.join(' ') }));
+        }
         // Record club portal access — fire and forget
         if (currentClubRecord?.id) {
             supabaseClient.client.from('clubs')
@@ -1279,8 +1281,13 @@
         // Pre-fill saved submitter name — but always require explicit login, no auto-passthrough
         const saved = JSON.parse(localStorage.getItem(SUBMITTER_KEY) || 'null');
         if (saved && saved.first && saved.last) {
-            document.getElementById('dwFirst').value = saved.first;
-            document.getElementById('dwLast').value  = saved.last;
+            // Don't pre-fill admin override — clear it if saved
+            if (`${saved.first} ${saved.last}`.toLowerCase() === 'admin override') {
+                localStorage.removeItem(SUBMITTER_KEY);
+            } else {
+                document.getElementById('dwFirst').value = saved.first;
+                document.getElementById('dwLast').value  = saved.last;
+            }
         }
     });
 
