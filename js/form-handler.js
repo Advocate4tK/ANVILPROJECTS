@@ -454,6 +454,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const [h, m] = t.split(':').map(Number);
             return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
         };
+        // Tournament mode: show checked session blocks instead of day rows
+        if (window._tournamentMode) {
+            const checked = [...document.querySelectorAll('input[name="tournament_sessions"]:checked')];
+            if (!checked.length) return '  No sessions selected.';
+            return checked.map(cb => `  ${cb.dataset.label} ${cb.dataset.session}  |  ${fmt(cb.dataset.start)} – ${fmt(cb.dataset.end)}`).join('\n');
+        }
         return Array.from(document.querySelectorAll('.day-row')).map((row, i) => {
             const date  = row.querySelector('input[name="availableDate[]"]').value;
             const start = row.querySelector('[name="startTime[]"]').value;
@@ -472,7 +478,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const email     = document.getElementById('refereeEmail').value.trim();
         if (!email) return;
 
-        const clubs     = getCheckboxValues('locations').join(', ') || 'None selected';
+        const clubs     = window._tournamentMode
+            ? (document.querySelector('#tournamentSubtitle')?.textContent || 'Tournament')
+            : (getCheckboxValues('locations').join(', ') || 'None selected');
         const ageGroups = getCheckboxValues('ageGroups').join(', ') || 'No preference';
         const arOnly    = document.getElementById('arOnly').value || '—';
         const notes     = document.getElementById('notes').value.trim() || 'None';
