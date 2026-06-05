@@ -454,11 +454,21 @@ document.addEventListener('DOMContentLoaded', function() {
             const [h, m] = t.split(':').map(Number);
             return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
         };
-        // Tournament mode: show checked session blocks instead of day rows
+        // Tournament mode: session checkboxes OR arrive/leave time windows
         if (window._tournamentMode) {
             const checked = [...document.querySelectorAll('input[name="tournament_sessions"]:checked')];
-            if (!checked.length) return '  No sessions selected.';
-            return checked.map(cb => `  ${cb.dataset.label} ${cb.dataset.session}  |  ${fmt(cb.dataset.start)} – ${fmt(cb.dataset.end)}`).join('\n');
+            const windows = [...document.querySelectorAll('.tw-row')].filter(r => r.querySelector('select[name="tourn_arrive"]')?.value);
+            if (!checked.length && !windows.length) return '  No sessions selected.';
+            const checkLines = checked.map(cb => `  ${cb.dataset.label} ${cb.dataset.session}  |  ${fmt(cb.dataset.start)} – ${fmt(cb.dataset.end)}`);
+            const windowLines = windows.map(row => {
+                const arrive = row.querySelector('select[name="tourn_arrive"]');
+                const depart = row.querySelector('select[name="tourn_depart"]');
+                const label  = arrive.dataset.label || arrive.dataset.date || '';
+                const arrTxt = arrive.options[arrive.selectedIndex]?.text || arrive.value;
+                const depTxt = depart?.options[depart.selectedIndex]?.text || depart?.value || '';
+                return `  ${label}  |  Arrive: ${arrTxt}${depTxt ? ' — Leave: ' + depTxt : ''}`;
+            });
+            return [...checkLines, ...windowLines].join('\n');
         }
         return Array.from(document.querySelectorAll('.day-row')).map((row, i) => {
             const date  = row.querySelector('input[name="availableDate[]"]').value;
