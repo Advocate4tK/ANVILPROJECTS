@@ -510,6 +510,11 @@
                                 🔗 Open Pay Portal ↗
                             </a>
                         </div>
+                        <div style="margin-top:12px; display:flex; align-items:center; gap:10px;">
+                            <label style="font-family:'DM Sans',sans-serif; font-size:0.85rem; font-weight:700; color:#c0392b; white-space:nowrap;">🔒 Portal PIN</label>
+                            <input type="text" id="payPortalPinInline" placeholder="e.g. 4821" maxlength="12" autocomplete="off" style="padding:6px 10px; border:1.5px solid #c0392b; border-radius:7px; font-size:0.88rem; font-family:'DM Sans',sans-serif; background:#fff5f5; font-weight:700; letter-spacing:2px; width:130px;">
+                            <span style="font-family:'DM Sans',sans-serif; font-size:0.78rem; color:#166534;">Pay coordinator enters this to access the portal.</span>
+                        </div>
                     </div>
 
                     <!-- Pay Types -->
@@ -1159,18 +1164,40 @@
                 if (error) throw new Error(error.message);
                 card.innerHTML = ccBuildTournamentCard(t);
             } else {
-                const [clubRes, ratesRes, billingRes] = await Promise.all([
+                const [clubRes, ratesRes] = await Promise.all([
                     supabaseClient.client.from('clubs')
-                        .select('id, name, "Club Name", president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, payment_coordinator_phone, assignor, "Assignor Email", "Assignor Phone", payment_portal_enabled')
+                        .select('id, name, "Club Name", "Source Club", president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, payment_coordinator_phone, assignor, "Assignor Email", "Assignor Phone", payment_portal_enabled')
                         .eq('id', parseInt(entityId)).single(),
                     supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(entityId)).order('age_group'),
-                    supabaseClient.client.from('club_contracts').select('*').eq('club_id', parseInt(entityId)).order('created_at', { ascending: false }).limit(1).maybeSingle()
                 ]);
                 if (clubRes.error) throw new Error(clubRes.error.message);
                 const c = clubRes.data;
-                const venueRes = await supabaseClient.client
-                    .from('venues').select('id').eq('club_name', c['Club Name'] || c.name || '');
-                card.innerHTML = ccBuildClubCard(c, ratesRes.data || [], (venueRes.data || []).length, billingRes.data || null);
+                const sourceClub = c['Source Club'] || c['Club Name'] || c.name || '';
+
+                // Game stats + venue count
+                const today = new Date();
+                const sun = new Date(today); sun.setDate(today.getDate() - today.getDay());
+                const sat = new Date(sun);   sat.setDate(sun.getDate() + 6);
+                const weekStart = sun.toISOString().split('T')[0];
+                const weekEnd   = sat.toISOString().split('T')[0];
+
+                const [gameRes, venueRes, lastUploadRes] = await Promise.all([
+                    supabaseClient.client.from('games').select('id, date, "Center Referee"').eq('"Source Club"', sourceClub),
+                    supabaseClient.client.from('venues').select('id').eq('club_name', c['Club Name'] || c.name || ''),
+                    supabaseClient.client.from('games').select('created_at, "Uploaded By"').eq('"Source Club"', sourceClub).order('created_at', { ascending: false }).limit(1)
+                ]);
+
+                const allGames     = gameRes.data || [];
+                const thisWeekGames = allGames.filter(g => g.date >= weekStart && g.date <= weekEnd);
+                const gameStats = {
+                    total:      allGames.length,
+                    thisWeek:   thisWeekGames.length,
+                    unassigned: thisWeekGames.filter(g => !g['Center Referee']).length,
+                    venueCount: (venueRes.data || []).length,
+                    lastUpload: (lastUploadRes.data || [])[0] || null
+                };
+
+                card.innerHTML = ccBuildClubCard(c, ratesRes.data || [], gameStats);
             }
         } catch(e) {
             card.innerHTML = `<div style="color:#e74c3c; font-family:'DM Sans',sans-serif; font-size:0.85rem; padding:6px 0;">Could not load: ${e.message}</div>`;
@@ -3157,7 +3184,7 @@
             document.getElementById('payRatesBodyComp').innerHTML = loading;
             const [ratesRes, clubRes] = await Promise.all([
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(entityId)),
-                supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day, payment_portal_enabled, payment_portal_start_date').eq('id', parseInt(entityId)).single()
+                supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day, payment_portal_enabled, payment_portal_start_date, payment_portal_pin').eq('id', parseInt(entityId)).single()
             ]);
             if (ratesRes.error) throw new Error(ratesRes.error.message);
             const existing = {};
@@ -3185,6 +3212,8 @@
                 linkA.textContent = `🔗 Open ${clubName} Pay Portal ↗`;
                 linkDiv.style.display = portalEnabled ? 'block' : 'none';
             }
+            const pinInline = document.getElementById('payPortalPinInline');
+            if (pinInline) pinInline.value = clubRes.data?.payment_portal_pin || '';
         } catch(e) {
             const err = `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
             if (isTournament) {
@@ -3245,7 +3274,8 @@
             const cutoffDay = document.getElementById('cancellationCutoffDay')?.value || 'thursday';
             const portalEnabled   = document.getElementById('payPortalEnabled')?.checked || false;
             const portalStartDate = document.getElementById('payPortalStartDate')?.value || null;
-            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null, cancellation_cutoff_day: cutoffDay, payment_portal_enabled: portalEnabled, payment_portal_start_date: portalStartDate }).eq('id', parseInt(entityId));
+            const portalPin       = document.getElementById('payPortalPinInline')?.value.trim() || null;
+            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null, cancellation_cutoff_day: cutoffDay, payment_portal_enabled: portalEnabled, payment_portal_start_date: portalStartDate, payment_portal_pin: portalPin }).eq('id', parseInt(entityId));
             msg.textContent = `✅ Saved — ${rows.length} age group${rows.length !== 1 ? 's' : ''} configured.`;
             msg.style.color = '#15803d'; msg.style.display = 'block';
         } catch(e) {
