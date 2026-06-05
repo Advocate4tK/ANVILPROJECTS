@@ -356,14 +356,15 @@ class SupabaseClientWrapper {
      */
     async findRefereeByEmail(email) {
         try {
-            // Check primary email first
+            const normalizedEmail = (email || '').trim().toLowerCase();
+            // Check primary email first — ilike for case-insensitive match
             const { data: d1, error: e1 } = await this.client
-                .from('referees').select('*').eq('email', email).limit(1);
+                .from('referees').select('*').ilike('email', normalizedEmail).limit(1);
             if (!e1 && d1 && d1.length > 0) return this._wrap(d1[0]);
 
             // Fall back to Email 2 (column name has a space — can't use .or())
             const { data: d2, error: e2 } = await this.client
-                .from('referees').select('*').eq('Email 2', email).limit(1);
+                .from('referees').select('*').ilike('Email 2', normalizedEmail).limit(1);
             if (!e2 && d2 && d2.length > 0) return this._wrap(d2[0]);
 
             return null;
