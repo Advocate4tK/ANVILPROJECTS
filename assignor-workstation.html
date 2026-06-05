@@ -935,7 +935,7 @@
                         <!-- Row 1: Title + Refresh -->
                         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
                             <span id="refsPanelTitle" style="font-size:1rem; font-weight:700; letter-spacing:0.5px;">👤 Referees</span>
-                            <button onclick="renderRefs(document.getElementById('refSearch').value.toLowerCase())" title="Refresh" style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:6px; padding:3px 8px; font-size:0.78rem; cursor:pointer; color:white; font-family:inherit;">↻ Refresh</button>
+                            <button onclick="window.tournamentMode ? refreshTournamentRefs() : renderRefs(document.getElementById('refSearch').value.toLowerCase())" title="Refresh" style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:6px; padding:3px 8px; font-size:0.78rem; cursor:pointer; color:white; font-family:inherit;">↻ Refresh</button>
                         </div>
                         <!-- Row 2: Search -->
                         <input type="text" id="refSearch" placeholder="Search referee by name..." oninput="renderRefs(this.value.toLowerCase())" style="width:100%; padding:5px 9px; border:1px solid rgba(255,255,255,0.3); border-radius:6px; font-size:0.78rem; font-family:inherit; background:rgba(255,255,255,0.12); color:white; box-sizing:border-box; margin-bottom:7px;">
@@ -3736,6 +3736,32 @@
             // Refs pane: RTL means scrollLeft=0 is rightmost — force to leftmost on every render
             const _refsPane = document.getElementById('s3refsPane');
             if (_refsPane) _refsPane.scrollLeft = -99999;
+        }
+
+        async function refreshTournamentRefs() {
+            const btn = document.querySelector('[onclick*="refreshTournamentRefs"]');
+            if (btn) { btn.textContent = '↻ Loading…'; btn.disabled = true; }
+            try {
+                const tKey = new URLSearchParams(window.location.search).get('tournament');
+                const { data, error } = await supabaseClient.client.from('availability')
+                    .select('*').eq('tournament_key', tKey);
+                if (!error && data) {
+                    allAvail = data.map(r => ({ id: r.id, fields: {
+                        'Referee Name':        r['Referee Name'] || '',
+                        'Date':                r['date'] || '',
+                        'Start Time':          r['Start Time'] || '',
+                        'End Time':            r['End Time'] || '',
+                        'Preferred Locations': r['Preferred Locations'] || '',
+                        'notes':               r['notes'] || r['Notes'] || '',
+                        'available':           true,
+                        'tournament_key':      r['tournament_key'] || '',
+                    }}));
+                    sheet3CachedRefRows = null;
+                    renderSheet3View(sheet3LastFiltered);
+                }
+            } finally {
+                if (btn) { btn.textContent = '↻ Refresh'; btn.disabled = false; }
+            }
         }
 
         function sheet3SortRefs(col) {
