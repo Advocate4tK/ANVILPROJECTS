@@ -1048,7 +1048,7 @@
         document.getElementById('portalChoice').style.display = 'none';
         if (dest === 'pay') {
             const slug = new URLSearchParams(window.location.search).get('club') || '';
-            window.location.href = window.location.pathname + `?club=${slug}&pay=portal&v=3`;
+            window.location.href = window.location.pathname + `?club=${slug}&pay=portal&v=4`;
         } else {
             showMainForm();
         }
@@ -1301,9 +1301,9 @@
 
         // Payment portal — any club with ?pay=portal
         // Force cache bust: redirect to v=2 if not already there
-        if (params.get('pay') === 'portal' && params.get('v') !== '3') {
+        if (params.get('pay') === 'portal' && params.get('v') !== '4') {
             const fresh = new URL(window.location.href);
-            fresh.searchParams.set('v', '3');
+            fresh.searchParams.set('v', '4');
             window.location.replace(fresh.toString());
         }
         if (params.get('pay') === 'portal') {
@@ -2857,6 +2857,10 @@
         try {
             const today = new Date().toISOString().split('T')[0];
             const _sourceClub = (currentClubRecord?.fields?.['Club Name'] || currentClubRecord?.fields?.['Name'] || '').trim();
+            const _isMob = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const _venmoUrl = (handle, amount, encodedNote) => _isMob
+                ? `venmo://paycharge?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`
+                : `https://venmo.com/?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`;
             const _clubId = currentClubRecord?.id || null;
             const [rawGrisGames, ratesResult, refPayResult, clubResult, invoiceResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', _sourceClub).limit(2000),
@@ -2881,7 +2885,7 @@
                 const amt = parseFloat(inv.total_due || 0).toFixed(2);
                 const clubDisplay = (currentClubRecord?.fields?.['Club Name'] || currentClubRecord?.fields?.['Name'] || 'Club').trim();
                 const venmoNote   = encodeURIComponent(`${clubDisplay} ${inv.season || ''}`);
-                const venmoUrl    = `venmo://paycharge?txn=pay&recipients=Advocate4tk&amount=${amt}&note=${venmoNote}`;
+                const venmoUrl    = _venmoUrl('Advocate4tk', amt, venmoNote);
                 const showVenmo   = clubPayMethods.includes('venmo');
                 const showCheck   = clubPayMethods.includes('check');
                 const venmoBtn    = showVenmo ? `<a class="btn-venmo-link" href="${venmoUrl}" target="_blank"><span class="vl-badge">V</span><span class="vl-handle" style="color:#000; font-size:0.85rem; font-weight:700;">@Advocate4tk</span></a>` : '';
@@ -3143,7 +3147,7 @@
                             const venmoHtml = (payMethod === 'check' || !clubPayMethods.includes('venmo'))
                                 ? `<span class="pay-check-badge"><span class="vc-badge"><span class="vc-icon">✉️</span><span class="vc-label">check</span></span><span class="vc-note">${address || 'No address on file'}</span></span>`
                                 : (venmo && clubPayMethods.includes('venmo')
-                                    ? `<a class="btn-venmo-link" href="venmo://paycharge?txn=pay&recipients=${venmoHandle}&amount=${rate}&note=${venmoNote}" onclick="this.href='venmo://paycharge?txn=pay&recipients=${venmoHandle}&amount='+(this.closest('tr').querySelector('.pay-amount')?.value||'${rate}')+'&note=${venmoNote}'" target="_blank"><span class="vl-badge">V</span><span class="vl-handle">@${venmoHandle}</span></a>`
+                                    ? `<a class="btn-venmo-link" href="${_venmoUrl(venmoHandle, rate, venmoNote)}" onclick="this.href=_venmoUrl('${venmoHandle}',(this.closest('tr')?.querySelector('.pay-amount')?.value||'${rate}'),'${venmoNote}')" target="_blank"><span class="vl-badge">V</span><span class="vl-handle">@${venmoHandle}</span></a>`
                                     : `<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#94a3b8;font-size:0.68rem;font-weight:600;letter-spacing:0.3px;">No info</span>`);
 
                             const posBadge = slot.pos === 'CR'
@@ -3298,7 +3302,7 @@
                                 <div id="${cardId}_addr" style="display:none; margin-top:6px; font-size:0.8rem; color:#92400e; background:#fef3c7; border-radius:7px; padding:8px 12px; line-height:1.6;">${address || 'No address on file'}</div>
                             </div>`;
                         } else if (venmo && clubPayMethods.includes('venmo')) {
-                            actionHtml = `<a class="pay-card-m-venmo" href="venmo://paycharge?txn=pay&recipients=${venmoHandle}&amount=${rate}&note=${venmoNote}">
+                            actionHtml = `<a class="pay-card-m-venmo" href="${_venmoUrl(venmoHandle, rate, venmoNote)}">
                                 <span class="vl-badge" style="display:inline-flex;align-items:center;justify-content:center;background:#3D95CE;border-radius:6px;color:white;font-size:1.2rem;font-weight:900;font-style:italic;width:32px;height:32px;">V</span>
                                 <span style="font-size:0.88rem;font-weight:700;color:#fff;">Pay via Venmo</span>
                             </a>`;
