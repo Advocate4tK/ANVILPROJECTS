@@ -700,7 +700,7 @@
             Promise.all([
                 supabaseClient.client.from('settings').select('value').eq('key','openings_form_config').maybeSingle(),
                 supabaseClient.client.from('clubs').select('name, payment_methods').eq('enabled', true).eq('avail_form_enabled', true),
-                (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); if (!tParam) return Promise.resolve({ data: [] }); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks, avail_mode').eq('avail_enabled', true).eq('key', tParam); return q; })()
+                (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks, avail_mode').eq('avail_enabled', true); if (tParam) q = q.eq('key', tParam); return q; })()
             ]).then(([formRes, clubsRes, tournRes]) => {
                 const allClubs = (clubsRes.data || []).sort((a, b) => a.name.localeCompare(b.name));
                 const PAY_CLUBS = allClubs
@@ -720,10 +720,33 @@
                     if (cb && !cb.disabled) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
                 }
 
-                // Render tournament sessions if any are enabled
+                // Render tournament sessions (tournament mode) or link cards (regular form)
                 const enabledTournaments = tournRes.data || [];
-                if (enabledTournaments.length) renderTournamentSessions(enabledTournaments);
+                if (enabledTournaments.length) {
+                    if (window._tournamentMode) {
+                        renderTournamentSessions(enabledTournaments);
+                    } else {
+                        renderTournamentLinks(enabledTournaments);
+                    }
+                }
             });
+
+            function renderTournamentLinks(tourneys) {
+                const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const wrap = document.getElementById('tournamentSessionsWrap');
+                wrap.innerHTML = tourneys.map(t => {
+                    const d = t.from_date ? new Date(t.from_date + 'T12:00:00') : null;
+                    const dateStr = d ? `${MONTHS[d.getMonth()]} ${d.getDate()}` : '';
+                    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;margin-bottom:10px;">
+                        <div>
+                            <div style="font-weight:700;font-size:1rem;color:#09142a;">🏆 ${t.name}</div>
+                            ${dateStr ? `<div style="font-size:0.82rem;color:#555;margin-top:3px;">${dateStr}</div>` : ''}
+                        </div>
+                        <a href="referee-availability-form.html?tournament=${encodeURIComponent(t.key)}" style="background:#152d55;color:#fff;padding:9px 18px;border-radius:8px;text-decoration:none;font-weight:700;font-size:0.88rem;white-space:nowrap;">Sign Up →</a>
+                    </div>`;
+                }).join('');
+                document.getElementById('tournamentFieldset').style.display = 'block';
+            }
 
             function renderTournamentSessions(tourneys) {
                 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
