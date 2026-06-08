@@ -212,7 +212,8 @@ document.addEventListener('DOMContentLoaded', function() {
             await Promise.all(submissions);
 
             // Save tournament session availability (session-block mode)
-            const refName = `${firstName} ${lastName}`;
+            const refName = window._foundRefName || `${firstName} ${lastName}`;
+            const refEmail = document.getElementById('refereeEmail')?.value.trim() || '';
             if (tournChecked.length || tournWindows.length) {
                 const allTKeys = [...new Set([
                     ...tournChecked.map(cb => cb.dataset.tkey),
@@ -227,6 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 const sessionSubs = tournChecked.map(cb => airtableClient.createAvailability({
                     'Referee Name':        refName,
+                    'Referee Email':       refEmail,
                     'Date':                cb.dataset.date,
                     'Start Time':          cb.dataset.start,
                     'End Time':            cb.dataset.end,
@@ -248,6 +250,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const depTxt    = depart?.options[depart.selectedIndex]?.text || departVal;
                     return airtableClient.createAvailability({
                         'Referee Name':        refName,
+                        'Referee Email':       refEmail,
                         'Date':                date,
                         'Start Time':          arriveVal,
                         'End Time':            departVal,
