@@ -189,12 +189,12 @@
                         <div style="font-size:0.875rem; color:#555; margin-top:6px;">Please complete all fields below. Your information will be saved to our database so future submissions are faster.</div>
                     </div>
 
-                    <!-- Option 3b: Name match but both email slots already taken — tell them to use an existing email -->
+                    <!-- Option 3b: Name match but all email slots taken — tell them to use an existing email -->
                     <div id="twoEmailsPrompt" style="display:none; background:#fdecea; border:2px solid #e74c3c; border-radius:12px; padding:20px 25px; margin-bottom:20px;">
-                        <div style="font-size:1.1rem; font-weight:700; color:#0f3460;">📧 We already have two emails on file for you</div>
+                        <div style="font-size:1.1rem; font-weight:700; color:#0f3460;">📧 We already have three emails on file for you</div>
                         <div style="font-size:0.875rem; color:#555; margin-top:8px; line-height:1.6;">
-                            There is a profile for <strong id="twoEmailsName"></strong> in our system with two email addresses already on file.
-                            Please go back and log in using one of the two emails you have used previously.
+                            There is a profile for <strong id="twoEmailsName"></strong> in our system with three email addresses already on file.
+                            Please go back and log in using one of the emails you have used previously.
                         </div>
                         <div style="margin-top:14px;">
                             <button type="button" onclick="document.getElementById('twoEmailsPrompt').style.display='none'; document.getElementById('entryFieldset').style.display='block'; document.getElementById('refereeEmail').value=''; document.getElementById('refereeEmail').focus();"
@@ -1341,9 +1341,10 @@
                         if (nameMatch) {
                             const existingEmail  = nameMatch.fields['Email']   || '';
                             const existingEmail2 = nameMatch.fields['Email 2'] || '';
+                            const existingEmail3 = nameMatch.fields['Email 3'] || '';
 
-                            if (existingEmail && existingEmail2) {
-                                // ── BOTH EMAIL SLOTS TAKEN — can't add a third ──
+                            if (existingEmail && existingEmail2 && existingEmail3) {
+                                // ── ALL THREE EMAIL SLOTS TAKEN ──
                                 document.getElementById('twoEmailsName').textContent    = typedName;
                                 document.getElementById('twoEmailsPrompt').style.display = 'block';
                                 document.getElementById('entryFieldset').style.display  = 'none';
@@ -1576,8 +1577,9 @@
                 this.textContent = 'Linking…';
 
                 try {
-                    // Save the new email into Email 2 on the existing record
-                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rec.id, { 'Email 2': email });
+                    // Fill next available email slot (Email 2 → Email 3)
+                    const emailSlot = rec.fields['Email 2'] ? 'Email 3' : 'Email 2';
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rec.id, { [emailSlot]: email });
 
                     // Now continue exactly like a returning ref
                     window._foundRefId  = rec.id;

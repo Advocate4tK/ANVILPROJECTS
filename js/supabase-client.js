@@ -352,20 +352,22 @@ class SupabaseClientWrapper {
     }
 
     /**
-     * Find a referee by email (checks Email and Email 2 columns)
+     * Find a referee by email (checks Email, Email 2, and Email 3 columns)
      */
     async findRefereeByEmail(email) {
         try {
             const normalizedEmail = (email || '').trim().toLowerCase();
-            // Check primary email first — ilike for case-insensitive match
             const { data: d1, error: e1 } = await this.client
                 .from('referees').select('*').ilike('email', normalizedEmail).limit(1);
             if (!e1 && d1 && d1.length > 0) return this._wrap(d1[0]);
 
-            // Fall back to Email 2 (column name has a space — can't use .or())
             const { data: d2, error: e2 } = await this.client
                 .from('referees').select('*').ilike('Email 2', normalizedEmail).limit(1);
             if (!e2 && d2 && d2.length > 0) return this._wrap(d2[0]);
+
+            const { data: d3, error: e3 } = await this.client
+                .from('referees').select('*').ilike('Email 3', normalizedEmail).limit(1);
+            if (!e3 && d3 && d3.length > 0) return this._wrap(d3[0]);
 
             return null;
         } catch (error) {
