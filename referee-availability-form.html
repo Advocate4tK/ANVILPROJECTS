@@ -338,6 +338,18 @@
                                 </button>
                             </div>
                             <div id="contactSaveMessage" class="form-message" style="display:none;"></div>
+
+                            <!-- DOB match prompt — same birthday + last name found under a different email/name -->
+                            <div id="dobMergeSection" style="display:none; background:#fff3e0; border:2px solid #e67e22; border-radius:12px; padding:20px 25px; margin-top:12px;">
+                                <div style="font-size:1.1rem; font-weight:700; color:#0f3460;">🎂 We found a possible match</div>
+                                <div style="font-size:0.875rem; color:#555; margin-top:8px; line-height:1.6;">
+                                    There is already a profile for <strong id="dobMatchName"></strong> in our system with the same date of birth and last name.<br>Is this you?
+                                </div>
+                                <div style="display:flex; gap:10px; margin-top:14px;">
+                                    <button type="button" id="dobMergeYesBtn" style="background:#27ae60; color:white; border:none; border-radius:8px; padding:8px 22px; font-size:0.9rem; font-weight:700; cursor:pointer;">✅ Yes, that's me</button>
+                                    <button type="button" id="dobMergeNoBtn"  style="background:#eee; color:#555; border:1px solid #ccc; border-radius:8px; padding:8px 18px; font-size:0.9rem; cursor:pointer;">No, I'm a new referee</button>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- STEP 2: Availability + remaining sections (hidden until contact saved) -->
@@ -1477,10 +1489,11 @@
 
                     let savedRef;
                     if (phoneMatch) {
-                        // Existing ref found by phone — update Email 2 and profile, don't create new
+                        // Existing ref found by phone — fill next email slot, update profile
                         savedRef = phoneMatch;
-                        const updates = { 'Email 2': document.getElementById('refereeEmail').value.trim() };
-                        // Update any profile fields that may have changed
+                        const newEmail   = document.getElementById('refereeEmail').value.trim();
+                        const emailSlot  = phoneMatch.fields['Email 2'] ? 'Email 3' : 'Email 2';
+                        const updates    = { [emailSlot]: newEmail };
                         if (refereeRecord['Years Reffing']) updates['Years Reffing'] = refereeRecord['Years Reffing'];
                         if (refereeRecord['Address'])       updates['Address']        = refereeRecord['Address'];
                         if (refereeRecord['City'])          updates['City']           = refereeRecord['City'];
@@ -1497,7 +1510,33 @@
                         msgEl.className = 'form-message success';
                         msgEl.textContent = '✅ Welcome back! Your new email has been saved to your profile.';
                     } else {
-                        // Genuinely new referee — create record
+                        // ── DOB + last name check — catches changed name AND email ──
+                        let dobMatch = null;
+                        if (birthDate && lastName) {
+                            try {
+                                const { data: dobRows } = await supabaseClient.client
+                                    .from('referees').select('*')
+                                    .eq('Date of Birth', birthDate)
+                                    .ilike('name', `%${lastName}%`)
+                                    .limit(1);
+                                if (dobRows && dobRows.length > 0) {
+                                    const newEmail = document.getElementById('refereeEmail').value.trim().toLowerCase();
+                                    const row = dobRows[0];
+                                    const existing = [row.email, row['Email 2'], row['Email 3']].filter(Boolean).map(e => e.toLowerCase());
+                                    if (!existing.includes(newEmail)) dobMatch = { id: row.id, fields: row };
+                                }
+                            } catch(e) { /* ignore — fall through to create */ }
+                        }
+
+                        if (dobMatch) {
+                            window._dobMatchRecord    = dobMatch;
+                            window._dobMatchRefRecord = refereeRecord;
+                            document.getElementById('dobMatchName').textContent     = dobMatch.fields['name'] || dobMatch.fields['Name'] || 'an existing referee';
+                            document.getElementById('dobMergeSection').style.display = 'block';
+                            this.disabled    = false;
+                            this.textContent = 'Save & Continue to Availability Page →';
+                            return;
+                        }
                     }
 
                     // Save core fields — this must succeed
@@ -1527,6 +1566,73 @@
                     msgEl.style.display = 'block';
                     this.disabled = false;
                     this.textContent = 'Save & Continue to Availability Page →';
+                }
+            });
+
+            // ── DOB merge: Yes — link accounts ────────────────────────────────────
+            document.getElementById('dobMergeYesBtn').addEventListener('click', async function() {
+                const rec           = window._dobMatchRecord;
+                const refereeRecord = window._dobMatchRefRecord;
+                if (!rec) return;
+                this.disabled = true;
+                this.textContent = 'Linking…';
+                document.getElementById('dobMergeSection').style.display = 'none';
+                const msgEl   = document.getElementById('contactSaveMessage');
+                const email   = document.getElementById('refereeEmail').value.trim();
+                const emailSlot = rec.fields['Email 2'] ? (rec.fields['Email 3'] ? null : 'Email 3') : 'Email 2';
+                try {
+                    const updates = {};
+                    if (emailSlot) updates[emailSlot] = email;
+                    if (refereeRecord['Years Reffing'])       updates['Years Reffing']       = refereeRecord['Years Reffing'];
+                    if (refereeRecord['Address'])             updates['Address']             = refereeRecord['Address'];
+                    if (refereeRecord['City'])                updates['City']                = refereeRecord['City'];
+                    if (refereeRecord['State'])               updates['State']               = refereeRecord['State'];
+                    if (refereeRecord['Zip Code'])            updates['Zip Code']            = refereeRecord['Zip Code'];
+                    if (refereeRecord['Gender'])              updates['Gender']              = refereeRecord['Gender'];
+                    if (refereeRecord['Certification Level']) updates['Certification Level'] = refereeRecord['Certification Level'];
+                    await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rec.id, updates);
+                    window._foundRefId   = rec.id;
+                    window._foundRefDob  = rec.fields['Date of Birth'] || refereeRecord['Date of Birth'] || null;
+                    window._foundRefName = rec.fields['name'] || rec.fields['Name'] || refereeRecord['Name'];
+                    msgEl.className = 'form-message success';
+                    msgEl.textContent = '✅ Accounts linked! Welcome back.';
+                    msgEl.style.display = 'block';
+                    document.querySelectorAll('#contactSection [required]').forEach(el => el.removeAttribute('required'));
+                    setTimeout(() => {
+                        document.getElementById('contactSection').style.display = 'none';
+                        unlockAvailability();
+                    }, 800);
+                } catch(err) {
+                    msgEl.className = 'form-message error';
+                    msgEl.textContent = `Could not link accounts: ${err.message}. Please try again.`;
+                    msgEl.style.display = 'block';
+                    this.disabled = false;
+                    this.textContent = '✅ Yes, that\'s me';
+                }
+            });
+
+            // ── DOB merge: No — create new record ─────────────────────────────────
+            document.getElementById('dobMergeNoBtn').addEventListener('click', async function() {
+                document.getElementById('dobMergeSection').style.display = 'none';
+                const refereeRecord = window._dobMatchRefRecord;
+                window._dobMatchRecord    = null;
+                window._dobMatchRefRecord = null;
+                const msgEl = document.getElementById('contactSaveMessage');
+                try {
+                    const savedRef = await airtableClient.upsertReferee(refereeRecord);
+                    if (savedRef?.id) window._foundRefId = savedRef.id;
+                    msgEl.className = 'form-message success';
+                    msgEl.textContent = '✅ Profile saved! Now fill in your availability below.';
+                    msgEl.style.display = 'block';
+                    document.querySelectorAll('#contactSection [required]').forEach(el => el.removeAttribute('required'));
+                    setTimeout(() => {
+                        document.getElementById('contactSection').style.display = 'none';
+                        unlockAvailability();
+                    }, 800);
+                } catch(err) {
+                    msgEl.className = 'form-message error';
+                    msgEl.textContent = `Could not save profile: ${err.message}. Please try again.`;
+                    msgEl.style.display = 'block';
                 }
             });
 
