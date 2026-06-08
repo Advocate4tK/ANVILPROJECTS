@@ -982,14 +982,19 @@
 
                     <div class="fg">
                         <label>Billing Model</label>
-                        <select id="wizBillingModel">
+                        <select id="wizBillingModel" onchange="toggleBillingModelFields()">
                             <option value="per_team">Per Team Per Season</option>
                             <option value="per_game">Per Game Per Season</option>
                             <option value="flat">Flat Season Rate</option>
                         </select>
                     </div>
 
-                    <div class="fg">
+                    <div class="fg" id="wizFlatAmountRow" style="display:none;">
+                        <label>Flat Season Amount ($)</label>
+                        <input type="number" id="wizFlatAmount" placeholder="e.g. 100" min="0" step="1" style="max-width:160px;">
+                    </div>
+
+                    <div id="wizRateTiersSection" class="fg">
                         <label>Rate Tiers</label>
                         <div style="font-size:0.75rem; color:#aaa; margin-bottom:8px;">Age group prefix (U8, default…) or "default" for catch-all. Rate = $ charged per team/game.</div>
                         <div id="wizRateTiersContainer"></div>
@@ -1594,7 +1599,10 @@
         document.getElementById('wizPaymentTerms').value   = b ? (b.payment_terms || 'Net 15 Days') : 'Net 15 Days';
         document.getElementById('wizBillingNotes').value   = b ? (b.notes || '') : '';
         const tiers = b ? (b.rate_tiers || []) : [{ age_group: 'U8', rate: 50 }, { age_group: 'default', rate: 80 }];
-        renderWizRateTiers(tiers);
+        const flatTier = tiers.find(t => t.age_group === 'flat');
+        document.getElementById('wizFlatAmount').value = flatTier ? flatTier.rate : '';
+        renderWizRateTiers(tiers.filter(t => t.age_group !== 'flat'));
+        toggleBillingModelFields();
     }
 
     function renderWizRateTiers(tiers) {
@@ -1619,7 +1627,19 @@
         c.appendChild(div);
     }
 
+    function toggleBillingModelFields() {
+        const model = document.getElementById('wizBillingModel').value;
+        const isFlat = model === 'flat';
+        document.getElementById('wizFlatAmountRow').style.display    = isFlat ? '' : 'none';
+        document.getElementById('wizRateTiersSection').style.display = isFlat ? 'none' : '';
+    }
+
     function collectWizRateTiers() {
+        const model = document.getElementById('wizBillingModel').value;
+        if (model === 'flat') {
+            const amt = parseFloat(document.getElementById('wizFlatAmount').value) || 0;
+            return [{ age_group: 'flat', rate: amt }];
+        }
         return Array.from(document.querySelectorAll('#wizRateTiersContainer .tier-row')).map(r => ({
             age_group: r.querySelector('.wiz-tier-ag').value.trim(),
             rate: parseFloat(r.querySelector('.wiz-tier-rate').value) || 0
