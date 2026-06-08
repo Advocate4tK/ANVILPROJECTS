@@ -2003,10 +2003,9 @@
                 const safeName = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
                 return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
                     draggable="true"
-                    ondragstart="sheet2RefDragStart(event,'${safeName}')"
-                    oncontextmenu="showTournamentRefCtx(event,'${safeName}'); return false;">
+                    ondragstart="sheet2RefDragStart(event,'${safeName}')">
                     <td style="${cell}">${r.date}</td>
-                    <td style="${cell}">${r.name}</td>
+                    <td style="${cell}"><span style="display:flex;align-items:center;justify-content:space-between;gap:4px;"><span>${r.name}</span><button onclick="event.stopPropagation();removeTournamentRef('${safeName}')" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:0.85rem;padding:0 3px;line-height:1;flex-shrink:0;border-radius:3px;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='none'" title="Remove from tournament">✕</button></span></td>
                     <td style="${cell}">${fmtExp(r.exp)}</td>
                     <td style="${cell}">${r.club}</td>
                     <td style="${cell}">${fmt(r.start)}</td>
@@ -3638,7 +3637,7 @@
                         onmouseenter="${s3unavail && s3refObj ? `s2ShowStrikeTooltip(event,'${s3refObj.id}')` : `showRefTooltip('${safeName}', this, event)`}"
                         onmouseleave="hideRefTooltip(); hideAvailNotes();">
                         ${sheet3RefHiddenCols.includes('clubDate')  ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubDate"  style="${cell} ${rcw('clubDate')}">${r.date}</td>`}
-                        <td data-rcol="clubName"  style="${cell} ${rcw('clubName')} cursor:pointer; ${s3unavail?'text-decoration:line-through;color:#aaa;':s3conflict?'color:#c0392b;':'color:#0f3460;text-decoration:underline dotted;'}" onclick="sheet3ShowRefDetail('${safeName}')" title="${s3conflict?'Already assigned at this time':'Click to see this ref\'s assignments'}">${r.name}${s3unavail?'<span style=\"font-size:0.65rem;font-weight:700;color:#c0392b;margin-left:4px;\">⚠</span>':s3conflict?'<span style=\"font-size:0.65rem;color:#c0392b;margin-left:4px;\">⚠ on another game</span>':''}${countBadge}</td>
+                        <td data-rcol="clubName"  style="${cell} ${rcw('clubName')} cursor:pointer; ${s3unavail?'text-decoration:line-through;color:#aaa;':s3conflict?'color:#c0392b;':'color:#0f3460;text-decoration:underline dotted;'}" onclick="sheet3ShowRefDetail('${safeName}')" title="${s3conflict?'Already assigned at this time':'Click to see this ref\'s assignments'}"><span style="display:flex;align-items:center;justify-content:space-between;gap:4px;"><span>${r.name}${s3unavail?'<span style=\"font-size:0.65rem;font-weight:700;color:#c0392b;margin-left:4px;\">⚠</span>':s3conflict?'<span style=\"font-size:0.65rem;color:#c0392b;margin-left:4px;\">⚠ on another game</span>':''}${countBadge}</span><button onclick="event.stopPropagation();removeTournamentRef('${safeName}')" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:0.85rem;padding:0 3px;line-height:1;flex-shrink:0;border-radius:3px;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='none'" title="Remove from tournament">✕</button></span></td>
                         ${sheet3RefHiddenCols.includes('clubExp')   ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubExp"   style="${cell} ${rcw('clubExp')}">${fmtExp(r.exp, true)}</td>`}
                         ${sheet3RefHiddenCols.includes('clubClub')  ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubClub"  style="${cell} ${rcw('clubClub')}">${r.club}</td>`}
                         ${sheet3RefHiddenCols.includes('clubStart') ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubStart" style="${cell} ${rcw('clubStart')}">${fmt(r.start)}</td>`}
@@ -7465,45 +7464,8 @@
                 </div>`;
                 setTimeout(() => document.getElementById(inputId)?.focus(), 50);
             }
-            if (window.tournamentMode) {
-                const refName = ref?.fields['Name'] || '';
-                const safeRefName = refName.replace(/'/g, "\\'");
-                menu.innerHTML += `<div style="border-top:1px solid #eee; padding:6px 14px 8px;">
-                    <div onclick="removeTournamentRef('${safeRefName}'); document.getElementById('s2RefCtxMenu').style.display='none';"
-                         style="padding:6px 10px;cursor:pointer;font-weight:600;color:#e74c3c;border-radius:5px;text-align:center;"
-                         onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='';">
-                        🗑 Remove from tournament
-                    </div>
-                </div>`;
-            }
             menu.style.left    = Math.min(e.clientX, window.innerWidth  - 240) + 'px';
             menu.style.top     = Math.min(e.clientY, window.innerHeight - 150) + 'px';
-            menu.style.display = 'block';
-            setTimeout(() => document.addEventListener('click', ev => {
-                if (!menu.contains(ev.target)) menu.style.display = 'none';
-            }, { once: true }), 0);
-        }
-
-        function showTournamentRefCtx(event, refName) {
-            event.preventDefault();
-            event.stopPropagation();
-            let menu = document.getElementById('s2RefCtxMenu');
-            if (!menu) {
-                menu = document.createElement('div');
-                menu.id = 's2RefCtxMenu';
-                menu.style.cssText = 'position:fixed;background:#fff;border:1px solid #d0d7de;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:sans-serif;font-size:0.82rem;z-index:9999;min-width:200px;overflow:hidden;';
-                document.body.appendChild(menu);
-            }
-            menu.innerHTML = `<div style="padding:8px 14px 8px;">
-                <div style="font-size:0.78rem;font-weight:700;color:#333;margin-bottom:6px;">${refName}</div>
-                <div onclick="removeTournamentRef('${refName.replace(/'/g,"\\'")}'); document.getElementById('s2RefCtxMenu').style.display='none';"
-                     style="padding:6px 10px;cursor:pointer;font-weight:600;color:#e74c3c;border-radius:5px;text-align:center;"
-                     onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='';">
-                    🗑 Remove from tournament
-                </div>
-            </div>`;
-            menu.style.left    = Math.min(event.clientX, window.innerWidth  - 220) + 'px';
-            menu.style.top     = Math.min(event.clientY, window.innerHeight - 100) + 'px';
             menu.style.display = 'block';
             setTimeout(() => document.addEventListener('click', ev => {
                 if (!menu.contains(ev.target)) menu.style.display = 'none';
