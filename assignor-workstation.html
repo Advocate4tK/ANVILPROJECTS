@@ -4935,7 +4935,7 @@
         let loadedDateFrom = '';
         let loadedDateTo   = '';
         let availTimeByName = {}; // ref name → { date → { start, end } }
-        const KNOWN_CLUBS = ['East Haddam','ELLIS TECH SUMMER SOCCER','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
+        const KNOWN_CLUBS = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
         let clubsList     = KNOWN_CLUBS.slice(); // pre-seeded so pills render on page load
         let selectedClubs = new Set(clubsList); // default: all selected
         let userHasFilteredClubs = false; // true once user manually picks specific clubs
@@ -5206,10 +5206,14 @@
             // without waiting for Load Games — runs in background, silent on error
             (async () => {
                 try {
-                    const { data: clubRecs, error } = await supabaseClient.client.from('clubs').select('"Club Name"').eq('enabled', true).order('"Club Name"');
-                    if (error) throw error;
-                    const dbClubs = clubRecs.map(c => c['Club Name'] || '').filter(Boolean);
-                    let merged = [...new Set([...KNOWN_CLUBS, ...dbClubs])].sort();
+                    const [clubsRes, eventsRes] = await Promise.all([
+                        supabaseClient.client.from('clubs').select('"Club Name"').eq('enabled', true).order('"Club Name"'),
+                        supabaseClient.client.from('events').select('"Club Name"').eq('enabled', true).order('"Club Name"')
+                    ]);
+                    if (clubsRes.error) throw clubsRes.error;
+                    const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || '').filter(Boolean);
+                    const dbEvents = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
+                    let merged = [...new Set([...KNOWN_CLUBS, ...dbClubs, ...dbEvents])].sort();
                     if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
                     clubsList = merged;
                     if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);

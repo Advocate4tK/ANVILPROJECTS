@@ -211,16 +211,19 @@
     let OPENINGS_ALL_CLUBS = [];
 
     let _openingsTournaments = [];
+    let _openingsEvents = [];
 
     async function loadOpeningsClubs() {
-        const [clubsRes, settingsRes, formRes, tournRes] = await Promise.all([
-            supabaseClient.client.from('clubs').select('name').order('name'),
+        const [clubsRes, settingsRes, formRes, tournRes, eventsRes] = await Promise.all([
+            supabaseClient.client.from('clubs').select('name').eq('enabled', true).order('name'),
             supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
             supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
-            supabaseClient.client.from('tournaments').select('key, name, status').order('name')
+            supabaseClient.client.from('tournaments').select('key, name, status').order('name'),
+            supabaseClient.client.from('events').select('id, name, "Club Name", enabled, avail_form_enabled, start_date, end_date').eq('enabled', true).order('name')
         ]);
         OPENINGS_ALL_CLUBS = (clubsRes.data || []).map(c => c.name);
         _openingsTournaments = tournRes.data || [];
+        _openingsEvents = eventsRes.data || [];
         let active = [];
         let formConfig = {};
         try { active     = JSON.parse(settingsRes.data?.value || '[]'); } catch(e) {}
@@ -269,7 +272,18 @@
                 </label>
             </div>`).join('')}` : '';
 
-        wrap.innerHTML = (clubHtml || '<p style="color:#aaa; font-size:0.85rem;">No managed clubs found.</p>') + tournHtml;
+        const eventsHtml = _openingsEvents.length ? `
+            <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#0369a1; margin:14px 0 8px;">📅 Events</div>
+            ${_openingsEvents.map(e => `
+            <div class="club-row">
+                <label class="club-main-row">
+                    <input type="checkbox" class="event-openings-cb" data-id="${e.id}" ${e.avail_form_enabled ? 'checked' : ''}>
+                    ${e['Club Name'] || e.name}
+                    ${e.start_date || e.end_date ? `<span style="font-size:0.7rem; color:#888; margin-left:8px;">${[e.start_date, e.end_date].filter(Boolean).join(' – ')}</span>` : ''}
+                </label>
+            </div>`).join('')}` : '';
+
+        wrap.innerHTML = (clubHtml || '<p style="color:#aaa; font-size:0.85rem;">No managed clubs found.</p>') + tournHtml + eventsHtml;
     }
 
     function toggleJotformUrl(club, val) {
@@ -301,12 +315,19 @@
                 .eq('key', cb.dataset.key)
         );
 
+        const eventUpdates = [...document.querySelectorAll('.event-openings-cb')].map(cb =>
+            supabaseClient.client.from('events')
+                .update({ avail_form_enabled: cb.checked })
+                .eq('id', parseInt(cb.dataset.id))
+        );
+
         await Promise.all([
             supabaseClient.client.from('settings')
                 .update({ value: JSON.stringify(selected)    }).eq('key', 'openings_clubs'),
             supabaseClient.client.from('settings')
                 .update({ value: JSON.stringify(formConfig)  }).eq('key', 'openings_form_config'),
-            ...tournUpdates
+            ...tournUpdates,
+            ...eventUpdates
         ]);
 
         const msg = document.getElementById('openingsSaveMsg');
