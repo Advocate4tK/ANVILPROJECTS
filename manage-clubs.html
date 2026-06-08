@@ -1159,10 +1159,18 @@
 
         card.innerHTML = '<div style="color:#aaa; font-size:0.85rem; padding:8px 0;">Loading…</div>';
         const isTournament = rawId.startsWith('t:');
-        const entityId     = isTournament ? rawId.slice(2) : rawId;
+        const isEvent      = rawId.startsWith('e:');
+        const entityId     = (isTournament || isEvent) ? rawId.slice(2) : rawId;
 
         try {
-            if (isTournament) {
+            if (isEvent) {
+                const { data: ev, error } = await supabaseClient.client
+                    .from('events')
+                    .select('id, name, "Club Name", assignor, "Assignor Email", "Assignor Phone", assignors_json, age_groups, enabled, start_date, end_date, avail_form_enabled')
+                    .eq('id', parseInt(entityId)).single();
+                if (error) throw new Error(error.message);
+                card.innerHTML = ccBuildEventCard(ev);
+            } else if (isTournament) {
                 const { data: t, error } = await supabaseClient.client
                     .from('tournaments')
                     .select('id, key, name, club, from_date, to_date, status, director, director_email, event_admin, event_admin_phone, event_admin_email, payment_coordinator, payment_coordinator_phone, payment_coordinator_email, assignor, assignor_phone, assignor_email, age_groups, venues')
@@ -1208,6 +1216,50 @@
         } catch(e) {
             card.innerHTML = `<div style="color:#e74c3c; font-family:'DM Sans',sans-serif; font-size:0.85rem; padding:6px 0;">Could not load: ${e.message}</div>`;
         }
+    }
+
+    function ccBuildEventCard(ev) {
+        const name       = ev['Club Name'] || ev.name || '(unnamed)';
+        const assignors  = ev.assignors_json || [];
+        const lead       = assignors.find(a => a.is_lead) || assignors[0] || null;
+        const assignorName  = lead ? lead.name  : (ev.assignor || '—');
+        const assignorEmail = lead ? lead.email : (ev['Assignor Email'] || '');
+        const assignorPhone = lead ? lead.phone : (ev['Assignor Phone'] || '');
+        const statusColor = ev.enabled ? '#00c853' : '#aaa';
+        const statusLabel = ev.enabled ? '● LIVE' : '○ DISABLED';
+        const dateRange   = [ev.start_date, ev.end_date].filter(Boolean).join(' – ') || '—';
+        const ageList     = (ev.age_groups || []).join(', ') || '—';
+
+        const assignorRows = assignors.length > 1
+            ? assignors.map(a => `<div style="font-size:0.8rem; color:#555; padding:2px 0;">
+                ${a.is_lead ? '<strong>Lead:</strong> ' : ''}${a.name || '—'}
+                ${a.phone  ? ` · 📞 ${a.phone}`  : ''}
+                ${a.email  ? ` · <a href="mailto:${a.email}" style="color:#3498db;">${a.email}</a>` : ''}
+              </div>`).join('')
+            : '';
+
+        return `<div style="background:#f8fbff; border:1px solid #bae6fd; border-radius:10px; padding:18px 20px; margin-top:8px;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
+                <span style="font-size:1.3rem;">📅</span>
+                <div>
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; font-weight:800; color:#09142a; text-transform:uppercase;">${name}</div>
+                    <div style="font-size:0.75rem; color:${statusColor}; font-weight:700;">${statusLabel}</div>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+                <div><div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:3px;">Dates</div>
+                    <div style="font-size:0.85rem; color:#333;">${dateRange}</div></div>
+                <div><div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:3px;">Age Groups</div>
+                    <div style="font-size:0.85rem; color:#333;">${ageList}</div></div>
+            </div>
+            <div style="border-top:1px solid #e2f0fb; padding-top:12px; margin-top:4px;">
+                <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:6px;">Assignor</div>
+                <div style="font-weight:700; color:#09142a; font-size:0.88rem;">${assignorName}</div>
+                ${assignorPhone ? `<div style="font-size:0.76rem; color:#555; margin-top:3px;">📞 ${assignorPhone}</div>` : ''}
+                ${assignorEmail ? `<div style="font-size:0.76rem; margin-top:2px;"><a href="mailto:${assignorEmail}" style="color:#3498db; text-decoration:none;">✉️ ${assignorEmail}</a></div>` : ''}
+                ${assignorRows ? `<div style="margin-top:8px; padding-top:8px; border-top:1px solid #e2f0fb;">${assignorRows}</div>` : ''}
+            </div>
+        </div>`;
     }
 
     function ccContact(label, name, phone, email) {
@@ -2728,9 +2780,10 @@
 
     async function loadClubsForRemove() {
         try {
-            const [clubsRes, tournsRes] = await Promise.all([
+            const [clubsRes, tournsRes, eventsRes] = await Promise.all([
                 supabaseClient.client.from('clubs').select('id, name, "Club Name", "Display Name"').order('name'),
-                supabaseClient.client.from('tournaments').select('id, name').order('name')
+                supabaseClient.client.from('tournaments').select('id, name').order('name'),
+                supabaseClient.client.from('events').select('id, name, "Club Name"').order('"Club Name"')
             ]);
             if (clubsRes.error) throw new Error(clubsRes.error.message);
             allClubRecords = (clubsRes.data || [])
@@ -2738,6 +2791,9 @@
                 .sort((a, b) => a.name.localeCompare(b.name));
             const tournRecords = (tournsRes.data || [])
                 .map(r => ({ id: r.id, name: r.name }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            const eventRecords = (eventsRes.data || [])
+                .map(r => ({ id: r.id, name: r['Club Name'] || r.name || '(unnamed)' }))
                 .sort((a, b) => a.name.localeCompare(b.name));
 
             const clubOpts = '<optgroup label="Clubs">'
@@ -2748,7 +2804,12 @@
                   + tournRecords.map(t => `<option value="t:${t.id}">🏆 ${t.name}</option>`).join('')
                   + '</optgroup>'
                 : '';
-            const opts = '<option value="">— Select —</option>' + clubOpts + tournOpts;
+            const eventOpts = eventRecords.length
+                ? '<optgroup label="Events">'
+                  + eventRecords.map(e => `<option value="e:${e.id}">📅 ${e.name}</option>`).join('')
+                  + '</optgroup>'
+                : '';
+            const opts = '<option value="">— Select —</option>' + clubOpts + tournOpts + eventOpts;
 
             document.getElementById('ccMasterSelect').innerHTML    = opts;
             document.getElementById('removeClubSelect').innerHTML   = opts;
