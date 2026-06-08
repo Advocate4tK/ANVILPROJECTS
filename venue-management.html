@@ -65,6 +65,7 @@
                         <option value="">All Clubs</option>
                     </select>
                     <span id="countNote" class="count-note"></span>
+                    <button onclick="newVenue()" style="margin-left:auto; background:#00c853; color:#09142a; border:none; border-radius:8px; padding:8px 20px; font-weight:800; font-size:0.85rem; cursor:pointer; font-family:inherit;">+ New Venue</button>
                 </div>
                 <div style="font-size:0.8rem; color:#aaa; margin-bottom:12px;">Filter by club or search by name, city, or address. Click any venue to view and edit.</div>
                 <div class="search-wrap">
@@ -188,6 +189,7 @@
         let allVenues = [];
         let currentVenueId = null;
         let caLocked = true;
+        let isNewVenue = false;
 
         function renderCAField(caId) {
             const wrap = document.getElementById('caIdWrap');
@@ -302,8 +304,36 @@
             document.getElementById('venueCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
+        function newVenue() {
+            isNewVenue = true;
+            currentVenueId = null;
+            caLocked = false;
+
+            document.getElementById('cardTitle').textContent = 'New Venue';
+            document.getElementById('cardSub').textContent   = '';
+            document.getElementById('cardCaId').textContent  = '—';
+            document.getElementById('fVenueName').value = '';
+            document.getElementById('fAddress').value   = '';
+            document.getElementById('fCity').value      = '';
+            document.getElementById('fState').value     = '';
+            document.getElementById('fZip').value       = '';
+            document.getElementById('fClub').value      = '';
+            document.getElementById('caIdWrap').innerHTML = `<input type="number" id="fCaId" value="" placeholder="e.g. 795" style="width:100%; padding:8px 10px; border:1.5px solid #ddd; border-radius:6px; font-size:0.88rem; font-family:inherit; box-sizing:border-box;">`;
+            document.getElementById('caConfirmRow').style.display = 'none';
+            document.querySelector('.save-card-btn').textContent = 'Create Venue';
+            document.getElementById('venueCard').style.display = 'block';
+            document.getElementById('saveStatus').style.display = 'none';
+            document.getElementById('saveErr').style.display    = 'none';
+            document.getElementById('fieldsDropdown').style.display = 'none';
+            document.getElementById('fieldsToggleArrow').style.transform = '';
+            document.getElementById('fieldsCountBadge').style.display = 'none';
+            document.getElementById('fieldsList').innerHTML = '<div style="color:#aaa; font-size:0.88rem; padding:8px 0;">Save the venue first to add fields.</div>';
+            document.getElementById('venueCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            document.getElementById('fVenueName').focus();
+        }
+
         async function saveVenue() {
-            if (!currentVenueId) return;
+            if (!currentVenueId && !isNewVenue) return;
 
             const caInput = document.getElementById('fCaId');
             const caIdSpan = document.querySelector('#caIdWrap .ca-locked span');
@@ -320,7 +350,12 @@
                 'Venue ID':   caId ? parseFloat(caId) : null
             };
 
-            const res = await db.client.from('venues').update(updates).eq('id', currentVenueId);
+            let res;
+            if (isNewVenue) {
+                res = await db.client.from('venues').insert(updates).select().single();
+            } else {
+                res = await db.client.from('venues').update(updates).eq('id', currentVenueId).select().single();
+            }
 
             if (res.error) {
                 document.getElementById('saveErr').style.display = 'inline';
@@ -329,10 +364,14 @@
                 return;
             }
 
-            // Update local cache
-            const idx = allVenues.findIndex(v => v.id === currentVenueId);
-            if (idx >= 0) {
-                allVenues[idx] = { ...allVenues[idx], ...updates };
+            if (isNewVenue) {
+                allVenues.push(res.data);
+                currentVenueId = res.data.id;
+                isNewVenue = false;
+                document.querySelector('.save-card-btn').textContent = 'Save Changes';
+            } else {
+                const idx = allVenues.findIndex(v => v.id === currentVenueId);
+                if (idx >= 0) allVenues[idx] = { ...allVenues[idx], ...updates };
             }
 
             document.getElementById('cardTitle').textContent = updates['Venue Name'];
