@@ -2471,6 +2471,43 @@
                 return;
             }
 
+            // ── League / Event path — writes to events table ──────────────────
+            if (window._entityType === 'league') {
+                const slug = clubName.toLowerCase().replace(/[\s-]+/g, '-').replace(/[^a-z0-9-]/g, '');
+                const assignors = collectWizAssignors();
+                const lead = assignors.find(a => a.is_lead) || assignors[0] || {};
+                const ageGroups = collectAgeGroups();
+                const presNA = document.getElementById('presNA')?.checked;
+                const row = {
+                    name:              slug,
+                    'Club Name':       clubName,
+                    slug:              slug,
+                    enabled:           true,
+                    assignor:          lead.name  || null,
+                    'Assignor Email':  lead.email || null,
+                    'Assignor Phone':  lead.phone || null,
+                    assignors_json:    assignors.length ? assignors : null,
+                    'Club Admin':      [document.getElementById('adminFirst').value.trim(), document.getElementById('adminLast').value.trim()].filter(Boolean).join(' ') || null,
+                    'Club Admin Email': document.getElementById('adminEmail').value.trim() || null,
+                    'Club Admin Phone': document.getElementById('adminPhone').value.trim() || null,
+                    age_groups:        ageGroups.length ? ageGroups : null,
+                };
+                if (!presNA) {
+                    row['Club Admin'] = row['Club Admin'] || [document.getElementById('presFirst').value.trim(), document.getElementById('presLast').value.trim()].filter(Boolean).join(' ') || null;
+                }
+                log('Creating event record…', 'info');
+                const { error: evErr } = await supabaseClient.client.from('events').insert(row);
+                if (evErr) throw new Error(evErr.message);
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+                log(`✅ Event "${clubName}" created.`, 'ok');
+                if (ageGroups.length) log(`⚽ ${ageGroups.length} age group(s) saved.`, 'ok');
+                createBtn.textContent = '✓ Created';
+                createBtn.style.background = '#00c853';
+                document.getElementById('backBtn2').style.display = 'none';
+                await loadClubsForRemove();
+                return;
+            }
+
             const isRef      = _clubTypeMode === 'reference';
             const adminFirst = isRef ? '' : document.getElementById('adminFirst').value.trim();
             const adminLast  = isRef ? '' : document.getElementById('adminLast').value.trim();
