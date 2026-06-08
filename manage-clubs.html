@@ -841,26 +841,14 @@
                     </div>
                 </div>
 
-                <!-- Assignor block — shown for reference clubs -->
-                <div id="refAssignorBlock" style="display:none; background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #7c3aed; border-radius:8px; padding:14px 16px;">
-                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:12px;">Assignor</div>
-                    <div class="form-row">
-                        <div class="fg" style="margin-bottom:0;">
-                            <label>Name</label>
-                            <input type="text" id="refAssignorName" placeholder="First Last">
-                        </div>
-                        <div class="fg" style="margin-bottom:0;">
-                            <label>Email</label>
-                            <input type="email" id="refAssignorEmail" placeholder="assignor@email.com">
-                        </div>
+                <!-- Assignors — multi-assignor with lead -->
+                <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #7c3aed; border-radius:8px; padding:14px 16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px;">Assignors</div>
+                        <button type="button" onclick="addWizAssignor()" style="background:#7c3aed; color:#fff; border:none; border-radius:7px; padding:5px 14px; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">+ Add Assignor</button>
                     </div>
-                    <div class="form-row" style="margin-top:12px;">
-                        <div class="fg" style="margin-bottom:0;">
-                            <label>Phone</label>
-                            <input type="tel" id="refAssignorPhone" placeholder="(860) 555-9876">
-                        </div>
-                        <div class="fg" style="margin-bottom:0;"></div>
-                    </div>
+                    <div style="font-size:0.72rem; color:#aaa; margin-bottom:10px;">Mark one as Lead — they become the primary contact for this entity.</div>
+                    <div id="wizAssignorRows"></div>
                 </div>
 
                 <div class="wizard-nav">
@@ -1646,6 +1634,50 @@
         })).filter(t => t.age_group);
     }
 
+    function renderWizAssignors(list) {
+        const c = document.getElementById('wizAssignorRows');
+        if (!list || !list.length) list = [{ name: '', email: '', phone: '', is_lead: true }];
+        c.innerHTML = list.map((a, i) => `
+            <div class="wiz-assignor-row" style="display:grid; grid-template-columns:auto 1fr 1fr 1fr auto; gap:8px; align-items:center; margin-bottom:8px;">
+                <label style="display:flex; align-items:center; gap:4px; font-size:0.78rem; font-weight:700; color:#7c3aed; white-space:nowrap; cursor:pointer;">
+                    <input type="radio" name="wizLeadRadio" value="${i}" ${a.is_lead ? 'checked' : ''} style="accent-color:#7c3aed;"> Lead
+                </label>
+                <input type="text" class="wiz-asgn-name" placeholder="Full Name" value="${a.name || ''}" style="padding:7px 10px; border:1.5px solid #e2d9ce; border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.85rem;">
+                <input type="email" class="wiz-asgn-email" placeholder="Email" value="${a.email || ''}" style="padding:7px 10px; border:1.5px solid #e2d9ce; border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.85rem;">
+                <input type="tel" class="wiz-asgn-phone" placeholder="Phone" value="${a.phone || ''}" style="padding:7px 10px; border:1.5px solid #e2d9ce; border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.85rem;">
+                <button type="button" onclick="this.closest('.wiz-assignor-row').remove()" style="background:none; border:none; color:#dc2626; cursor:pointer; font-size:1rem; padding:0 4px;">✕</button>
+            </div>`).join('');
+    }
+
+    function addWizAssignor() {
+        const c = document.getElementById('wizAssignorRows');
+        const div = document.createElement('div');
+        div.className = 'wiz-assignor-row';
+        div.style.cssText = 'display:grid; grid-template-columns:auto 1fr 1fr 1fr auto; gap:8px; align-items:center; margin-bottom:8px;';
+        const idx = c.querySelectorAll('.wiz-assignor-row').length;
+        div.innerHTML = `
+            <label style="display:flex; align-items:center; gap:4px; font-size:0.78rem; font-weight:700; color:#7c3aed; white-space:nowrap; cursor:pointer;">
+                <input type="radio" name="wizLeadRadio" value="${idx}" style="accent-color:#7c3aed;"> Lead
+            </label>
+            <input type="text" class="wiz-asgn-name" placeholder="Full Name" style="padding:7px 10px; border:1.5px solid #e2d9ce; border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.85rem;">
+            <input type="email" class="wiz-asgn-email" placeholder="Email" style="padding:7px 10px; border:1.5px solid #e2d9ce; border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.85rem;">
+            <input type="tel" class="wiz-asgn-phone" placeholder="Phone" style="padding:7px 10px; border:1.5px solid #e2d9ce; border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.85rem;">
+            <button type="button" onclick="this.closest('.wiz-assignor-row').remove()" style="background:none; border:none; color:#dc2626; cursor:pointer; font-size:1rem; padding:0 4px;">✕</button>`;
+        c.appendChild(div);
+    }
+
+    function collectWizAssignors() {
+        const rows = document.querySelectorAll('#wizAssignorRows .wiz-assignor-row');
+        const leadRadio = document.querySelector('input[name="wizLeadRadio"]:checked');
+        const leadIdx = leadRadio ? parseInt(leadRadio.value) : 0;
+        return Array.from(rows).map((r, i) => ({
+            name:    r.querySelector('.wiz-asgn-name').value.trim(),
+            email:   r.querySelector('.wiz-asgn-email').value.trim(),
+            phone:   r.querySelector('.wiz-asgn-phone').value.trim(),
+            is_lead: i === leadIdx
+        })).filter(a => a.name);
+    }
+
     let _wizardExistingPay  = {};
     let _wizardExistingCrew = {};
 
@@ -1792,6 +1824,7 @@
         if (createBtn) createBtn.textContent = cfg.createBtn;
 
         renderAgeGroupHeaders();
+        renderWizAssignors([]);
         // Step visibility is handled dynamically in goToStep — force a refresh of step-1
         goToStep(1, true);
     }
@@ -1883,7 +1916,7 @@
         _clubTypeMode = type;
         const isRef = type === 'reference';
         document.getElementById('clubAdminBlock').style.display   = isRef ? 'none' : '';
-        document.getElementById('refAssignorBlock').style.display = isRef ? '' : 'none';
+        // assignor block now always visible
         document.getElementById('nextStep2Btn').textContent       = isRef ? 'Next: Review →' : 'Next: Venues & Fields →';
         document.getElementById('step-ind-2').style.display       = isRef ? 'none' : '';
         document.getElementById('conn-1').style.display           = isRef ? 'none' : '';
@@ -2312,7 +2345,7 @@
 
         const [clubRes, payRes, crewRes, billingRes] = await Promise.all([
             supabaseClient.client.from('clubs')
-                .select('id, name, "Club Name", "Display Name", president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", assignor, "Assignor Email", "Assignor Phone", age_groups')
+                .select('id, name, "Club Name", "Display Name", president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", assignor, "Assignor Email", "Assignor Phone", assignors_json, age_groups')
                 .eq('id', clubId).single(),
             supabaseClient.client.from('pay_rates').select('*').eq('club_id', clubId),
             supabaseClient.client.from('crew_rules').select('*').eq('club_id', clubId),
@@ -2343,6 +2376,11 @@
         }
         document.getElementById('adminEmail').value = club['Club Admin Email'] || '';
         document.getElementById('adminPhone').value = club['Club Admin Phone'] || '';
+
+        const existingAssignors = Array.isArray(club.assignors_json) && club.assignors_json.length
+            ? club.assignors_json
+            : (club.assignor ? [{ name: club.assignor, email: club['Assignor Email'] || '', phone: club['Assignor Phone'] || '', is_lead: true }] : []);
+        renderWizAssignors(existingAssignors);
 
         const ageGroups = Array.isArray(club.age_groups) ? club.age_groups : [];
         document.getElementById('ageGroupList').innerHTML = '';
@@ -2446,17 +2484,17 @@
             // ── Reference club — insert directly via supabase client (known column names) ──
             if (isRef) {
                 log('Creating reference club record…', 'info');
-                const assignorName  = document.getElementById('refAssignorName').value.trim();
-                const assignorEmail = document.getElementById('refAssignorEmail').value.trim();
-                const assignorPhone = document.getElementById('refAssignorPhone').value.trim();
+                const assignors = collectWizAssignors();
+                const lead = assignors.find(a => a.is_lead) || assignors[0] || {};
                 const row = {
                     name:             clubName,
                     president:        `${presFirst} ${presLast}`,
                     'President Email': presEmail || null,
                     'President Phone': presPhone || null,
-                    assignor:          assignorName || null,
-                    'Assignor Email':  assignorEmail || null,
-                    'Assignor Phone':  assignorPhone || null,
+                    assignor:          lead.name  || null,
+                    'Assignor Email':  lead.email || null,
+                    'Assignor Phone':  lead.phone || null,
+                    assignors_json:    assignors.length ? assignors : null,
                     club_type:         'reference'
                 };
                 if (displayName) row['Display Name'] = displayName;
@@ -2478,6 +2516,8 @@
             const adminPhone = document.getElementById('adminPhone').value.trim();
             const ageGroups  = collectAgeGroups();
 
+            const wizAssignors = collectWizAssignors();
+            const wizLead = wizAssignors.find(a => a.is_lead) || wizAssignors[0] || {};
             const clubRow = {
                 name:               slug,
                 'Club Name':        clubName,
@@ -2488,6 +2528,10 @@
                 'Club Admin':       `${adminFirst} ${adminLast}`.trim() || null,
                 'Club Admin Email': adminEmail || null,
                 'Club Admin Phone': adminPhone || null,
+                assignor:           wizLead.name  || null,
+                'Assignor Email':   wizLead.email || null,
+                'Assignor Phone':   wizLead.phone || null,
+                assignors_json:     wizAssignors.length ? wizAssignors : null,
                 club_type:          'managed',
                 age_groups:         ageGroups.length ? ageGroups : null,
             };
