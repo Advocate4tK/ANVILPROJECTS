@@ -2003,7 +2003,8 @@
                 const safeName = r.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
                 return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
                     draggable="true"
-                    ondragstart="sheet2RefDragStart(event,'${safeName}')">
+                    ondragstart="sheet2RefDragStart(event,'${safeName}')"
+                    oncontextmenu="showTournamentRefCtx(event,'${safeName}'); return false;">
                     <td style="${cell}">${r.date}</td>
                     <td style="${cell}">${r.name}</td>
                     <td style="${cell}">${fmtExp(r.exp)}</td>
@@ -7464,12 +7465,62 @@
                 </div>`;
                 setTimeout(() => document.getElementById(inputId)?.focus(), 50);
             }
+            if (window.tournamentMode) {
+                const refName = ref?.fields['Name'] || '';
+                const safeRefName = refName.replace(/'/g, "\\'");
+                menu.innerHTML += `<div style="border-top:1px solid #eee; padding:6px 14px 8px;">
+                    <div onclick="removeTournamentRef('${safeRefName}'); document.getElementById('s2RefCtxMenu').style.display='none';"
+                         style="padding:6px 10px;cursor:pointer;font-weight:600;color:#e74c3c;border-radius:5px;text-align:center;"
+                         onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='';">
+                        🗑 Remove from tournament
+                    </div>
+                </div>`;
+            }
             menu.style.left    = Math.min(e.clientX, window.innerWidth  - 240) + 'px';
             menu.style.top     = Math.min(e.clientY, window.innerHeight - 150) + 'px';
             menu.style.display = 'block';
             setTimeout(() => document.addEventListener('click', ev => {
                 if (!menu.contains(ev.target)) menu.style.display = 'none';
             }, { once: true }), 0);
+        }
+
+        function showTournamentRefCtx(event, refName) {
+            event.preventDefault();
+            event.stopPropagation();
+            let menu = document.getElementById('s2RefCtxMenu');
+            if (!menu) {
+                menu = document.createElement('div');
+                menu.id = 's2RefCtxMenu';
+                menu.style.cssText = 'position:fixed;background:#fff;border:1px solid #d0d7de;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:sans-serif;font-size:0.82rem;z-index:9999;min-width:200px;overflow:hidden;';
+                document.body.appendChild(menu);
+            }
+            menu.innerHTML = `<div style="padding:8px 14px 8px;">
+                <div style="font-size:0.78rem;font-weight:700;color:#333;margin-bottom:6px;">${refName}</div>
+                <div onclick="removeTournamentRef('${refName.replace(/'/g,"\\'")}'); document.getElementById('s2RefCtxMenu').style.display='none';"
+                     style="padding:6px 10px;cursor:pointer;font-weight:600;color:#e74c3c;border-radius:5px;text-align:center;"
+                     onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='';">
+                    🗑 Remove from tournament
+                </div>
+            </div>`;
+            menu.style.left    = Math.min(event.clientX, window.innerWidth  - 220) + 'px';
+            menu.style.top     = Math.min(event.clientY, window.innerHeight - 100) + 'px';
+            menu.style.display = 'block';
+            setTimeout(() => document.addEventListener('click', ev => {
+                if (!menu.contains(ev.target)) menu.style.display = 'none';
+            }, { once: true }), 0);
+        }
+
+        async function removeTournamentRef(refName) {
+            const tKey = new URLSearchParams(window.location.search).get('tournament');
+            if (!tKey || !refName) return;
+            const { error } = await supabaseClient.client.from('availability')
+                .delete()
+                .eq('tournament_key', tKey)
+                .eq('Referee Name', refName);
+            if (error) { alert('Could not remove: ' + error.message); return; }
+            allAvail = allAvail.filter(a => (a.fields['Referee Name'] || '').trim().toLowerCase() !== refName.trim().toLowerCase());
+            renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
+            if (document.getElementById('sheet3View')?.style.display !== 'none') renderSheet3View(sheet3LastFiltered);
         }
 
         async function refToggleUnavailable(rid, reason) {
