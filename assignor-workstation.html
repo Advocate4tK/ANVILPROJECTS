@@ -2375,6 +2375,7 @@
         let sheet3HiddenCols      = []; // column keys hidden by user (games pane)
         let sheet3RefHiddenCols   = []; // column keys hidden by user (refs pane)
         let sheet3RefColWidths    = JSON.parse(localStorage.getItem('sheet3RefColWidths') || '{}');
+        let sheet3GameColWidths   = JSON.parse(localStorage.getItem('sheet3GameColWidths') || '{}');
 
         function sheet3SaveLocalState() {
             try {
@@ -2743,6 +2744,34 @@
                 document.body.style.userSelect = '';
                 document.body.style.cursor     = '';
                 try { localStorage.setItem('sheet3RefColWidths', JSON.stringify(sheet3RefColWidths)); } catch(e) {}
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup',   onUp);
+        }
+
+        function sheet3GameColResizeStart(e, key) {
+            e.preventDefault(); e.stopPropagation();
+            const th = e.target.closest('th');
+            if (!th) return;
+            const startX = e.clientX;
+            const startW = th.offsetWidth;
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor     = 'col-resize';
+            const onMove = mv => {
+                const newW = Math.max(30, startW + mv.clientX - startX);
+                sheet3GameColWidths[key] = newW;
+                document.querySelectorAll(`[data-gcol="${key}"]`).forEach(el => {
+                    el.style.width    = newW + 'px';
+                    el.style.minWidth = newW + 'px';
+                    el.style.maxWidth = newW + 'px';
+                });
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup',  onUp);
+                document.body.style.userSelect = '';
+                document.body.style.cursor     = '';
+                try { localStorage.setItem('sheet3GameColWidths', JSON.stringify(sheet3GameColWidths)); } catch(e) {}
             };
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup',   onUp);
@@ -3230,13 +3259,17 @@
                 }
                 const _isSel = gid === sheet3SelectedGameId;
                 const _dotTd = `<td style="border:1px solid #d0d7de; width:22px; min-width:22px; max-width:22px; padding:0; text-align:center; vertical-align:middle; cursor:pointer;" onclick="sheet3SelectGame('${gid}'); event.stopPropagation();" oncontextmenu="sheet3ShowGameMenu(event,'${gid}'); return false;" title="${_isSel ? 'Deselect — show all refs' : 'Select · Right-click to edit'}"><span style="display:inline-block; width:11px; height:11px; border-radius:50%; background:${_isSel ? 'radial-gradient(circle at 35% 35%, #ffe066, #f0a500)' : 'transparent'}; border:2px solid ${_isSel ? '#c47f00' : '#ccc'}; box-shadow:${_isSel ? '0 0 5px 1px rgba(240,165,0,0.6)' : 'none'};"></span></td>`;
-                return periodDivider + `<tr style="background:${_isSel ? '#a5d6a7' : rowBg};">${_dotTd}${sheet3ColOrder.map(k =>
-                    sheet3HiddenCols.includes(k) ? `<td style="${stubTd}"></td>` : (colRenderers[k] ? colRenderers[k]() : '<td></td>')
-                ).join('')}</tr>`;
+                return periodDivider + `<tr style="background:${_isSel ? '#a5d6a7' : rowBg};">${_dotTd}${sheet3ColOrder.map(k => {
+                    if (sheet3HiddenCols.includes(k)) return `<td style="${stubTd}"></td>`;
+                    const raw = colRenderers[k] ? colRenderers[k]() : '<td></td>';
+                    return raw.replace(/^<td/, `<td data-gcol="${k}"`);
+                }).join('')}</tr>`;
             }).join('') : `<tr><td colspan="${sheet3ColOrder.length + 1}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
             const thDrag  = 'cursor:grab; user-select:none;';
             const stubTh  = 'border:1px solid #d0d7de; width:14px; min-width:14px; max-width:14px; padding:4px 2px; background:#e8eaed; cursor:pointer; text-align:center; font-size:0.65rem; color:#888;';
+            const gcw     = key => { const w = sheet3GameColWidths[key]; return w ? `width:${w}px; min-width:${w}px; max-width:${w}px;` : ''; };
+            const gHandle = key => `<span onmousedown="sheet3GameColResizeStart(event,'${key}')" style="position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;z-index:3;" title="Drag to resize"></span>`;
             const headerCells = sheet3ColOrder.map(key => {
                 if (sheet3HiddenCols.includes(key)) {
                     return `<th style="${stubTh}" onclick="sheet3ShowCol('${key}')" title="Show ${colLabels[key]||key}">▶</th>`;
@@ -3248,7 +3281,7 @@
                     const active = sheet3DateFilter;
                     const badge  = ` <span style="background:${active ? '#e3f0ff' : '#f0ece6'};color:${active ? '#0f3460' : '#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${active || 'All'}</span>`;
                     const tip    = active ? `Click to cycle date filter (${active})` : 'Click to filter by date';
-                    return `<th style="${hdr}${minW} cursor:pointer; user-select:none;" draggable="true"
+                    return `<th data-gcol="${key}" style="${hdr}${minW} cursor:pointer; user-select:none; position:relative; overflow:visible; ${gcw(key)}" draggable="true"
                         ondragstart="sheet3ColDragStart('${key}')"
                         ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
                         ondragleave="this.style.background='';"
@@ -3257,13 +3290,13 @@
                         <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
                             <span>${label}${badge}</span>
                             <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
-                        </span></th>`;
+                        </span>${gHandle(key)}</th>`;
                 }
                 if (key === 'ageGroup') {
                     const active = sheet3AgeFilter;
                     const badge  = ` <span style="background:${active ? '#e3f0ff' : '#f0ece6'};color:${active ? '#0f3460' : '#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${active || 'All'}</span>`;
                     const tip    = active ? `Click to cycle age filter (${active})` : 'Click to filter by age group';
-                    return `<th style="${hdr}${minW} cursor:pointer; user-select:none;" draggable="true"
+                    return `<th data-gcol="${key}" style="${hdr}${minW} cursor:pointer; user-select:none; position:relative; overflow:visible; ${gcw(key)}" draggable="true"
                         ondragstart="sheet3ColDragStart('${key}')"
                         ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
                         ondragleave="this.style.background='';"
@@ -3272,13 +3305,13 @@
                         <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
                             <span>${label}${badge}</span>
                             <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
-                        </span></th>`;
+                        </span>${gHandle(key)}</th>`;
                 }
                 if (key === 'club') {
                     const active = sheet3ClubFilter;
                     const badge  = ` <span style="background:${active ? '#e3f0ff' : '#f0ece6'};color:${active ? '#0f3460' : '#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${active || 'All'}</span>`;
                     const tip    = active ? `Click to cycle club filter (${active})` : 'Click to filter by club';
-                    return `<th style="${hdr}${minW} cursor:pointer; user-select:none;" draggable="true"
+                    return `<th data-gcol="${key}" style="${hdr}${minW} cursor:pointer; user-select:none; position:relative; overflow:visible; ${gcw(key)}" draggable="true"
                         ondragstart="sheet3ColDragStart('${key}')"
                         ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
                         ondragleave="this.style.background='';"
@@ -3287,12 +3320,12 @@
                         <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
                             <span>${label}${badge}</span>
                             <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
-                        </span></th>`;
+                        </span>${gHandle(key)}</th>`;
                 }
                 if (key === 'time') {
                     const fmtT = t => { const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
                     const timeOpts = `<option value="">All</option>` + s3UniqueTimes.map(t => `<option value="${t}" ${t === sheet3TimeFilter ? 'selected' : ''}>${fmtT(t)}</option>`).join('');
-                    return `<th style="${hdr}${minW} white-space:nowrap;" draggable="true"
+                    return `<th data-gcol="${key}" style="${hdr}${minW} white-space:nowrap; position:relative; overflow:visible; ${gcw(key)}" draggable="true"
                         ondragstart="sheet3ColDragStart('${key}')"
                         ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
                         ondragleave="this.style.background='';"
@@ -3306,9 +3339,9 @@
                                 </select>
                             </span>
                             <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
-                        </span></th>`;
+                        </span>${gHandle(key)}</th>`;
                 }
-                return `<th style="${hdr}${minW} ${thDrag}" draggable="true"
+                return `<th data-gcol="${key}" style="${hdr}${minW} ${thDrag} position:relative; overflow:visible; ${gcw(key)}" draggable="true"
                     ondragstart="sheet3ColDragStart('${key}')"
                     ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
                     ondragleave="this.style.background='';"
@@ -3317,7 +3350,7 @@
                     <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
                         <span>${label}</span>
                         <span onclick="event.stopPropagation();sheet3HideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>
-                    </span></th>`;
+                    </span>${gHandle(key)}</th>`;
             }).join('');
 
             const zoomBtn = 'border:1px solid #ccc; background:#f6f8fa; border-radius:3px; padding:1px 7px; font-size:0.8rem; cursor:pointer; line-height:1.4;';
