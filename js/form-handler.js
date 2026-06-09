@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         }
-        if (window._tournamentMode) {
+        if (window._tournamentMode || window._eventMode) {
             if (!document.querySelectorAll('input[name="ageGroups"]:checked').length)  missing.push('Preferred Age Groups (at least one)');
             if (!document.getElementById('arOnly')?.value)                             missing.push('AR Only preference');
         }
@@ -431,7 +431,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        if (window._tournamentMode) {
+        if (window._tournamentMode || window._eventMode) {
             const ageGroups = getCheckboxValues('ageGroups');
             if (ageGroups.length === 0) {
                 showMessage('error', 'Please select at least one preferred age group.');
