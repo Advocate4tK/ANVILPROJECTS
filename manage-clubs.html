@@ -1166,7 +1166,7 @@
             if (isEvent) {
                 const { data: ev, error } = await supabaseClient.client
                     .from('events')
-                    .select('id, name, "Club Name", assignor, "Assignor Email", "Assignor Phone", assignors_json, age_groups, enabled, start_date, end_date, avail_form_enabled')
+                    .select('id, name, "Club Name", slug, assignor, "Assignor Email", "Assignor Phone", assignors_json, "Club Admin", "Club Admin Email", "Club Admin Phone", age_groups, venues, enabled, start_date, end_date, avail_form_enabled')
                     .eq('id', parseInt(entityId)).single();
                 if (error) throw new Error(error.message);
                 card.innerHTML = ccBuildEventCard(ev);
@@ -1219,46 +1219,69 @@
     }
 
     function ccBuildEventCard(ev) {
-        const name       = ev['Club Name'] || ev.name || '(unnamed)';
-        const assignors  = ev.assignors_json || [];
-        const lead       = assignors.find(a => a.is_lead) || assignors[0] || null;
-        const assignorName  = lead ? lead.name  : (ev.assignor || '—');
+        const name      = ev['Club Name'] || ev.name || '(unnamed)';
+        const assignors = ev.assignors_json || [];
+        const lead      = assignors.find(a => a.is_lead) || assignors[0] || null;
+        const assignorName  = lead ? lead.name  : (ev.assignor || '');
         const assignorEmail = lead ? lead.email : (ev['Assignor Email'] || '');
         const assignorPhone = lead ? lead.phone : (ev['Assignor Phone'] || '');
-        const statusColor = ev.enabled ? '#00c853' : '#aaa';
-        const statusLabel = ev.enabled ? '● LIVE' : '○ DISABLED';
-        const dateRange   = [ev.start_date, ev.end_date].filter(Boolean).join(' – ') || '—';
-        const ageList     = (ev.age_groups || []).map(g => g.age_group ? `${g.age_group}${g.game_type ? ' ' + g.game_type : ''}` : String(g)).join(', ') || '—';
+        const dateRange = [ev.start_date, ev.end_date].filter(Boolean).join(' → ') || 'Dates TBD';
+        const statusLabel = ev.enabled ? 'ACTIVE' : 'DISABLED';
+        const ageGroups = Array.isArray(ev.age_groups) ? ev.age_groups : [];
+        const evVenues  = Array.isArray(ev.venues) ? ev.venues : [];
+        const portalUrl = ev.slug ? `https://referee-tool.com/referee-availability-form.html?event=${ev.slug}` : '';
 
-        const assignorRows = assignors.length > 1
-            ? assignors.map(a => `<div style="font-size:0.8rem; color:#555; padding:2px 0;">
-                ${a.is_lead ? '<strong>Lead:</strong> ' : ''}${a.name || '—'}
-                ${a.phone  ? ` · 📞 ${a.phone}`  : ''}
-                ${a.email  ? ` · <a href="mailto:${a.email}" style="color:#3498db;">${a.email}</a>` : ''}
-              </div>`).join('')
-            : '';
+        const ageTable = ageGroups.length ? `
+            <div style="border-top:1px solid #edf0f7;">
+                <div style="padding:10px 18px 4px; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Age Groups &amp; Pay Rates</div>
+                <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+                    <thead><tr style="background:#f4f6fa;">
+                        <th style="padding:6px 18px; text-align:left; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Age Group</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Type</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Format</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555;">Half</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#00c853;">Center</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#3498db;">AR</th>
+                        <th style="padding:6px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#9b59b6;">Solo CR</th>
+                    </tr></thead>
+                    <tbody>${ageGroups.map((r,i) => `<tr style="${i%2===1?'background:#fafbfd;':''}">
+                        <td style="padding:6px 18px; font-weight:600; color:#09142a;">${r.age_group||''}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#555;">${r.game_type||'—'}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#555;">${r.format||'—'}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#555;">${r.half_length?'2×'+r.half_length+'m':'—'}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#00c853; font-weight:700;">${r.center?'$'+r.center:'—'}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#3498db; font-weight:700;">${r.ar?'$'+r.ar:'—'}</td>
+                        <td style="padding:6px 12px; text-align:center; color:#9b59b6; font-weight:700;">${r.solo_cr?'$'+r.solo_cr:'—'}</td>
+                    </tr>`).join('')}</tbody>
+                </table>
+            </div>` : '';
 
-        return `<div style="background:#f8fbff; border:1px solid #bae6fd; border-radius:10px; padding:18px 20px; margin-top:8px;">
-            <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
-                <span style="font-size:1.3rem;">📅</span>
-                <div>
-                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; font-weight:800; color:#09142a; text-transform:uppercase;">${name}</div>
-                    <div style="font-size:0.75rem; color:${statusColor}; font-weight:700;">${statusLabel}</div>
+        const venueChips = evVenues.length
+            ? `<div style="padding:12px 18px; border-top:1px solid #edf0f7;">
+                <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; margin-bottom:8px;">Venues on File</div>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                    ${evVenues.map(v=>`<span style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:4px; padding:3px 8px; font-size:0.78rem; color:#0369a1;">📍 ${v.name||v}</span>`).join('')}
                 </div>
+              </div>` : '';
+
+        return `<div style="background:white; border:1px solid #dde3f0; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+            <div style="background:linear-gradient(135deg,#0f3460,#1a6985); padding:12px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <span style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#fff;">📅 ${name}</span>
+                    <span style="font-size:0.78rem; color:rgba(255,255,255,0.7);">📅 ${dateRange}</span>
+                </div>
+                <span style="font-size:0.72rem; background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.85); padding:2px 10px; border-radius:12px; font-weight:700; text-transform:uppercase;">${statusLabel}</span>
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
-                <div><div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:3px;">Dates</div>
-                    <div style="font-size:0.85rem; color:#333;">${dateRange}</div></div>
-                <div><div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:3px;">Age Groups</div>
-                    <div style="font-size:0.85rem; color:#333;">${ageList}</div></div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); border-bottom:1px solid #edf0f7;">
+                ${ccContact('Event Admin', ev['Club Admin'], ev['Club Admin Phone'], ev['Club Admin Email'])}
+                ${ccContact('Assignor', assignorName, assignorPhone, assignorEmail)}
             </div>
-            <div style="border-top:1px solid #e2f0fb; padding-top:12px; margin-top:4px;">
-                <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:6px;">Assignor</div>
-                <div style="font-weight:700; color:#09142a; font-size:0.88rem;">${assignorName}</div>
-                ${assignorPhone ? `<div style="font-size:0.76rem; color:#555; margin-top:3px;">📞 ${assignorPhone}</div>` : ''}
-                ${assignorEmail ? `<div style="font-size:0.76rem; margin-top:2px;"><a href="mailto:${assignorEmail}" style="color:#3498db; text-decoration:none;">✉️ ${assignorEmail}</a></div>` : ''}
-                ${assignorRows ? `<div style="margin-top:8px; padding-top:8px; border-top:1px solid #e2f0fb;">${assignorRows}</div>` : ''}
+            ${ageTable}
+            <div style="padding:12px 18px; background:#fafbfd; border-top:1px solid #edf0f7; display:flex; flex-direction:column; gap:7px;">
+                <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:4px;">Portals &amp; Links</div>
+                ${ccPortalRow('Event Availability Form', portalUrl)}
             </div>
+            ${venueChips}
         </div>`;
     }
 
