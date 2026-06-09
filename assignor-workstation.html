@@ -3549,6 +3549,27 @@
                         sheet3CachedRefRows.sort((a, b) => startVal(a).localeCompare(startVal(b)) * sheet3RefSort.dir);
                     }
 
+                    // If a game is selected, filter ref pane to only refs available at that game's time
+                    if (sheet3SelectedGameId) {
+                        const _selGame = allGames.find(g => String(g.id) === sheet3SelectedGameId);
+                        if (_selGame) {
+                            const _selDate = _selGame.fields['Date'] || '';
+                            const _selTime = (_selGame.fields['Time'] || '').slice(0, 5);
+                            if (_selDate && _selTime) {
+                                sheet3CachedRefRows = sheet3CachedRefRows.filter(r => {
+                                    const slots = (r.avail[_selDate] || []).filter(s => s.available);
+                                    if (!slots.length) return false;
+                                    return slots.some(s => {
+                                        const st = (s.start || '').slice(0, 5);
+                                        const et = (s.end   || '').slice(0, 5);
+                                        if (!st || !et) return true;
+                                        return _selTime >= st && _selTime <= et;
+                                    });
+                                });
+                            }
+                        }
+                    }
+
                     const fmtAvailSlots = slots => {
                         if (!slots.length) return '<span style="color:#bbb;">—</span>';
                         const available = slots.filter(s => s.available);
