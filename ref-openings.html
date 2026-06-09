@@ -793,19 +793,26 @@
                 </div>
                </div>`;
 
-        const isRec     = club === 'RECREATION';
-        const org       = g.organization || '';
-        const payType   = g.pay_type || '';
-        const gameDesc  = `${home} vs ${away} (${age}) — ${formatDate(g.date || '')}${time ? ' @ ' + time : ''}`;
-        const noteParam = encodeURIComponent(`Interested in ${gameDesc}`);
-        const formCfg   = _formConfig[club] || {};
-        const isJotform = !isRec && formCfg.formType === 'jotform';
-        const availUrl  = isRec
+        const isRec        = club === 'RECREATION';
+        const isTournament = !!g._tournamentKey;
+        const org          = g.organization || '';
+        const payType      = g.pay_type || '';
+        const gameDesc     = `${home} vs ${away} (${age}) — ${formatDate(g.date || '')}${time ? ' @ ' + time : ''}`;
+        const noteParam    = encodeURIComponent(`Interested in ${gameDesc}`);
+        const formCfg      = _formConfig[club] || {};
+        const isJotform    = !isRec && !isTournament && formCfg.formType === 'jotform';
+        const availUrl     = isRec
             ? `recreation-portal.html`
-            : (isJotform && formCfg.jotformUrl)
-                ? formCfg.jotformUrl
-                : `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}${(g.time||g.Time||g['Time']) ? '&time=' + encodeURIComponent((g.time||g.Time||g['Time'])) : ''}`;
-        const availLabel = isRec ? 'Contact Your Assignor to Work This Game' : 'Click Here to Submit Your Availability for This Game';
+            : isTournament
+                ? `referee-availability-form.html?tournament=${encodeURIComponent(g._tournamentKey)}&note=${noteParam}`
+                : (isJotform && formCfg.jotformUrl)
+                    ? formCfg.jotformUrl
+                    : `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}${(g.time||g.Time||g['Time']) ? '&time=' + encodeURIComponent((g.time||g.Time||g['Time'])) : ''}`;
+        const availLabel   = isRec
+            ? 'Contact Your Assignor to Work This Game'
+            : isTournament
+                ? 'Click Here to Submit Availability for This Tournament'
+                : 'Click Here to Submit Your Availability for This Game';
         const finalSlotsHtml = isJotform ? '' : slotsHtml;
 
         return `<div class="game-card">
@@ -944,8 +951,16 @@
                 if (v.id)          venueMap[String(v.id)]          = nm;
             });
 
-            // Merge + filter + sort
-            const allGames = allResults.flatMap(r => r.data || []);
+            // Merge + filter + sort (tag tournament games with their key for direct portal routing)
+            const recCount    = _recOrgs.length ? 1 : 0;
+            const clubGames   = allResults.slice(0, CLUBS.length).flatMap(r => r.data || []);
+            const recGames    = _recOrgs.length ? (allResults[CLUBS.length]?.data || []) : [];
+            const tournOffset = CLUBS.length + recCount;
+            const tournGames  = TOURNAMENTS.flatMap((t, i) =>
+                (allResults[tournOffset + i]?.data || []).map(g => ({ ...g, _tournamentKey: t.key }))
+            );
+            const eventGames  = allResults.slice(tournOffset + TOURNAMENTS.length).flatMap(r => r.data || []);
+            const allGames    = [...clubGames, ...recGames, ...tournGames, ...eventGames];
             _allOpenGames = allGames
                 .filter(g => (g['Game Status'] || '') !== 'Cancelled' && (g['Game Status'] || '') !== 'Filled')
                 .filter(hasOpenSlot)
