@@ -2355,23 +2355,24 @@
         noteText += `\nReason: ${reason}`;
         if (currentSubmitter) noteText += `\nRequested by: ${currentSubmitter}`;
 
+        const _chgTable = currentTournament ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
         try {
             // Get existing notes to append
-            const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { filterByFormula: `RECORD_ID()='${gameId}'`, maxRecords: 1 });
+            const existing = await airtableClient.getRecords(_chgTable, { filterByFormula: `RECORD_ID()='${gameId}'`, maxRecords: 1 });
             const prevNotes = existing[0]?.fields['Notes'] || '';
 
             // Update Notes first — always works
-            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+            await airtableClient.updateRecord(_chgTable, gameId, {
                 'Notes': prevNotes + noteText
             });
 
-            // Try Game Status separately — may fail if select option doesn't exist in Airtable yet
+            // Try Game Status separately
             try {
-                await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                await airtableClient.updateRecord(_chgTable, gameId, {
                     'Game Status': 'Change Requested'
                 });
             } catch(statusErr) {
-                console.warn('Could not update Game Status (add "Change Requested" option to Airtable select field):', statusErr.message);
+                console.warn('Could not update Game Status:', statusErr.message);
             }
 
             msgEl.textContent = '✅ Change request submitted. The assignor will be in touch.';
