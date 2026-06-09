@@ -673,6 +673,16 @@
                 const _ts = document.getElementById('formPageSubtitle'); if (_ts) _ts.textContent = 'Submit your availability for the tournament';
             }
 
+            // Event mode — same structure as tournament mode
+            if (new URLSearchParams(window.location.search).get('event')) {
+                window._eventMode = true;
+                ['howYouGetGames','availDetailFieldset','locationPrefsFieldset']
+                    .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+                document.title = 'Event Availability Form';
+                const _eh = document.getElementById('formPageTitle'); if (_eh) _eh.textContent = 'Event Availability Form';
+                const _es = document.getElementById('formPageSubtitle'); if (_es) _es.textContent = 'Submit your availability for this event';
+            }
+
             // Preview mode — ?preview=true shows full form without entry step, no submission
             if (new URLSearchParams(window.location.search).get('preview') === 'true') {
                 document.getElementById('entryFieldset').style.display = 'none';
@@ -711,17 +721,18 @@
                 container.appendChild(createDayRow(1));
             }
 
-            // Tournament mode: strip required from hidden day-row inputs after rows are in DOM
-            if (window._tournamentMode) {
+            // Tournament/Event mode: strip required from hidden day-row inputs after rows are in DOM
+            if (window._tournamentMode || window._eventMode) {
                 document.querySelectorAll('#availabilityDays [required]').forEach(el => el.removeAttribute('required'));
             }
 
-            // Load referee-tool clubs + PAY_CLUBS + enabled tournaments
+            // Load referee-tool clubs + PAY_CLUBS + enabled tournaments + enabled events
             Promise.all([
                 supabaseClient.client.from('settings').select('value').eq('key','openings_form_config').maybeSingle(),
                 supabaseClient.client.from('clubs').select('name, payment_methods').eq('enabled', true).eq('avail_form_enabled', true),
-                (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks, avail_mode').eq('avail_enabled', true); if (tParam) q = q.eq('key', tParam); return q; })()
-            ]).then(([formRes, clubsRes, tournRes]) => {
+                (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks, avail_mode').eq('avail_enabled', true); if (tParam) q = q.eq('key', tParam); return q; })(),
+                (()=>{ const eParam = new URLSearchParams(window.location.search).get('event'); let q = supabaseClient.client.from('events').select('id, name, slug, min_age, session_blocks, avail_mode, start_date, end_date').eq('avail_form_enabled', true).order('start_date'); if (eParam) q = q.eq('slug', eParam); return q; })()
+            ]).then(([formRes, clubsRes, tournRes, eventsRes]) => {
                 const allClubs = (clubsRes.data || []).sort((a, b) => a.name.localeCompare(b.name));
                 const PAY_CLUBS = allClubs
                     .filter(c => c.payment_methods && /venmo|check/i.test(c.payment_methods))
@@ -740,13 +751,27 @@
                     if (cb && !cb.disabled) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
                 }
 
-                // Render tournament sessions (tournament mode) or link cards (regular form)
+                // Render tournament/event sessions or link cards
                 const enabledTournaments = tournRes.data || [];
-                if (enabledTournaments.length) {
-                    if (window._tournamentMode) {
-                        renderTournamentSessions(enabledTournaments);
-                    } else {
-                        renderTournamentLinks(enabledTournaments);
+                const enabledEvents = eventsRes.data || [];
+                window._eventData = window._eventMode ? (enabledEvents[0] || null) : null;
+
+                if (window._eventMode && window._eventData) {
+                    const evName = window._eventData.name;
+                    document.title = evName + ' — Availability Form';
+                    const _eh2 = document.getElementById('formPageTitle'); if (_eh2) _eh2.textContent = evName + ' Availability Form';
+                    const sub = document.getElementById('tournamentSubtitle'); if (sub) { sub.textContent = evName; sub.style.display = 'block'; }
+                    renderEventSessions([window._eventData]);
+                } else if (!window._eventMode) {
+                    if (enabledTournaments.length) {
+                        if (window._tournamentMode) {
+                            renderTournamentSessions(enabledTournaments);
+                        } else {
+                            renderTournamentLinks(enabledTournaments);
+                        }
+                    }
+                    if (!window._tournamentMode && enabledEvents.length) {
+                        renderEventLinks(enabledEvents);
                     }
                 }
             });
@@ -765,6 +790,24 @@
                         <a href="referee-availability-form.html?tournament=${encodeURIComponent(t.key)}" style="background:#152d55;color:#fff;padding:9px 18px;border-radius:8px;text-decoration:none;font-weight:700;font-size:0.88rem;white-space:nowrap;">Sign Up →</a>
                     </div>`;
                 }).join('');
+                document.getElementById('tournamentFieldset').style.display = 'block';
+            }
+
+            function renderEventLinks(events) {
+                const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const wrap = document.getElementById('tournamentSessionsWrap');
+                const evHtml = events.map(ev => {
+                    const d = ev.start_date ? new Date(ev.start_date + 'T12:00:00') : null;
+                    const dateStr = d ? `${MONTHS[d.getMonth()]} ${d.getDate()}` : '';
+                    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;background:#f0faf9;border:1px solid #5eead4;border-radius:10px;margin-bottom:10px;">
+                        <div>
+                            <div style="font-weight:700;font-size:1rem;color:#09142a;">📅 ${ev.name}</div>
+                            ${dateStr ? `<div style="font-size:0.82rem;color:#555;margin-top:3px;">${dateStr}</div>` : ''}
+                        </div>
+                        <a href="referee-availability-form.html?event=${encodeURIComponent(ev.slug || ev.id)}" style="background:#0f766e;color:#fff;padding:9px 18px;border-radius:8px;text-decoration:none;font-weight:700;font-size:0.88rem;white-space:nowrap;">Sign Up →</a>
+                    </div>`;
+                }).join('');
+                wrap.innerHTML += evHtml;
                 document.getElementById('tournamentFieldset').style.display = 'block';
             }
 
@@ -912,6 +955,130 @@
                 }
             }
 
+            function renderEventSessions(events) {
+                const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const WDAYS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+                function fmtTime(t) {
+                    if (!t) return '';
+                    const [h, m] = t.split(':').map(Number);
+                    return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
+                }
+
+                function getBlocks(ev) {
+                    if (ev.session_blocks && ev.session_blocks.length) return ev.session_blocks;
+                    if (!ev.start_date) return [];
+                    const blocks = [];
+                    const start  = new Date(ev.start_date + 'T12:00:00');
+                    const end    = new Date((ev.end_date || ev.start_date) + 'T12:00:00');
+                    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                        const iso    = d.toISOString().slice(0, 10);
+                        const dlabel = `${WDAYS[d.getDay()]} ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+                        blocks.push({ date: iso, label: dlabel, session: 'AM', start_time: '07:00', end_time: '12:00' });
+                        blocks.push({ date: iso, label: dlabel, session: 'PM', start_time: '12:00', end_time: '18:00' });
+                    }
+                    return blocks;
+                }
+
+                window._genEvTimeOpts = function(startH, startM, endH, endM) {
+                    const opts = [];
+                    let h = startH, m = startM;
+                    while (h < endH || (h === endH && m <= endM)) {
+                        const val  = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+                        const disp = `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
+                        opts.push(`<option value="${val}">${disp}</option>`);
+                        m += 30; if (m >= 60) { m -= 60; h++; }
+                    }
+                    return opts.join('');
+                };
+
+                window._evWindowCfg = {};
+
+                window._buildEvRow = function(ekey, date, label) {
+                    const cfg = window._evWindowCfg[ekey + '_' + date];
+                    if (!cfg) return '';
+                    const [eh,em] = cfg.earliest.split(':').map(Number);
+                    const [lh,lm] = cfg.latest.split(':').map(Number);
+                    let aEH = lh, aEM = lm - 30; if (aEM < 0) { aEM += 60; aEH--; }
+                    let dSH = eh, dSM = em + 30; if (dSM >= 60) { dSM -= 60; dSH++; }
+                    const sel = 'border:1px solid #6ee7b7; border-radius:6px; padding:7px 10px; font-size:0.88rem; font-family:\'DM Sans\',sans-serif; cursor:pointer; background:#fff; color:#09142a; min-width:130px;';
+                    return `<div class="ev-row" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 14px; background:#f0fdf4; border:1px solid #86efac; border-radius:10px; margin-bottom:8px;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <span style="font-size:0.82rem; color:#166534; font-family:'DM Sans',sans-serif; font-weight:600; white-space:nowrap;">Arrive by</span>
+                            <select name="event_arrive" data-ekey="${ekey}" data-date="${date}" data-label="${label}" style="${sel}">
+                                <option value="">-- time --</option>
+                                ${window._genEvTimeOpts(eh,em,aEH,aEM)}
+                            </select>
+                            <span style="font-size:0.82rem; color:#166534; font-family:'DM Sans',sans-serif; font-weight:600; white-space:nowrap;">→ Leave by</span>
+                            <select name="event_depart" data-ekey="${ekey}" data-date="${date}" data-label="${label}" style="${sel}">
+                                <option value="">-- time --</option>
+                                ${window._genEvTimeOpts(dSH,dSM,lh,lm)}
+                            </select>
+                        </div>
+                        <button type="button" onclick="this.closest('.ev-row').remove();" style="background:#fee2e2; border:1px solid #fca5a5; color:#b91c1c; border-radius:6px; padding:4px 10px; font-size:0.8rem; cursor:pointer; font-weight:700; margin-left:auto;">✕ Remove</button>
+                    </div>`;
+                };
+
+                window._addEvWindow = function(ekey, date, label) {
+                    const container = document.getElementById('ew_' + ekey + '_' + date);
+                    if (!container) return;
+                    const div = document.createElement('div');
+                    div.innerHTML = window._buildEvRow(ekey, date, label);
+                    const addBtn = container.querySelector('.ew-add-btn');
+                    container.insertBefore(div.firstChild, addBtn);
+                };
+
+                const wrap = document.getElementById('tournamentSessionsWrap');
+                wrap.innerHTML = events.map(ev => {
+                    const ekey   = ev.slug || String(ev.id);
+                    const mode   = ev.avail_mode || 'sessions';
+                    const blocks = getBlocks(ev);
+                    let blockHtml = '';
+                    if (mode === 'window') {
+                        const days     = [...new Map(blocks.map(b => [b.date, b])).values()];
+                        const earliest = blocks.reduce((a,b) => a.start_time < b.start_time ? a : b, blocks[0]||{}).start_time || '07:00';
+                        const latest   = blocks.reduce((a,b) => a.end_time   > b.end_time   ? a : b, blocks[0]||{}).end_time   || '18:00';
+                        days.forEach(d => { window._evWindowCfg[ekey+'_'+d.date] = { earliest, latest }; });
+                        blockHtml = days.map(d => `
+                            <div style="padding:12px 0; border-bottom:1px solid #eee;">
+                                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                                    <span style="font-weight:700; font-size:0.92rem; color:#09142a; font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:0.5px;">${d.label}</span>
+                                    <span style="font-size:0.75rem; color:#6b7280; font-family:'DM Sans',sans-serif;">${fmtTime(earliest)} – ${fmtTime(latest)}</span>
+                                </div>
+                                <div id="ew_${ekey}_${d.date}">
+                                    ${window._buildEvRow(ekey, d.date, d.label)}
+                                    <button type="button" class="ew-add-btn" onclick="_addEvWindow('${ekey}','${d.date}','${d.label}')"
+                                        style="background:#00c853; border:none; color:#09142a; border-radius:8px; padding:6px 16px; font-size:0.82rem; font-weight:800; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase; margin-top:4px;">+ Add Window</button>
+                                </div>
+                            </div>`).join('');
+                    } else {
+                        blockHtml = blocks.map(b => `
+                            <label style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #eee; cursor:pointer;">
+                                <input type="checkbox" name="event_sessions"
+                                    data-ekey="${ekey}"
+                                    data-date="${b.date}"
+                                    data-session="${b.session}"
+                                    data-label="${b.label}"
+                                    data-start="${b.start_time}"
+                                    data-end="${b.end_time}">
+                                <span style="font-size:0.88rem;">
+                                    <strong>${b.label}</strong> — ${b.session}
+                                    <span style="color:#888; font-size:0.83rem;">(${fmtTime(b.start_time)} – ${fmtTime(b.end_time)})</span>
+                                </span>
+                            </label>`).join('');
+                    }
+                    return `
+                    <div style="margin-bottom:18px;">
+                        <div style="font-weight:700; font-size:0.95rem; color:#09142a; margin-bottom:6px; padding-bottom:6px; border-bottom:2px solid #0f766e;">
+                            📅 ${ev.name}
+                        </div>
+                        ${blockHtml}
+                    </div>`;
+                }).join('');
+
+                document.getElementById('tournamentFieldset').style.display = 'block';
+            }
+
             function attachLocationListeners(PAY_CLUBS) {
                 // Clear any browser-restored checkbox state
                 document.querySelectorAll('input[name="locations"]').forEach(cb => cb.checked = false);
@@ -1053,6 +1220,28 @@
 
             // Reveal the availability section with a fade
             function unlockAvailability() {
+                // Age gate for events with min_age
+                if (window._eventData?.min_age) {
+                    const dob = window._foundRefDob || document.getElementById('refereeBirthDate')?.value;
+                    if (dob) {
+                        const today = new Date();
+                        const birth = new Date(dob + 'T12:00:00');
+                        let age = today.getFullYear() - birth.getFullYear();
+                        const m = today.getMonth() - birth.getMonth();
+                        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+                        if (age < window._eventData.min_age) {
+                            const msgEl = document.getElementById('contactSaveMessage');
+                            if (msgEl) {
+                                msgEl.className = 'form-message error';
+                                msgEl.textContent = `⛔ You must be ${window._eventData.min_age} or older to sign up for this event.`;
+                                msgEl.style.display = 'block';
+                            }
+                            const btn = document.getElementById('saveContactBtn');
+                            if (btn) { btn.disabled = false; btn.textContent = 'Save & Continue to Availability Page →'; }
+                            return;
+                        }
+                    }
+                }
                 const sec = document.getElementById('availabilitySection');
                 sec.style.display = 'block';
                 requestAnimationFrame(() => { sec.style.opacity = '1'; });

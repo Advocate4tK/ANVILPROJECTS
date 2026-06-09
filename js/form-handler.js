@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (yearsEl  && yearsEl.offsetParent  !== null && !yearsEl.value)  missing.push('Years Reffing');
         if (certEl   && certEl.offsetParent   !== null && !certEl.value)   missing.push('Certification Level');
         if (genderEl && genderEl.offsetParent !== null && !genderEl.value) missing.push('Gender');
-        if (!window._tournamentMode) {
+        if (!window._tournamentMode && !window._eventMode) {
             if (!document.querySelectorAll('input[name="locations"]:checked').length)  missing.push('Preferred Locations (at least one)');
             // Venmo — required if Griswold or East Haddam selected, no payment on file, and venmo method chosen
             const checkedLocs = [...document.querySelectorAll('input[name="locations"]:checked')].map(c => c.value);
@@ -48,10 +48,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const dayRows       = document.querySelectorAll('.day-row');
         const tournSessions = document.querySelectorAll('input[name="tournament_sessions"]:checked');
+        const eventSessions = document.querySelectorAll('input[name="event_sessions"]:checked');
         const tournWindows  = [...document.querySelectorAll('.tw-row')].filter(r => r.querySelector('select[name="tourn_arrive"]')?.value);
+        const eventWindows  = [...document.querySelectorAll('.ev-row')].filter(r => r.querySelector('select[name="event_arrive"]')?.value);
         if (window._tournamentMode) {
             if (!tournSessions.length && !tournWindows.length) {
                 missing.push('At least one availability date or tournament time window');
+            }
+        } else if (window._eventMode) {
+            if (!eventSessions.length && !eventWindows.length) {
+                missing.push('At least one availability session or time window');
             }
         } else {
             if (!dayRows.length && !tournSessions.length && !tournWindows.length) {
@@ -182,10 +188,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            const dayRows        = window._tournamentMode ? [] : [...document.querySelectorAll('.day-row')];
+            const dayRows        = (window._tournamentMode || window._eventMode) ? [] : [...document.querySelectorAll('.day-row')];
             const tournChecked   = [...document.querySelectorAll('input[name="tournament_sessions"]:checked')];
+            const eventChecked   = [...document.querySelectorAll('input[name="event_sessions"]:checked')];
             const tournWindows   = [...document.querySelectorAll('.tw-row')].filter(r => r.querySelector('select[name="tourn_arrive"]')?.value);
-            if (!dayRows.length && !tournChecked.length && !tournWindows.length) throw new Error('No availability dates or tournament sessions selected.');
+            const eventWindows   = [...document.querySelectorAll('.ev-row')].filter(r => r.querySelector('select[name="event_arrive"]')?.value);
+            if (!dayRows.length && !tournChecked.length && !tournWindows.length && !eventChecked.length && !eventWindows.length) throw new Error('No availability dates or sessions selected.');
 
             // Delete existing records only for the specific dates being submitted
             // (leaves other dates untouched — upsert behavior per-date)
@@ -262,6 +270,57 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 });
                 await Promise.all([...sessionSubs, ...windowSubs]);
+            }
+
+            // Save event session availability
+            if (eventChecked.length || eventWindows.length) {
+                const allEKeys = [...new Set([
+                    ...eventChecked.map(cb => cb.dataset.ekey),
+                    ...eventWindows.map(r  => r.querySelector('select[name="event_arrive"]').dataset.ekey),
+                ])];
+                for (const eKey of allEKeys) {
+                    await supabaseClient.client.from('availability')
+                        .delete()
+                        .eq('Referee Name', refName)
+                        .eq('event_slug', eKey)
+                        .gte('date', new Date().toISOString().split('T')[0]);
+                }
+                const evSessionSubs = eventChecked.map(cb => airtableClient.createAvailability({
+                    'Referee Name':        refName,
+                    'Referee Email':       refEmail,
+                    'Date':                cb.dataset.date,
+                    'Start Time':          cb.dataset.start,
+                    'End Time':            cb.dataset.end,
+                    'Max Games':           '1',
+                    'Notes':               `${cb.dataset.label} ${cb.dataset.session}`,
+                    'Status':              'New',
+                    'Preferred Locations': '',
+                    'event_slug':          cb.dataset.ekey,
+                }));
+                const evWindowSubs = eventWindows.map(row => {
+                    const arrive    = row.querySelector('select[name="event_arrive"]');
+                    const depart    = row.querySelector('select[name="event_depart"]');
+                    const ekey      = arrive.dataset.ekey;
+                    const date      = arrive.dataset.date;
+                    const label     = arrive.dataset.label;
+                    const arriveVal = arrive.value;
+                    const departVal = depart?.value || '18:00';
+                    const arrTxt    = arrive.options[arrive.selectedIndex]?.text || arriveVal;
+                    const depTxt    = depart?.options[depart.selectedIndex]?.text || departVal;
+                    return airtableClient.createAvailability({
+                        'Referee Name':        refName,
+                        'Referee Email':       refEmail,
+                        'Date':                date,
+                        'Start Time':          arriveVal,
+                        'End Time':            departVal,
+                        'Max Games':           '1',
+                        'Notes':               `${label} — Arrive: ${arrTxt}, Leave: ${depTxt}`,
+                        'Status':              'New',
+                        'Preferred Locations': '',
+                        'event_slug':          ekey,
+                    });
+                });
+                await Promise.all([...evSessionSubs, ...evWindowSubs]);
             }
 
             // Send confirmation email (non-blocking — availability already saved)
@@ -351,7 +410,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
         }
 
-        if (!window._tournamentMode) {
+        if (!window._tournamentMode && !window._eventMode) {
             const locations = getCheckboxValues('locations');
             if (locations.length === 0) {
                 showMessage('error', 'Please select at least one preferred location.');
@@ -385,8 +444,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // Validate each day row — skip in tournament mode (day rows are hidden)
-        const dayRows = window._tournamentMode ? [] : document.querySelectorAll('.day-row');
+        // Validate each day row — skip in tournament/event mode (day rows are hidden)
+        const dayRows = (window._tournamentMode || window._eventMode) ? [] : document.querySelectorAll('.day-row');
         for (let i = 0; i < dayRows.length; i++) {
             const row = dayRows[i];
             const date = row.querySelector('input[name="availableDate[]"]').value;
@@ -473,6 +532,22 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             return [...checkLines, ...windowLines].join('\n');
         }
+        // Event mode
+        if (window._eventMode) {
+            const checked = [...document.querySelectorAll('input[name="event_sessions"]:checked')];
+            const windows = [...document.querySelectorAll('.ev-row')].filter(r => r.querySelector('select[name="event_arrive"]')?.value);
+            if (!checked.length && !windows.length) return '  No sessions selected.';
+            const checkLines = checked.map(cb => `  ${cb.dataset.label} ${cb.dataset.session}  |  ${fmt(cb.dataset.start)} – ${fmt(cb.dataset.end)}`);
+            const windowLines = windows.map(row => {
+                const arrive = row.querySelector('select[name="event_arrive"]');
+                const depart = row.querySelector('select[name="event_depart"]');
+                const label  = arrive.dataset.label || arrive.dataset.date || '';
+                const arrTxt = arrive.options[arrive.selectedIndex]?.text || arrive.value;
+                const depTxt = depart?.options[depart.selectedIndex]?.text || depart?.value || '';
+                return `  ${label}  |  Arrive: ${arrTxt}${depTxt ? ' — Leave: ' + depTxt : ''}`;
+            });
+            return [...checkLines, ...windowLines].join('\n');
+        }
         return Array.from(document.querySelectorAll('.day-row')).map((row, i) => {
             const date  = row.querySelector('input[name="availableDate[]"]').value;
             const start = row.querySelector('[name="startTime[]"]').value;
@@ -493,6 +568,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const clubs     = window._tournamentMode
             ? (document.querySelector('#tournamentSubtitle')?.textContent || 'Tournament')
+            : window._eventMode
+            ? (document.querySelector('#tournamentSubtitle')?.textContent || 'Event')
             : (getCheckboxValues('locations').join(', ') || 'None selected');
         const ageGroups = getCheckboxValues('ageGroups').join(', ') || 'No preference';
         const arOnly    = document.getElementById('arOnly').value || '—';
