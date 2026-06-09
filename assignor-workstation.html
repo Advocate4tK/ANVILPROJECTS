@@ -3892,15 +3892,21 @@
                 alert('No refs loaded — click ↻ Refresh first.');
                 return;
             }
-            const unseeded = allGames.filter(g => {
-                const gid = String(g.id);
-                return !sheet3StagedRefs[gid] || !sheet3StagedRefs[gid].some(Boolean);
-            });
+            // Skip games that already have a real assignment (Center/AR1/AR2 filled)
+            const hasAssignment = g => {
+                const cleared = sheet3ClearedAssigned[String(g.id)] || {};
+                return ['center', 'ar1', 'ar2'].some(f => {
+                    if (cleared[f]) return false;
+                    const raw = g.fields[{ center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' }[f]];
+                    return raw && raw !== 'FILLED' && String(raw).trim() !== '';
+                });
+            };
+            const unseeded = allGames.filter(g => !hasAssignment(g));
             if (!unseeded.length) {
-                alert('Every game already has candidates staged.');
+                alert('All games already have refs assigned to positions.');
                 return;
             }
-            if (!confirm(`Auto-seed ${unseeded.length} unseeded game${unseeded.length !== 1 ? 's' : ''} with AI-ranked ref candidates?\n\nGames that already have opts staged will not be touched.`)) return;
+            if (!confirm(`Re-rank opt cells for ${unseeded.length} unassigned game${unseeded.length !== 1 ? 's' : ''}?\n\nExisting opts on these games will be replaced. Games with a Center/AR1/AR2 already filled will not be touched.`)) return;
 
             const expV = r => {
                 const v = String(r.exp || '').toLowerCase().trim();
@@ -3918,6 +3924,11 @@
                     s.toLowerCase().includes(vLow.split(' ')[0])
                 );
             };
+
+            // Clear existing opts for all games being re-seeded so stale slots don't linger
+            const reseedIds = unseeded.map(g => parseInt(g.id));
+            await supabaseClient.client.from('staging').delete().in('game_id', reseedIds);
+            reseedIds.forEach(id => { sheet3StagedRefs[String(id)] = []; });
 
             const upsertPromises = [];
 
