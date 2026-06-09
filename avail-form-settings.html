@@ -146,6 +146,23 @@
             </div>
         </div>
 
+        <div class="tool-card" style="border-top:4px solid #0f766e;">
+            <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="toggleSection('eventAvailBody','eventAvailArrow')">
+                <span id="eventAvailArrow" style="color:#00c853; font-size:1rem; display:inline-block; transition:transform 0.2s;">▶</span>
+                <h2 style="margin:0;">Events</h2>
+            </div>
+            <div id="eventAvailBody" style="display:none; margin-top:18px;">
+                <p>Toggle events on to make them appear on the availability form.</p>
+                <div id="eventListWrap">
+                    <p style="color:#aaa; font-size:0.85rem;">Loading…</p>
+                </div>
+                <div style="display:none; margin-top:16px; align-items:center; gap:12px;" id="eventSaveRow">
+                    <button class="btn btn-secondary" onclick="saveEventAvail()">Save</button>
+                    <span class="save-msg" id="eventSaveMsg">✓ Saved</span>
+                </div>
+            </div>
+        </div>
+
         <!-- ══════════════════════════════════════════════════════ -->
         <!-- SECTION 2: PUBLIC OPENINGS BOARD                      -->
         <!-- ══════════════════════════════════════════════════════ -->
@@ -373,6 +390,7 @@
     let _recLoaded        = false;
     let _clubAvailLoaded  = false;
     let _tournAvailLoaded = false;
+    let _eventAvailLoaded = false;
 
     function toggleSection(bodyId, arrowId) {
         const body  = document.getElementById(bodyId);
@@ -384,6 +402,7 @@
         if (open && bodyId === 'recBody'        && !_recLoaded)        { _recLoaded        = true; loadRecOrgs();       }
         if (open && bodyId === 'clubAvailBody'  && !_clubAvailLoaded)  { _clubAvailLoaded  = true; loadAvailClubs();    }
         if (open && bodyId === 'tournAvailBody' && !_tournAvailLoaded) { _tournAvailLoaded = true; loadTournAvail();    }
+        if (open && bodyId === 'eventAvailBody' && !_eventAvailLoaded) { _eventAvailLoaded = true; loadEventAvail();   }
     }
 
     async function loadAvailClubs() {
@@ -647,6 +666,72 @@
         if (el)    el.style.display    = show ? 'block'  : 'none';
         if (badge) badge.style.display = show ? 'inline' : 'none';
     };
+
+    // ── Event Availability ───────────────────────────────────────────────────
+    let _allEvents = [];
+
+    async function loadEventAvail() {
+        const wrap = document.getElementById('eventListWrap');
+        const { data: events, error } = await supabaseClient.client
+            .from('events')
+            .select('id, name, "Club Name", slug, start_date, end_date, avail_form_enabled')
+            .eq('enabled', true)
+            .order('start_date');
+
+        if (error || !events || !events.length) {
+            wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">No events found. Create one in <a href="manage-clubs.html" style="color:#0369a1;">Club Management</a>.</p>';
+            return;
+        }
+
+        _allEvents = events;
+
+        const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        function fmtDate(iso) {
+            if (!iso) return '';
+            const d = new Date(iso + 'T12:00:00');
+            return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+        }
+
+        wrap.innerHTML = events.map(ev => {
+            const enabled   = ev.avail_form_enabled || false;
+            const label     = ev.name || ev['Club Name'];
+            const dateRange = ev.start_date && ev.end_date && ev.start_date !== ev.end_date
+                ? `${fmtDate(ev.start_date)} – ${fmtDate(ev.end_date)}`
+                : fmtDate(ev.start_date || ev.end_date);
+            const slug      = ev.slug || ev.id;
+            const formUrl   = `https://referee-tool.com/referee-availability-form.html?event=${encodeURIComponent(slug)}`;
+            return `
+            <div class="club-row" style="margin-bottom:10px;">
+                <div class="club-main-row" style="justify-content:space-between;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; flex:1; margin:0;">
+                        <input type="checkbox" id="ev_${ev.id}" value="${ev.id}" ${enabled ? 'checked' : ''}>
+                        <strong>${label}</strong>
+                        ${dateRange ? `<span style="color:#888; font-size:0.82rem; margin-left:6px;">${dateRange}</span>` : ''}
+                    </label>
+                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                        <button onclick="navigator.clipboard.writeText('${formUrl}').then(()=>{ this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy',1500); })"
+                            style="background:#e8f4fd; border:1px solid #3498db; color:#3498db; border-radius:6px; padding:4px 9px; font-size:0.75rem; cursor:pointer; white-space:nowrap; font-family:inherit;">📋 Copy</button>
+                        <a href="${formUrl}" target="_blank"
+                            style="background:#eafaf1; border:1px solid #27ae60; color:#27ae60; border-radius:6px; padding:4px 9px; font-size:0.75rem; text-decoration:none; white-space:nowrap;">↗ Form</a>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        document.getElementById('eventSaveRow').style.display = 'flex';
+    }
+
+    async function saveEventAvail() {
+        await Promise.all(_allEvents.map(ev => {
+            const cb = document.getElementById('ev_' + ev.id);
+            return supabaseClient.client.from('events')
+                .update({ avail_form_enabled: cb ? cb.checked : false })
+                .eq('id', ev.id);
+        }));
+        const msg = document.getElementById('eventSaveMsg');
+        msg.style.display = 'inline';
+        setTimeout(() => msg.style.display = 'none', 2000);
+    }
 
     async function saveTournAvail() {
         const promises = _allTournaments.map(t => {
