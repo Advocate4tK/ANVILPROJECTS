@@ -772,6 +772,43 @@
                     if (enabledTournaments.length) {
                         if (window._tournamentMode) {
                             renderTournamentSessions(enabledTournaments);
+                            // Pre-fill arrive/depart from ?time= and ?date= passed by ref-openings
+                            (function() {
+                                const _tp = new URLSearchParams(window.location.search);
+                                const _pfTime = _tp.get('time');
+                                const _pfDate = _tp.get('date');
+                                if (!_pfTime) return;
+                                const [ph, pm] = _pfTime.split(':').map(Number);
+                                if (isNaN(ph)) return;
+                                const gameMin = ph * 60 + (pm || 0);
+                                // arrive = floor to nearest 30-min at/before game time
+                                const arrMin = Math.floor(gameMin / 30) * 30;
+                                const arrVal = `${String(Math.floor(arrMin/60)).padStart(2,'0')}:${String(arrMin%60).padStart(2,'0')}`;
+                                // depart = game time + 2 hrs, ceil to nearest 30
+                                const depMin = Math.ceil((gameMin + 120) / 30) * 30;
+                                const depVal = `${String(Math.floor(depMin/60)).padStart(2,'0')}:${String(depMin%60).padStart(2,'0')}`;
+                                // window mode — arrive/depart selects
+                                document.querySelectorAll('select[name="tourn_arrive"]').forEach(sel => {
+                                    if (_pfDate && sel.dataset.date !== _pfDate) return;
+                                    const opt = [...sel.options].find(o => o.value === arrVal);
+                                    if (opt) sel.value = arrVal;
+                                    else if (sel.options.length > 1) sel.selectedIndex = 1;
+                                });
+                                document.querySelectorAll('select[name="tourn_depart"]').forEach(sel => {
+                                    if (_pfDate && sel.dataset.date !== _pfDate) return;
+                                    const opt = [...sel.options].find(o => o.value === depVal);
+                                    if (opt) sel.value = depVal;
+                                    else sel.selectedIndex = sel.options.length - 1;
+                                });
+                                // sessions mode — check the block whose window covers the game time
+                                document.querySelectorAll('input[name="tournament_sessions"]').forEach(cb => {
+                                    if (_pfDate && cb.dataset.date !== _pfDate) return;
+                                    const [sh, sm] = (cb.dataset.start || '').split(':').map(Number);
+                                    const [eh, em] = (cb.dataset.end   || '').split(':').map(Number);
+                                    if (isNaN(sh)) return;
+                                    if (gameMin >= sh*60+(sm||0) && gameMin < eh*60+(em||0)) cb.checked = true;
+                                });
+                            })();
                         } else {
                             renderTournamentLinks(enabledTournaments);
                         }
