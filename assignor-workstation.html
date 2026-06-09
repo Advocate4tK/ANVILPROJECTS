@@ -4119,13 +4119,21 @@
                     sheet3UpsertSlot(toGid, toSlot, name);
                 }
             } else if (type === 'opt') {
-                // Block cross-game opt drag if ref already exists in destination queue
+                // Cross-game drag: if ref already exists in destination, reposition within dest queue
                 if (String(fromGid) !== String(toGid)) {
-                    const nameLc = name.trim().toLowerCase();
-                    const alreadyInDest = (sheet3StagedRefs[toGid] || []).some(n => n && n.trim().toLowerCase() === nameLc);
-                    if (alreadyInDest) {
-                        const td = document.getElementById(`s3opt-${toGid}-${toSlot}`);
-                        if (td) { td.style.outline = '2px solid #e74c3c'; setTimeout(() => td.style.outline = '', 800); }
+                    const nameLc   = name.trim().toLowerCase();
+                    const destArr  = sheet3StagedRefs[toGid] || [];
+                    const existIdx = destArr.findIndex(n => n && n.trim().toLowerCase() === nameLc);
+                    if (existIdx !== -1) {
+                        // Remove from current position, insert at target slot
+                        destArr.splice(existIdx, 1);
+                        destArr.splice(toSlot > existIdx ? toSlot - 1 : toSlot, 0, name);
+                        sheet3StagedRefs[toGid] = destArr;
+                        // Clear from source game and slide left
+                        sheet3SlideQueue(fromGid, fromSlot);
+                        destArr.forEach((n, s) => { if (n) sheet3UpsertSlot(toGid, s, n); });
+                        sheet3CacheStagedRefs();
+                        renderSheet3View(sheet3LastFiltered);
                         return;
                     }
                 }
