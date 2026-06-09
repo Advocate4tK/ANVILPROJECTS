@@ -3885,14 +3885,13 @@
             }
         }
 
-        async function sheet3AutoSeedTournament() {
+        function sheet3AutoSeedTournament() {
             if (!window.tournamentMode) return;
             const allRefsList = window._s3AllTourneyRefs;
             if (!allRefsList || !allRefsList.length) {
                 alert('No refs loaded — click ↻ Refresh first.');
                 return;
             }
-            // Skip games that already have a real assignment (Center/AR1/AR2 filled)
             const hasAssignment = g => {
                 const cleared = sheet3ClearedAssigned[String(g.id)] || {};
                 return ['center', 'ar1', 'ar2'].some(f => {
@@ -3906,7 +3905,75 @@
                 alert('All games already have refs assigned to positions.');
                 return;
             }
-            if (!confirm(`Re-rank opt cells for ${unseeded.length} unassigned game${unseeded.length !== 1 ? 's' : ''}?\n\nExisting opts on these games will be replaced. Games with a Center/AR1/AR2 already filled will not be touched.`)) return;
+            window._s3AutoSeedQueue = unseeded;
+            // Load saved prefs
+            const prefs = (() => { try { return JSON.parse(localStorage.getItem('s3AutoSeedPrefs') || '{}'); } catch(e) { return {}; } })();
+            const p = (k, def) => prefs[k] !== undefined ? prefs[k] : def;
+
+            const existing = document.getElementById('s3AutoSeedModal');
+            if (existing) existing.remove();
+            const modal = document.createElement('div');
+            modal.id = 's3AutoSeedModal';
+            modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:inherit;';
+            modal.innerHTML = `
+                <div style="background:#1a1f35;border:1px solid #7c3aed;border-radius:12px;padding:28px 28px 22px;max-width:480px;width:92%;color:#e2e8f0;box-shadow:0 8px 40px rgba(0,0,0,0.6);">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                        <span style="font-size:1.05rem;font-weight:700;color:#fff;">Auto-Seed Opts</span>
+                        <span style="margin-left:auto;font-size:0.78rem;color:#a78bfa;font-weight:600;">${unseeded.length} game${unseeded.length !== 1 ? 's' : ''} to seed</span>
+                    </div>
+                    <p style="margin:0 0 18px;font-size:0.8rem;color:#94a3b8;line-height:1.55;">
+                        Ranks every ref available at each game's time slot and fills opt cells in priority order — Opt 1 is the best fit, Opt 2 is second, and so on. Games with a Center, AR1, or AR2 already filled will not be touched. Existing opt cells on unseeded games will be replaced.
+                    </p>
+                    <p style="margin:0 0 10px;font-size:0.75rem;font-weight:700;color:#c4b5fd;text-transform:uppercase;letter-spacing:0.05em;">Scoring factors</p>
+                    <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:22px;">
+                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.82rem;">
+                            <input type="checkbox" id="aseed_age" ${p('age',true)?'checked':''} style="width:15px;height:15px;accent-color:#7c3aed;cursor:pointer;">
+                            <span>Age group capability match <span style="color:#64748b;">(+3 pts if ref's cap fits game age)</span></span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.82rem;">
+                            <input type="checkbox" id="aseed_site" ${p('site',true)?'checked':''} style="width:15px;height:15px;accent-color:#7c3aed;cursor:pointer;">
+                            <span>Venue / site preference <span style="color:#64748b;">(+2 pts if ref listed this venue)</span></span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.82rem;">
+                            <input type="checkbox" id="aseed_exp" ${p('exp',true)?'checked':''} style="width:15px;height:15px;accent-color:#7c3aed;cursor:pointer;">
+                            <span>Years of experience <span style="color:#64748b;">(+1–10 pts, more experience ranks higher)</span></span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.82rem;">
+                            <input type="checkbox" id="aseed_workload" ${p('workload',true)?'checked':''} style="width:15px;height:15px;accent-color:#7c3aed;cursor:pointer;">
+                            <span>Distribute workload evenly <span style="color:#64748b;">(−2 pts per game already assigned)</span></span>
+                        </label>
+                    </div>
+                    <div style="display:flex;gap:10px;justify-content:flex-end;">
+                        <button onclick="sheet3AutoSeedCancel()" style="padding:7px 18px;border-radius:6px;border:1px solid #475569;background:transparent;color:#94a3b8;font-size:0.82rem;cursor:pointer;font-family:inherit;">Cancel</button>
+                        <button onclick="sheet3AutoSeedRun()" style="padding:7px 20px;border-radius:6px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">Run Auto-Seed</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+        }
+
+        function sheet3AutoSeedCancel() {
+            const modal = document.getElementById('s3AutoSeedModal');
+            if (modal) modal.remove();
+            window._s3AutoSeedQueue = null;
+        }
+
+        async function sheet3AutoSeedRun() {
+            const modal = document.getElementById('s3AutoSeedModal');
+            const config = {
+                age:      document.getElementById('aseed_age')?.checked ?? true,
+                site:     document.getElementById('aseed_site')?.checked ?? true,
+                exp:      document.getElementById('aseed_exp')?.checked ?? true,
+                workload: document.getElementById('aseed_workload')?.checked ?? true,
+            };
+            localStorage.setItem('s3AutoSeedPrefs', JSON.stringify(config));
+            if (modal) modal.remove();
+
+            const unseeded = window._s3AutoSeedQueue;
+            window._s3AutoSeedQueue = null;
+            if (!unseeded || !unseeded.length) return;
+
+            const allRefsList = window._s3AllTourneyRefs;
+            if (!allRefsList || !allRefsList.length) return;
 
             const expV = r => {
                 const v = String(r.exp || '').toLowerCase().trim();
@@ -3925,7 +3992,6 @@
                 );
             };
 
-            // Clear existing opts for all games being re-seeded so stale slots don't linger
             const reseedIds = unseeded.map(g => parseInt(g.id));
             await supabaseClient.client.from('staging').delete().in('game_id', reseedIds);
             reseedIds.forEach(id => { sheet3StagedRefs[String(id)] = []; });
@@ -3954,13 +4020,15 @@
                     })
                     .map(r => {
                         let score = 0;
-                        const cap = (r.ageCap || '').toLowerCase();
-                        if      (cap.includes('11v11') && ageNum >= 13)                 score += 3;
-                        else if (cap.includes('9v9')   && ageNum >= 11 && ageNum <= 12) score += 3;
-                        else if (cap.includes('7v7')   && ageNum <= 10)                 score += 3;
-                        if (siteMatch(r, venueName)) score += 2;
-                        score += Math.min(Math.max(expV(r), 0), 10);
-                        score -= (r._assignedCount || 0) * 2;
+                        if (config.age) {
+                            const cap = (r.ageCap || '').toLowerCase();
+                            if      (cap.includes('11v11') && ageNum >= 13)                 score += 3;
+                            else if (cap.includes('9v9')   && ageNum >= 11 && ageNum <= 12) score += 3;
+                            else if (cap.includes('7v7')   && ageNum <= 10)                 score += 3;
+                        }
+                        if (config.site)     { if (siteMatch(r, venueName)) score += 2; }
+                        if (config.exp)      { score += Math.min(Math.max(expV(r), 0), 10); }
+                        if (config.workload) { score -= (r._assignedCount || 0) * 2; }
                         return { r, score };
                     })
                     .sort((a, b) => b.score - a.score || a.r.name.localeCompare(b.r.name))
