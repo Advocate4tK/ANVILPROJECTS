@@ -586,6 +586,7 @@
 
     let CLUBS        = ['Griswold', 'East Haddam']; // overridden by settings table on load
     let TOURNAMENTS  = []; // active tournaments with avail_enabled = true
+    let EVENTS       = []; // active events with avail_form_enabled = true
     let _formConfig  = {};
     let _recOrgs     = []; // active recreation orgs from settings
 
@@ -873,29 +874,32 @@
             const _now = new Date();
             const today = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0') + '-' + String(_now.getDate()).padStart(2,'0');
 
-            // Fetch active clubs + tournaments + form routing + rec orgs
-            const [settingRes, formConfigRes, recOrgsRes, tournRes] = await Promise.all([
+            // Fetch active clubs + tournaments + events + form routing + rec orgs
+            const [settingRes, formConfigRes, recOrgsRes, tournRes, eventsRes] = await Promise.all([
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_recreation_orgs').maybeSingle(),
-                supabaseClient.client.from('tournaments').select('key, name').eq('avail_enabled', true).eq('status', 'active').order('name')
+                supabaseClient.client.from('tournaments').select('key, name').eq('avail_enabled', true).eq('status', 'active').order('name'),
+                supabaseClient.client.from('events').select('id, name, "Club Name", slug').eq('avail_form_enabled', true).order('name')
             ]);
             if (settingRes.data?.value) {
-                try { CLUBS = JSON.parse(settingRes.data.value); } catch(e) {}
+                try { CLUBS = JSON.parse(settingRes.data.value).filter(c => c !== 'on'); } catch(e) {}
             }
             try { _formConfig = JSON.parse(formConfigRes.data?.value || '{}'); } catch(e) { _formConfig = {}; }
             try { _recOrgs    = JSON.parse(recOrgsRes.data?.value    || '[]'); } catch(e) { _recOrgs = []; }
             TOURNAMENTS = tournRes.data || [];
+            EVENTS      = (eventsRes.data || []);
 
             // Build selector dropdown + rotator
-            const allFilterClubs = [...CLUBS, ...(_recOrgs.length ? ['RECREATION'] : []), ...TOURNAMENTS.map(t => t.name)];
+            const allFilterClubs = [...CLUBS, ...(_recOrgs.length ? ['RECREATION'] : []), ...TOURNAMENTS.map(t => t.name), ...EVENTS.map(e => e.name || e['Club Name'])];
             const savedClub = _clubFilter;
             _clubFilter = (savedClub === 'all' || allFilterClubs.includes(savedClub)) ? savedClub : 'all';
             const sel = document.getElementById('clubSelectNative');
             sel.innerHTML = `<option value="all">All</option>` +
                 CLUBS.map(c => `<option value="${c}">${c}</option>`).join('') +
                 (_recOrgs.length ? `<option value="RECREATION">Recreation</option>` : '') +
-                (TOURNAMENTS.length ? TOURNAMENTS.map(t => `<option value="${t.name}">🏆 ${t.name}</option>`).join('') : '');
+                (TOURNAMENTS.length ? TOURNAMENTS.map(t => `<option value="${t.name}">🏆 ${t.name}</option>`).join('') : '') +
+                (EVENTS.length ? EVENTS.map(e => `<option value="${e.name || e['Club Name']}">📅 ${e.name || e['Club Name']}</option>`).join('') : '');
             sel.value = _clubFilter;
             const selector = document.getElementById('clubSelector');
             if (_clubFilter !== 'all') {
@@ -923,6 +927,11 @@
                 ...TOURNAMENTS.map(t =>
                     supabaseClient.client.from('tournament_games').select('*')
                         .eq('Source Club', t.name).gte('date', today)
+                        .order('date', { ascending: true }).limit(500)
+                ),
+                ...EVENTS.map(ev =>
+                    supabaseClient.client.from('games').select('*')
+                        .eq('Source Club', ev.name || ev['Club Name']).gte('date', today)
                         .order('date', { ascending: true }).limit(500)
                 )
             ]);
