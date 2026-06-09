@@ -1981,13 +1981,15 @@
     async function loadScheduledGames() {
         const section = document.getElementById('scheduledGamesSection');
         const content = document.getElementById('scheduledGamesContent');
-        if (!currentClubRecord) return;
+        if (!currentClubRecord && !currentTournament) return;
         section.style.display = 'block';
 
-        const clubName = (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '').toLowerCase();
+        const clubName = currentClubRecord ? (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '').toLowerCase() : '';
         try {
             const [games, refRecs, venueRecs] = await Promise.all([
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    { maxRecords: 500 }),
+                currentTournament
+                    ? airtableClient.getRecords('tournament_games', { maxRecords: 500, extraEq: [{ col: 'Source Club', val: currentTournament.key.toUpperCase() }] })
+                    : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 500 }),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 }),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 200 })
             ]);
@@ -1999,10 +2001,9 @@
                 name:  v.fields['Venue Name'] || v.fields['Name'] || ''
             }));
 
-
             const clubGames = games
                 .filter(r => currentTournament
-                    ? (r.fields['game_type'] || '').toLowerCase() === 'tournament'
+                    ? true
                     : ((r.fields['Home Team'] || '').toLowerCase().includes(clubName) || (r.fields['Club'] || '').toLowerCase().includes(clubName) || (r.fields['Source Club'] || '').toLowerCase().includes(clubName)))
                 .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || '') || (a.fields['Time'] || '').localeCompare(b.fields['Time'] || ''));
 
