@@ -3528,9 +3528,15 @@
 
                     sheet3CachedRefRows = tourneyRefs.map(r => ({ ...r, _assignedCount: getAssignedCount(r) }));
 
-                    // Override sort if user explicitly sorted by exp or day start time
+                    // Override sort if user explicitly sorted by exp, age, or day start time
                     if (sheet3RefSort.col === 'exp') {
                         sheet3CachedRefRows.sort((a, b) => (expVal(a) - expVal(b)) * sheet3RefSort.dir);
+                    } else if (sheet3RefSort.col === 'age') {
+                        sheet3CachedRefRows.sort((a, b) => {
+                            const av = a.age != null ? a.age : (sheet3RefSort.dir === 1 ? 9999 : -9999);
+                            const bv = b.age != null ? b.age : (sheet3RefSort.dir === 1 ? 9999 : -9999);
+                            return (av - bv) * sheet3RefSort.dir;
+                        });
                     } else if (sheet3RefSort.col && sheet3RefSort.col.startsWith('day_')) {
                         const sortDate = sheet3RefSort.col.slice(4);
                         const startVal = r => {
@@ -3606,7 +3612,7 @@
                     refsHeader = `<tr>
                         ${rTh('refName',    hdr, 'Name')}
                         ${sheet3RefHiddenCols.includes('refPref')     ? rShowStubTh('refPref','Pref Assignment') : rTh('refPref',     hdr, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Pref Assignment${rHideX('refPref')}</span>`)}
-                        ${sheet3RefHiddenCols.includes('refAge')      ? rShowStubTh('refAge','Age')              : rTh('refAge',      hdr, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Age${rHideX('refAge')}</span>`)}
+                        ${sheet3RefHiddenCols.includes('refAge')      ? rShowStubTh('refAge','Age')              : rTh('refAge',      `${hdr} cursor:pointer; user-select:none;`, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;" onclick="sheet3SortRefs('age')" title="Sort by age">Age ${sheet3RefSort.col==='age'?(sheet3RefSort.dir===1?'▲':'▼'):''}${rHideX('refAge')}</span>`)}
                         ${sheet3RefHiddenCols.includes('refExp')      ? rShowStubTh('refExp','Ref Exp')          : rTh('refExp',      `${hdr} cursor:pointer; user-select:none;`, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}${rHideX('refExp')}</span>`)}
                         ${sheet3RefHiddenCols.includes('refAgeCap')   ? rShowStubTh('refAgeCap','Age Cap')       : rTh('refAgeCap',   hdr, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Age Cap${rHideX('refAgeCap')}</span>`)}
                         ${sheet3RefHiddenCols.includes('refSitePref') ? rShowStubTh('refSitePref','Site Pref')   : rTh('refSitePref', hdr, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Site Pref${rHideX('refSitePref')}</span>`)}
