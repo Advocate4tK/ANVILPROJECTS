@@ -3549,6 +3549,9 @@
                         sheet3CachedRefRows.sort((a, b) => startVal(a).localeCompare(startVal(b)) * sheet3RefSort.dir);
                     }
 
+                    // Snapshot full sorted list for auto-seed (before selected-game filter narrows it)
+                    window._s3AllTourneyRefs = sheet3CachedRefRows;
+
                     // If a game is selected, filter ref pane to only refs available at that game's time
                     if (sheet3SelectedGameId) {
                         const _selGame = allGames.find(g => String(g.id) === sheet3SelectedGameId);
@@ -3806,6 +3809,7 @@
                     <button onclick="sheet3SetZoomRefs(0.05)" style="${zoomBtn}">+</button>
                     <span style="font-size:0.78rem; font-weight:700; color:${sheet3SelectedGameId ? '#00c853' : '#1f2328'}; margin-left:6px;">${sheet3CachedRefRows.length} refs</span>
                     ${window.tournamentMode ? `<button onclick="refreshTournamentRefs()" style="${zoomBtn} margin-left:10px; background:#7c3aed; color:white; border-color:#7c3aed;">↻ Refresh</button>` : ''}
+                    ${window.tournamentMode ? `<button onclick="sheet3AutoSeedTournament()" style="${zoomBtn} margin-left:6px; background:#d97706; color:white; border-color:#d97706;" title="AI-rank and pre-fill opt cells for unseeded games">Auto-Seed Opts</button>` : ''}
                     ${sheet3RefHiddenCols.length ? `<button onclick="sheet3RefShowAllCols()" style="${zoomBtn}" title="Show all hidden ref columns">Show all ref cols</button>` : ''}
                     ${sheet3SelectedGameId ? `<button onclick="sheet3ToggleConflicts()" style="${zoomBtn} margin-left:10px; ${sheet3ShowConflicts ? 'background:#c0392b;color:#fff;border-color:#c0392b;' : ''}" title="${sheet3ShowConflicts ? 'Showing conflicts — click to hide' : 'Show refs already on another game at this time'}">${sheet3ShowConflicts ? '⚠ Show conflicts too ✕' : '⚠ Show conflicts too'}</button>` : ''}
                     ${!window.tournamentMode ? `<span style="margin-left:10px; font-size:0.58rem; color:#888; display:flex; align-items:center; gap:6px; white-space:nowrap;">
@@ -3879,6 +3883,90 @@
             } finally {
                 if (btn) { btn.textContent = '↻ Refresh'; btn.disabled = false; }
             }
+        }
+
+        async function sheet3AutoSeedTournament() {
+            if (!window.tournamentMode) return;
+            const allRefsList = window._s3AllTourneyRefs;
+            if (!allRefsList || !allRefsList.length) {
+                alert('No refs loaded — click ↻ Refresh first.');
+                return;
+            }
+            const unseeded = allGames.filter(g => {
+                const gid = String(g.id);
+                return !sheet3StagedRefs[gid] || !sheet3StagedRefs[gid].some(Boolean);
+            });
+            if (!unseeded.length) {
+                alert('Every game already has candidates staged.');
+                return;
+            }
+            if (!confirm(`Auto-seed ${unseeded.length} unseeded game${unseeded.length !== 1 ? 's' : ''} with AI-ranked ref candidates?\n\nGames that already have opts staged will not be touched.`)) return;
+
+            const expV = r => {
+                const v = String(r.exp || '').toLowerCase().trim();
+                if (v === 'season 1' || v === 'seas 1') return -2;
+                if (v === 'season 2' || v === 'seas 2') return -1;
+                const n = parseInt(v);
+                return isNaN(n) ? 0 : n;
+            };
+
+            const siteMatch = (ref, venueName) => {
+                if (!venueName) return false;
+                const vLow = venueName.toLowerCase();
+                return ref.sitePref.some(s =>
+                    vLow.includes(s.toLowerCase()) ||
+                    s.toLowerCase().includes(vLow.split(' ')[0])
+                );
+            };
+
+            const upsertPromises = [];
+
+            for (const game of unseeded) {
+                const gid       = String(game.id);
+                const gameDate  = game.fields['Date'] || '';
+                const gameTime  = (game.fields['Time'] || '').slice(0, 5);
+                const ageNum    = parseInt((game.fields['Age Group'] || '').replace(/\D/g, '')) || 0;
+                const venueObj  = allVenues.find(v => String(v.id) === String(game.fields['Venue ID']));
+                const venueName = venueObj ? venueObj.name : '';
+
+                const ranked = allRefsList
+                    .filter(r => {
+                        const slots = (r.avail[gameDate] || []).filter(s => s.available);
+                        if (!slots.length) return false;
+                        if (!gameTime) return true;
+                        return slots.some(s => {
+                            const st = (s.start || '').slice(0, 5);
+                            const et = (s.end   || '').slice(0, 5);
+                            if (!st || !et) return true;
+                            return gameTime >= st && gameTime <= et;
+                        });
+                    })
+                    .map(r => {
+                        let score = 0;
+                        const cap = (r.ageCap || '').toLowerCase();
+                        if      (cap.includes('11v11') && ageNum >= 13)                 score += 3;
+                        else if (cap.includes('9v9')   && ageNum >= 11 && ageNum <= 12) score += 3;
+                        else if (cap.includes('7v7')   && ageNum <= 10)                 score += 3;
+                        if (siteMatch(r, venueName)) score += 2;
+                        score += Math.min(Math.max(expV(r), 0), 10);
+                        score -= (r._assignedCount || 0) * 2;
+                        return { r, score };
+                    })
+                    .sort((a, b) => b.score - a.score || a.r.name.localeCompare(b.r.name))
+                    .slice(0, sheet3MaxQueueLen)
+                    .map(c => c.r.name);
+
+                if (!ranked.length) continue;
+
+                sheet3StagedRefs[gid] = ranked;
+                ranked.forEach((name, slot) => {
+                    upsertPromises.push(sheet3UpsertSlot(gid, slot, name));
+                });
+            }
+
+            sheet3CacheStagedRefs();
+            await Promise.all(upsertPromises);
+            renderSheet3View(sheet3LastFiltered);
         }
 
         function sheet3SortRefs(col) {
