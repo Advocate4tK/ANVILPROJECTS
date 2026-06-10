@@ -4167,21 +4167,6 @@
                     sheet3UpsertSlot(toGid, toSlot, name);
                 }
                 sheet3ClearAssignedCell(fromGid, fromField);
-                // Re-add to opt queues of all overlapping games that had her stripped on assignment
-                const _unassignedGame = allGames.find(g => String(g.id) === String(fromGid));
-                if (_unassignedGame) {
-                    const _nameLc = name.trim().toLowerCase();
-                    allGames.forEach(g => {
-                        if (String(g.id) === String(toGid)) return;
-                        if (!gamesOverlap(_unassignedGame, g)) return;
-                        const _gid2 = String(g.id);
-                        const _opts2 = sheet3StagedRefs[_gid2];
-                        if (!_opts2) return;
-                        if (_opts2.some(n => n && n.trim().toLowerCase() === _nameLc)) return;
-                        sheet3InsertQueue(_gid2, 0, name);
-                    });
-                    sheet3CacheStagedRefs();
-                }
                 renderGames();
             }
             sheet3CacheStagedRefs();
@@ -8049,23 +8034,24 @@
 
                     // Do NOT auto-clear Change Requested here — assignor must explicitly mark resolved
 
-                    // Remove ref from Opt cells of ALL games that overlap this game's time window
-                    // Use slideQueue (not just null) so order compacts cleanly and persists on next login
-                    const assignedNameLc = refName.trim().toLowerCase();
-                    const removePromises = [];
-                    allGames.forEach(g => {
-                        if (!gamesOverlap(game, g)) return;
-                        const gid = String(g.id);
-                        const opts = sheet3StagedRefs[gid];
-                        if (!opts) return;
-                        // Iterate in reverse so splices don't shift unprocessed indices
-                        for (let slot = opts.length - 1; slot >= 0; slot--) {
-                            const name = opts[slot];
-                            if (!name || name.trim().toLowerCase() !== assignedNameLc) continue;
-                            removePromises.push(...sheet3SlideQueue(gid, slot));
-                        }
-                    });
-                    await Promise.all(removePromises);
+                    // In tournament mode Eric manages opt cells manually — don't auto-strip on assign
+                    if (!window.tournamentMode) {
+                        // Remove ref from Opt cells of ALL games that overlap this game's time window
+                        const assignedNameLc = refName.trim().toLowerCase();
+                        const removePromises = [];
+                        allGames.forEach(g => {
+                            if (!gamesOverlap(game, g)) return;
+                            const gid = String(g.id);
+                            const opts = sheet3StagedRefs[gid];
+                            if (!opts) return;
+                            for (let slot = opts.length - 1; slot >= 0; slot--) {
+                                const name = opts[slot];
+                                if (!name || name.trim().toLowerCase() !== assignedNameLc) continue;
+                                removePromises.push(...sheet3SlideQueue(gid, slot));
+                            }
+                        });
+                        await Promise.all(removePromises);
+                    }
                 }
 
                 renderGames();
