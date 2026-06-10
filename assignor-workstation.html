@@ -2995,7 +2995,7 @@
         }
         function _doShowRefTooltip(name, el, evt) {
             if (!name || name === '—') return;
-            const ref = refLookupByName[name.trim().toLowerCase()];
+            const ref = lookupRefByName(name);
             if (!ref) return;
             const f = ref.fields;
             const yrs      = parseYrs(f['Years Reffing'], -1);
@@ -3057,9 +3057,22 @@
             } catch(e) { console.error('sheet3UpsertSlot:', e); }
         }
 
+        // Name lookup with fuzzy fallback: exact → alias → first-initial+last-name (single unique match only)
+        function lookupRefByName(name) {
+            if (!name || name === '—') return null;
+            const k = name.trim().replace(/\s+/g, ' ').toLowerCase();
+            if (refLookupByName[k]) return refLookupByName[k];
+            const parts = k.split(/\s+/);
+            if (parts.length >= 2) {
+                const fuzzy = parts[0][0] + '_' + parts[parts.length - 1];
+                if (refLookupByLastNameFirst[fuzzy]) return refLookupByLastNameFirst[fuzzy];
+            }
+            return null;
+        }
+
         function refNotesBadge(name) {
             if (!name || name === '—') return '';
-            const refObj = refLookupByName[name.trim().toLowerCase()];
+            const refObj = lookupRefByName(name);
             if (!refObj) return '';
             const notes = (refObj.fields['Assignor Notes'] || '').trim();
             return notes ? `<span style="background:#c0392b;color:#fff;border-radius:10px;padding:1px 5px;font-size:0.62rem;font-weight:700;margin-left:3px;vertical-align:middle;" title="${notes.replace(/"/g,'&quot;')}">!</span>` : '';
@@ -3067,7 +3080,7 @@
 
         function refPosBadge(name) {
             if (!name || name === '—') return '';
-            const refObj = refLookupByName[name.trim().toLowerCase()];
+            const refObj = lookupRefByName(name);
             if (!refObj) return '';
             const pos = (refObj.fields['Position Preference'] || '').toLowerCase();
             if (pos.includes('ar only') || pos.includes('assistant') || pos === 'ar')
@@ -3458,7 +3471,7 @@
                         const name = (a.fields['Referee Name'] || '').trim();
                         if (!name) return;
                         if (!refMap[name]) {
-                            const refObj = refLookupByName[name.trim().toLowerCase()];
+                            const refObj = lookupRefByName(name);
                             const notesText = refObj ? (refObj.fields['notes'] || '') : '';
                             const certYrMatch = notesText.match(/Cert year:\s*(\d{4})/i);
                             refMap[name] = {
@@ -5160,8 +5173,9 @@
         let allFields     = []; // { fieldId, name, venueId }
         let clubLookup    = {}; // airtable record ID → club name
         let refLookup     = {}; // airtable record ID → ref object
-        let refLookupByName  = {}; // lowercase name → ref object (for Supabase string refs)
-        let refLookupByEmail = {}; // lowercase email → ref object (for email-based ghost resolution)
+        let refLookupByName        = {}; // lowercase name → ref object (for Supabase string refs)
+        let refLookupByEmail       = {}; // lowercase email → ref object (for email-based ghost resolution)
+        let refLookupByLastNameFirst = {}; // "firstinitial_lastname" → ref (fuzzy fallback when name doesn't exact-match)
         let venueZipMap     = {}; // Airtable field record ID → venue zip string
         let clubVenueZipMap = {}; // club name (lowercase) → representative venue zip
 
@@ -6141,6 +6155,21 @@
                     // Register aliases — alternate names (e.g. "TJ" for "Timothy") resolve to real record
                     (r.fields['aliases'] || '').split(',').map(a => a.trim().toLowerCase()).filter(Boolean)
                         .forEach(alias => { if (!refLookupByName[alias]) refLookupByName[alias] = r; });
+                });
+                // Fuzzy fallback: first-initial + last-name key → single unique ref
+                // Handles nickname/spelling variants ("Edie Ranta" → "Edith Ranta", "Matthew" → "Mathew")
+                const _lastFirstMap = {};
+                refs.forEach(r => {
+                    const parts = (r.fields['Name'] || '').trim().split(/\s+/);
+                    if (parts.length >= 2) {
+                        const k = (parts[0][0] + '_' + parts[parts.length - 1]).toLowerCase();
+                        if (!_lastFirstMap[k]) _lastFirstMap[k] = [];
+                        _lastFirstMap[k].push(r);
+                    }
+                });
+                refLookupByLastNameFirst = {};
+                Object.entries(_lastFirstMap).forEach(([k, arr]) => {
+                    if (arr.length === 1) refLookupByLastNameFirst[k] = arr[0];
                 });
 
                 // Build availability by referee name
