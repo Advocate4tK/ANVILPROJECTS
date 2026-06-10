@@ -4167,6 +4167,21 @@
                     sheet3UpsertSlot(toGid, toSlot, name);
                 }
                 sheet3ClearAssignedCell(fromGid, fromField);
+                // Re-add to opt queues of all overlapping games that had her stripped on assignment
+                const _unassignedGame = allGames.find(g => String(g.id) === String(fromGid));
+                if (_unassignedGame) {
+                    const _nameLc = name.trim().toLowerCase();
+                    allGames.forEach(g => {
+                        if (String(g.id) === String(toGid)) return;
+                        if (!gamesOverlap(_unassignedGame, g)) return;
+                        const _gid2 = String(g.id);
+                        const _opts2 = sheet3StagedRefs[_gid2];
+                        if (!_opts2) return;
+                        if (_opts2.some(n => n && n.trim().toLowerCase() === _nameLc)) return;
+                        sheet3InsertQueue(_gid2, 0, name);
+                    });
+                    sheet3CacheStagedRefs();
+                }
                 renderGames();
             }
             sheet3CacheStagedRefs();
