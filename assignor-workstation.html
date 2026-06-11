@@ -3214,8 +3214,8 @@
                     const badge     = hasRef ? refCountBadge(rawName) : '';
                     const hoverIn  = hasRef ? `onmouseenter="showRefTooltip('${display.replace(/'/g,"\\'")}', this, event)"` : '';
                     const hoverOut   = hasRef ? `onmouseleave="hideRefTooltip()"` : '';
-                    const emptyClick = (!hasRef && !isFil && !isEmpty && !isCleared) ? `onclick="s3OpenRefInline(event,'${gid}','${field}')"` : '';
-                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${!isCleared?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut} ${emptyClick}
+                    const cellClick = (!isFil && !isEmpty && !isCleared) ? `onclick="s3CellClick(event,'${gid}','${field}','${hasRef ? rawName.replace(/'/g,"\\'") : ''}')"` : '';
+                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${!isCleared?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut} ${cellClick}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
                         ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}</td>`;
@@ -3642,12 +3642,13 @@
                         const siteDisplay = r.sitePref.length
                             ? r.sitePref.join(', ')
                             : '<span style="color:#bbb;">Any</span>';
-                        return `<tr style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
+                        return `<tr data-stamp-name="${safeName}" style="background:${i%2===0?'#ffffff':'#f6f8fa'}; cursor:grab;"
                             draggable="true"
+                            onclick="activateStamp('${safeName}')"
                             ondragstart="sheet3RefDragStart(event,'${safeName}')"
                             onmouseenter="showRefTooltip('${safeName}', this, event)"
                             onmouseleave="hideRefTooltip()">
-                            <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's schedule">${r.name}${countBadge}</td>
+                            <td style="${cell} cursor:pointer; color:#0f3460; text-decoration:underline dotted;" onclick="event.stopPropagation(); sheet3ShowRefDetail('${safeName}')" title="Click to see this ref's schedule">${r.name}${countBadge}</td>
                             ${sheet3RefHiddenCols.includes('refPref')     ? `<td style="${refStubTd}"></td>` : `<td style="${cell} text-align:center;">${posLabel(r.position)}</td>`}
                             ${sheet3RefHiddenCols.includes('refAge')      ? `<td style="${refStubTd}"></td>` : `<td style="${cell} text-align:center; font-size:0.78rem; font-weight:600; color:#374151;">${r.age != null ? r.age : '<span style=\'color:#bbb;\'>—</span>'}</td>`}
                             ${sheet3RefHiddenCols.includes('refExp')      ? `<td style="${refStubTd}"></td>` : `<td style="${cell} cursor:pointer; user-select:none;" onclick="sheet3SortRefs('exp')" title="Sort by experience">${certYrToExp(r.exp, true)}</td>`}
@@ -3769,14 +3770,15 @@
                                      : s3conflict ? 'background:#fdecea;'
                                      : `background:${i%2===0?'#ffffff':'#f6f8fa'};`;
                     const s3ctxMenu  = s3refObj ? `oncontextmenu="s2ShowRefCtx(event,'${s3refObj.id}'); return false;"` : '';
-                    return `<tr style="${s3rowBg} cursor:${(s3unavail||s3conflict)?'default':'grab'};"
+                    return `<tr data-stamp-name="${safeName}" style="${s3rowBg} cursor:${(s3unavail||s3conflict)?'default':'grab'};"
                         draggable="${!s3unavail && !s3conflict}"
+                        onclick="${(s3unavail||s3conflict) ? '' : `activateStamp('${safeName}')`}"
                         ${s3ctxMenu}
                         ondragstart="${(s3unavail||s3conflict) ? 'event.preventDefault();' : `sheet3RefDragStart(event,'${safeName}')`}"
                         onmouseenter="${s3unavail && s3refObj ? `s2ShowStrikeTooltip(event,'${s3refObj.id}')` : `showRefTooltip('${safeName}', this, event)`}"
                         onmouseleave="hideRefTooltip(); hideAvailNotes();">
                         ${sheet3RefHiddenCols.includes('clubDate')  ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubDate"  style="${cell} ${rcw('clubDate')}">${r.date}</td>`}
-                        <td data-rcol="clubName"  style="${cell} ${rcw('clubName')} cursor:pointer; ${s3unavail?'text-decoration:line-through;color:#aaa;':s3conflict?'color:#c0392b;':'color:#0f3460;text-decoration:underline dotted;'}" onclick="sheet3ShowRefDetail('${safeName}')" title="${s3conflict?'Already assigned at this time':'Click to see this ref\'s assignments'}">${r.name}${s3unavail?'<span style=\"font-size:0.65rem;font-weight:700;color:#c0392b;margin-left:4px;\">⚠</span>':s3conflict?'<span style=\"font-size:0.65rem;color:#c0392b;margin-left:4px;\">⚠ on another game</span>':''}${countBadge}</td>
+                        <td data-rcol="clubName"  style="${cell} ${rcw('clubName')} cursor:pointer; ${s3unavail?'text-decoration:line-through;color:#aaa;':s3conflict?'color:#c0392b;':'color:#0f3460;text-decoration:underline dotted;'}" onclick="event.stopPropagation(); sheet3ShowRefDetail('${safeName}')" title="${s3conflict?'Already assigned at this time':'Click to see this ref\'s assignments'}">${r.name}${s3unavail?'<span style=\"font-size:0.65rem;font-weight:700;color:#c0392b;margin-left:4px;\">⚠</span>':s3conflict?'<span style=\"font-size:0.65rem;color:#c0392b;margin-left:4px;\">⚠ on another game</span>':''}${countBadge}</td>
                         ${sheet3RefHiddenCols.includes('clubExp')   ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubExp"   style="${cell} ${rcw('clubExp')}">${fmtExp(r.exp, true)}</td>`}
                         ${sheet3RefHiddenCols.includes('clubClub')  ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubClub"  style="${cell} ${rcw('clubClub')}">${r.club}</td>`}
                         ${sheet3RefHiddenCols.includes('clubStart') ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubStart" style="${cell} ${rcw('clubStart')}">${fmt(r.start)}</td>`}
@@ -4233,6 +4235,48 @@
 
         // ── Inline ref search — click an empty assignment cell to search & assign ──
         let _s3RefClose = null;
+        let _stampRef   = null; // { id, name } when stamp mode is active
+
+        function showStampBanner(name) {
+            let b = document.getElementById('s3StampBanner');
+            if (!b) {
+                b = document.createElement('div');
+                b.id = 's3StampBanner';
+                b.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;background:#1a3a6b;color:#fff;padding:7px 16px 7px 18px;border-radius:22px;font-size:0.84rem;font-weight:600;display:flex;align-items:center;gap:10px;box-shadow:0 3px 14px rgba(0,0,0,0.32);';
+                document.body.appendChild(b);
+            }
+            b.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#60a5fa;margin-right:2px;flex-shrink:0;"></span><span>Stamp: <strong>${name}</strong></span><span style="color:#93c5fd;font-size:0.74rem;">— click any slot to assign</span><button onclick="clearStampMode()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;cursor:pointer;font-size:0.8rem;padding:2px 8px;border-radius:10px;line-height:1.4;margin-left:4px;" title="Cancel (Esc)">✕ Esc</button>`;
+            b.style.display = 'flex';
+        }
+
+        function clearStampMode() {
+            _stampRef = null;
+            const b = document.getElementById('s3StampBanner');
+            if (b) b.style.display = 'none';
+            document.querySelectorAll('tr[data-stamp-name]').forEach(r => r.style.outline = '');
+        }
+
+        function activateStamp(refName) {
+            if (_stampRef?.name === refName) { clearStampMode(); return; }
+            const ro = refLookupByName[refName.trim().toLowerCase()];
+            _stampRef = { id: ro?.id ?? '', name: refName };
+            showStampBanner(refName);
+            document.querySelectorAll('tr[data-stamp-name]').forEach(r => {
+                r.style.outline = r.getAttribute('data-stamp-name') === refName ? '2px solid #1a3a6b' : '';
+            });
+        }
+
+        function s3CellClick(evt, gid, field, refName) {
+            if (_stampRef) {
+                evt.stopPropagation();
+                s3RefPick(evt, gid, field, _stampRef.name, _stampRef.id);
+                return;
+            }
+            if (refName) { activateStamp(refName); return; }
+            s3OpenRefInline(evt, gid, field);
+        }
+
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && _stampRef) clearStampMode(); });
 
         function s3OpenRefInline(evt, gid, field) {
             evt.stopPropagation();
