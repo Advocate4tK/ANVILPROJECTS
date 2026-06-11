@@ -215,7 +215,16 @@
         }
         .paid-btn:hover:not(.paid) { border-color: rgba(255,255,255,0.4); color: #fff; }
 
-        /* ── No venmo note ── */
+        /* ── Method badges ── */
+        .method-badge {
+            font-size: 0.72rem; font-weight: 700; border-radius: 14px;
+            padding: 4px 10px; flex-shrink: 0; white-space: nowrap;
+        }
+        .badge-cash    { background: rgba(76,223,138,0.15); color: #4cdf8a; border: 1px solid rgba(76,223,138,0.35); }
+        .badge-check   { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.2); }
+        .badge-cashapp { background: rgba(0,212,100,0.15); color: #00d464; border: 1px solid rgba(0,212,100,0.35); }
+        .badge-zelle   { background: rgba(138,76,223,0.15); color: #a855f7; border: 1px solid rgba(138,76,223,0.35); }
+        .badge-dd      { background: rgba(99,179,237,0.15); color: #63b3ed; border: 1px solid rgba(99,179,237,0.35); }
         .no-venmo { font-size: 0.7rem; color: rgba(255,255,255,0.25); flex-shrink: 0; }
 
         /* ── Loading / error ── */
@@ -286,6 +295,7 @@
     let _tournament = null;
     let _games      = [];
     let _refMap     = {};
+    let _payMethods = [];
     let _filter     = 'all';
 
     document.getElementById('yearBadge').textContent = YEAR;
@@ -356,23 +366,35 @@
         const rates   = getRates(ageGroup);
         const amount  = slot === 'cr' ? rates?.center : rates?.ar;
         const ref     = _refMap[refName] || {};
-        const handle  = (ref.venmo || '').replace(/^@/, '');
         const paid    = isPaid(gameId, slot);
         const note    = `${_tournament.name} ${YEAR} ${ageGroup} ${label}`;
-
-        const vBtn = handle && amount
-            ? `<a class="v-btn" href="${esc(venmoUrl(handle, amount, note))}" target="_blank">V</a>`
-            : `<span class="v-btn v-no" title="${handle ? 'No rate for this slot' : 'No Venmo on file'}">V</span>`;
+        const methods = _payMethods.length ? _payMethods : ['venmo'];
 
         const amtHtml = amount
             ? `<span class="amount">$${amount}</span>`
             : `<span class="no-venmo">no rate</span>`;
 
+        // Build one button/badge per enabled payment method
+        const payBtns = methods.map(m => {
+            if (m === 'venmo') {
+                const handle = (ref.venmo || '').replace(/^@/, '');
+                if (handle && amount)
+                    return `<a class="v-btn" href="${esc(venmoUrl(handle, amount, note))}" target="_blank">V</a>`;
+                return `<span class="v-btn v-no" title="${handle ? 'No rate' : 'No Venmo on file'}">V</span>`;
+            }
+            if (m === 'cash')    return `<span class="method-badge badge-cash">💵 Cash at Field</span>`;
+            if (m === 'check')   return `<span class="method-badge badge-check">📋 Check</span>`;
+            if (m === 'cashapp') return `<span class="method-badge badge-cashapp">$ Cash App</span>`;
+            if (m === 'zelle')   return `<span class="method-badge badge-zelle">⚡ Zelle</span>`;
+            if (m === 'dd')      return `<span class="method-badge badge-dd">🏦 Direct Deposit</span>`;
+            return '';
+        }).join('');
+
         return `<div class="slot-row${paid ? ' slot-paid' : ''}" id="sr-${gameId}-${slot}">
             <span class="slot-label">${esc(label)}</span>
             <span class="ref-name">${esc(refName)}</span>
             ${amtHtml}
-            ${vBtn}
+            ${payBtns}
             <button class="paid-btn${paid ? ' paid' : ''}"
                 onclick="togglePaid(${gameId},'${slot}',this)">${paid ? '✓ Paid' : 'Mark Paid'}</button>
         </div>`;
@@ -465,11 +487,12 @@
         // Fetch tournament record
         const { data: t, error: tErr } = await supabaseClient.client
             .from('tournaments')
-            .select('id, name, key, age_groups')
+            .select('id, name, key, age_groups, payment_methods')
             .eq('key', KEY)
             .single();
         if (tErr || !t) throw new Error('Tournament not found for key: ' + KEY);
-        _tournament = t;
+        _tournament  = t;
+        _payMethods  = (t.payment_methods || '').split(',').map(s => s.trim()).filter(Boolean);
 
         document.getElementById('headerTitle').textContent = `${t.name} ${YEAR}`;
         document.title = `${t.name} ${YEAR} — Ref Pay`;
