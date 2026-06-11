@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -356,7 +356,7 @@
     <script src="js/supabase-client.js?v=12"></script>
     <script>var airtableClient = supabaseClient;</script>
     <script src="js/admin-auth.js?v=8"></script>
-    <script src="js/tournament-card-portals.js"></script>
+    <script src="js/cc-cards.js"></script>
     <script>
         // ── Super Admin PIN ───────────────────────────────────────────────────
         const SUPER_ADMIN_PIN = '8625';
@@ -1658,113 +1658,8 @@
                         if (clubName.startsWith('__tourney_')) {
                             const tKey         = clubName.replace('__tourney_', '');
                             const t            = allTournaments.find(x => x.key === tKey) || {};
-                            const director     = t.director                  || '—';
-                            const dirEmail     = t.director_email            || '';
-                            const eventAdmin   = t.event_admin               || '—';
-                            const eaPhone      = t.event_admin_phone         || '';
-                            const eaEmail      = t.event_admin_email         || '';
-                            const payCoord     = t.payment_coordinator       || '—';
-                            const payPhone     = t.payment_coordinator_phone || '';
-                            const payEmail     = t.payment_coordinator_email || '';
-                            const tAssignor    = t.assignor                  || '—';
-                            const assPhone     = t.assignor_phone            || '';
-                            const assEmail     = t.assignor_email            || '';
-                            const hostedBy     = t.club || '';
-                            const dateRange    = t.from_date
-                                ? (t.to_date && t.to_date !== t.from_date ? `${t.from_date} → ${t.to_date}` : t.from_date)
-                                : 'Dates TBD';
-                            const tVenues      = Array.isArray(t.venues) ? t.venues : [];
-                            const venueCount   = tVenues.length;
-                            const fieldCount   = tVenues.reduce((s, v) => s + (v.fields ? v.fields.length : 0), 0);
-                            const ageGroups    = Array.isArray(t.age_groups) ? t.age_groups : [];
 
-                            const ageGroupsHtml = ageGroups.length ? `
-                            <div style="border-top:1px solid #edf0f7;">
-                                <div style="padding:10px 18px 4px; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Age Groups</div>
-                                <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
-                                    <thead><tr style="background:#f4f6fa;">
-                                        <th style="padding:7px 18px; text-align:left; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555; font-weight:700;">Age Group</th>
-                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555; font-weight:700;">Format</th>
-                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555; font-weight:700;">Half Length</th>
-                                    </tr></thead>
-                                    <tbody>${ageGroups.map((r, i) => `<tr style="${i % 2 === 1 ? 'background:#fafbfd;' : ''}">
-                                        <td style="padding:7px 18px; font-weight:600; color:#09142a;">${r.age_group || ''}</td>
-                                        <td style="padding:7px 12px; text-align:center; color:#555;">${r.format || '—'}</td>
-                                        <td style="padding:7px 12px; text-align:center; color:#555;">${r.half_length ? '2 × ' + r.half_length + ' min' : '—'}</td>
-                                    </tr>`).join('')}</tbody>
-                                </table>
-                            </div>
-                            <div style="border-top:1px solid #edf0f7;">
-                                <div style="padding:10px 18px 4px; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Pay Rates</div>
-                                <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
-                                    <thead><tr style="background:#f4f6fa;">
-                                        <th style="padding:7px 18px; text-align:left; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#555; font-weight:700;">Age Group</th>
-                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#00c853; font-weight:700;">Center</th>
-                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#3498db; font-weight:700;">AR</th>
-                                        <th style="padding:7px 12px; text-align:center; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#9b59b6; font-weight:700;">Solo CR</th>
-                                    </tr></thead>
-                                    <tbody>${ageGroups.map((r, i) => `<tr style="${i % 2 === 1 ? 'background:#fafbfd;' : ''}">
-                                        <td style="padding:7px 18px; font-weight:600; color:#09142a;">${r.age_group || ''}</td>
-                                        <td style="padding:7px 12px; text-align:center; color:#00c853; font-weight:700;">${r.center ? '$' + r.center : '—'}</td>
-                                        <td style="padding:7px 12px; text-align:center; color:#3498db; font-weight:700;">${r.ar ? '$' + r.ar : '—'}</td>
-                                        <td style="padding:7px 12px; text-align:center; color:#9b59b6; font-weight:700;">${r.solo_cr ? '$' + r.solo_cr : '—'}</td>
-                                    </tr>`).join('')}</tbody>
-                                </table>
-                            </div>` : '';
-
-
-                            stat.innerHTML = `
-                            <div style="background:white; border:1px solid #dde3f0; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
-                                <div style="background:linear-gradient(135deg,#4a0072,#1a0030); padding:12px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                                        <span style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#fff;">🏆 ${t.name || tKey}</span>
-                                        <span style="font-size:0.78rem; color:rgba(255,255,255,0.7);">📅 ${dateRange}</span>
-                                        ${hostedBy ? `<span style="font-size:0.78rem; color:rgba(255,255,255,0.6);">Hosted by: ${hostedBy}</span>` : ''}
-                                    </div>
-                                    <div style="display:flex; align-items:center; gap:8px;">
-                                        <span style="font-size:0.72rem; color:rgba(255,255,255,0.55);">${venueCount} venue${venueCount !== 1 ? 's' : ''} · ${fieldCount} field${fieldCount !== 1 ? 's' : ''}</span>
-                                        <span style="font-size:0.72rem; background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.85); padding:2px 10px; border-radius:12px; font-weight:700; text-transform:uppercase;">${(t.status || 'upcoming').toUpperCase()}</span>
-                                    </div>
-                                </div>
-                                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); border-bottom:1px solid #edf0f7;">
-                                    <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
-                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Tournament Director</div>
-                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${director}</div>
-                                        ${dirEmail ? `<div style="font-size:0.78rem; margin-top:3px;"><a href="mailto:${dirEmail}" style="color:#3498db; text-decoration:none;">✉️ ${dirEmail}</a></div>` : ''}
-                                    </div>
-                                    <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
-                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Event Admin</div>
-                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${eventAdmin}</div>
-                                        ${eaPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${eaPhone}</div>` : ''}
-                                        ${eaEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${eaEmail}" style="color:#3498db; text-decoration:none;">✉️ ${eaEmail}</a></div>` : ''}
-                                    </div>
-                                    <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
-                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Payment Coordinator</div>
-                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${payCoord}</div>
-                                        ${payPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${payPhone}</div>` : ''}
-                                        ${payEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${payEmail}" style="color:#3498db; text-decoration:none;">✉️ ${payEmail}</a></div>` : ''}
-                                    </div>
-                                    <div style="padding:14px 18px;">
-                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Assignor</div>
-                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${tAssignor}</div>
-                                        ${assPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${assPhone}</div>` : ''}
-                                        ${assEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${assEmail}" style="color:#3498db; text-decoration:none;">✉️ ${assEmail}</a></div>` : ''}
-                                    </div>
-                                </div>
-                                ${ageGroupsHtml}
-                                <div style="padding:12px 18px; background:#fafbfd; border-top:1px solid #edf0f7;">
-                                    <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:10px;">Portals &amp; Links</div>
-                                    <div style="display:flex; flex-direction:column; gap:7px;">
-                                        ${buildTournamentPortalRows(tKey)}
-                                    </div>
-                                </div>
-                                ${venueCount ? `<div style="padding:12px 18px; border-top:1px solid #edf0f7;">
-                                    <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; margin-bottom:8px;">Venues on File</div>
-                                    <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                                        ${tVenues.map(v => `<span style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:4px; padding:3px 8px; font-size:0.8rem; color:#0369a1;">📍 ${v.name}</span>`).join('')}
-                                    </div>
-                                </div>` : ''}
-                            </div>`;
+                            stat.innerHTML = ccBuildTournamentCard(t);
                             return;
                         }
 
@@ -1804,122 +1699,19 @@
                                 + ' at ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
                         })() : null;
 
-                        stat.innerHTML = `
-                        <div style="background:white; border:1px solid #dde3f0; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
-
-                            <!-- Header bar -->
-                            <div style="background:#09142a; padding:12px 18px; display:flex; align-items:center; justify-content:space-between;">
-                                <span style="font-size:0.85rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#fff;">${clubName}</span>
-                                <div style="display:flex; gap:16px;">
-                                    <span style="font-size:0.75rem; color:#aac4e0;">${thisWeek} games this week${unassigned > 0 ? ` &nbsp;·&nbsp; <span style="color:#ff8a8a; font-weight:700;">${unassigned} unassigned</span>` : ' &nbsp;·&nbsp; <span style="color:#4cdf8a;">✅ all assigned</span>'}</span>
-                                    <span style="font-size:0.75rem; color:#aac4e0;">${totalGames} total &nbsp;·&nbsp; ${venueCount} venue${venueCount!==1?'s':''} &nbsp;·&nbsp; ${fieldCount} field${fieldCount!==1?'s':''}</span>
-                                </div>
-                            </div>
-
-                            <!-- Contacts row -->
-                            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); border-bottom:1px solid #edf0f7;">
-                                <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
-                                    <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">President</div>
-                                    <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${president || '—'}</div>
-                                    ${presPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${presPhone}</div>` : ''}
-                                    ${presEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${presEmail}" style="color:#3498db; text-decoration:none;">✉️ ${presEmail}</a></div>` : ''}
-                                </div>
-                                <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
-                                    <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Club Admin</div>
-                                    <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${clubAdmin || '—'}</div>
-                                    ${adminPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${adminPhone}</div>` : ''}
-                                    ${adminEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${adminEmail}" style="color:#3498db; text-decoration:none;">✉️ ${adminEmail}</a></div>` : ''}
-                                </div>
-                                <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
-                                    <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Payment Coordinator</div>
-                                    <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${payCoord || '—'}</div>
-                                    ${payCoordPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${payCoordPhone}</div>` : ''}
-                                    ${payCoordEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${payCoordEmail}" style="color:#3498db; text-decoration:none;">✉️ ${payCoordEmail}</a></div>` : ''}
-                                </div>
-                                <div style="padding:14px 18px;">
-                                    <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Assignor</div>
-                                    <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${assignor || '—'}</div>
-                                    ${assignorPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${assignorPhone}</div>` : ''}
-                                    ${assignorEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${assignorEmail}" style="color:#3498db; text-decoration:none;">✉️ ${assignorEmail}</a></div>` : ''}
-                                </div>
-                            </div>
-
-                            <!-- Pay rates -->
-                            ${(payRatesByClubId[cid] || []).length > 0 ? (() => {
-                                const allRates  = payRatesByClubId[cid] || [];
-                                const hasTypes  = allRates.some(r => r.game_type && r.game_type !== 'rec');
-                                const recRates  = hasTypes ? allRates.filter(r => !r.game_type || r.game_type === 'rec') : allRates;
-                                const compRates = hasTypes ? allRates.filter(r => r.game_type === 'comp') : [];
-                                const rateTable = (rows, label, borderColor) => {
-                                    if (rows.length === 0) return '';
-                                    return `<div style="flex:1; min-width:200px;">
-                                        <div style="padding:6px 14px; font-size:0.65rem; text-transform:uppercase; letter-spacing:1px; font-weight:800; color:#fff; background:${borderColor};">${label}</div>
-                                        <table style="width:100%; border-collapse:collapse; font-size:0.86rem;">
-                                            <thead><tr style="background:#f7f8fc;">
-                                                <th style="text-align:left; padding:6px 14px; color:#444; font-weight:700; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #edf0f7;">Age Group</th>
-                                                <th style="text-align:center; padding:6px 14px; color:#444; font-weight:700; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #edf0f7;">Center</th>
-                                                <th style="text-align:center; padding:6px 14px; color:#444; font-weight:700; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #edf0f7;">AR</th>
-                                                <th style="text-align:center; padding:6px 14px; color:#444; font-weight:700; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #edf0f7;">Solo CR</th>
-                                            </tr></thead>
-                                            <tbody>${rows.map((r,i) => `
-                                                <tr style="background:${i%2===0?'#fff':'#fafbfd'};">
-                                                    <td style="padding:8px 14px; font-weight:800; color:#09142a; font-size:0.9rem;">${r.age_group}</td>
-                                                    <td style="padding:8px 14px; text-align:center; font-weight:700; color:#1a7a1a; font-size:0.95rem;">$${r.center}</td>
-                                                    <td style="padding:8px 14px; text-align:center; font-weight:700; color:${r.ar!=null?'#1a7a1a':'#ccc'}; font-size:0.95rem;">${r.ar!=null?'$'+r.ar:'—'}</td>
-                                                    <td style="padding:8px 14px; text-align:center; font-weight:700; color:${r.solo!=null?'#1a7a1a':'#ccc'}; font-size:0.95rem;">${r.solo!=null?'$'+r.solo:'—'}</td>
-                                                </tr>`).join('')}
-                                            </tbody>
-                                        </table>
-                                    </div>`;
-                                };
-                                return `<div style="border-bottom:1px solid #edf0f7;">
-                                    <div style="padding:8px 18px 0; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700;">Pay Rates</div>
-                                    <div style="display:flex; gap:0; flex-wrap:wrap; border-top:1px solid #edf0f7; margin-top:8px;">
-                                        ${rateTable(recRates,  'Rec',  '#09142a')}
-                                        ${compRates.length > 0 ? `<div style="width:1px; background:#edf0f7;"></div>` : ''}
-                                        ${rateTable(compRates, 'Comp', '#7c3aed')}
-                                    </div>
-                                    ${clubName === 'NECONN' ? `<div style="padding:8px 18px 12px; font-size:0.78rem; color:#b45309; background:#fffbeb; border-top:1px solid #fde68a;">⚠️ NECONN policy: AR is not paid for U8 or U9-U10 games, regardless of assignment.</div>` : ''}
-                                    ${clubName === 'East Haddam' ? `<div style="padding:8px 18px 12px; font-size:0.78rem; color:#b45309; background:#fffbeb; border-top:1px solid #fde68a;">⚠️ East Haddam policy: Only one AR (AR1) is allowed to be assigned per game.</div>` : ''}
-                                </div>`;
-                            })() : ''}
-
-                            <!-- Portals & Links -->
-                            <div style="padding:14px 18px; background:#fafbfd;">
-                                <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:10px;">Portals &amp; Links</div>
-                                <div style="display:flex; flex-direction:column; gap:7px;">
-                                    ${submitUrl ? `<div style="display:flex; align-items:center; gap:8px;">
-                                        <span style="font-size:0.72rem; font-weight:700; color:#555; width:100px; flex-shrink:0;">Club Portal</span>
-                                        <button onclick="navigator.clipboard.writeText('${submitUrl}').then(()=>{ this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy Link',1500); })"
-                                            style="background:#e8f4fd; border:1px solid #3498db; color:#3498db; border-radius:6px; padding:4px 10px; font-size:0.78rem; cursor:pointer; white-space:nowrap;">📋 Copy Link</button>
-                                        <a href="${submitUrl}" target="_blank"
-                                            style="background:#eafaf1; border:1px solid #27ae60; color:#27ae60; border-radius:6px; padding:4px 10px; font-size:0.78rem; text-decoration:none; white-space:nowrap;">↗ Open</a>
-                                    </div>` : ''}
-                                    ${payUrl ? `<div style="display:flex; align-items:center; gap:8px;">
-                                        <span style="font-size:0.72rem; font-weight:700; color:#555; width:100px; flex-shrink:0;">Pay Portal</span>
-                                        <button onclick="navigator.clipboard.writeText('${payUrl}').then(()=>{ this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='💳 Copy Link',1500); })"
-                                            style="background:#fdf4ff; border:1px solid #a855f7; color:#7c3aed; border-radius:6px; padding:4px 10px; font-size:0.78rem; cursor:pointer; white-space:nowrap;">💳 Copy Link</button>
-                                        <a href="${payUrl}" target="_blank"
-                                            style="background:#fdf4ff; border:1px solid #a855f7; color:#7c3aed; border-radius:6px; padding:4px 10px; font-size:0.78rem; text-decoration:none; white-space:nowrap;">↗ Open</a>
-                                    </div>` : ''}
-                                    ${presUrl ? `<div style="display:flex; align-items:center; gap:8px;">
-                                        <span style="font-size:0.72rem; font-weight:700; color:#555; width:100px; flex-shrink:0;">President</span>
-                                        <button onclick="navigator.clipboard.writeText('${presUrl}').then(()=>{ this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='🏛 Copy Link',1500); })"
-                                            style="background:#f0fdf4; border:1px solid #16a34a; color:#15803d; border-radius:6px; padding:4px 10px; font-size:0.78rem; cursor:pointer; white-space:nowrap;">🏛 Copy Link</button>
-                                        <a href="${presUrl}" target="_blank"
-                                            style="background:#f0fdf4; border:1px solid #16a34a; color:#15803d; border-radius:6px; padding:4px 10px; font-size:0.78rem; text-decoration:none; white-space:nowrap;">↗ Open</a>
-                                    </div>` : ''}
-                                    <div style="font-size:0.78rem; margin-top:3px;">
-                                        <span style="color:#555; font-weight:600;">Last game upload: </span>
-                                        ${lastUploadStr
-                                            ? `<span style="color:#09142a; font-weight:700;">${lastUploadStr}</span>${lastUpload.uploader ? `<span style="color:#555;"> by <strong>${lastUpload.uploader}</strong></span>` : ''}`
-                                            : `<span style="color:#aaa;">No upload on record</span>`}
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-                        `;
+                        const cNorm = {
+                            'Club Name': clubName, name: clubName, id: cid,
+                            president, 'President Phone': presPhone, 'President Email': presEmail,
+                            'Club Admin': clubAdmin, 'Club Admin Phone': adminPhone, 'Club Admin Email': adminEmail,
+                            payment_coordinator: payCoord, payment_coordinator_phone: payCoordPhone, payment_coordinator_email: payCoordEmail,
+                            assignor, 'Assignor Phone': assignorPhone, 'Assignor Email': assignorEmail,
+                            _submit_url: submitUrl, payment_portal_enabled: !!payUrl,
+                        };
+                        const gs = {
+                            total: totalGames, thisWeek, unassigned, venueCount, fieldCount,
+                            lastUpload,
+                        };
+                        stat.innerHTML = ccBuildClubCard(cNorm, payRatesByClubId[cid] || [], gs);
                     });
                 }, 0);
             } catch (err) {
