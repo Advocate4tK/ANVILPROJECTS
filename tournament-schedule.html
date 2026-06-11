@@ -272,19 +272,40 @@
             color: rgba(0,200,83,0.6);
         }
 
-        .venue-selector-name {
+        .venue-rotator-wrap {
             flex: 1;
+            overflow: hidden;
+            height: 36px;
+            position: relative;
+            min-width: 0;
+        }
+
+        .venue-rotator-name {
+            position: absolute;
+            top: 0; left: 0; right: 0;
             font-family: 'Barlow Condensed', sans-serif;
             font-size: 1.55rem;
             font-weight: 800;
             letter-spacing: 1px;
-            color: rgba(255,255,255,0.65);
+            line-height: 36px;
+            color: #ffe000;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            transition: opacity 0.4s, transform 0.4s;
         }
 
-        .venue-selector.has-selection .venue-selector-name {
+        .venue-rotator-name.fade-out {
+            opacity: 0;
+            transform: translateY(-8px);
+        }
+
+        .venue-rotator-name.fade-in {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        .venue-selector.has-selection .venue-rotator-name {
             color: #00c853;
         }
 
@@ -563,7 +584,9 @@
         <div class="venue-selector-row" id="venueRow">
             <div class="venue-selector" id="venueSel">
                 <span class="venue-selector-label">Venue</span>
-                <span class="venue-selector-name" id="venueSelName">All Venues</span>
+                <div class="venue-rotator-wrap">
+                    <div class="venue-rotator-name" id="venueRotatorName">All Venues</div>
+                </div>
                 <span class="venue-selector-arrow">▼</span>
                 <select id="venueSelectNative" onchange="onVenueChange(this)">
                     <option value="">All Venues</option>
@@ -645,6 +668,7 @@ async function boot() {
 
         populateVenueSelect();
         render();
+        // rotator starts only if venue sort is already active (unlikely on first load, but safe)
 
     } catch (err) {
         console.error(err);
@@ -653,7 +677,11 @@ async function boot() {
     }
 }
 
-// ─── Venue select ─────────────────────────────────────────────────────────────
+// ─── Venue rotator ───────────────────────────────────────────────────────────
+
+let _rotatorVenues = [];
+let _rotatorIdx    = 0;
+let _rotatorTimer  = null;
 
 function populateVenueSelect() {
     const venues = [...new Set(
@@ -662,18 +690,58 @@ function populateVenueSelect() {
     const sel = document.getElementById('venueSelectNative');
     sel.innerHTML = '<option value="">All Venues</option>' +
         venues.map(v => `<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+    _rotatorVenues = ['All Venues', ...venues];
+}
+
+function startVenueRotator() {
+    clearInterval(_rotatorTimer);
+    if (_rotatorVenues.length <= 1) return;
+    _rotatorTimer = setInterval(rotatorTick, 2200);
+}
+
+function stopVenueRotator() {
+    clearInterval(_rotatorTimer);
+    _rotatorTimer = null;
+}
+
+function rotatorTick() {
+    if (selectedVenue) { stopVenueRotator(); return; }
+    const el = document.getElementById('venueRotatorName');
+    if (!el) return;
+    el.classList.add('fade-out');
+    setTimeout(() => {
+        _rotatorIdx = (_rotatorIdx + 1) % _rotatorVenues.length;
+        el.textContent = _rotatorVenues[_rotatorIdx];
+        el.classList.remove('fade-out');
+        el.classList.add('fade-in');
+        requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('fade-in')));
+    }, 400);
+}
+
+function setRotatorDisplay(label) {
+    const el = document.getElementById('venueRotatorName');
+    if (!el) return;
+    el.classList.add('fade-out');
+    setTimeout(() => {
+        el.textContent = label;
+        el.classList.remove('fade-out');
+        el.classList.add('fade-in');
+        requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('fade-in')));
+    }, 400);
 }
 
 function onVenueChange(sel) {
     selectedVenue = sel.value;
     const container = document.getElementById('venueSel');
-    const nameEl    = document.getElementById('venueSelName');
     if (selectedVenue) {
         container.classList.add('has-selection');
-        nameEl.textContent = selectedVenue;
+        stopVenueRotator();
+        setRotatorDisplay(selectedVenue);
     } else {
         container.classList.remove('has-selection');
-        nameEl.textContent = 'All Venues';
+        _rotatorIdx = 0;
+        setRotatorDisplay('All Venues');
+        startVenueRotator();
     }
     render();
 }
@@ -857,11 +925,15 @@ function setSort(mode) {
     document.getElementById('sortTimeBtn').classList.toggle('active', mode === 'time');
     document.getElementById('sortVenueBtn').classList.toggle('active', mode === 'venue');
     document.getElementById('venueRow').style.display = mode === 'venue' ? 'block' : 'none';
-    if (mode === 'time') {
+    if (mode === 'venue') {
+        if (!selectedVenue) startVenueRotator();
+    } else {
+        stopVenueRotator();
         selectedVenue = '';
+        _rotatorIdx   = 0;
         document.getElementById('venueSelectNative').value = '';
         document.getElementById('venueSel').classList.remove('has-selection');
-        document.getElementById('venueSelName').textContent = 'All Venues';
+        document.getElementById('venueRotatorName').textContent = 'All Venues';
     }
     render();
 }
