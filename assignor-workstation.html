@@ -3200,7 +3200,7 @@
                         ? '<span style="font-size:0.72rem;background:#1565c0;color:#fff;border-radius:3px;padding:1px 6px;font-weight:700;letter-spacing:0.03em;">Filled</span>'
                         : isEmpty
                             ? '<span style="font-size:0.72rem;background:#9e9e9e;color:#fff;border-radius:3px;padding:1px 6px;font-weight:700;letter-spacing:0.03em;">Empty</span>'
-                            : (isCleared ? '—' : rawName);
+                            : isCleared ? '—' : hasRef ? rawName : '<span style="color:#bbb;font-size:0.72rem;font-style:italic;">+ Add ref</span>';
                     const storedBg  = sheet3OptColors[`assigned-${gid}-${field}`] || '';
                     const bg        = isFil ? '#e3f2fd' : isEmpty ? '#f5f5f5' : (hasRef ? (storedBg || '#e8f5e9') : '#fffde7');
                     const drag      = hasRef ? `draggable="true" ondragstart="sheet3AssignedDragStart(event,'${gid}','${field}','${rawName.replace(/'/g,"\\'")}')"`  : '';
@@ -3213,8 +3213,9 @@
                             : `oncontextmenu="sheet3ShowCellFilledMenu(event,'${gid}','${gcol}',''); return false;"`);
                     const badge     = hasRef ? refCountBadge(rawName) : '';
                     const hoverIn  = hasRef ? `onmouseenter="showRefTooltip('${display.replace(/'/g,"\\'")}', this, event)"` : '';
-                    const hoverOut = hasRef ? `onmouseleave="hideRefTooltip()"` : '';
-                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${(hasRef||isFil||isEmpty)?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut}
+                    const hoverOut   = hasRef ? `onmouseleave="hideRefTooltip()"` : '';
+                    const emptyClick = (!hasRef && !isFil && !isEmpty && !isCleared) ? `onclick="s3OpenRefInline(event,'${gid}','${field}')"` : '';
+                    return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${!isCleared?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut} ${emptyClick}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
                         ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}</td>`;
@@ -4229,6 +4230,94 @@
         }
 
         const SHEET3_POS = { center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' };
+
+        // ── Inline ref search — click an empty assignment cell to search & assign ──
+        let _s3RefClose = null;
+
+        function s3OpenRefInline(evt, gid, field) {
+            evt.stopPropagation();
+            if (_s3RefClose) _s3RefClose(false);
+            document.getElementById('s3RefDropdown')?.remove();
+
+            const td = document.getElementById(`s3${field}-${gid}`);
+            if (!td) return;
+            const origHTML = td.innerHTML;
+            const origBg   = td.style.background;
+
+            td.innerHTML = `<input id="s3RefInput" type="text" autocomplete="off" placeholder="Search ref…"
+                style="width:100%;border:none;outline:none;font-size:0.78rem;font-family:inherit;background:transparent;color:#0f3460;padding:0;margin:0;">`;
+            td.style.background = '#e8f4ff';
+            td.style.outline    = '2px solid #0f3460';
+
+            const input = document.getElementById('s3RefInput');
+            input.focus();
+
+            const drop = document.createElement('div');
+            drop.id = 's3RefDropdown';
+            drop.style.cssText = 'position:fixed;background:#fff;border:1px solid #c8d3e0;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);max-height:220px;overflow-y:auto;z-index:9999;';
+            document.body.appendChild(drop);
+
+            function pos() {
+                const r = td.getBoundingClientRect();
+                drop.style.left     = r.left + 'px';
+                drop.style.top      = (r.bottom + 2) + 'px';
+                drop.style.minWidth = Math.max(r.width, 180) + 'px';
+            }
+            pos();
+
+            function render(q) {
+                const lq   = q.toLowerCase().trim();
+                const hits = lq.length === 0 ? [] : allRefs
+                    .filter(r => (r.fields['Name'] || '').toLowerCase().includes(lq))
+                    .slice(0, 15);
+                if (!hits.length) {
+                    drop.innerHTML = `<div style="padding:8px 12px;color:#999;font-size:0.78rem;">${lq ? 'No match' : 'Type a name…'}</div>`;
+                    return;
+                }
+                drop.innerHTML = hits.map(r => {
+                    const name = r.fields['Name'] || '';
+                    const safe = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                    const rid  = String(r.id).replace(/'/g,"\\'");
+                    return `<div style="padding:6px 12px;cursor:pointer;font-size:0.82rem;border-bottom:1px solid #f0f0f0;"
+                        onmousedown="event.preventDefault();s3RefPick(event,'${gid}','${field}','${safe}','${rid}')"
+                        onmouseover="this.style.background='#e8f4ff'" onmouseout="this.style.background=''">${name}</div>`;
+                }).join('');
+            }
+
+            function close(restore) {
+                document.getElementById('s3RefDropdown')?.remove();
+                if (restore && td.isConnected) { td.innerHTML = origHTML; td.style.background = origBg; }
+                if (td.isConnected) td.style.outline = '';
+                document.removeEventListener('mousedown', outside);
+                document.removeEventListener('keydown', onKey);
+                _s3RefClose = null;
+            }
+            _s3RefClose = close;
+
+            function outside(e) {
+                const d = document.getElementById('s3RefDropdown');
+                if (!td.contains(e.target) && !(d?.contains(e.target))) close(true);
+            }
+            function onKey(e) { if (e.key === 'Escape') close(true); }
+
+            input.addEventListener('input', () => { pos(); render(input.value); });
+            input.addEventListener('keydown', e => { if (e.key === 'Escape') close(true); });
+
+            setTimeout(() => {
+                document.addEventListener('mousedown', outside);
+                document.addEventListener('keydown', onKey);
+            }, 50);
+
+            render('');
+        }
+
+        window.s3RefPick = async function(evt, gid, field, refName, refId) {
+            if (_s3RefClose) _s3RefClose(false);
+            const pos = SHEET3_POS[field];
+            if (!pos) return;
+            const numId = parseInt(refId);
+            await assignRef(parseInt(gid), pos, isNaN(numId) ? refId : numId, refName);
+        };
 
         function sheet3ClearAssignedCell(gid, field, persist = true) {
             if (!sheet3ClearedAssigned[gid]) sheet3ClearedAssigned[gid] = {};
