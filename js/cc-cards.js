@@ -19,8 +19,10 @@ function ccPortalRow(label, url) {
 function buildTournamentPortalRows(key) {
     const portalUrl   = `https://referee-tool.com/club-game-submit.html?tournament=${key}`;
     const scheduleUrl = `https://referee-tool.com/tournament-schedule.html?key=${key}`;
+    const payUrl      = `https://referee-tool.com/tournament-pay-portal.html?key=${key}`;
     return ccPortalRow('Tournament Portal', portalUrl)
-         + ccPortalRow('Ref Schedule',      scheduleUrl);
+         + ccPortalRow('Ref Schedule',      scheduleUrl)
+         + ccPortalRow('Ref Pay Portal',    payUrl);
 }
 
 // ── Contact cell ──────────────────────────────────────────────────────────
