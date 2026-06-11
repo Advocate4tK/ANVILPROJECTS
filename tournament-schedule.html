@@ -230,7 +230,6 @@
 
         /* ── Venue selector pill (club-selector pattern) ── */
         .venue-selector-row {
-            display: none;
             margin-top: 9px;
         }
 
@@ -667,8 +666,8 @@ async function boot() {
         );
 
         populateVenueSelect();
+        startVenueRotator();
         render();
-        // rotator starts only if venue sort is already active (unlikely on first load, but safe)
 
     } catch (err) {
         console.error(err);
@@ -751,7 +750,7 @@ function onVenueChange(sel) {
 function render() {
     const q = searchQuery.trim().toLowerCase();
 
-    const games = q
+    let games = q
         ? allGames.filter(g =>
             ['Center Referee', 'AR 1', 'AR 2'].some(f => {
                 const n = g[f];
@@ -759,8 +758,10 @@ function render() {
             }))
         : allGames;
 
+    if (selectedVenue) games = games.filter(g => getVenueName(g) === selectedVenue);
+
     document.getElementById('gameCount').textContent =
-        q ? `${games.length} of ${allGames.length} games` : `${allGames.length} games`;
+        q || selectedVenue ? `${games.length} of ${allGames.length} games` : `${allGames.length} games`;
 
     if (!games.length) {
         document.getElementById('gameList').innerHTML = `
@@ -771,8 +772,9 @@ function render() {
         return;
     }
 
+    // Group by venue only when in venue sort AND no specific venue is pinned
     document.getElementById('gameList').innerHTML =
-        sortMode === 'venue' ? renderByVenue(games, q) : renderByTime(games, q);
+        sortMode === 'venue' && !selectedVenue ? renderByVenue(games, q) : renderByTime(games, q);
 }
 
 function renderByTime(games, q) {
@@ -790,25 +792,6 @@ function renderByTime(games, q) {
 }
 
 function renderByVenue(games, q) {
-    // Single venue selected — show its games sorted by time with period dividers
-    if (selectedVenue) {
-        const vGames = games.filter(g => getVenueName(g) === selectedVenue);
-        if (!vGames.length) {
-            return `<div class="empty-state"><div class="empty-icon">🏟️</div><div class="empty-text">No games at ${escHtml(selectedVenue)}.</div></div>`;
-        }
-        const parts = [];
-        let lastPeriod = null;
-        vGames.forEach(g => {
-            const p = timePeriod(g.time);
-            if (p !== lastPeriod) {
-                parts.push(`<div class="period-divider">${p}</div>`);
-                lastPeriod = p;
-            }
-            parts.push(cardHtml(g, q));
-        });
-        return parts.join('');
-    }
-
     // All venues — group alphabetically
     const groups = new Map();
     games.forEach(g => {
@@ -924,17 +907,6 @@ function setSort(mode) {
     sortMode = mode;
     document.getElementById('sortTimeBtn').classList.toggle('active', mode === 'time');
     document.getElementById('sortVenueBtn').classList.toggle('active', mode === 'venue');
-    document.getElementById('venueRow').style.display = mode === 'venue' ? 'block' : 'none';
-    if (mode === 'venue') {
-        if (!selectedVenue) startVenueRotator();
-    } else {
-        stopVenueRotator();
-        selectedVenue = '';
-        _rotatorIdx   = 0;
-        document.getElementById('venueSelectNative').value = '';
-        document.getElementById('venueSel').classList.remove('has-selection');
-        document.getElementById('venueRotatorName').textContent = 'All Venues';
-    }
     render();
 }
 
