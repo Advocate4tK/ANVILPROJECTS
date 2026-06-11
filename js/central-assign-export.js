@@ -74,6 +74,7 @@ const progressText   = document.getElementById('progressText');
 
 let loadedGames = [];
 let currentSort = { field: 'date', dir: 'asc' };
+let tournamentNames    = new Set(); // populated by loadClubCheckboxes; used by loadBtn to route to tournament_games
 let refIdLookup        = {}; // Supabase ref ID (int) or lowercase name → CA numeric ID
 let venueCAId          = {}; // Supabase record ID → CA venue ID (legacy fallback)
 let venueNameMap       = {}; // Supabase record ID → venue name (legacy fallback)
@@ -210,6 +211,17 @@ async function loadClubCheckboxes() {
             <label style="display:flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; white-space:nowrap;">
                 <input type="checkbox" class="club-cb" value="${n}" checked> ${n}
             </label>`).join('');
+
+        // Append active tournaments with 🏆 badge
+        const tournRes = await supabaseClient.client.from('tournaments').select('name').eq('status', 'active').order('name');
+        const tourns = (tournRes.data || []).map(t => t.name);
+        tournamentNames = new Set(tourns);
+        if (tourns.length) {
+            wrap.innerHTML += tourns.map(n => `
+                <label style="display:flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; white-space:nowrap;">
+                    <input type="checkbox" class="club-cb" value="${n}" checked> 🏆 ${n}
+                </label>`).join('');
+        }
     } catch(e) {
         document.getElementById('clubCheckboxes').innerHTML =
             `<span style="color:#e74c3c; font-size:13px;">Could not load clubs: ${e.message}</span>`;
@@ -257,14 +269,48 @@ loadBtn.addEventListener('click', async () => {
 
         // Load games, referee CA IDs, venues, fields, clubs, and pay rates in parallel
         progressText.textContent = 'Loading games, referees, venues, and fields...';
-        const [records, referees, venues, fieldRecs, clubRecs, payRatesResult] = await Promise.all([
+        const selectedTournaments = selectedClubs.filter(c => tournamentNames.has(c));
+        const tournGamesPromise = selectedTournaments.length
+            ? (() => {
+                let tq = supabaseClient.client.from('tournament_games').select('*')
+                    .in('Source Club', selectedTournaments);
+                if (dateFrom) tq = tq.gte('date', dateFrom);
+                if (dateTo)   tq = tq.lte('date', dateTo);
+                return tq.then(r => r.data || []);
+              })()
+            : Promise.resolve([]);
+
+        const [records, referees, venues, fieldRecs, clubRecs, payRatesResult, tournRaw] = await Promise.all([
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    options),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 500 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 500 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,    { maxRecords: 200 }),
-            supabaseClient.client.from('pay_rates').select('*').then(r => r.data || [])
+            supabaseClient.client.from('pay_rates').select('*').then(r => r.data || []),
+            tournGamesPromise
         ]);
+
+        // Normalize tournament_games rows into the same {id, fields} shape as regular games
+        const normTournGame = g => ({
+            id: String(g.id),
+            fields: {
+                'Date':            g.date            || '',
+                'Time':            g.time            || '',
+                'Age Group':       g['Age Group']    || '',
+                'Home Team':       g['Home Team']    || '',
+                'Away Team':       g['Away Team']    || '',
+                'Center Referee':  g['Center Referee'] || null,
+                'AR 1':            g['AR 1']         || null,
+                'AR 2':            g['AR 2']         || null,
+                'Source Club':     g['Source Club']  || '',
+                'Venue ID':        g['Venue ID']     || null,
+                'Field ID':        g['Field ID']     || null,
+                'Gender':          g['Gender']       || '',
+                'Game Status':     g['Game Status']  || '',
+                'game_type':       'Comp',
+            }
+        });
+        const allRecords = [...records, ...tournRaw.map(normTournGame)];
 
         // Build lookup: record ID or name → Central Assign numeric ID
         refIdLookup = {};
@@ -327,7 +373,7 @@ loadBtn.addEventListener('click', async () => {
         progressText.textContent = 'Done!';
 
         // Strip cancelled games — never export these
-        const active = records.filter(r => (r.fields['Game Status'] || '').toLowerCase() !== 'cancelled');
+        const active = allRecords.filter(r => (r.fields['Game Status'] || '').toLowerCase() !== 'cancelled');
 
         // Club filter — exact match on Source Club field
         const byClub = selectedClubs.length === 0 ? active : active.filter(r => {
