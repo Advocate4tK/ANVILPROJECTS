@@ -8148,6 +8148,22 @@
                         if (!confirm(`${refName} has not listed "${gameClub}" as a preferred location.\n\nAssign anyway?`)) return;
                     }
                 }
+
+                // Tournament: warn if game time falls outside the ref's availability window
+                if (window.tournamentMode && gameDate && !override) {
+                    const slot = availTimeByName[refNameKey]?.[gameDate];
+                    if (slot && slot.start && slot.end) {
+                        const toMins = t => { const [h, m] = (t || '').split(':').map(Number); return h * 60 + (m || 0); };
+                        const gameTime  = targetGame.fields['Time'] || '';
+                        const gameMins  = toMins(gameTime);
+                        const startMins = toMins(slot.start);
+                        const endMins   = toMins(slot.end);
+                        if (gameMins < startMins || gameMins >= endMins) {
+                            const fmt = t => { const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+                            if (!confirm(`⚠️ ${refName} is available ${fmt(slot.start)}–${fmt(slot.end)} but this game starts at ${fmt(gameTime)}.\n\nAssign anyway?`)) return;
+                        }
+                    }
+                }
             }
             try {
                 const fields = {};
