@@ -228,11 +228,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     ...tournWindows.map(s  => s.dataset.tkey),
                 ])];
                 for (const tKey of allTKeys) {
-                    await supabaseClient.client.from('availability')
+                    // Scope delete to form-entered name (not _foundRefName) + email to prevent
+                    // siblings sharing a device from wiping each other's availability records
+                    let delQ = supabaseClient.client.from('availability')
                         .delete()
-                        .eq('Referee Name', refName)
+                        .eq('Referee Name', `${firstName} ${lastName}`)
                         .eq('tournament_key', tKey)
                         .gte('date', new Date().toISOString().split('T')[0]);
+                    if (refEmail) delQ = delQ.eq('Referee Email', refEmail);
+                    await delQ;
                 }
                 const sessionSubs = tournChecked.map(cb => airtableClient.createAvailability({
                     'Referee Name':        refName,
