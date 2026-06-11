@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tournament Pay Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #060e20;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            );
+            min-height: 100vh;
+            font-family: 'DM Sans', sans-serif;
+            color: #e8edf5;
+            padding-bottom: 60px;
+        }
+
+        /* ── Header ── */
+        .page-header {
+            background: linear-gradient(135deg, #4a0072, #1a0030);
+            padding: 20px 24px 16px;
+            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        }
+        .logo-mark {
+            display: flex; align-items: center; justify-content: center;
+            width: 44px; height: 44px; flex-shrink: 0;
+        }
+        .logo-card { width: 24px; height: 32px; border-radius: 4px; position: absolute; }
+        .logo-card-back  { background: #e94560; transform: rotate(-8deg); }
+        .logo-card-front { background: #f5a623; transform: rotate(6deg); }
+        .header-text { flex: 1; }
+        .header-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: clamp(1.4rem, 4vw, 2rem);
+            font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase;
+            color: #fff; line-height: 1.1;
+        }
+        .header-sub { font-size: 0.8rem; color: rgba(255,255,255,0.55); margin-top: 3px; }
+        .year-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem; font-weight: 600;
+            background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px; padding: 4px 14px; color: rgba(255,255,255,0.8);
+        }
+
+        /* ── Page body ── */
+        .page-body { max-width: 760px; margin: 0 auto; padding: 20px 16px; }
+
+        /* ── Summary bar ── */
+        .summary-bar {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 1px; background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px; overflow: hidden; margin-bottom: 18px;
+        }
+        .sum-cell {
+            background: rgba(255,255,255,0.04);
+            padding: 14px 10px; text-align: center;
+        }
+        .sum-val {
+            display: block;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.15rem; font-weight: 700; color: #fff;
+        }
+        .sum-val.green { color: #4cdf8a; }
+        .sum-val.red   { color: #ff8a8a; }
+        .sum-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.8px; color: rgba(255,255,255,0.4); margin-top: 3px; display: block; }
+
+        /* ── Controls ── */
+        .controls {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .filter-btn {
+            font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 700;
+            padding: 6px 14px; border-radius: 20px; cursor: pointer;
+            border: 1.5px solid rgba(255,255,255,0.2);
+            background: transparent; color: rgba(255,255,255,0.6);
+            transition: all 0.15s;
+        }
+        .filter-btn.active {
+            background: rgba(255,255,255,0.12);
+            border-color: rgba(255,255,255,0.4); color: #fff;
+        }
+        .mark-all-btn {
+            font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 700;
+            padding: 6px 16px; border-radius: 20px; cursor: pointer;
+            border: 1.5px solid #00c853; background: rgba(0,200,83,0.1); color: #4cdf8a;
+            margin-left: auto; transition: all 0.15s;
+        }
+        .mark-all-btn:hover { background: rgba(0,200,83,0.2); }
+
+        /* ── Rate card ── */
+        .rate-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px; margin-bottom: 18px; overflow: hidden;
+        }
+        .rate-card summary {
+            font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.8px; color: rgba(255,255,255,0.5);
+            padding: 10px 16px; cursor: pointer; list-style: none;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .rate-card summary::before { content: '▶'; font-size: 0.6rem; }
+        .rate-card[open] summary::before { content: '▼'; }
+        .rate-table {
+            width: 100%; border-collapse: collapse; font-size: 0.82rem;
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+        .rate-table th {
+            padding: 6px 14px; text-align: center;
+            font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.8px;
+            color: rgba(255,255,255,0.4); font-weight: 600;
+        }
+        .rate-table th:first-child { text-align: left; }
+        .rate-table td {
+            padding: 8px 14px; text-align: center;
+            border-top: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.75);
+        }
+        .rate-table td:first-child { text-align: left; font-weight: 700; color: #fff; }
+        .rate-cr  { color: #4cdf8a !important; font-weight: 700 !important; }
+        .rate-ar  { color: #63b3ed !important; font-weight: 700 !important; }
+        .rate-scr { color: #d6a0f5 !important; font-weight: 700 !important; }
+
+        /* ── Game cards ── */
+        .game-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.09);
+            border-radius: 10px; margin-bottom: 10px; overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        .game-card.game-done {
+            border-color: rgba(0,200,83,0.3);
+            background: rgba(0,200,83,0.04);
+        }
+        .game-head {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding: 9px 14px 7px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+        .game-time {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+            font-weight: 600; color: rgba(255,255,255,0.9); flex-shrink: 0;
+        }
+        .game-ag {
+            font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+            color: rgba(255,255,255,0.6); letter-spacing: 0.5px;
+        }
+        .game-teams {
+            font-size: 0.72rem; color: rgba(255,255,255,0.35); margin-left: auto;
+        }
+        .done-badge {
+            font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+            letter-spacing: 0.5px; color: #4cdf8a; margin-left: auto;
+        }
+        .no-rate-badge {
+            font-size: 0.65rem; font-weight: 700; color: #ff8a8a;
+            background: rgba(255,100,100,0.1); border-radius: 4px; padding: 1px 6px;
+        }
+
+        /* ── Slot rows ── */
+        .slot-row {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            padding: 8px 14px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            transition: background 0.15s;
+        }
+        .slot-row.slot-paid { background: rgba(0,200,83,0.06); }
+        .slot-label {
+            font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+            letter-spacing: 0.8px; color: rgba(255,255,255,0.4);
+            width: 28px; flex-shrink: 0;
+        }
+        .ref-name {
+            font-size: 0.88rem; font-weight: 600; color: #e8edf5; flex: 1; min-width: 120px;
+        }
+        .ref-name.no-ref { color: rgba(255,255,255,0.25); font-style: italic; font-weight: 400; }
+        .amount {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.88rem; font-weight: 700; color: #4cdf8a; flex-shrink: 0;
+        }
+
+        /* ── Venmo button ── */
+        .v-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 34px; height: 34px; border-radius: 50%;
+            background: #008CFF; color: #fff;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.1rem; font-weight: 900;
+            text-decoration: none; flex-shrink: 0;
+            transition: opacity 0.15s;
+        }
+        .v-btn:hover { opacity: 0.85; }
+        .v-btn.v-no { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.3); cursor: default; }
+
+        /* ── Paid button ── */
+        .paid-btn {
+            font-family: 'DM Sans', sans-serif; font-size: 0.76rem; font-weight: 700;
+            padding: 5px 12px; border-radius: 16px; cursor: pointer;
+            border: 1.5px solid rgba(255,255,255,0.2);
+            background: transparent; color: rgba(255,255,255,0.45);
+            transition: all 0.15s; flex-shrink: 0;
+        }
+        .paid-btn.paid {
+            background: rgba(0,200,83,0.15);
+            border-color: #00c853; color: #4cdf8a;
+        }
+        .paid-btn:hover:not(.paid) { border-color: rgba(255,255,255,0.4); color: #fff; }
+
+        /* ── No venmo note ── */
+        .no-venmo { font-size: 0.7rem; color: rgba(255,255,255,0.25); flex-shrink: 0; }
+
+        /* ── Loading / error ── */
+        .msg { text-align: center; padding: 40px; color: rgba(255,255,255,0.4); font-size: 0.9rem; }
+        .msg.err { color: #ff8a8a; }
+
+        @media (max-width: 500px) {
+            .summary-bar { grid-template-columns: repeat(2, 1fr); }
+            .slot-row { gap: 6px; }
+            .ref-name { min-width: 90px; font-size: 0.82rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <div class="logo-mark" style="position:relative; width:44px; height:44px;">
+        <div class="logo-card logo-card-back"></div>
+        <div class="logo-card logo-card-front"></div>
+    </div>
+    <div class="header-text">
+        <div class="header-title" id="headerTitle">Loading…</div>
+        <div class="header-sub">Referee Pay Portal</div>
+    </div>
+    <div class="year-badge" id="yearBadge"></div>
+</div>
+
+<div class="page-body">
+
+    <div class="summary-bar" id="summaryBar">
+        <div class="sum-cell"><span class="sum-val">—</span><span class="sum-label">games</span></div>
+        <div class="sum-cell"><span class="sum-val">—</span><span class="sum-label">total payout</span></div>
+        <div class="sum-cell"><span class="sum-val green">—</span><span class="sum-label">paid</span></div>
+        <div class="sum-cell"><span class="sum-val">—</span><span class="sum-label">remaining</span></div>
+    </div>
+
+    <div class="controls">
+        <button class="filter-btn active" id="btnAll"    onclick="setFilter('all')">All Games</button>
+        <button class="filter-btn"        id="btnUnpaid" onclick="setFilter('unpaid')">Unpaid Only</button>
+        <button class="mark-all-btn"      onclick="markAllPaid()">✓ Mark All Paid</button>
+    </div>
+
+    <details class="rate-card" id="rateCard" style="display:none;">
+        <summary>Pay Rate Schedule</summary>
+        <table class="rate-table" id="rateTable">
+            <thead><tr>
+                <th>Age Group</th>
+                <th class="rate-cr">CR</th>
+                <th class="rate-ar">AR</th>
+                <th class="rate-scr">Solo CR</th>
+            </tr></thead>
+            <tbody id="rateRows"></tbody>
+        </table>
+    </details>
+
+    <div id="gamesList"><div class="msg">Loading games…</div></div>
+
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+(async () => {
+    const params = new URLSearchParams(location.search);
+    const KEY    = params.get('key')  || 'rhamboree';
+    const YEAR   = parseInt(params.get('year') || new Date().getFullYear());
+    const isMob  = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    let _tournament = null;
+    let _games      = [];
+    let _refMap     = {};
+    let _filter     = 'all';
+
+    document.getElementById('yearBadge').textContent = YEAR;
+
+    // ── Pay rate lookup ───────────────────────────────────────────────────
+    function getRates(ageGroup) {
+        const s   = (ageGroup || '').toLowerCase();
+        const all = _tournament?.age_groups || [];
+        if (s.includes('u8'))  return all.find(r => r.age_group === 'U8')          || null;
+        if ((s.includes('u9') || s.includes('u10')) && s.includes('comp'))
+                               return all.find(r => r.age_group === 'U9/U10 Comp') || null;
+        if (s.includes('u10')) return all.find(r => r.age_group === 'U10 Rec')     || null;
+        if (s.includes('u12')) return all.find(r => r.age_group === 'U12')         || null;
+        if (s.includes('u15')) return all.find(r => r.age_group === 'U15')         || null;
+        return null;
+    }
+
+    // ── Paid tracking (localStorage) ─────────────────────────────────────
+    const sk      = (id, slot) => `trp:${KEY}:${YEAR}:${id}:${slot}`;
+    const isPaid  = (id, slot) => !!localStorage.getItem(sk(id, slot));
+    const setPaid = (id, slot, val) =>
+        val ? localStorage.setItem(sk(id, slot), '1') : localStorage.removeItem(sk(id, slot));
+
+    function isFullyPaid(g) {
+        if (g['Center Referee'] && !isPaid(g.id, 'cr'))  return false;
+        if (g['AR 1']           && !isPaid(g.id, 'ar1')) return false;
+        if (g['AR 2']           && !isPaid(g.id, 'ar2')) return false;
+        return !!(g['Center Referee'] || g['AR 1'] || g['AR 2']);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+    function fmtTime(t) {
+        if (!t) return '?';
+        const [h, m] = t.split(':');
+        const hr = parseInt(h);
+        return `${hr > 12 ? hr - 12 : hr || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}`;
+    }
+
+    function venmoUrl(handle, amount, note) {
+        const enc = encodeURIComponent(note);
+        return isMob
+            ? `venmo://paycharge?txn=pay&recipients=${handle}&amount=${amount}&note=${enc}`
+            : `https://venmo.com/?txn=pay&recipients=${handle}&amount=${amount}&note=${enc}`;
+    }
+
+    function esc(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Render rate card ──────────────────────────────────────────────────
+    function renderRateCard() {
+        const rates = _tournament?.age_groups || [];
+        if (!rates.length) return;
+        document.getElementById('rateCard').style.display = '';
+        document.getElementById('rateRows').innerHTML = rates.map(r => `
+            <tr>
+                <td>${esc(r.age_group)}</td>
+                <td class="rate-cr">${r.center ? '$' + r.center : '—'}</td>
+                <td class="rate-ar">${r.ar     ? '$' + r.ar     : '—'}</td>
+                <td class="rate-scr">${r.solo_cr ? '$' + r.solo_cr : '—'}</td>
+            </tr>`).join('');
+    }
+
+    // ── Slot row HTML ─────────────────────────────────────────────────────
+    function slotHtml(gameId, ageGroup, label, slot, name) {
+        if (!name) return '';
+        const refName = name.trim();
+        const rates   = getRates(ageGroup);
+        const amount  = slot === 'cr' ? rates?.center : rates?.ar;
+        const ref     = _refMap[refName] || {};
+        const handle  = (ref.venmo || '').replace(/^@/, '');
+        const paid    = isPaid(gameId, slot);
+        const note    = `${_tournament.name} ${YEAR} ${ageGroup} ${label}`;
+
+        const vBtn = handle && amount
+            ? `<a class="v-btn" href="${esc(venmoUrl(handle, amount, note))}" target="_blank">V</a>`
+            : `<span class="v-btn v-no" title="${handle ? 'No rate for this slot' : 'No Venmo on file'}">V</span>`;
+
+        const amtHtml = amount
+            ? `<span class="amount">$${amount}</span>`
+            : `<span class="no-venmo">no rate</span>`;
+
+        return `<div class="slot-row${paid ? ' slot-paid' : ''}" id="sr-${gameId}-${slot}">
+            <span class="slot-label">${esc(label)}</span>
+            <span class="ref-name">${esc(refName)}</span>
+            ${amtHtml}
+            ${vBtn}
+            <button class="paid-btn${paid ? ' paid' : ''}"
+                onclick="togglePaid(${gameId},'${slot}',this)">${paid ? '✓ Paid' : 'Mark Paid'}</button>
+        </div>`;
+    }
+
+    // ── Game card HTML ────────────────────────────────────────────────────
+    function gameCardHtml(g) {
+        const done = isFullyPaid(g);
+        const rates = getRates(g['Age Group']);
+        const teams = (g['Home Team'] && g['Away Team'])
+            ? `${g['Home Team']} vs ${g['Away Team']}` : '';
+        return `<div class="game-card${done ? ' game-done' : ''}" id="gc-${g.id}">
+            <div class="game-head">
+                <span class="game-time">${fmtTime(g.time)}</span>
+                <span class="game-ag">${esc(g['Age Group'])}</span>
+                ${!rates ? '<span class="no-rate-badge">⚠ rate unknown</span>' : ''}
+                ${teams  ? `<span class="game-teams">${esc(teams)}</span>` : ''}
+                ${done   ? '<span class="done-badge">✓ All Paid</span>' : ''}
+            </div>
+            ${slotHtml(g.id, g['Age Group'], 'CR',  'cr',  g['Center Referee'])}
+            ${slotHtml(g.id, g['Age Group'], 'AR1', 'ar1', g['AR 1'])}
+            ${slotHtml(g.id, g['Age Group'], 'AR2', 'ar2', g['AR 2'])}
+        </div>`;
+    }
+
+    // ── Render games ──────────────────────────────────────────────────────
+    function render() {
+        const list = _filter === 'unpaid'
+            ? _games.filter(g => !isFullyPaid(g))
+            : _games;
+        const el = document.getElementById('gamesList');
+        if (!list.length) {
+            el.innerHTML = `<div class="msg">${_filter === 'unpaid' ? '🎉 All paid!' : 'No games found.'}</div>`;
+            return;
+        }
+        el.innerHTML = list.map(gameCardHtml).join('');
+    }
+
+    // ── Summary ───────────────────────────────────────────────────────────
+    function updateSummary() {
+        let total = 0, paid = 0;
+        _games.forEach(g => {
+            const rates = getRates(g['Age Group']);
+            const cr  = rates?.center || 0;
+            const ar  = rates?.ar     || 0;
+            if (g['Center Referee']) { total += cr; if (isPaid(g.id,'cr'))  paid += cr; }
+            if (g['AR 1'])           { total += ar; if (isPaid(g.id,'ar1')) paid += ar; }
+            if (g['AR 2'])           { total += ar; if (isPaid(g.id,'ar2')) paid += ar; }
+        });
+        const rem = total - paid;
+        document.getElementById('summaryBar').innerHTML = `
+            <div class="sum-cell"><span class="sum-val">${_games.length}</span><span class="sum-label">games</span></div>
+            <div class="sum-cell"><span class="sum-val">$${total}</span><span class="sum-label">total payout</span></div>
+            <div class="sum-cell"><span class="sum-val green">$${paid}</span><span class="sum-label">paid</span></div>
+            <div class="sum-cell"><span class="sum-val ${rem > 0 ? 'red' : 'green'}">$${rem}</span><span class="sum-label">remaining</span></div>`;
+    }
+
+    // ── Controls ──────────────────────────────────────────────────────────
+    window.setFilter = function(f) {
+        _filter = f;
+        document.getElementById('btnAll').classList.toggle('active', f === 'all');
+        document.getElementById('btnUnpaid').classList.toggle('active', f === 'unpaid');
+        render();
+    };
+
+    window.togglePaid = function(gameId, slot, btn) {
+        const now = !isPaid(gameId, slot);
+        setPaid(gameId, slot, now);
+        btn.textContent = now ? '✓ Paid' : 'Mark Paid';
+        btn.classList.toggle('paid', now);
+        const row  = document.getElementById(`sr-${gameId}-${slot}`);
+        if (row) row.classList.toggle('slot-paid', now);
+        const card = document.getElementById(`gc-${gameId}`);
+        const g    = _games.find(x => x.id === gameId);
+        if (card && g) card.classList.toggle('game-done', isFullyPaid(g));
+        updateSummary();
+    };
+
+    window.markAllPaid = function() {
+        const targets = _filter === 'unpaid' ? _games.filter(g => !isFullyPaid(g)) : _games;
+        targets.forEach(g => {
+            ['cr','ar1','ar2'].forEach(s => setPaid(g.id, s, true));
+        });
+        render();
+        updateSummary();
+    };
+
+    // ── Boot ──────────────────────────────────────────────────────────────
+    try {
+        // Fetch tournament record
+        const { data: t, error: tErr } = await supabaseClient.client
+            .from('tournaments')
+            .select('id, name, key, age_groups')
+            .eq('key', KEY)
+            .single();
+        if (tErr || !t) throw new Error('Tournament not found for key: ' + KEY);
+        _tournament = t;
+
+        document.getElementById('headerTitle').textContent = `${t.name} ${YEAR}`;
+        document.title = `${t.name} ${YEAR} — Ref Pay`;
+        renderRateCard();
+
+        // Fetch games for this year
+        const { data: games, error: gErr } = await supabaseClient.client
+            .from('tournament_games')
+            .select('id, "Age Group", "Center Referee", "AR 1", "AR 2", date, time, "Home Team", "Away Team"')
+            .eq('Source Club', t.name)
+            .gte('date', `${YEAR}-01-01`)
+            .lte('date', `${YEAR}-12-31`)
+            .order('time');
+        if (gErr) throw new Error(gErr.message);
+        _games = games || [];
+
+        // Collect ref names, fetch Venmo handles
+        const names = new Set();
+        _games.forEach(g => {
+            ['Center Referee','AR 1','AR 2'].forEach(col => {
+                const n = g[col]?.trim();
+                if (n) names.add(n);
+            });
+        });
+        if (names.size) {
+            const { data: refs } = await supabaseClient.client
+                .from('referees')
+                .select('name, venmo, payment_method')
+                .in('name', [...names]);
+            (refs || []).forEach(r => { _refMap[r.name?.trim()] = r; });
+        }
+
+        render();
+        updateSummary();
+
+    } catch(err) {
+        document.getElementById('gamesList').innerHTML =
+            `<div class="msg err">Error: ${err.message}</div>`;
+        document.getElementById('summaryBar').innerHTML = '';
+    }
+})();
+</script>
+</body>
+</html>
