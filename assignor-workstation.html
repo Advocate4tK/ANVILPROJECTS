@@ -3075,7 +3075,7 @@
             const refObj = lookupRefByName(name);
             if (!refObj) return '';
             const notes = (refObj.fields['Assignor Notes'] || '').trim();
-            return notes ? `<span style="background:#c0392b;color:#fff;border-radius:10px;padding:1px 5px;font-size:0.62rem;font-weight:700;margin-left:3px;vertical-align:middle;" title="${notes.replace(/"/g,'&quot;')}">!</span>` : '';
+            return notes ? `<span style="background:#00c853;color:#06200f;border-radius:10px;padding:1px 5px;font-size:0.62rem;font-weight:700;margin-left:3px;vertical-align:middle;" title="${notes.replace(/"/g,'&quot;')}">!</span>` : '';
         }
 
         function refPosBadge(name) {
@@ -4035,7 +4035,8 @@
             await supabaseClient.client.from('staging').delete().in('game_id', reseedIds);
             reseedIds.forEach(id => { sheet3StagedRefs[String(id)] = []; });
 
-            const upsertPromises = [];
+            const bulkRows = [];
+            const uid = currentUserId();
 
             for (const game of unseeded) {
                 const gid       = String(game.id);
@@ -4078,12 +4079,15 @@
 
                 sheet3StagedRefs[gid] = ranked;
                 ranked.forEach((name, slot) => {
-                    upsertPromises.push(sheet3UpsertSlot(gid, slot, name));
+                    bulkRows.push({ game_id: parseInt(gid), slot, ref_name: name, assignor_id: uid });
                 });
             }
 
             sheet3CacheStagedRefs();
-            await Promise.all(upsertPromises);
+            if (bulkRows.length) {
+                const { error } = await supabaseClient.client.from('staging').upsert(bulkRows, { onConflict: 'game_id,slot' });
+                if (error) console.error('auto-seed bulk upsert:', error);
+            }
             renderSheet3View(sheet3LastFiltered);
         }
 
