@@ -103,6 +103,20 @@
         .mark-all-btn { font-family: 'DM Sans',sans-serif; font-size: 0.8rem; font-weight: 700; padding: 6px 16px; border-radius: 20px; cursor: pointer; border: 1.5px solid #00c853; background: rgba(0,200,83,0.1); color: #4cdf8a; margin-left: auto; transition: all 0.15s; }
         .mark-all-btn:hover { background: rgba(0,200,83,0.2); }
 
+        /* ── Player summary ── */
+        .player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+        .player-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px 18px; }
+        .player-card.fully-paid { border-color: rgba(0,200,83,0.35); background: rgba(0,200,83,0.05); }
+        .player-name { font-family: 'Barlow Condensed',sans-serif; font-size: 1.2rem; font-weight: 800; color: #fff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+        .player-amounts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 14px; text-align: center; }
+        .pa-cell { background: rgba(255,255,255,0.04); border-radius: 7px; padding: 8px 4px; }
+        .pa-val { display: block; font-family: 'JetBrains Mono',monospace; font-size: 1rem; font-weight: 700; color: #fff; }
+        .pa-val.green { color: #4cdf8a; }
+        .pa-val.red   { color: #ff8a8a; }
+        .pa-val.dim   { color: rgba(255,255,255,0.4); }
+        .pa-label { display: block; font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.7px; color: rgba(255,255,255,0.35); margin-top: 3px; }
+        .player-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
         /* ── Rate card ── */
         .rate-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 18px; overflow: hidden; }
         .rate-card summary { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: rgba(255,255,255,0.5); padding: 10px 16px; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
@@ -294,9 +308,10 @@
             <div class="sum-cell"><span class="sum-val">—</span><span class="sum-label">remaining</span></div>
         </div>
         <div class="controls">
-            <button class="filter-btn active" id="btnAll"    onclick="setFilter('all')">All Games</button>
-            <button class="filter-btn"        id="btnUnpaid" onclick="setFilter('unpaid')">Unpaid Only</button>
-            <button class="mark-all-btn"      onclick="markAllPaid()">✓ Mark All Paid</button>
+            <button class="filter-btn active" id="btnAll"      onclick="setFilter('all')">All Games</button>
+            <button class="filter-btn"        id="btnUnpaid"   onclick="setFilter('unpaid')">Unpaid Only</button>
+            <button class="filter-btn"        id="btnPlayers"  onclick="setFilter('players')">By Player</button>
+            <button class="mark-all-btn" id="markAllBtn"       onclick="markAllPaid()">✓ Mark All Paid</button>
         </div>
         <details class="rate-card" id="rateCard" style="display:none;">
             <summary>Pay Rate Schedule</summary>
@@ -491,10 +506,70 @@
         </div>`;
     }
 
+    // ── Player summary ────────────────────────────────────────────────────
+    function buildPlayerSummary() {
+        const players = {};
+        _games.forEach(g => {
+            const r = getRates(g['Age Group']);
+            [
+                { slot: 'cr',  name: g['Center Referee'], amt: r?.center || 0 },
+                { slot: 'ar1', name: g['AR 1'],           amt: r?.ar     || 0 },
+                { slot: 'ar2', name: g['AR 2'],           amt: r?.ar     || 0 },
+            ].forEach(({ slot, name, amt }) => {
+                if (!name) return;
+                const n = name.trim();
+                if (!players[n]) players[n] = { total: 0, paid: 0, ref: _refMap[n] || {} };
+                players[n].total += amt;
+                if (isPaid(g.id, slot)) players[n].paid += amt;
+            });
+        });
+        return players;
+    }
+
+    function playerSummaryHtml() {
+        const players = buildPlayerSummary();
+        const names   = Object.keys(players).sort();
+        if (!names.length) return `<div class="pmsg">No referees found.</div>`;
+        const cards = names.map(name => {
+            const p   = players[name];
+            const rem = p.total - p.paid;
+            const fullyPaid = rem === 0 && p.total > 0;
+            const handle = (p.ref.venmo || '').replace(/^@/, '');
+            const note   = `${_tournament.name} ${YEAR} — Total Payment`;
+            const venmoBtn = (_payMethods.includes('venmo') && handle && rem > 0)
+                ? `<a class="v-btn" href="${esc(venmoUrl(handle, rem, note))}" target="_blank">V</a>`
+                : '';
+            const methodBadges = _payMethods.filter(m => m !== 'venmo').map(m => {
+                if (m === 'cash')    return `<span class="method-badge badge-cash">💵 Cash</span>`;
+                if (m === 'check')   return `<span class="method-badge badge-check">📋 Check</span>`;
+                if (m === 'cashapp') return `<span class="method-badge badge-cashapp">$ CashApp</span>`;
+                if (m === 'zelle')   return `<span class="method-badge badge-zelle">⚡ Zelle</span>`;
+                if (m === 'dd')      return `<span class="method-badge badge-dd">🏦 DD</span>`;
+                return '';
+            }).join('');
+            return `<div class="player-card${fullyPaid ? ' fully-paid' : ''}">
+                <div class="player-name">${esc(name)}${fullyPaid ? ' <span style="font-size:0.7rem;color:#4cdf8a;">✓ PAID</span>' : ''}</div>
+                <div class="player-amounts">
+                    <div class="pa-cell"><span class="pa-val">$${p.total}</span><span class="pa-label">Total</span></div>
+                    <div class="pa-cell"><span class="pa-val green">$${p.paid}</span><span class="pa-label">Paid</span></div>
+                    <div class="pa-cell"><span class="pa-val ${rem > 0 ? 'red' : 'dim'}">$${rem}</span><span class="pa-label">Owed</span></div>
+                </div>
+                <div class="player-actions">${venmoBtn}${methodBadges}</div>
+            </div>`;
+        }).join('');
+        return `<div class="player-grid">${cards}</div>`;
+    }
+
     // ── Render ────────────────────────────────────────────────────────────
     function render() {
+        const el = document.getElementById('gamesList');
+        if (_filter === 'players') {
+            el.innerHTML = playerSummaryHtml();
+            document.getElementById('markAllBtn').style.display = 'none';
+            return;
+        }
+        document.getElementById('markAllBtn').style.display = '';
         const list = _filter === 'unpaid' ? _games.filter(g => !isFullyPaid(g)) : _games;
-        const el   = document.getElementById('gamesList');
         el.innerHTML = list.length
             ? list.map(gameCardHtml).join('')
             : `<div class="pmsg">${_filter==='unpaid' ? '🎉 All paid!' : 'No games found.'}</div>`;
@@ -518,8 +593,9 @@
 
     window.setFilter = function(f) {
         _filter = f;
-        document.getElementById('btnAll').classList.toggle('active', f==='all');
-        document.getElementById('btnUnpaid').classList.toggle('active', f==='unpaid');
+        document.getElementById('btnAll').classList.toggle('active',     f==='all');
+        document.getElementById('btnUnpaid').classList.toggle('active',  f==='unpaid');
+        document.getElementById('btnPlayers').classList.toggle('active', f==='players');
         render();
     };
 
