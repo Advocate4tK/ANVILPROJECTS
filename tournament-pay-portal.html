@@ -24,30 +24,47 @@
 
         /* ── Header ── */
         .page-header {
-            background: linear-gradient(135deg, #4a0072, #1a0030);
-            padding: 20px 24px 16px;
-            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+            padding: 28px 24px 20px;
+            text-align: center;
+        }
+        .header-brand {
+            display: inline-flex; align-items: center; gap: 18px;
+            justify-content: center;
         }
         .logo-mark {
-            display: flex; align-items: center; justify-content: center;
-            width: 44px; height: 44px; flex-shrink: 0;
+            --sz: 64px;
+            position: relative; width: var(--sz); height: var(--sz); flex-shrink: 0;
         }
-        .logo-card { width: 24px; height: 32px; border-radius: 4px; position: absolute; }
-        .logo-card-back  { background: #e94560; transform: rotate(-8deg); }
-        .logo-card-front { background: #f5a623; transform: rotate(6deg); }
-        .header-text { flex: 1; }
+        .lcard {
+            position: absolute; width: calc(var(--sz)*0.42); height: calc(var(--sz)*0.56);
+            border-radius: calc(var(--sz)*0.07);
+            top: 50%; left: 50%; transform-origin: center center;
+        }
+        .lcard-red    { background: #e94560; transform: translate(-50%,-50%) rotate(-10deg); }
+        .lcard-yellow { background: #f5a623; transform: translate(-50%,-50%) rotate(8deg); }
+        .logo-text {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            display: flex; flex-direction: column; align-items: center;
+            font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+            text-transform: uppercase; z-index: 10; line-height: 0.88; letter-spacing: 2px;
+        }
+        .logo-line1 { color: #fff; font-size: calc(var(--sz)*0.2); text-shadow: 0 2px 12px rgba(0,0,0,0.95); }
+        .logo-line2 { color: #00c853; font-size: calc(var(--sz)*0.32); transform: skewX(-14deg); display: block; text-shadow: 0 2px 12px rgba(0,0,0,0.95); }
+        .logo-underline { display: block; height: calc(var(--sz)*0.022); width: calc(var(--sz)*0.58); margin-top: calc(var(--sz)*0.025); background: #ef4444; border-radius: 2px; transform: skewX(-14deg); }
+        .header-text { text-align: left; }
         .header-title {
             font-family: 'Barlow Condensed', sans-serif;
-            font-size: clamp(1.4rem, 4vw, 2rem);
-            font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase;
-            color: #fff; line-height: 1.1;
+            font-size: clamp(1.6rem, 4vw, 2.4rem);
+            font-weight: 900; letter-spacing: 2px; text-transform: uppercase;
+            color: #fff; line-height: 1.05; margin: 0;
         }
-        .header-sub { font-size: 0.8rem; color: rgba(255,255,255,0.55); margin-top: 3px; }
+        .header-sub { font-size: 0.82rem; color: rgba(255,255,255,0.45); margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
         .year-badge {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem; font-weight: 600;
-            background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 20px; padding: 4px 14px; color: rgba(255,255,255,0.8);
+            font-size: 0.78rem; font-weight: 600;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 20px; padding: 3px 12px; color: rgba(255,255,255,0.5);
+            display: inline-block; margin-top: 6px;
         }
 
         /* ── Page body ── */
@@ -240,14 +257,35 @@
 </head>
 <body>
 
-<div class="page-header">
-    <div class="logo-mark" style="position:relative; width:44px; height:44px;">
-        <div class="logo-card logo-card-back"></div>
-        <div class="logo-card logo-card-front"></div>
+<!-- PIN overlay -->
+<div id="pinOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;padding:36px 32px;max-width:340px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
+        <div style="font-size:2rem;margin-bottom:8px;">🔒</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.3rem;font-weight:800;color:#0f3460;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Payment Portal PIN</div>
+        <div style="font-size:0.85rem;color:#666;margin-bottom:20px;">Enter your PIN to access payment data.</div>
+        <input type="password" id="pinInput" maxlength="12" placeholder="PIN" autocomplete="off"
+            style="width:100%;box-sizing:border-box;padding:10px 14px;font-size:1.1rem;border:2px solid #d0d7de;border-radius:8px;text-align:center;letter-spacing:4px;margin-bottom:12px;outline:none;"
+            onkeydown="if(event.key==='Enter') submitPin()">
+        <div id="pinError" style="color:#e74c3c;font-size:0.8rem;min-height:18px;margin-bottom:10px;"></div>
+        <button onclick="submitPin()" style="padding:10px 28px;border:none;border-radius:8px;background:#0f3460;color:white;cursor:pointer;font-size:0.95rem;font-weight:700;width:100%;">Enter</button>
     </div>
-    <div class="header-text">
-        <div class="header-title" id="headerTitle">Loading…</div>
-        <div class="header-sub">Referee Pay Portal</div>
+</div>
+
+<div class="page-header">
+    <div class="header-brand">
+        <div class="logo-mark">
+            <div class="lcard lcard-red"></div>
+            <div class="lcard lcard-yellow"></div>
+            <div class="logo-text">
+                <span class="logo-line1">Referee</span>
+                <span class="logo-line2">Tool</span>
+                <span class="logo-underline"></span>
+            </div>
+        </div>
+        <div class="header-text">
+            <div class="header-title" id="headerTitle">Loading…</div>
+            <div class="header-sub">Referee Pay Portal</div>
+        </div>
     </div>
     <div class="year-badge" id="yearBadge"></div>
 </div>
@@ -299,8 +337,19 @@
     let _refMap     = {};
     let _payMethods = [];
     let _filter     = 'all';
+    let _pin        = '';
 
-    document.getElementById('yearBadge').textContent = YEAR;
+    window.submitPin = function() {
+        const entered = (document.getElementById('pinInput').value || '').trim();
+        if (entered === _pin) {
+            document.getElementById('pinOverlay').style.display = 'none';
+            loadData();
+        } else {
+            document.getElementById('pinError').textContent = 'Incorrect PIN. Try again.';
+            document.getElementById('pinInput').value = '';
+            document.getElementById('pinInput').focus();
+        }
+    };
 
     // ── Pay rate lookup ───────────────────────────────────────────────────
     function getRates(ageGroup) {
@@ -485,50 +534,64 @@
     };
 
     // ── Boot ──────────────────────────────────────────────────────────────
+    async function loadData() {
+        try {
+            const { data: games, error: gErr } = await supabaseClient.client
+                .from('tournament_games')
+                .select('id, "Age Group", "Center Referee", "AR 1", "AR 2", date, time, "Home Team", "Away Team"')
+                .eq('Source Club', _tournament.name)
+                .gte('date', `${YEAR}-01-01`)
+                .lte('date', `${YEAR}-12-31`)
+                .order('time');
+            if (gErr) throw new Error(gErr.message);
+            _games = games || [];
+
+            const names = new Set();
+            _games.forEach(g => {
+                ['Center Referee','AR 1','AR 2'].forEach(col => {
+                    const n = g[col]?.trim();
+                    if (n) names.add(n);
+                });
+            });
+            if (names.size) {
+                const { data: refs } = await supabaseClient.client
+                    .from('referees')
+                    .select('name, venmo, payment_method')
+                    .in('name', [...names]);
+                (refs || []).forEach(r => { _refMap[r.name?.trim()] = r; });
+            }
+
+            render();
+            updateSummary();
+        } catch(err) {
+            document.getElementById('gamesList').innerHTML =
+                `<div class="msg err">Error: ${err.message}</div>`;
+        }
+    }
+
     try {
-        // Fetch tournament record
         const { data: t, error: tErr } = await supabaseClient.client
             .from('tournaments')
-            .select('id, name, key, age_groups, payment_methods')
+            .select('id, name, key, age_groups, payment_methods, payment_portal_pin')
             .eq('key', KEY)
             .single();
         if (tErr || !t) throw new Error('Tournament not found for key: ' + KEY);
-        _tournament  = t;
-        _payMethods  = (t.payment_methods || '').split(',').map(s => s.trim()).filter(Boolean);
+        _tournament = t;
+        _payMethods = (t.payment_methods || '').split(',').map(s => s.trim()).filter(Boolean);
+        _pin        = (t.payment_portal_pin || '').trim();
 
         document.getElementById('headerTitle').textContent = `${t.name} ${YEAR}`;
         document.title = `${t.name} ${YEAR} — Ref Pay`;
+        document.getElementById('yearBadge').textContent = YEAR;
         renderRateCard();
 
-        // Fetch games for this year
-        const { data: games, error: gErr } = await supabaseClient.client
-            .from('tournament_games')
-            .select('id, "Age Group", "Center Referee", "AR 1", "AR 2", date, time, "Home Team", "Away Team"')
-            .eq('Source Club', t.name)
-            .gte('date', `${YEAR}-01-01`)
-            .lte('date', `${YEAR}-12-31`)
-            .order('time');
-        if (gErr) throw new Error(gErr.message);
-        _games = games || [];
-
-        // Collect ref names, fetch Venmo handles
-        const names = new Set();
-        _games.forEach(g => {
-            ['Center Referee','AR 1','AR 2'].forEach(col => {
-                const n = g[col]?.trim();
-                if (n) names.add(n);
-            });
-        });
-        if (names.size) {
-            const { data: refs } = await supabaseClient.client
-                .from('referees')
-                .select('name, venmo, payment_method')
-                .in('name', [...names]);
-            (refs || []).forEach(r => { _refMap[r.name?.trim()] = r; });
+        if (_pin) {
+            const ol = document.getElementById('pinOverlay');
+            ol.style.display = 'flex';
+            setTimeout(() => document.getElementById('pinInput').focus(), 50);
+        } else {
+            loadData();
         }
-
-        render();
-        updateSummary();
 
     } catch(err) {
         document.getElementById('gamesList').innerHTML =
