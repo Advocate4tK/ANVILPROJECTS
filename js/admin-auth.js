@@ -94,17 +94,17 @@ if (loginSection) {
             return;
         }
         if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = 'Logging in…'; }
+        const _timeout = ms => new Promise((_, rej) => setTimeout(() => rej(new Error(`Supabase not responding after ${ms/1000}s — check your connection and try again.`)), ms));
         try {
-            const email = await _resolveUsernameToEmail(username);
+            const email = await Promise.race([_resolveUsernameToEmail(username), _timeout(10000)]);
             if (!email) {
                 loginError.textContent = 'Username not found.';
                 loginError.style.display = 'block';
                 return;
             }
-            const _authTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Auth timed out — Supabase is not responding. Try again in a moment.')), 12000));
             const { data, error } = await Promise.race([
                 supabaseClient.client.auth.signInWithPassword({ email, password }),
-                _authTimeout
+                _timeout(12000)
             ]);
             if (error || !data.session) {
                 loginError.textContent = 'Incorrect username or password.';
