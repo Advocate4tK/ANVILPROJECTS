@@ -2108,9 +2108,38 @@
             }).join('') : `<tr><td colspan="6" style="${cell2} color:#888;">No availability submitted.</td></tr>`;
         }
 
+        // ── Controlled autoscroll for ref→game drags ─────────────────────────
+        let _s2DragScrollRAF = null;
+        let _s2DragClientY   = 0;
+
+        function _s2TrackDragY(e) { _s2DragClientY = e.clientY; }
+
+        function _s2StartDragScroll() {
+            document.addEventListener('dragover', _s2TrackDragY);
+            function _tick() {
+                if (!sheet2DragData || sheet2DragData.type !== 'ref') {
+                    document.removeEventListener('dragover', _s2TrackDragY);
+                    _s2DragScrollRAF = null;
+                    return;
+                }
+                const pane = document.getElementById('s2gamesPane');
+                if (pane) {
+                    const rect = pane.getBoundingClientRect();
+                    const edge = 60;
+                    if (_s2DragClientY > rect.top && _s2DragClientY < rect.top + edge)
+                        pane.scrollTop -= 8;
+                    else if (_s2DragClientY < rect.bottom && _s2DragClientY > rect.bottom - edge)
+                        pane.scrollTop += 8;
+                }
+                _s2DragScrollRAF = requestAnimationFrame(_tick);
+            }
+            _s2DragScrollRAF = requestAnimationFrame(_tick);
+        }
+
         function sheet2RefDragStart(e, name) {
             sheet2DragData = { type: 'ref', name };
             e.dataTransfer.effectAllowed = 'copy';
+            _s2StartDragScroll();
         }
 
         function sheet2OptDragStart(e, gid, slot, name) {
