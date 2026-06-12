@@ -1477,7 +1477,7 @@
                     if (!hasDate) return false;
                     if (gameClubLower) {
                         const prefs = parsePreferences(r.fields['Club Preference'] || '');
-                        const availClubs = availTimeByName[name.toLowerCase()]?.[gameDate]?.clubs || [];
+                        const availClubs = (availTimeByName[name.toLowerCase()]?.[gameDate] || []).flatMap(s => s.clubs || []);
                         const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availClubs])];
                         if (merged.length > 0 && !merged.some(p => p === gameClubLower)) return false;
                     }
@@ -1606,7 +1606,7 @@
                     if (!hasDate) return false;
                     if (gameClubLower) {
                         const prefs = parsePreferences(r.fields['Club Preference'] || '');
-                        const availClubs = availTimeByName[name.toLowerCase()]?.[gameDate]?.clubs || [];
+                        const availClubs = (availTimeByName[name.toLowerCase()]?.[gameDate] || []).flatMap(s => s.clubs || []);
                         const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availClubs])];
                         if (merged.length > 0 && !merged.some(p => p === gameClubLower)) return false;
                     }
@@ -2680,10 +2680,9 @@
                         if (!prefs.some(p => p.toLowerCase() === gameClubLower)) return;
                     }
                     if (gameTime) {
-                        const slot = availTimeByName[name.toLowerCase()]?.[gameDate];
-                        if (slot && slot.start && slot.end) {
-                            if (gameTime < slot.start || gameTime > slot.end) return;
-                        }
+                        const slots = availTimeByName[name.toLowerCase()]?.[gameDate] || [];
+                        const timed = slots.filter(s => s.start && s.end);
+                        if (timed.length && !timed.some(s => gameTime >= s.start && gameTime <= s.end)) return;
                     }
                     seen.add(name.toLowerCase());
                     names.push(name);
@@ -3778,7 +3777,7 @@
                     let club = ref ? (ref.fields['Club Preference'] || '') : '';
                     try { const parsed = JSON.parse(club); if (Array.isArray(parsed)) club = parsed.join(', '); } catch {}
                     // Merge in what the ref put on their availability form for this date
-                    const availFormClubs = (availTimeByName[name.toLowerCase()]?.[date]?.clubs || []).join(', ');
+                    const availFormClubs = (availTimeByName[name.toLowerCase()]?.[date] || []).flatMap(s => s.clubs || []).join(', ');
                     if (availFormClubs) club = club ? `${club}, ${availFormClubs}` : availFormClubs;
                     const exp  = ref ? (ref.fields['Years Reffing'] || '') : '';
                     const rawNote = (a.fields['Notes'] || '').trim();
@@ -5032,10 +5031,10 @@
             const refNameKey = name.trim().toLowerCase();
             let avail = '';
             if (gameDate && availTimeByName[refNameKey]?.[gameDate]) {
-                const slot = availTimeByName[refNameKey][gameDate];
+                const slots = availTimeByName[refNameKey][gameDate];
                 const fmtT = t => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
-                if (slot.start && slot.end) avail = `${fmtT(slot.start)} – ${fmtT(slot.end)}`;
-                else if (slot.start) avail = `from ${fmtT(slot.start)}`;
+                avail = slots.filter(s => s.start && s.end).map(s => `${fmtT(s.start)} – ${fmtT(s.end)}`).join(', ');
+                if (!avail && slots[0]?.start) avail = `from ${fmtT(slots[0].start)}`;
             }
 
             const genderHtml = gender
@@ -6395,7 +6394,8 @@
                     if (!availByName[key]) availByName[key] = new Set();
                     availByName[key].add(date);
                     if (!availTimeByName[key]) availTimeByName[key] = {};
-                    if (!availTimeByName[key][date]) availTimeByName[key][date] = slot;
+                    if (!availTimeByName[key][date]) availTimeByName[key][date] = [];
+                    availTimeByName[key][date].push(slot);
                 };
                 avail.forEach(a => {
                     const name = normName(a.fields['Referee Name']);
@@ -7534,13 +7534,14 @@
                         const prefs  = parsePreferences(ref?.fields['Club Preference'] || '');
                         const clubOk = !gameClub || prefs.some(p => p.toLowerCase() === gameClub);
 
-                        // 3. Time — does their availability window cover the requested time?
-                        const timeSlot = availTimeByName[refKey]?.[requestedChangeDate];
+                        // 3. Time — does any availability window cover the requested time?
+                        const timeSlots = availTimeByName[refKey]?.[requestedChangeDate] || [];
+                        const timedSlots = timeSlots.filter(s => s.start && s.end);
                         let timeOk;
-                        if (!requestedChangeTime)                             timeOk = true;
-                        else if (!dateOk)                                     timeOk = false;
-                        else if (!timeSlot || !timeSlot.start || !timeSlot.end) timeOk = true;
-                        else timeOk = requestedChangeTime >= timeSlot.start && requestedChangeTime <= timeSlot.end;
+                        if (!requestedChangeTime)    timeOk = true;
+                        else if (!dateOk)            timeOk = false;
+                        else if (!timedSlots.length) timeOk = true;
+                        else timeOk = timedSlots.some(s => requestedChangeTime >= s.start && requestedChangeTime <= s.end);
 
                         const chk = (ok, label) =>
                             `<span style="color:${ok?'#1e8449':'#e74c3c'}; font-weight:700; white-space:nowrap;">${ok?'✓':'⚠'} ${label}</span>`;
@@ -7777,10 +7778,9 @@
                         // Specific date filter active — ref must be available on that date
                         if (!availByName[refName]?.has(dateFilter)) return false;
                         if (timeFilter) {
-                            const slot = availTimeByName[refName]?.[dateFilter];
-                            if (slot && slot.start && slot.end) {
-                                if (timeFilter < slot.start || timeFilter > slot.end) return false;
-                            }
+                            const slots = availTimeByName[refName]?.[dateFilter] || [];
+                            const timed = slots.filter(s => s.start && s.end);
+                            if (timed.length && !timed.some(s => timeFilter >= s.start && timeFilter <= s.end)) return false;
                         }
                     } else if (visibleGameDates.size > 0 && !gameDate) {
                         // Filter by the actual dates of games on screen —
@@ -7791,9 +7791,10 @@
                         if (matchingDates.length === 0) return false;
                         if (timeFilter) {
                             const hasTime = matchingDates.some(d => {
-                                const slot = availTimeByName[refName]?.[d];
-                                if (!slot || !slot.start || !slot.end) return true;
-                                return timeFilter >= slot.start && timeFilter <= slot.end;
+                                const slots = availTimeByName[refName]?.[d] || [];
+                                const timed = slots.filter(s => s.start && s.end);
+                                if (!timed.length) return true;
+                                return timed.some(s => timeFilter >= s.start && timeFilter <= s.end);
                             });
                             if (!hasTime) return false;
                         }
@@ -7953,17 +7954,19 @@
 
                 let timeLines = '';
                 if (lookupDate) {
-                    // Game selected or date filter — show just that date's window
-                    const slot = availTimeByName[refNameKey]?.[lookupDate];
-                    if (slot?.start && slot?.end) timeLines = `🕐 ${fmtT(slot.start)} – ${fmtT(slot.end)}`;
-                    else if (slot?.start)         timeLines = `🕐 from ${fmtT(slot.start)}`;
+                    // Game selected or date filter — show all windows for that date
+                    const slots = availTimeByName[refNameKey]?.[lookupDate] || [];
+                    timeLines = slots.filter(s => s.start && s.end).map(s => `🕐 ${fmtT(s.start)} – ${fmtT(s.end)}`).join('<br>');
+                    if (!timeLines && slots[0]?.start) timeLines = `🕐 from ${fmtT(slots[0].start)}`;
                 } else {
                     // No game selected — show all available dates + windows
-                    const slots = availTimeByName[refNameKey] || {};
-                    const lines = Object.entries(slots).sort(([a],[b]) => a.localeCompare(b)).map(([d, slot]) => {
-                        const window = (slot.start && slot.end) ? `${fmtT(slot.start)} – ${fmtT(slot.end)}` : slot.start ? `from ${fmtT(slot.start)}` : '';
-                        return `🕐 ${fmtD(d)}${window ? ': ' + window : ''}`;
-                    });
+                    const slotsByDate = availTimeByName[refNameKey] || {};
+                    const lines = Object.entries(slotsByDate).sort(([a],[b]) => a.localeCompare(b)).flatMap(([d, slots]) =>
+                        slots.filter(s => s.start || s.end).map(s => {
+                            const win = (s.start && s.end) ? `${fmtT(s.start)} – ${fmtT(s.end)}` : s.start ? `from ${fmtT(s.start)}` : '';
+                            return `🕐 ${fmtD(d)}${win ? ': ' + win : ''}`;
+                        })
+                    );
                     timeLines = lines.join('<br>');
                 }
 
@@ -8261,18 +8264,19 @@
                     }
                 }
 
-                // Tournament: warn if game time falls outside the ref's availability window
+                // Tournament: warn if game time falls outside ALL of the ref's availability windows
                 if (window.tournamentMode && gameDate && !override) {
-                    const slot = availTimeByName[refNameKey]?.[gameDate];
-                    if (slot && slot.start && slot.end) {
+                    const slots = availTimeByName[refNameKey]?.[gameDate] || [];
+                    const timed = slots.filter(s => s.start && s.end);
+                    if (timed.length) {
                         const toMins = t => { const [h, m] = (t || '').split(':').map(Number); return h * 60 + (m || 0); };
-                        const gameTime  = targetGame.fields['Time'] || '';
-                        const gameMins  = toMins(gameTime);
-                        const startMins = toMins(slot.start);
-                        const endMins   = toMins(slot.end);
-                        if (gameMins < startMins || gameMins >= endMins) {
+                        const gameTime = targetGame.fields['Time'] || '';
+                        const gameMins = toMins(gameTime);
+                        const withinAny = timed.some(s => gameMins >= toMins(s.start) && gameMins < toMins(s.end));
+                        if (!withinAny) {
                             const fmt = t => { const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
-                            if (!confirm(`⚠️ ${refName} is available ${fmt(slot.start)}–${fmt(slot.end)} but this game starts at ${fmt(gameTime)}.\n\nAssign anyway?`)) return;
+                            const windowList = timed.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ');
+                            if (!confirm(`⚠️ ${refName} is available ${windowList} but this game starts at ${fmt(gameTime)}.\n\nAssign anyway?`)) return;
                         }
                     }
                 }
