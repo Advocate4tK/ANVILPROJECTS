@@ -1797,6 +1797,7 @@
         let sheet2OptColors       = {};   // { 'gid-slot': '#hexcolor' }
         let sheet2DragData        = null; // { type:'ref'|'opt'|'assigned', name, fromGid, fromSlot, fromField }
         let sheet2RefSort         = { col: null, dir: 1 }; // col: 'exp', dir: 1=asc -1=desc
+        let sheet2GameSort        = { col: null, dir: 1 }; // col: 'time'|'date', dir: 1=asc -1=desc
         let sheet2CachedRefRows   = [];   // holds built refRows for re-sort without full re-render
         let sheet2SplitGamesH     = 400; // px height of games scroll pane (user-draggable)
         let sheet2ZoomGames       = 1.0; // zoom level for games table (0.6–1.5)
@@ -1989,15 +1990,21 @@
             }).join('') : `<tr><td colspan="${sheet2ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
             const thDrag = 'cursor:grab; user-select:none;';
+            const sortableCols = ['time', 'date'];
             const headerCells = sheet2ColOrder.map(key => {
-                const label = SHEET2_COL_LABELS[key] || key;
-                const minW  = SHEET2_COL_MINW[key] ? ` min-width:${SHEET2_COL_MINW[key]};` : '';
-                return `<th style="${hdr}${minW} ${thDrag}" draggable="true"
+                const label    = SHEET2_COL_LABELS[key] || key;
+                const minW     = SHEET2_COL_MINW[key] ? ` min-width:${SHEET2_COL_MINW[key]};` : '';
+                const isSortable = sortableCols.includes(key);
+                const arrow    = isSortable && sheet2GameSort.col === key ? (sheet2GameSort.dir === 1 ? ' ▲' : ' ▼') : '';
+                const sortStyle = isSortable ? ' cursor:pointer;' : '';
+                const sortClick = isSortable ? `onclick="sheet2SortGames('${key}')"` : '';
+                const title     = isSortable ? `title="Click to sort, drag to reorder"` : `title="Drag to reorder"`;
+                return `<th style="${hdr}${minW}${sortStyle}" draggable="true"
                     ondragstart="sheet2ColDragStart('${key}')"
                     ondragover="event.preventDefault(); this.style.background='#c8d8f0';"
                     ondragleave="this.style.background='';"
                     ondrop="sheet2ColDrop('${key}'); this.style.background='';"
-                    title="Drag to reorder">${label}</th>`;
+                    ${sortClick} ${title}>${label}${arrow}</th>`;
             }).join('');
 
             const zoomBtn = 'border:1px solid #ccc; background:#f6f8fa; border-radius:3px; padding:1px 7px; font-size:0.8rem; cursor:pointer; line-height:1.4;';
@@ -2106,6 +2113,26 @@
                     <td style="${cell2}">${fmtT(r.start)}</td><td style="${cell2}">${fmtT(r.end)}</td>
                 </tr>`;
             }).join('') : `<tr><td colspan="6" style="${cell2} color:#888;">No availability submitted.</td></tr>`;
+        }
+
+        // ── Games pane column sort (time / date) ─────────────────────────────
+        function sheet2SortGames(col) {
+            if (sheet2GameSort.col === col) {
+                sheet2GameSort.dir *= -1;
+            } else {
+                sheet2GameSort.col = col;
+                sheet2GameSort.dir = 1;
+            }
+            const field = col === 'time' ? 'Time' : 'Date';
+            sheet2LastFiltered = [...(sheet2LastFiltered || allGames)].sort((a, b) => {
+                const va = a.fields[field] || '';
+                const vb = b.fields[field] || '';
+                return va.localeCompare(vb) * sheet2GameSort.dir;
+            });
+            const pane = document.getElementById('s2gamesPane');
+            const scrollTop = pane ? pane.scrollTop : 0;
+            renderSheet2View(sheet2LastFiltered);
+            if (pane) pane.scrollTop = scrollTop;
         }
 
         // ── Controlled autoscroll for ref→game drags ─────────────────────────
