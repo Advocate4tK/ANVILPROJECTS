@@ -96,7 +96,11 @@ if (loginSection) {
         if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = 'Logging in…'; }
         const _timeout = ms => new Promise((_, rej) => setTimeout(() => rej(new Error(`Supabase not responding after ${ms/1000}s — check your connection and try again.`)), ms));
         try {
-            const email = await Promise.race([_resolveUsernameToEmail(username), _timeout(10000)]);
+            // If input looks like an email, use it directly (bypasses DB lookup)
+            const isEmail = username.includes('@');
+            const email = isEmail
+                ? username.trim()
+                : await Promise.race([_resolveUsernameToEmail(username), _timeout(10000)]);
             if (!email) {
                 loginError.textContent = 'Username not found.';
                 loginError.style.display = 'block';
