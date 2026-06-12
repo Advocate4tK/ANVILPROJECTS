@@ -24,6 +24,15 @@ function isLoggedIn() {
     return _getSupabaseSession() !== null;
 }
 
+function clearSessionAndReload() {
+    try {
+        const url   = (typeof CONFIG !== 'undefined') ? CONFIG.SUPABASE_URL : '';
+        const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
+        if (match) localStorage.removeItem(`sb-${match[1]}-auth-token`);
+    } catch(e) {}
+    location.reload();
+}
+
 function checkAdminAccess() {
     if (!isLoggedIn()) {
         window.location.href = 'admin.html';
@@ -92,7 +101,11 @@ if (loginSection) {
                 loginError.style.display = 'block';
                 return;
             }
-            const { data, error } = await supabaseClient.client.auth.signInWithPassword({ email, password });
+            const _authTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Auth timed out — Supabase is not responding. Try again in a moment.')), 12000));
+            const { data, error } = await Promise.race([
+                supabaseClient.client.auth.signInWithPassword({ email, password }),
+                _authTimeout
+            ]);
             if (error || !data.session) {
                 loginError.textContent = 'Incorrect username or password.';
                 loginError.style.display = 'block';
