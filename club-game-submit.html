@@ -1219,6 +1219,20 @@
                     document.getElementById('pageSubtitle').textContent = '';
                     const sel = document.getElementById('clubSelect');
                     sel.innerHTML = `<option value="${displayName}" selected>${displayName}</option>`;
+                    // Override allVenues/allFields from event record (same pattern as tournaments)
+                    const evVenues = Array.isArray(evMatch.venues) ? evMatch.venues : [];
+                    if (evVenues.length) {
+                        allVenues = evVenues.map((v, i) => ({ id: `ev-venue-${i}`, numId: null, name: v.name }));
+                        allFields = evVenues.flatMap((v, i) =>
+                            (v.fields || []).map(fName => ({
+                                id: `ev-field-${i}-${fName}`,
+                                numId: null,
+                                name: fName,
+                                venueId: `ev-venue-${i}`,
+                                fields: { 'Field Name': fName }
+                            }))
+                        );
+                    }
                     populateVenues();
                     updateCreateBtn();
                 } else {
@@ -2022,7 +2036,7 @@
     async function loadScheduledGames() {
         const section = document.getElementById('scheduledGamesSection');
         const content = document.getElementById('scheduledGamesContent');
-        if (!currentClubRecord && !currentTournament) return;
+        if (!currentClubRecord && !currentTournament && !currentLeagueLabel) return;
         section.style.display = 'block';
 
         const clubName = currentClubRecord ? (currentClubRecord.fields['Club Name'] || currentClubRecord.fields['Name'] || '').toLowerCase() : '';
@@ -2030,22 +2044,28 @@
             const [games, refRecs, venueRecs] = await Promise.all([
                 currentTournament
                     ? airtableClient.getRecords('tournament_games', { maxRecords: 500, extraEq: [{ col: 'Source Club', val: currentTournament.key.toUpperCase() }] })
-                    : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 500 }),
+                    : currentLeagueLabel
+                        ? airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 500, extraEq: [{ col: 'Source Club', val: currentLeagueLabel }] })
+                        : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 500 }),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 500 }),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 200 })
             ]);
             refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
-            // Rebuild allVenues so venue names resolve correctly
-            allVenues = venueRecs.map(v => ({
-                id:    v.id,
-                numId: v.fields['Venue ID'] || null,
-                name:  v.fields['Venue Name'] || v.fields['Name'] || ''
-            }));
+            // Rebuild allVenues so venue names resolve correctly — skip for event portals (they have custom venue list)
+            if (!currentLeagueLabel) {
+                allVenues = venueRecs.map(v => ({
+                    id:    v.id,
+                    numId: v.fields['Venue ID'] || null,
+                    name:  v.fields['Venue Name'] || v.fields['Name'] || ''
+                }));
+            }
 
             const clubGames = games
                 .filter(r => currentTournament
                     ? true
-                    : ((r.fields['Home Team'] || '').toLowerCase().includes(clubName) || (r.fields['Club'] || '').toLowerCase().includes(clubName) || (r.fields['Source Club'] || '').toLowerCase().includes(clubName)))
+                    : currentLeagueLabel
+                        ? true  // server already filtered by Source Club via extraEq
+                        : ((r.fields['Home Team'] || '').toLowerCase().includes(clubName) || (r.fields['Club'] || '').toLowerCase().includes(clubName) || (r.fields['Source Club'] || '').toLowerCase().includes(clubName)))
                 .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || '') || (a.fields['Time'] || '').localeCompare(b.fields['Time'] || ''));
 
             if (clubGames.length === 0) {
