@@ -2799,7 +2799,44 @@
         }
 
         const isTournament = rawId.startsWith('t:');
-        const entityId     = isTournament ? rawId.slice(2) : rawId;
+        const isEvent      = rawId.startsWith('e:');
+        const entityId     = (isTournament || isEvent) ? rawId.slice(2) : rawId;
+
+        // Event path — venues live in events.venues JSONB
+        if (isEvent) {
+            currentEl.style.display = 'block';
+            const listEl = document.getElementById('editCurrentVenuesList');
+            listEl.style.cssText = 'background:transparent; border:none; padding:0;';
+            listEl.innerHTML = '<span style="color:#aaa; font-family:\'DM Sans\',sans-serif; font-size:0.85rem;">Loading…</span>';
+            try {
+                const { data, error } = await supabaseClient.client
+                    .from('events').select('venues').eq('id', entityId).single();
+                if (error) throw new Error(error.message);
+                const venues = Array.isArray(data.venues) ? data.venues : [];
+                if (!venues.length) {
+                    listEl.innerHTML = '<span style="color:#aaa; font-style:italic; font-family:\'DM Sans\',sans-serif;">No venues on file. Use "Add New Venues" below.</span>';
+                } else {
+                    listEl.innerHTML = venues.map(v => {
+                        const fields = Array.isArray(v.fields) && v.fields.length
+                            ? v.fields.map(f => `<span style="display:inline-block; background:#f3eaff; border:1px solid #c8a0e8; border-radius:10px; padding:1px 9px; font-size:0.75rem; color:#6c3483; margin:2px 3px 2px 0;">${f}</span>`).join('')
+                            : '<span style="color:#aaa; font-size:0.8rem;">No fields</span>';
+                        return `<div style="margin-bottom:12px; padding:10px 14px; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px;">
+                            <div style="font-weight:700; font-size:0.88rem; color:#09142a; margin-bottom:4px;">📍 ${v.name}</div>
+                            <div>${fields}</div>
+                        </div>`;
+                    }).join('');
+                }
+            } catch(e) {
+                listEl.innerHTML = `<span style="color:#e74c3c; font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</span>`;
+            }
+            // Show venue builder so venues can be added/replaced
+            document.getElementById('editVenueList').innerHTML = '';
+            editVenueCount  = 0;
+            editFieldCounts = {};
+            addEditVenue();
+            builderEl.style.display = 'block';
+            return;
+        }
 
         // Tournament path — venues live in tournaments.venues JSONB
         if (isTournament) {
@@ -3566,11 +3603,48 @@
 
     async function saveEditVenues() {
         const clubId   = document.getElementById('editClubSelect').value;
-        const clubName = allClubRecords.find(c => String(c.id) === String(clubId))?.name || '';
+        const isEvent  = clubId.startsWith('e:');
+        const eventId  = isEvent ? clubId.slice(2) : null;
+        const clubName = allClubRecords.find(c => String(c.id) === String(clubId))?.name || clubId;
         if (!clubId) { alert('Select a club first.'); return; }
 
         const venueBlocks = document.querySelectorAll('#editVenueList .venue-block');
         if (venueBlocks.length === 0) { alert('Add at least one venue.'); return; }
+
+        // Event path — write venue list into events.venues JSONB
+        if (isEvent) {
+            let valid = true;
+            venueBlocks.forEach((vb, i) => {
+                if (!vb.querySelector('.edit-venue-name').value.trim()) {
+                    alert(`Venue ${i + 1} needs a name.`); valid = false;
+                }
+            });
+            if (!valid) return;
+            const btn   = document.getElementById('saveEditBtn');
+            const logEl = document.getElementById('editLog');
+            btn.disabled = true;
+            logEl.style.display = 'block';
+            logEl.innerHTML = '';
+            const log = (msg, type = '') => { logEl.innerHTML += `<div class="${type ? 'log-' + type : ''}">${msg}</div>`; logEl.scrollTop = logEl.scrollHeight; };
+            try {
+                const newVenues = [...venueBlocks].map(vb => ({
+                    name:   vb.querySelector('.edit-venue-name').value.trim(),
+                    fields: [...vb.querySelectorAll('.field-name-input')].map(el => el.value.trim()).filter(Boolean)
+                })).filter(v => v.name);
+                // Merge with existing venues (append, don't replace)
+                const { data: existing } = await supabaseClient.client.from('events').select('venues').eq('id', eventId).single();
+                const existingVenues = Array.isArray(existing?.venues) ? existing.venues : [];
+                const merged = [...existingVenues, ...newVenues];
+                const { error } = await supabaseClient.client.from('events').update({ venues: merged }).eq('id', eventId);
+                if (error) throw new Error(error.message);
+                log(`✅ Done — ${newVenues.length} venue(s) saved to event.`, 'ok');
+                await onEditClubChange();
+            } catch(e) {
+                log(`✗ Error: ${e.message}`, 'err');
+            }
+            btn.disabled = false;
+            return;
+        }
 
         // Validate
         let valid = true;
