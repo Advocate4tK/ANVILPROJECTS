@@ -1232,6 +1232,15 @@
                                 fields: { 'Field Name': fName }
                             }))
                         );
+                        // Look up CA Venue IDs by name so submitted games carry the correct numeric Venue ID for CA export
+                        const evVenueNames = allVenues.map(v => v.name).filter(Boolean);
+                        if (evVenueNames.length) {
+                            const { data: caVenues } = await supabaseClient.client
+                                .from('venues').select('"Venue Name", "Venue ID"').in('"Venue Name"', evVenueNames);
+                            const caIdMap = {};
+                            (caVenues || []).forEach(r => { if (r['Venue ID']) caIdMap[r['Venue Name']] = r['Venue ID']; });
+                            allVenues.forEach(v => { v.numId = caIdMap[v.name] || null; });
+                        }
                     }
                     populateVenues();
                     updateCreateBtn();
