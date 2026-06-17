@@ -57,6 +57,9 @@
         }
         .club-pill:hover { border-color: #d4ac0d; color: #222; background: #f5e97a; }
         .club-pill.active { background: #f1c40f; color: #222; border-color: #c9a200; }
+        /* Event pills — light blue */
+        .club-pill.event-pill:hover { border-color: #0369a1; color: #0369a1; background: #e0f2fe; }
+        .club-pill.event-pill.active { background: #0ea5e9; color: #fff; border-color: #0369a1; }
         /* "All Clubs" master control — visually distinct from individual club pills */
         .club-pill-all {
             padding: 4px 16px; border-radius: 20px; font-size: 0.82rem; font-weight: 800;
@@ -5527,6 +5530,7 @@
         let selectedClubs = new Set(clubsList); // default: all selected
         let userHasFilteredClubs = false; // true once user manually picks specific clubs
         let assignorClubRestriction = null; // set when a non-Admin assignor logs in — limits visible clubs
+        let knownEventsList = []; // event "Club Name" values — kept separate so events survive loadAll rebuild
         let selectedGame        = null; // currently focused game record
         let requestedChangeDate = null; // parsed from Notes when change request game is open
         let requestedChangeTime = null; // parsed from Notes when change request game is open
@@ -5800,6 +5804,7 @@
                     if (clubsRes.error) throw clubsRes.error;
                     const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || '').filter(Boolean);
                     const dbEvents = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
+                    knownEventsList = dbEvents.slice();
                     let merged = [...new Set([...KNOWN_CLUBS, ...dbClubs, ...dbEvents])].sort();
                     if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
                     clubsList = merged;
@@ -6236,7 +6241,9 @@
 
             clubsList.forEach(club => {
                 const pill = document.createElement('span');
-                pill.className = selectedClubs.has(club) ? 'club-pill active' : 'club-pill';
+                const isEvent = knownEventsList.includes(club);
+                const baseClass = isEvent ? 'club-pill event-pill' : 'club-pill';
+                pill.className = selectedClubs.has(club) ? `${baseClass} active` : baseClass;
                 pill.textContent = club;
                 pill.dataset.club = club;
                 pill.addEventListener('click', () => {
@@ -6501,7 +6508,7 @@
                 // Merge Airtable club names + Source Club game values into the known list
                 const sourceClubs  = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
                 const airtableClubs = clubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
-                let mergedAll = [...new Set([...KNOWN_CLUBS, ...airtableClubs, ...sourceClubs])].sort();
+                let mergedAll = [...new Set([...KNOWN_CLUBS, ...airtableClubs, ...sourceClubs, ...knownEventsList])].sort();
                 if (assignorClubRestriction) mergedAll = mergedAll.filter(c => assignorClubRestriction.includes(c));
                 clubsList = mergedAll;
                 if (!userHasFilteredClubs) {
