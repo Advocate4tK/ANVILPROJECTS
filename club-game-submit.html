@@ -1197,8 +1197,32 @@
                 populateVenues();
                 updateCreateBtn();
             } else {
-                document.getElementById('clubSelectWrap').style.display = 'none';
-                document.getElementById('clubNotFoundMsg').style.display = 'block';
+                // Fallback: check events table for league/event slugs
+                const { data: evMatch } = await supabaseClient.client
+                    .from('events')
+                    .select('id, name, "Club Name", slug')
+                    .eq('slug', slug)
+                    .eq('enabled', true)
+                    .maybeSingle();
+
+                if (evMatch) {
+                    const displayName = evMatch['Club Name'] || evMatch.name;
+                    document.getElementById('clubSelectWrap').style.display = 'none';
+                    const lockedWrap = document.getElementById('clubLockedWrap');
+                    lockedWrap.style.display = 'flex';
+                    document.getElementById('clubLockedName').textContent = displayName;
+                    document.getElementById('preDoorwayName').textContent = displayName;
+                    document.getElementById('preDoorwayClubName').style.display = 'block';
+                    document.getElementById('clubLockedLogo').style.display = 'none';
+                    document.getElementById('pageSubtitle').textContent = '';
+                    const sel = document.getElementById('clubSelect');
+                    sel.innerHTML = `<option value="${displayName}" selected>${displayName}</option>`;
+                    populateVenues();
+                    updateCreateBtn();
+                } else {
+                    document.getElementById('clubSelectWrap').style.display = 'none';
+                    document.getElementById('clubNotFoundMsg').style.display = 'block';
+                }
             }
         } else if (tournParam) {
             // ── Tournament portal (?tournament=rhamboree) ──
