@@ -1157,16 +1157,23 @@
 
             try {
                 // Fetch games, referees, clubs, venues, and fields in parallel
-                const [allGames, allReferees, allClubs, allVenues, allFields, allAssignors, tournamentsRes] = await Promise.all([
+                const [allGames, allReferees, allClubs, allVenues, allFields, allAssignors, tournamentsRes, eventsRes, sbClubsRes] = await Promise.all([
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,     { maxRecords: 1000 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES,  { maxRecords: 1000 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,     { maxRecords: 200 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,    { maxRecords: 200 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,    { maxRecords: 500 }),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.ASSIGNORS, { maxRecords: 100 }),
-                    supabaseClient.client.from('tournaments').select('id, key, name, status, club, from_date, to_date, director, director_email, event_admin, event_admin_phone, event_admin_email, payment_coordinator, payment_coordinator_phone, payment_coordinator_email, assignor, assignor_phone, assignor_email, age_groups, venues').order('from_date', { ascending: false }),
+                    supabaseClient.client.from('tournaments').select('id, key, name, status, club, from_date, to_date, director, director_email, event_admin, event_admin_phone, event_admin_email, payment_coordinator, payment_coordinator_phone, payment_coordinator_email, assignor, assignor_phone, assignor_email, age_groups, venues').order('name'),
+                    supabaseClient.client.from('events').select('id, name, "Club Name", "Club Admin", "Club Admin Email", "Club Admin Phone", assignor, "Assignor Email", "Assignor Phone", venues, start_date, end_date').order('name'),
+                    supabaseClient.client.from('clubs').select('id, name, "Club Name", "Display Name"').order('name'),
                 ]);
                 const allTournaments = (tournamentsRes.data || []);
+                const allEvents      = (eventsRes.data || []);
+                const sbClubs        = (sbClubsRes.data || [])
+                    .map(r => ({ id: r.id, name: r['Club Name'] || r.name || '' }))
+                    .filter(c => c.name)
+                    .sort((a, b) => a.name.localeCompare(b.name));
 
                 // Supplemental fetch for payment coordinator columns (bypasses schema cache wrapper)
                 const clubPayMap = {};
@@ -1446,12 +1453,21 @@
                     </div>`;
                 }
 
-                // Clubs being served — managed clubs + reference clubs separated
-                const _managedClubs   = allClubs.filter(c => (c.fields['club_type'] || 'managed') === 'managed');
-                const _refClubs       = allClubs.filter(c => c.fields['club_type'] === 'reference');
-                const _clubNamesFromRecords = _managedClubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
-                const _clubNamesFromGames   = allGames.map(r => r.fields['Source Club']).filter(Boolean);
-                const clubNames = [...new Set([..._clubNamesFromRecords, ..._clubNamesFromGames])].sort();
+                // Clubs being served — Supabase sources with optgroups matching manage-clubs.html
+                const _ddClubOpts  = '<optgroup label="Clubs">'
+                    + sbClubs.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+                    + '</optgroup>';
+                const _ddTournOpts = allTournaments.length
+                    ? '<optgroup label="Tournaments">'
+                      + allTournaments.map(t => `<option value="t:${t.id}">🏆 ${t.name}</option>`).join('')
+                      + '</optgroup>'
+                    : '';
+                const _ddEventOpts = allEvents.length
+                    ? '<optgroup label="Events">'
+                      + allEvents.map(e => `<option value="e:${e.id}">📅 ${e['Club Name'] || e.name}</option>`).join('')
+                      + '</optgroup>'
+                    : '';
+                const _refClubs = allClubs.filter(c => c.fields['club_type'] === 'reference');
 
                 let html = `<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:20px; margin-bottom:24px; padding-bottom:20px; border-bottom:1px solid #e0e0e0;">
                     <div style="background:#f0f2f5; border-radius:8px; padding:15px; text-align:center;">
@@ -1479,9 +1495,7 @@
                     <p style="font-weight:600; margin-bottom:10px; font-size:0.95rem;">⚽ Clubs / Events Being Served</p>
                     <select id="clubDropdown" style="padding:8px 14px; border-radius:8px; border:1px solid #ccc; font-size:0.9rem; color:#09142a; min-width:220px;">
                         <option value="">— Select a Club or Event —</option>
-                        ${clubNames.map(c => `<option value="${c}">${c}</option>`).join('')}
-                        ${!adminUserClubs && allTournaments.length ? `<option disabled>──────────────</option>` + allTournaments.map(t => `<option value="__tourney_${t.key}">🏆 ${t.name}</option>`).join('') : ''}
-                        ${_refClubs.length > 0 ? `<option disabled>── Reference Clubs ──</option>` + _refClubs.sort((a,b)=>(a.fields['Name']||a.fields['Club Name']||'').localeCompare(b.fields['Name']||b.fields['Club Name']||'')).map(c => { const n = c.fields['Name'] || c.fields['Club Name'] || ''; return `<option value="__ref__${n}">📋 ${n}</option>`; }).join('') : ''}
+                        ${_ddClubOpts}${_ddTournOpts}${_ddEventOpts}
                     </select>
                     <div id="clubStatDisplay" style="margin-top:12px;"></div>
                 </div>
@@ -1557,164 +1571,66 @@
                     const dd = document.getElementById('clubDropdown');
                     const stat = document.getElementById('clubStatDisplay');
                     if (!dd || !stat) return;
-                    dd.addEventListener('change', function() {
-                        const clubName = this.value;
-                        if (!clubName) { stat.innerHTML = ''; return; }
+                    dd.addEventListener('change', async function() {
+                        const rawVal = this.value;
+                        if (!rawVal) { stat.innerHTML = ''; return; }
 
-                        // ── Reference club entry ──────────────────────────────
-                        if (clubName.startsWith('__ref__')) {
-                            const refName = clubName.slice(7);
-                            const rec = _refClubs.find(c => (c.fields['Name'] || c.fields['Club Name'] || '') === refName);
-                            const f = rec?.fields || {};
-                            const president     = f['PRESIDENT'] || f['President'] || '';
-                            const presEmail     = f['President Email'] || '';
-                            const presPhone     = f['President Phone'] || '';
-                            const assignor      = f['assignor'] || f['Assignor'] || '';
-                            const assignorEmail = f['Assignor Email'] || '';
-                            const assignorPhone = f['Assignor Phone'] || '';
-                            stat.innerHTML = `
-                            <div style="background:white; border:1px solid #dde3f0; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
-                                <div style="background:#4b6280; padding:12px 18px; display:flex; align-items:center; justify-content:space-between;">
-                                    <span style="font-size:0.85rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#fff;">${refName}</span>
-                                    <span style="font-size:0.72rem; background:rgba(255,255,255,0.15); color:#fff; padding:2px 10px; border-radius:12px; font-weight:700; letter-spacing:0.5px;">REFERENCE ONLY</span>
-                                </div>
-                                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); border-bottom:1px solid #edf0f7;">
-                                    <div style="padding:14px 18px; border-right:1px solid #edf0f7;">
-                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">President</div>
-                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${president || '—'}</div>
-                                        ${presPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${presPhone}</div>` : ''}
-                                        ${presEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${presEmail}" style="color:#3498db; text-decoration:none;">✉️ ${presEmail}</a></div>` : ''}
-                                    </div>
-                                    <div style="padding:14px 18px;">
-                                        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:5px;">Assignor</div>
-                                        <div style="font-weight:700; color:#09142a; font-size:0.92rem;">${assignor || '—'}</div>
-                                        ${assignorPhone ? `<div style="font-size:0.78rem; color:#555; margin-top:3px;">📞 ${assignorPhone}</div>` : ''}
-                                        ${assignorEmail ? `<div style="font-size:0.78rem; margin-top:2px;"><a href="mailto:${assignorEmail}" style="color:#3498db; text-decoration:none;">✉️ ${assignorEmail}</a></div>` : ''}
-                                    </div>
-                                </div>
-                            </div>`;
-                            return;
-                        }
-
-                        // ── Recreation Organizations ──────────────────────────
-                        if (clubName === 'RECREATION') {
-                            stat.innerHTML = `<div style="background:white; border:1px solid #dde3f0; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
-                                <div style="background:#1e5f1e; padding:12px 18px; display:flex; align-items:center; justify-content:space-between;">
-                                    <span style="font-size:0.85rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#fff;">Recreation Organizations</span>
-                                    <span style="font-size:0.72rem; background:rgba(255,255,255,0.15); color:#fff; padding:2px 10px; border-radius:12px; font-weight:700;">UNSANCTIONED</span>
-                                </div>
-                                <div id="recOrgList" style="padding:16px 18px;"><em style="color:#aaa; font-size:0.85rem;">Loading…</em></div>
-                                <div style="padding:12px 18px; background:#fafbfd; border-top:1px solid #edf0f7;">
-                                    <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:10px;">Portals &amp; Links</div>
-                                    <div style="display:flex; flex-direction:column; gap:7px;">
-                                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                            <span style="font-size:0.8rem; font-weight:600; color:#333; min-width:110px;">Recreation Portal</span>
-                                            <button onclick="navigator.clipboard.writeText('https://referee-tool.com/recreation-portal.html').then(()=>{this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy Link',1500)})" style="font-size:0.75rem; background:#e8f4fd; border:1px solid #3498db; color:#2980b9; border-radius:6px; padding:3px 10px; cursor:pointer; font-family:inherit; font-weight:700;">📋 Copy Link</button>
-                                            <a href="https://referee-tool.com/recreation-portal.html" target="_blank" style="font-size:0.75rem; background:#eafaf1; border:1px solid #27ae60; color:#27ae60; border-radius:6px; padding:3px 10px; text-decoration:none; font-weight:700;">↗ Open</a>
-                                        </div>
-                                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                            <span style="font-size:0.8rem; font-weight:600; color:#333; min-width:110px;">Manage Orgs</span>
-                                            <a href="manage-organizations.html" style="font-size:0.75rem; background:#e8f4fd; border:1px solid #3498db; color:#2980b9; border-radius:6px; padding:3px 10px; text-decoration:none; font-weight:700;">↗ Open</a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>`;
-                            supabaseClient.client.from('organizations').select('*').order('name').then(({ data }) => {
-                                const el = document.getElementById('recOrgList');
-                                if (!el) return;
-                                if (!data || !data.length) { el.innerHTML = '<em style="color:#aaa; font-size:0.85rem;">No organizations registered yet.</em>'; return; }
-                                el.innerHTML = data.map(org => `
-                                    <div style="border:1px solid #e8e8e8; border-radius:8px; margin-bottom:10px; overflow:hidden;">
-                                        <div style="background:#f4f6fa; padding:9px 14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
-                                            <span style="font-weight:800; color:#09142a; font-size:0.92rem;">${org.name}</span>
-                                            <span style="font-size:0.68rem; font-weight:800; padding:2px 9px; border-radius:10px; ${org.active ? 'background:#e8f9ef; color:#1a6b3a; border:1px solid #a8e6bf;' : 'background:#fff3cd; color:#856404; border:1px solid #ffc107;'}">${org.active ? '✅ Active' : '⏳ Pending Review'}</span>
-                                        </div>
-                                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); padding:10px 14px; gap:10px; font-size:0.82rem;">
-                                            <div>
-                                                <div style="font-size:0.62rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; font-weight:700; margin-bottom:3px;">Administrator</div>
-                                                <div style="font-weight:700; color:#1f2328;">${org.admin_name || '—'}</div>
-                                                ${org.phone ? `<div style="color:#555; margin-top:2px;">📞 ${org.phone}</div>` : ''}
-                                            </div>
-                                            <div>
-                                                <div style="font-size:0.62rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; font-weight:700; margin-bottom:3px;">Address</div>
-                                                <div style="color:#555;">${org.address || '—'}</div>
-                                                ${(org.city || org.state || org.zip) ? `<div style="color:#555; font-size:0.8rem;">${[org.city, org.state, org.zip].filter(Boolean).join(', ')}</div>` : ''}
-                                            </div>
-                                            <div>
-                                                <div style="font-size:0.62rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; font-weight:700; margin-bottom:3px;">Pay Type</div>
-                                                <div style="font-weight:700; color:#1f2328;">${org.pay_type || '—'}</div>
-                                            </div>
-                                            <div>
-                                                <div style="font-size:0.62rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; font-weight:700; margin-bottom:3px;">Insurance</div>
-                                                <div style="font-weight:700; ${org.insurance_confirmed ? 'color:#1a6b3a;' : 'color:#b91c1c;'}">${org.insurance_confirmed ? '✅ Confirmed' : '❌ Not confirmed'}</div>
-                                            </div>
-                                        </div>
-                                        <div style="padding:8px 14px; border-top:1px solid #f0f0f0; background:#fafbfc; display:flex; gap:8px; flex-wrap:wrap;">
-                                            <button onclick="toggleOrgActive(${org.id}, ${org.active}, this)" style="font-size:0.75rem; font-weight:700; padding:4px 12px; border-radius:5px; cursor:pointer; border:1px solid ${org.active ? '#fecaca' : '#bbf7d0'}; background:${org.active ? '#fef2f2' : '#f0fdf4'}; color:${org.active ? '#b91c1c' : '#15803d'};">${org.active ? 'Suspend' : 'Activate'}</button>
-                                        </div>
-                                    </div>`).join('');
-                            });
-                            return;
-                        }
-
-                        // ── Tournament entry (generic — any __tourney_* key) ──
-                        if (clubName.startsWith('__tourney_')) {
-                            const tKey         = clubName.replace('__tourney_', '');
-                            const t            = allTournaments.find(x => x.key === tKey) || {};
-
+                        // ── Tournament ────────────────────────────────────────
+                        if (rawVal.startsWith('t:')) {
+                            const tid = parseInt(rawVal.slice(2));
+                            const t   = allTournaments.find(x => x.id === tid) || {};
                             stat.innerHTML = ccBuildTournamentCard(t);
                             return;
                         }
 
-                        const rec  = clubRecordByName[clubName];
-                        const f    = rec?.fields || {};
-                        const cid  = rec?.id;
+                        // ── Event ─────────────────────────────────────────────
+                        if (rawVal.startsWith('e:')) {
+                            const eid = parseInt(rawVal.slice(2));
+                            const ev  = allEvents.find(x => x.id === eid) || {};
+                            stat.innerHTML = ccBuildEventCard(ev);
+                            return;
+                        }
 
-                        const president    = f['PRESIDENT'] || f['President'] || f['President Name'] || f['Contact Name'] || f['Contact'] || '';
-                        const presEmail    = f['President Email'] || f['Email'] || f['Contact Email'] || '';
-                        const presPhone    = f['President Phone'] || f['Phone'] || f['Contact Phone'] || '';
-                        const clubAdmin    = f['Club Admin'] || '';
-                        const adminEmail   = f['Club Admin Email'] || '';
-                        const adminPhone   = f['Club Admin Phone'] || '';
-                        const assignor     = f['assignor'] || f['Assignor'] || '';
-                        const assignorEmail = f['Assignor Email'] || '';
-                        const assignorPhone = f['Assignor Phone'] || '';
-                        const _pay          = clubPayMap[String(cid)] || {};
-                        const payCoord      = f['payment_coordinator'] || _pay.payment_coordinator || '';
-                        const payCoordEmail = f['payment_coordinator_email'] || _pay.payment_coordinator_email || '';
-                        const payCoordPhone = f['payment_coordinator_phone'] || _pay.payment_coordinator_phone || '';
-                        const submitUrl = f['Club Game Upload'] || '';
-                        const payUrl    = (payCoord && submitUrl) ? submitUrl + '&pay=portal' : '';
-                        const slug      = (f['slug'] || clubName.toLowerCase().replace(/\s+/g,'-'));
-                        const presUrl   = `https://referee-tool.com/presidents-portal.html?club=${slug}`;
+                        // ── Club (Supabase int ID) ────────────────────────────
+                        const clubId = parseInt(rawVal);
+                        stat.innerHTML = '<em style="color:#aaa; font-size:0.85rem;">Loading…</em>';
+                        const { data: clubRow } = await supabaseClient.client
+                            .from('clubs')
+                            .select('id, name, "Club Name", president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, payment_coordinator_phone, payment_portal_pin, assignor, "Assignor Email", "Assignor Phone", slug, "Club Game Upload"')
+                            .eq('id', clubId).single();
+                        if (!clubRow) { stat.innerHTML = '<em style="color:#e74c3c; font-size:0.85rem;">Club not found.</em>'; return; }
 
-                        const totalGames = (cid ? gameCountById[cid]  : 0) || clubGameCount[clubName]  || 0;
-                        const thisWeek   = (cid ? thisWeekById[cid]   : 0) || thisWeekByClub[clubName] || 0;
-                        const unassigned = (cid ? unassignedById[cid] : 0) || unassignedByClub[clubName] || 0;
-                        const venueCount     = cid ? (venueCountByClubId[cid] || 0) : 0;
-                        const fieldCount     = cid ? (fieldCountByClubId[cid] || 0) : 0;
-                        const lastUpload     = (cid ? lastUploadByClubId[cid] : null)
-                                               || lastUploadByClubId['name:' + clubName]
-                                               || null;
-                        const lastUploadStr  = lastUpload ? (() => {
-                            const d = new Date(lastUpload.time);
-                            return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
-                                + ' at ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
-                        })() : null;
+                        const clubName   = clubRow['Club Name'] || clubRow.name || '';
+                        const submitUrl  = clubRow['Club Game Upload'] || '';
+                        const payCoord   = clubRow.payment_coordinator || '';
+                        const payUrl     = (payCoord && submitUrl) ? submitUrl + '&pay=portal' : '';
+                        const slug       = clubRow.slug || clubName.toLowerCase().replace(/\s+/g, '-');
+                        const presUrl    = `https://referee-tool.com/presidents-portal.html?club=${slug}`;
+
+                        const totalGames = clubGameCount[clubName] || 0;
+                        const thisWeek   = thisWeekByClub[clubName] || 0;
+                        const unassigned = unassignedByClub[clubName] || 0;
+                        const lastUpload = lastUploadByClubId['name:' + clubName] || null;
 
                         const cNorm = {
-                            'Club Name': clubName, name: clubName, id: cid,
-                            president, 'President Phone': presPhone, 'President Email': presEmail,
-                            'Club Admin': clubAdmin, 'Club Admin Phone': adminPhone, 'Club Admin Email': adminEmail,
-                            payment_coordinator: payCoord, payment_coordinator_phone: payCoordPhone, payment_coordinator_email: payCoordEmail,
-                            assignor, 'Assignor Phone': assignorPhone, 'Assignor Email': assignorEmail,
+                            'Club Name': clubName, name: clubName, id: clubId,
+                            president:              clubRow.president || '',
+                            'President Phone':      clubRow['President Phone'] || '',
+                            'President Email':      clubRow['President Email'] || '',
+                            'Club Admin':           clubRow['Club Admin'] || '',
+                            'Club Admin Phone':     clubRow['Club Admin Phone'] || '',
+                            'Club Admin Email':     clubRow['Club Admin Email'] || '',
+                            payment_coordinator:       payCoord,
+                            payment_coordinator_phone: clubRow.payment_coordinator_phone || '',
+                            payment_coordinator_email: clubRow.payment_coordinator_email || '',
+                            assignor:           clubRow.assignor || '',
+                            'Assignor Phone':   clubRow['Assignor Phone'] || '',
+                            'Assignor Email':   clubRow['Assignor Email'] || '',
                             _submit_url: submitUrl, payment_portal_enabled: !!payUrl,
                         };
-                        const gs = {
-                            total: totalGames, thisWeek, unassigned, venueCount, fieldCount,
-                            lastUpload,
-                        };
-                        stat.innerHTML = ccBuildClubCard(cNorm, payRatesByClubId[cid] || [], gs);
+                        const gs = { total: totalGames, thisWeek, unassigned, venueCount: 0, fieldCount: 0, lastUpload };
+                        stat.innerHTML = ccBuildClubCard(cNorm, payRatesByClubId[clubId] || [], gs);
+                        return;
                     });
                 }, 0);
             } catch (err) {
