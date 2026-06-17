@@ -3217,13 +3217,31 @@
         if (!rawId) { section.style.display = 'none'; return; }
         section.style.display = 'block';
         const isTournament = rawId.startsWith('t:');
-        const entityId     = isTournament ? rawId.slice(2) : rawId;
-        document.getElementById('payClubOnlyParts').style.display = isTournament ? 'none' : 'block';
-        document.getElementById('payTourneyParts').style.display  = isTournament ? 'block' : 'none';
-        document.getElementById('payRecCompWrap').style.display   = isTournament ? 'none' : 'block';
+        const isEvent      = rawId.startsWith('e:');
+        const entityId     = (isTournament || isEvent) ? rawId.slice(2) : rawId;
+        document.getElementById('payClubOnlyParts').style.display = (isTournament || isEvent) ? 'none' : 'block';
+        document.getElementById('payTourneyParts').style.display  = (isTournament || isEvent) ? 'block' : 'none';
+        document.getElementById('payRecCompWrap').style.display   = (isTournament || isEvent) ? 'none' : 'block';
         document.getElementById('payMethodsAll').style.display    = isTournament ? 'block' : 'none';
         const loading = '<tr><td colspan="4" style="padding:12px; color:#aaa; font-family:\'DM Sans\',sans-serif;">Loading…</td></tr>';
         try {
+            if (isEvent) {
+                document.getElementById('payTourneyBody').innerHTML = loading;
+                const { data, error } = await supabaseClient.client
+                    .from('events').select('age_groups').eq('id', parseInt(entityId)).single();
+                if (error) throw new Error(error.message);
+                const ags = Array.isArray(data.age_groups) ? data.age_groups : [];
+                const inp = 'style="width:70px; padding:4px 6px; border:1.5px solid #e2d9ce; border-radius:5px; font-family:\'DM Sans\',sans-serif; font-size:0.85rem; text-align:right;"';
+                document.getElementById('payTourneyBody').innerHTML = ags.length
+                    ? ags.map((ag, i) => `<tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 10px; font-weight:700; font-size:0.88rem; color:#09142a;">${ag.age_group}${ag.format ? ` <span style="font-weight:400;color:#888;font-size:0.8rem;">· ${ag.format}</span>` : ''}</td>
+                        <td style="text-align:center; padding:6px 10px;"><input type="number" id="pay_cr_t${i}" value="${ag.center ?? ''}" ${inp}></td>
+                        <td style="text-align:center; padding:6px 10px;"><input type="number" id="pay_ar_t${i}" value="${ag.ar ?? ''}" ${inp}></td>
+                        <td style="text-align:center; padding:6px 10px;"><input type="number" id="pay_solo_t${i}" value="${ag.solo_cr ?? ''}" ${inp}></td>
+                    </tr>`).join('')
+                    : '<tr><td colspan="4" style="padding:12px;color:#aaa;font-family:\'DM Sans\',sans-serif;">No age groups defined — add them in the wizard first.</td></tr>';
+                return;
+            }
             if (isTournament) {
                 document.getElementById('payTourneyBody').innerHTML = loading;
                 const { data, error } = await supabaseClient.client
@@ -3299,8 +3317,27 @@
         const msg = document.getElementById('payRatesMsg');
         btn.disabled = true; btn.textContent = 'Saving…'; msg.style.display = 'none';
         const isTournament = rawId.startsWith('t:');
-        const entityId     = isTournament ? rawId.slice(2) : rawId;
+        const isEvent      = rawId.startsWith('e:');
+        const entityId     = (isTournament || isEvent) ? rawId.slice(2) : rawId;
         try {
+            if (isEvent) {
+                const { data, error } = await supabaseClient.client
+                    .from('events').select('age_groups').eq('id', parseInt(entityId)).single();
+                if (error) throw new Error(error.message);
+                const ags = Array.isArray(data.age_groups) ? data.age_groups : [];
+                const updated = ags.map((ag, i) => ({
+                    ...ag,
+                    center:  parseFloat(document.getElementById(`pay_cr_t${i}`)?.value)   || null,
+                    ar:      parseFloat(document.getElementById(`pay_ar_t${i}`)?.value)   || null,
+                    solo_cr: parseFloat(document.getElementById(`pay_solo_t${i}`)?.value) || null
+                }));
+                const { error: upErr } = await supabaseClient.client
+                    .from('events').update({ age_groups: updated }).eq('id', parseInt(entityId));
+                if (upErr) throw new Error(upErr.message);
+                msg.textContent = `✅ Saved — ${updated.length} age group${updated.length !== 1 ? 's' : ''} configured.`;
+                msg.style.color = '#15803d'; msg.style.display = 'block';
+                return;
+            }
             if (isTournament) {
                 const { data, error } = await supabaseClient.client
                     .from('tournaments').select('age_groups').eq('id', entityId).single();
