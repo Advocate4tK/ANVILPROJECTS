@@ -431,7 +431,7 @@
         <div id="editSection" style="margin-bottom:24px;">
             <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #f59e0b;">
                 <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">📍 Venue Assignment</h2>
-                <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Add new venues and fields to an existing club. Existing venues and fields are not modified.</p>
+                <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Attach existing venues from the system to clubs, events, and tournaments.</p>
 
                 <div class="fg" style="max-width:380px; margin-bottom:20px;">
                     <label>Select Entity</label>
@@ -461,16 +461,31 @@
                     <div id="editCurrentVenuesList" style="font-size:0.85rem; color:#555; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px; padding:12px 16px;"></div>
                 </div>
 
-                <!-- New venue builder -->
-                <div id="editVenueBuilder" style="display:none;">
-                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#aaa; margin-bottom:12px;">Add New Venues</div>
-                    <div id="editVenueList"></div>
-                    <button class="btn-add-venue" onclick="addEditVenue()" style="margin-bottom:20px;">+ Add Venue</button>
-                    <br>
-                    <button onclick="saveEditVenues()" id="saveEditBtn"
-                        style="background:#00c853; color:#09142a; border:none; padding:11px 32px; border-radius:8px; font-weight:800; font-size:1rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">
-                        Save Venues &amp; Fields ↗
-                    </button>
+                <!-- Venue picker — events and tournaments only -->
+                <div id="editVenuePicker" style="display:none;">
+                    <div style="border-top:2px dashed #e2d9ce; margin:4px 0 20px;"></div>
+
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#aaa; margin-bottom:8px;">Add All Venues from a Club</div>
+                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:20px; flex-wrap:wrap;">
+                        <select id="vPickerClubSel" style="flex:1; min-width:200px; padding:9px 12px; border:1px solid #e2d9ce; border-radius:8px; font-size:0.9rem; font-family:'DM Sans',sans-serif; background:#fff;">
+                            <option value="">— Select a club —</option>
+                        </select>
+                        <button onclick="vPickerAddByClub()" style="background:#09142a; color:#fff; border:none; padding:9px 18px; border-radius:8px; font-weight:700; font-size:0.85rem; cursor:pointer; font-family:'DM Sans',sans-serif; white-space:nowrap;">+ Add All Club Venues</button>
+                    </div>
+
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#aaa; margin-bottom:8px;">Add Individual Venue</div>
+                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:20px; flex-wrap:wrap;">
+                        <select id="vPickerSingleSel" style="flex:1; min-width:200px; padding:9px 12px; border:1px solid #e2d9ce; border-radius:8px; font-size:0.9rem; font-family:'DM Sans',sans-serif; background:#fff;">
+                            <option value="">— Select a venue —</option>
+                        </select>
+                        <button onclick="vPickerAddOne()" style="background:#09142a; color:#fff; border:none; padding:9px 18px; border-radius:8px; font-weight:700; font-size:0.85rem; cursor:pointer; font-family:'DM Sans',sans-serif; white-space:nowrap;">+ Add This Venue</button>
+                    </div>
+
+                    <div id="vPickerPending" style="display:none;">
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#00c853; margin-bottom:10px;">Queued to Add</div>
+                        <div id="vPickerPendingList" style="margin-bottom:16px;"></div>
+                        <button onclick="vPickerSave()" id="vPickerSaveBtn" style="background:#00c853; color:#09142a; border:none; padding:11px 32px; border-radius:8px; font-weight:800; font-size:1rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">Save Venues ↗</button>
+                    </div>
                 </div>
 
                 <div class="create-log" id="editLog"></div>
@@ -2825,36 +2840,31 @@
         // Event path — venues live in events.venues JSONB
         if (isEvent) {
             currentEl.style.display = 'block';
+            builderEl.style.display = 'none';
             const listEl = document.getElementById('editCurrentVenuesList');
             listEl.style.cssText = 'background:transparent; border:none; padding:0;';
             listEl.innerHTML = '<span style="color:#aaa; font-family:\'DM Sans\',sans-serif; font-size:0.85rem;">Loading…</span>';
             try {
-                const { data, error } = await supabaseClient.client
-                    .from('events').select('venues').eq('id', entityId).single();
-                if (error) throw new Error(error.message);
-                const venues = Array.isArray(data.venues) ? data.venues : [];
+                const [evRes, venueRes, fieldRes] = await Promise.all([
+                    supabaseClient.client.from('events').select('venues').eq('id', entityId).single(),
+                    supabaseClient.client.from('venues').select('id, name, "Venue Name", "Venue ID", club_name, city').order('"Venue Name"'),
+                    supabaseClient.client.from('fields').select('"Field Name", "Venue ID", venue_id')
+                ]);
+                if (evRes.error) throw new Error(evRes.error.message);
+                _loadSystemVenues(venueRes.data || [], fieldRes.data || []);
+                _populateVenuePickers();
+                const venues = Array.isArray(evRes.data.venues) ? evRes.data.venues : [];
                 if (!venues.length) {
-                    listEl.innerHTML = '<span style="color:#aaa; font-style:italic; font-family:\'DM Sans\',sans-serif;">No venues on file. Use "Add New Venues" below.</span>';
+                    listEl.innerHTML = '<span style="color:#aaa; font-style:italic; font-family:\'DM Sans\',sans-serif;">No venues attached yet. Use the picker below.</span>';
                 } else {
-                    listEl.innerHTML = venues.map(v => {
-                        const fields = Array.isArray(v.fields) && v.fields.length
-                            ? v.fields.map(f => `<span style="display:inline-block; background:#f3eaff; border:1px solid #c8a0e8; border-radius:10px; padding:1px 9px; font-size:0.75rem; color:#6c3483; margin:2px 3px 2px 0;">${f}</span>`).join('')
-                            : '<span style="color:#aaa; font-size:0.8rem;">No fields</span>';
-                        return `<div style="margin-bottom:12px; padding:10px 14px; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px;">
-                            <div style="font-weight:700; font-size:0.88rem; color:#09142a; margin-bottom:4px;">📍 ${v.name}</div>
-                            <div>${fields}</div>
-                        </div>`;
-                    }).join('');
+                    listEl.innerHTML = venues.map(v => _venueCardHtml(v, 'e:' + entityId)).join('');
                 }
             } catch(e) {
                 listEl.innerHTML = `<span style="color:#e74c3c; font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</span>`;
             }
-            // Show venue builder so venues can be added/replaced
-            document.getElementById('editVenueList').innerHTML = '';
-            editVenueCount  = 0;
-            editFieldCounts = {};
-            addEditVenue();
-            builderEl.style.display = 'block';
+            _pendingVenues = [];
+            renderPendingVenues();
+            document.getElementById('editVenuePicker').style.display = 'block';
             return;
         }
 
@@ -2866,36 +2876,26 @@
             listEl.style.cssText = 'background:transparent; border:none; padding:0;';
             listEl.innerHTML = '<span style="color:#aaa; font-family:\'DM Sans\',sans-serif; font-size:0.85rem;">Loading…</span>';
             try {
-                const { data, error } = await supabaseClient.client
-                    .from('tournaments').select('venues').eq('id', entityId).single();
-                if (error) throw new Error(error.message);
-                const venues = Array.isArray(data.venues) ? data.venues : [];
+                const [tRes, venueRes, fieldRes] = await Promise.all([
+                    supabaseClient.client.from('tournaments').select('venues').eq('id', entityId).single(),
+                    supabaseClient.client.from('venues').select('id, name, "Venue Name", "Venue ID", club_name, city').order('"Venue Name"'),
+                    supabaseClient.client.from('fields').select('"Field Name", "Venue ID", venue_id')
+                ]);
+                if (tRes.error) throw new Error(tRes.error.message);
+                _loadSystemVenues(venueRes.data || [], fieldRes.data || []);
+                _populateVenuePickers();
+                const venues = Array.isArray(tRes.data.venues) ? tRes.data.venues : [];
                 if (!venues.length) {
-                    listEl.innerHTML = '<span style="color:#aaa; font-style:italic; font-family:\'DM Sans\',sans-serif;">No venues on file for this tournament.</span>';
-                    return;
+                    listEl.innerHTML = '<span style="color:#aaa; font-style:italic; font-family:\'DM Sans\',sans-serif;">No venues attached yet. Use the picker below.</span>';
+                } else {
+                    listEl.innerHTML = venues.map(v => _venueCardHtml(v, 't:' + entityId)).join('');
                 }
-                // Cross-reference venues table for authoritative address data
-                const venueNames = venues.map(v => v.name).filter(Boolean);
-                const { data: venueRows } = await supabaseClient.client
-                    .from('venues').select('"Venue Name", address, city, state').in('"Venue Name"', venueNames);
-                const venueAddrMap = {};
-                (venueRows || []).forEach(r => {
-                    const parts = [r.address, r.city, r.state].filter(Boolean).join(', ');
-                    if (parts) venueAddrMap[r['Venue Name']] = parts;
-                });
-                listEl.innerHTML = venues.map(v => {
-                    const address = venueAddrMap[v.name] || v.address || '';
-                    const fields = Array.isArray(v.fields) && v.fields.length
-                        ? v.fields.map(f => `<span style="display:inline-block; background:#f3eaff; border:1px solid #c8a0e8; border-radius:10px; padding:1px 9px; font-size:0.75rem; color:#6c3483; margin:2px 3px 2px 0;">${f}</span>`).join('')
-                        : '<span style="color:#aaa; font-size:0.8rem;">No fields</span>';
-                    return `<div style="margin-bottom:12px; padding:10px 14px; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px;">
-                        <div style="font-weight:700; font-size:0.88rem; color:#09142a; margin-bottom:4px;">📍 ${v.name}${address ? `<span style="font-weight:400; color:#888; font-size:0.8rem; margin-left:8px;">${address}</span>` : ''}</div>
-                        <div>${fields}</div>
-                    </div>`;
-                }).join('');
             } catch(e) {
                 listEl.innerHTML = `<span style="color:#e74c3c; font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</span>`;
             }
+            _pendingVenues = [];
+            renderPendingVenues();
+            document.getElementById('editVenuePicker').style.display = 'block';
             return;
         }
 
@@ -2941,12 +2941,9 @@
             listEl.innerHTML = `<span style="color:#e74c3c; font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</span>`;
         }
 
-        // Reset and show venue builder
-        document.getElementById('editVenueList').innerHTML = '';
-        editVenueCount  = 0;
-        editFieldCounts = {};
-        addEditVenue();
-        builderEl.style.display = 'block';
+        // Clubs manage venues via Venue & Field Management — hide picker here
+        builderEl.style.display = 'none';
+        document.getElementById('editVenuePicker').style.display = 'none';
     }
 
     async function saveDisplayName() {
@@ -2971,6 +2968,140 @@
             msgEl.style.display = 'block';
         }
     }
+
+    // ── Venue Picker (events + tournaments) ──────────────────────────────────
+    let _allSystemVenues = [];
+    let _pendingVenues   = [];
+
+    function _loadSystemVenues(venueRows, fieldRows) {
+        _allSystemVenues = venueRows.map(v => {
+            const vPk  = v.id;
+            const vCaId = v['Venue ID'];
+            const fields = fieldRows
+                .filter(f => (f.venue_id && f.venue_id === vPk) || (f['Venue ID'] && f['Venue ID'] === vCaId))
+                .map(f => f['Field Name']).filter(Boolean);
+            return { id: vPk, name: v['Venue Name'] || v.name || '', club_name: v.club_name || '', city: v.city || '', fields };
+        }).filter(v => v.name);
+    }
+
+    function _populateVenuePickers() {
+        const clubs = [...new Set(_allSystemVenues.map(v => v.club_name).filter(Boolean))].sort();
+        document.getElementById('vPickerClubSel').innerHTML =
+            '<option value="">— Select a club —</option>' +
+            clubs.map(c => `<option value="${c}">${c}</option>`).join('');
+        document.getElementById('vPickerSingleSel').innerHTML =
+            '<option value="">— Select a venue —</option>' +
+            [..._allSystemVenues].sort((a, b) => a.name.localeCompare(b.name))
+                .map(v => `<option value="${v.id}">${v.name}${v.city ? ' — ' + v.city : ''}${v.club_name ? ' (' + v.club_name + ')' : ''}</option>`)
+                .join('');
+    }
+
+    function _venueCardHtml(v, rawId) {
+        const flds = Array.isArray(v.fields) && v.fields.length
+            ? v.fields.map(f => `<span style="display:inline-block; background:#f3eaff; border:1px solid #c8a0e8; border-radius:10px; padding:1px 9px; font-size:0.75rem; color:#6c3483; margin:2px 3px 2px 0;">${f}</span>`).join('')
+            : '<span style="color:#aaa; font-size:0.8rem;">No fields</span>';
+        const esc = JSON.stringify(v.name);
+        return `<div style="margin-bottom:10px; padding:10px 14px; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px; display:flex; align-items:flex-start; gap:10px;">
+            <div style="flex:1;">
+                <div style="font-weight:700; font-size:0.88rem; color:#09142a; margin-bottom:4px;">📍 ${v.name}</div>
+                <div>${flds}</div>
+            </div>
+            <button onclick="removeExistingVenue(${esc})" style="background:none; border:1px solid #e74c3c; color:#e74c3c; border-radius:6px; padding:3px 10px; font-size:0.75rem; cursor:pointer; font-weight:700; flex-shrink:0;">Remove</button>
+        </div>`;
+    }
+
+    function vPickerAddByClub() {
+        const club = document.getElementById('vPickerClubSel').value;
+        if (!club) { alert('Select a club first.'); return; }
+        const toAdd = _allSystemVenues.filter(v => v.club_name === club);
+        if (!toAdd.length) { alert('No venues found for that club.'); return; }
+        toAdd.forEach(v => {
+            if (!_pendingVenues.find(p => p.name === v.name))
+                _pendingVenues.push({ name: v.name, fields: v.fields });
+        });
+        renderPendingVenues();
+    }
+
+    function vPickerAddOne() {
+        const id = document.getElementById('vPickerSingleSel').value;
+        if (!id) { alert('Select a venue first.'); return; }
+        const v = _allSystemVenues.find(v => String(v.id) === String(id));
+        if (!v) return;
+        if (!_pendingVenues.find(p => p.name === v.name))
+            _pendingVenues.push({ name: v.name, fields: v.fields });
+        renderPendingVenues();
+    }
+
+    function renderPendingVenues() {
+        const wrap = document.getElementById('vPickerPending');
+        const list = document.getElementById('vPickerPendingList');
+        if (!_pendingVenues.length) { wrap.style.display = 'none'; return; }
+        wrap.style.display = 'block';
+        list.innerHTML = _pendingVenues.map((v, i) => `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; padding:8px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
+                <span style="flex:1; font-weight:600; font-size:0.88rem; font-family:'DM Sans',sans-serif;">📍 ${v.name}${v.fields.length ? `<span style="color:#888; font-weight:400; font-size:0.78rem;"> — ${v.fields.join(', ')}</span>` : ''}</span>
+                <button onclick="vPickerRemovePending(${i})" style="background:none; border:1px solid #aaa; color:#888; border-radius:6px; padding:2px 8px; font-size:0.75rem; cursor:pointer;">✕</button>
+            </div>`).join('');
+    }
+
+    function vPickerRemovePending(i) {
+        _pendingVenues.splice(i, 1);
+        renderPendingVenues();
+    }
+
+    async function vPickerSave() {
+        const rawId = document.getElementById('editClubSelect').value;
+        const isEv  = rawId.startsWith('e:');
+        const isTn  = rawId.startsWith('t:');
+        if (!isEv && !isTn) return;
+        const entityId = rawId.slice(2);
+        const table    = isEv ? 'events' : 'tournaments';
+        if (!_pendingVenues.length) { alert('Nothing queued to add.'); return; }
+
+        const btn   = document.getElementById('vPickerSaveBtn');
+        const logEl = document.getElementById('editLog');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        try {
+            const { data, error } = await supabaseClient.client.from(table).select('venues').eq('id', entityId).single();
+            if (error) throw new Error(error.message);
+            const existing = Array.isArray(data?.venues) ? data.venues : [];
+            const existingNames = new Set(existing.map(v => v.name));
+            const toAdd  = _pendingVenues.filter(v => !existingNames.has(v.name));
+            const merged = [...existing, ...toAdd];
+            const { error: upErr } = await supabaseClient.client.from(table).update({ venues: merged }).eq('id', entityId);
+            if (upErr) throw new Error(upErr.message);
+            _pendingVenues = [];
+            await onEditClubChange();
+            logEl.style.display = 'block';
+            logEl.innerHTML = `<div class="log-ok">✅ ${toAdd.length} venue(s) added.</div>`;
+        } catch(e) {
+            logEl.style.display = 'block';
+            logEl.innerHTML = `<div class="log-err">✗ ${e.message}</div>`;
+        }
+        btn.disabled = false;
+        btn.textContent = 'Save Venues ↗';
+    }
+
+    async function removeExistingVenue(venueName) {
+        const rawId = document.getElementById('editClubSelect').value;
+        const isEv  = rawId.startsWith('e:');
+        const isTn  = rawId.startsWith('t:');
+        if (!isEv && !isTn) return;
+        const entityId = rawId.slice(2);
+        const table    = isEv ? 'events' : 'tournaments';
+        if (!confirm(`Remove "${venueName}" from this ${isEv ? 'event' : 'tournament'}?`)) return;
+        try {
+            const { data } = await supabaseClient.client.from(table).select('venues').eq('id', entityId).single();
+            const venues = (Array.isArray(data?.venues) ? data.venues : []).filter(v => v.name !== venueName);
+            await supabaseClient.client.from(table).update({ venues }).eq('id', entityId);
+            await onEditClubChange();
+        } catch(e) {
+            alert('Remove failed: ' + e.message);
+        }
+    }
+
+    // ── (legacy builder removed — venue creation moved to Venue & Field Management) ──
 
     function addEditVenue() {
         const idx = editVenueCount++;
