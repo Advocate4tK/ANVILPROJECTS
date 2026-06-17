@@ -795,24 +795,29 @@
 
         const isRec        = club === 'RECREATION';
         const isTournament = !!g._tournamentKey;
+        const isEvent      = !isTournament && !!window._eventSlugByName?.[club];
         const org          = g.organization || '';
         const payType      = g.pay_type || '';
         const gameDesc     = `${home} vs ${away} (${age}) — ${formatDate(g.date || '')}${time ? ' @ ' + time : ''}`;
         const noteParam    = encodeURIComponent(`Interested in ${gameDesc}`);
         const formCfg      = _formConfig[club] || {};
-        const isJotform    = !isRec && !isTournament && formCfg.formType === 'jotform';
+        const isJotform    = !isRec && !isTournament && !isEvent && formCfg.formType === 'jotform';
         const availUrl     = isRec
             ? `recreation-portal.html`
             : isTournament
                 ? `referee-availability-form.html?tournament=${encodeURIComponent(g._tournamentKey)}&note=${noteParam}&date=${encodeURIComponent(g.date || '')}&time=${encodeURIComponent(g.time || g.Time || g['Time'] || '')}`
-                : (isJotform && formCfg.jotformUrl)
-                    ? formCfg.jotformUrl
-                    : `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}${(g.time||g.Time||g['Time']) ? '&time=' + encodeURIComponent((g.time||g.Time||g['Time'])) : ''}`;
+                : isEvent
+                    ? `referee-availability-form.html?event=${encodeURIComponent(window._eventSlugByName[club])}&note=${noteParam}&date=${encodeURIComponent(g.date || '')}&time=${encodeURIComponent(g.time || g.Time || g['Time'] || '')}`
+                    : (isJotform && formCfg.jotformUrl)
+                        ? formCfg.jotformUrl
+                        : `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}${(g.time||g.Time||g['Time']) ? '&time=' + encodeURIComponent((g.time||g.Time||g['Time'])) : ''}`;
         const availLabel   = isRec
             ? 'Contact Your Assignor to Work This Game'
             : isTournament
                 ? 'Click Here to Submit Availability for This Tournament'
-                : 'Click Here to Submit Your Availability for This Game';
+                : isEvent
+                    ? 'Click Here to Submit Your Availability for This Event Game'
+                    : 'Click Here to Submit Your Availability for This Game';
         const finalSlotsHtml = isJotform ? '' : slotsHtml;
 
         return `<div class="game-card">
@@ -896,6 +901,8 @@
             try { _recOrgs    = JSON.parse(recOrgsRes.data?.value    || '[]'); } catch(e) { _recOrgs = []; }
             TOURNAMENTS = tournRes.data || [];
             EVENTS      = (eventsRes.data || []);
+            window._eventSlugByName = {};
+            EVENTS.forEach(e => { window._eventSlugByName[e['Club Name'] || e.name] = e.slug || e.name; });
 
             // Build selector dropdown + rotator
             const allFilterClubs = [...CLUBS, ...(_recOrgs.length ? ['RECREATION'] : []), ...TOURNAMENTS.map(t => t.name), ...EVENTS.map(e => e['Club Name'] || e.name)];
