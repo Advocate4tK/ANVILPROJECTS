@@ -5941,25 +5941,34 @@
             }
 
             let payRatesByClubId = {};
+            let payRatesByEventName = {}; // keyed by event "Club Name" — events store rates in age_groups JSONB
             window._crewRules = {}; // { clubName: { ageGroup: { ar1, ar2 } } }
             const clubIds = Object.values(clubIdByName);
-            if (clubIds.length) {
-                const [ratesRes, crewRes] = await Promise.all([
-                    supabaseClient.client.from('pay_rates').select('club_id, age_group, center, ar').in('club_id', clubIds),
-                    supabaseClient.client.from('crew_rules').select('club_id, age_group, ar1, ar2').in('club_id', clubIds)
-                ]);
-                if (ratesRes.data) ratesRes.data.forEach(r => {
-                    if (!payRatesByClubId[r.club_id]) payRatesByClubId[r.club_id] = [];
-                    payRatesByClubId[r.club_id].push(r);
-                });
-                const clubNameById = {};
-                Object.entries(clubIdByName).forEach(([name, id]) => { clubNameById[id] = name; });
-                if (crewRes.data) crewRes.data.forEach(r => {
-                    const name = clubNameById[r.club_id] || String(r.club_id);
-                    if (!window._crewRules[name]) window._crewRules[name] = {};
-                    window._crewRules[name][r.age_group] = { ar1: r.ar1, ar2: r.ar2 };
-                });
-            }
+            const [ratesRes, crewRes, evRatesRes] = await Promise.all([
+                clubIds.length ? supabaseClient.client.from('pay_rates').select('club_id, age_group, center, ar').in('club_id', clubIds) : Promise.resolve({ data: [] }),
+                clubIds.length ? supabaseClient.client.from('crew_rules').select('club_id, age_group, ar1, ar2').in('club_id', clubIds) : Promise.resolve({ data: [] }),
+                supabaseClient.client.from('events').select('"Club Name", age_groups').eq('enabled', true)
+            ]);
+            if (ratesRes.data) ratesRes.data.forEach(r => {
+                if (!payRatesByClubId[r.club_id]) payRatesByClubId[r.club_id] = [];
+                payRatesByClubId[r.club_id].push(r);
+            });
+            const clubNameById = {};
+            Object.entries(clubIdByName).forEach(([name, id]) => { clubNameById[id] = name; });
+            if (crewRes.data) crewRes.data.forEach(r => {
+                const name = clubNameById[r.club_id] || String(r.club_id);
+                if (!window._crewRules[name]) window._crewRules[name] = {};
+                window._crewRules[name][r.age_group] = { ar1: r.ar1, ar2: r.ar2 };
+            });
+            if (evRatesRes.data) evRatesRes.data.forEach(ev => {
+                const evName = ev['Club Name'];
+                const ags = Array.isArray(ev.age_groups) ? ev.age_groups : [];
+                if (evName && ags.length) {
+                    payRatesByEventName[evName] = ags
+                        .filter(ag => ag.center || ag.ar)
+                        .map(ag => ({ age_group: ag.age_group, center: ag.center, ar: ag.ar }));
+                }
+            });
 
             const fmtDate = iso => {
                 const d = new Date(iso + 'T12:00:00');
@@ -6036,7 +6045,7 @@
                     if (!games.length) continue;
 
                     const clubId = clubIdByName[club];
-                    const rates  = clubId ? (payRatesByClubId[clubId] || []) : [];
+                    const rates  = clubId ? (payRatesByClubId[clubId] || []) : (payRatesByEventName[club] || []);
 
                     const gameLines = games.map(g => {
                         const f = g.fields;
