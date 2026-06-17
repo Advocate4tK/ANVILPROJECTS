@@ -130,6 +130,7 @@ function ccBuildEventCard(ev) {
     const ageGroups = Array.isArray(ev.age_groups) ? ev.age_groups : [];
     const evVenues  = Array.isArray(ev.venues) ? ev.venues : [];
     const portalUrl = ev.slug ? `https://referee-tool.com/referee-availability-form.html?event=${ev.slug}` : '';
+    const submitUrl = ev.slug ? `https://referee-tool.com/club-game-submit.html?club=${ev.slug}` : '';
 
     const ageTable = ageGroups.length ? `
         <div style="border-top:1px solid #edf0f7;">
@@ -179,6 +180,7 @@ function ccBuildEventCard(ev) {
         ${ageTable}
         <div style="padding:12px 18px; background:#fafbfd; border-top:1px solid #edf0f7; display:flex; flex-direction:column; gap:7px;">
             <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:4px;">Portals &amp; Links</div>
+            ${ccPortalRow('Game Submit Portal',      submitUrl)}
             ${ccPortalRow('Event Availability Form', portalUrl)}
         </div>
         ${venueChips}

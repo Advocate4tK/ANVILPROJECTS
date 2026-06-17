@@ -3053,14 +3053,29 @@
         if (!rawId) { form.style.display = 'none'; return; }
 
         const isTournament = rawId.startsWith('t:');
-        const entityId     = isTournament ? rawId.slice(2) : rawId;
+        const isEvent      = rawId.startsWith('e:');
+        const entityId     = (isTournament || isEvent) ? rawId.slice(2) : rawId;
 
-        document.getElementById('contactsClubOnlySection').style.display = '';
+        document.getElementById('contactsClubOnlySection').style.display = isEvent ? 'none' : '';
         document.getElementById('cPresLabel').textContent   = isTournament ? 'Tournament Director' : 'President';
-        document.getElementById('cAdminLabel').textContent  = isTournament ? 'Event Admin' : 'Organization Admin (Scheduling Contact)';
+        document.getElementById('cAdminLabel').textContent  = (isTournament || isEvent) ? 'Event Admin' : 'Organization Admin (Scheduling Contact)';
 
         try {
-            if (isTournament) {
+            if (isEvent) {
+                const { data, error } = await supabaseClient.client
+                    .from('events').select('"Club Admin", "Club Admin Email", "Club Admin Phone", assignor, "Assignor Email", "Assignor Phone"').eq('id', entityId).single();
+                if (error) throw new Error(error.message);
+                document.getElementById('cAdminName').value     = data['Club Admin']       || '';
+                document.getElementById('cAdminEmail').value    = data['Club Admin Email'] || '';
+                document.getElementById('cAdminPhone').value    = data['Club Admin Phone'] || '';
+                document.getElementById('cPayCoordName').value  = '';
+                document.getElementById('cPayCoordEmail').value = '';
+                document.getElementById('cPayCoordPhone').value = '';
+                document.getElementById('cPayCoordPin').value   = '';
+                document.getElementById('cAssignorName').value  = data.assignor               || '';
+                document.getElementById('cAssignorEmail').value = data['Assignor Email']      || '';
+                document.getElementById('cAssignorPhone').value = data['Assignor Phone']      || '';
+            } else if (isTournament) {
                 const { data, error } = await supabaseClient.client
                     .from('tournaments').select('director, director_email, event_admin, event_admin_phone, event_admin_email, payment_coordinator, payment_coordinator_phone, payment_coordinator_email, payment_portal_pin, assignor, assignor_phone, assignor_email').eq('id', entityId).single();
                 if (error) throw new Error(error.message);
@@ -3108,7 +3123,8 @@
         if (!rawId) { alert('Select an entity first.'); return; }
 
         const isTournament = rawId.startsWith('t:');
-        const entityId     = isTournament ? rawId.slice(2) : rawId;
+        const isEvent      = rawId.startsWith('e:');
+        const entityId     = (isTournament || isEvent) ? rawId.slice(2) : rawId;
         const btn = document.getElementById('saveContactsBtn');
         const msg = document.getElementById('contactsSaveMsg');
         btn.disabled = true;
@@ -3116,7 +3132,17 @@
         msg.style.display = 'none';
 
         try {
-            if (isTournament) {
+            if (isEvent) {
+                const { error } = await supabaseClient.client.from('events').update({
+                    'Club Admin':       document.getElementById('cAdminName').value.trim()     || null,
+                    'Club Admin Email': document.getElementById('cAdminEmail').value.trim()    || null,
+                    'Club Admin Phone': document.getElementById('cAdminPhone').value.trim()    || null,
+                    assignor:           document.getElementById('cAssignorName').value.trim()  || null,
+                    'Assignor Email':   document.getElementById('cAssignorEmail').value.trim() || null,
+                    'Assignor Phone':   document.getElementById('cAssignorPhone').value.trim() || null,
+                }).eq('id', entityId);
+                if (error) throw new Error(error.message);
+            } else if (isTournament) {
                 const { error } = await supabaseClient.client.from('tournaments').update({
                     director:                    document.getElementById('cPresName').value.trim()      || null,
                     director_email:              document.getElementById('cPresEmail').value.trim()      || null,
