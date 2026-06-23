@@ -778,6 +778,7 @@
                             <button class="date-quick-btn" onclick="setDateRange('next-sat', event)">Next Sat</button>
                             <button class="date-quick-btn" onclick="setDateRange('next-sun', event)">Next Sun</button>
                             <button class="date-quick-btn" onclick="setDateRange('next-weekend', event)">Next Weekend</button>
+                            <button class="date-quick-btn" onclick="setDateRange('all', event)" style="background:#152d55; color:#fff; border-color:#152d55;">📅 All Games</button>
                         </div>
                     </div>
                 </div>
@@ -5670,6 +5671,11 @@
             } else if (preset === 'next-weekend') {
                 const { fri, sun } = getWeekendDates(1);
                 from = fri; to = sun;
+            } else if (preset === 'all') {
+                // Escape hatch — open the whole window so far-out games (and error
+                // games needing deletion) are visible, not just this/next week.
+                from = new Date('2020-01-01T12:00:00');
+                to   = new Date('2035-12-31T12:00:00');
             }
 
             if (!from) return;
@@ -7096,6 +7102,9 @@
                             ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
                             : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`
                         }
+                        ${(!isCancelled && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
+                            ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
+                            : ''}
                     </div>
                 </div>`;
         }
@@ -7508,6 +7517,9 @@
                             ${cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled'
                                 ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
                                 : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`}
+                            ${(!(cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled') && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
+                                ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
+                                : ''}
                         </div>
                     </div>
                 </div>`;
@@ -8622,6 +8634,60 @@
                 alert('Could not cancel game: ' + e.message);
                 renderGames();
             }
+        }
+
+        // ── Guarded HARD DELETE — for games created in error only (test/junk). ──
+        // Removes the row from the table entirely, so it vanishes from every view.
+        // Refuses anything that looks real (refs assigned OR pay records), backs the
+        // row up to localStorage first, and requires an explicit irreversible confirm.
+        async function deleteGame(gameId, label) {
+            const game = allGames.find(g => String(g.id) === String(gameId));
+            if (!game) { alert('Game not found.'); return; }
+
+            // Guard 1 — refs assigned = a real game, not an error
+            const hasRef = ['Center Referee','AR 1','AR 2'].some(pos => {
+                const v = (game.fields[pos] || '').trim().toUpperCase();
+                return v && v !== 'EMPTY' && v !== 'FILLED';
+            });
+            if (hasRef) {
+                alert('This game has referees assigned — it looks like a real game.\n\nUse "Cancel Game" instead. Delete is only for games created in error.');
+                return;
+            }
+
+            // Guard 2 — pay records = a real game
+            try {
+                const { data: pays } = await supabaseClient.client
+                    .from('ref_payments').select('id').eq('game_id', gameId).limit(1);
+                if (pays && pays.length) {
+                    alert('This game has payment records against it — it is a real game.\n\nUse "Cancel Game" instead.');
+                    return;
+                }
+            } catch(e) { /* if the check can't run, the confirm below is the backstop */ }
+
+            // Final human gate — permanent and irreversible
+            if (!confirm(`PERMANENTLY DELETE this game?\n\n${label}\n\nThis erases it from the database entirely — it will not appear anywhere, and it CANNOT be undone. Only do this for a game created in error.`)) return;
+
+            // Back the row up to localStorage before deleting (keeps last 50)
+            try {
+                const backups = JSON.parse(localStorage.getItem('deletedGamesBackup') || '[]');
+                backups.push({ deleted_at: new Date().toISOString(), label, id: gameId, row: game.fields });
+                localStorage.setItem('deletedGamesBackup', JSON.stringify(backups.slice(-50)));
+            } catch(e) { /* backup is best-effort */ }
+
+            // Delete from DB (FK to ref_payments, if any, will block a real game — extra net)
+            try {
+                const _dTable = window.tournamentMode ? 'tournament_games' : 'games';
+                const { error } = await supabaseClient.client.from(_dTable).delete().eq('id', gameId);
+                if (error) throw error;
+            } catch(e) {
+                alert('Could not delete game: ' + e.message);
+                return;
+            }
+
+            // Drop from memory + re-render so it vanishes from the board
+            const idx = allGames.findIndex(g => String(g.id) === String(gameId));
+            if (idx >= 0) allGames.splice(idx, 1);
+            renderGames();
         }
 
         async function restoreGame(gameId) {
