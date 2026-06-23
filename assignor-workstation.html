@@ -6992,9 +6992,12 @@
             const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
             const pillClub      = selectedClubs.size === 1 ? [...selectedClubs][0].toLowerCase() : '';
             const activeClub    = gameClubLower || pillClub;
-            const venuesFiltered = allVenues.filter(v =>
+            let venuesFiltered = allVenues.filter(v =>
                 !activeClub || v.clubs.some(c => c.includes(activeClub) || activeClub.includes(c))
             );
+            // Never a dead dropdown: if no club-tagged venues match (events / untagged
+            // clubs), fall back to the full list so the venue is always pickable.
+            if (venuesFiltered.length === 0) venuesFiltered = allVenues;
             const venueOpts = venuesFiltered.map(v =>
                 `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
             ).join('');
@@ -7481,8 +7484,9 @@
                             <option value="">Venue…</option>${(() => {
                                 const curVenueId = f['Venue ID'] || '';
                                 const gameClubLower = (resolveGameClub(f)||'').toLowerCase();
-                                return allVenues.filter(v => !gameClubLower || v.clubs.some(c => c.includes(gameClubLower)||gameClubLower.includes(c)))
-                                    .map(v=>`<option value="${v.id}" ${v.id==curVenueId?'selected':''}>${v.name}</option>`).join('');
+                                let vf = allVenues.filter(v => !gameClubLower || v.clubs.some(c => c.includes(gameClubLower)||gameClubLower.includes(c)));
+                                if (vf.length === 0) vf = allVenues;   // never a dead dropdown
+                                return vf.map(v=>`<option value="${v.id}" ${v.id==curVenueId?'selected':''}>${v.name}</option>`).join('');
                             })()}
                         </select>
                         <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;" ${!f['Venue ID'] ? 'disabled' : ''}>
