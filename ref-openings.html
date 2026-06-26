@@ -706,21 +706,28 @@
     };
 
     let venueMap = {};
+    let _singleRef = {}; // "Club Name|AgeGroup" -> true when single-ref (event crew rule ar1=ar2=false)
 
     function isFilled(v) {
         return !!(v && String(v).trim() !== '' && v !== '—' && v !== '[]' && v !== 'null') || String(v).toUpperCase() === 'EMPTY';
     }
 
     function hasOpenSlot(g) {
-        const age = (g['Age Group'] || '').toUpperCase();
-        const isU8 = age.startsWith('U8') || age.startsWith('U-8');
-        if (isU8) return !isFilled(g['Center Referee']);
+        if (isSingleRefGame(g)) return !isFilled(g['Center Referee']);
         return !isFilled(g['Center Referee']) || !isFilled(g['AR 1']) || !isFilled(g['AR 2']);
     }
 
     function isU8Game(g) {
         const age = (g['Age Group'] || '').toUpperCase();
         return age.startsWith('U8') || age.startsWith('U-8');
+    }
+
+    // Single-ref game = U8 (always one ref) OR a crew rule with both ARs off (e.g. GSL).
+    function isSingleRefGame(g) {
+        if (isU8Game(g)) return true;
+        const src = g['Source Club'] || '';
+        const ageBase = (g['Age Group'] || '').replace(/\s*(Boys|Girls)$/i, '').replace(/[BG]$/, '').trim();
+        return !!_singleRef[`${src}|${ageBase}`];
     }
 
     function formatDate(d) {
@@ -761,7 +768,7 @@
         const time      = formatTime(g['time'] || g['Time'] || '');
         const venueId   = g['Venue ID'];
         const venue     = venueId ? (venueMap[String(venueId)] || '') : '';
-        const u8        = isU8Game(g);
+        const u8        = isSingleRefGame(g);
 
         const crFilled  = isFilled(g['Center Referee']);
         const ar1Filled = isFilled(g['AR 1']);
@@ -957,6 +964,21 @@
                 if (v['Venue ID']) venueMap[String(v['Venue ID'])] = nm;
                 if (v.id)          venueMap[String(v.id)]          = nm;
             });
+
+            // Single-ref crew rules from enabled events (age_groups with both ARs off → one ref)
+            _singleRef = {};
+            try {
+                const { data: evCrew } = await supabaseClient.client
+                    .from('events').select('"Club Name", age_groups').eq('enabled', true);
+                (evCrew || []).forEach(ev => {
+                    const nm = ev['Club Name'] || '';
+                    (Array.isArray(ev.age_groups) ? ev.age_groups : []).forEach(ag => {
+                        if (nm && ag.age_group && ag.ar1 === false && ag.ar2 === false) {
+                            _singleRef[`${nm}|${ag.age_group}`] = true;
+                        }
+                    });
+                });
+            } catch(e) { /* fall back to U8-only single-ref */ }
 
             // Merge + filter + sort (tag tournament games with their key for direct portal routing)
             const recCount    = _recOrgs.length ? 1 : 0;
