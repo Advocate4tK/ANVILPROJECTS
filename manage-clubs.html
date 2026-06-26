@@ -2951,8 +2951,18 @@
             listEl.innerHTML = `<span style="color:#e74c3c; font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</span>`;
         }
 
-        // Clubs manage venues via Venue & Field Management — hide picker here
-        pickerEl.style.display = 'none';
+        // Clubs can now add venues here too — load the picker (Save dual-writes clubs.venues + entity_venues)
+        try {
+            const [vRes, fRes] = await Promise.all([
+                supabaseClient.client.from('venues').select('id, name, "Venue Name", "Venue ID", club_name, city').order('"Venue Name"'),
+                supabaseClient.client.from('fields').select('"Field Name", "Venue ID", venue_id')
+            ]);
+            _loadSystemVenues(vRes.data || [], fRes.data || []);
+            _populateVenuePickers();
+        } catch(e) { /* picker just won't populate; current-venues list still shows */ }
+        _pendingVenues = [];
+        renderPendingVenues();
+        pickerEl.style.display = 'block';
     }
 
     async function saveDisplayName() {
@@ -2978,9 +2988,22 @@
         }
     }
 
-    // ── Venue Picker (events + tournaments) ──────────────────────────────────
+    // ── Venue Picker (clubs, events + tournaments) ───────────────────────────
     let _allSystemVenues = [];
     let _pendingVenues   = [];
+
+    // Mirrors club-game-submit.html — parses clubs.venues CA-ID string ("1,128.0",867.0 → [1128,867])
+    function parseAirtableIds(str) {
+        if (!str) return [];
+        const cleaned = str.replace(/"/g, '').trim();
+        if (!cleaned) return [];
+        if (cleaned.includes('.')) {
+            return (cleaned.match(/[\d,]+(?:\.\d+)?/g) || [])
+                .map(s => parseInt(s.replace(/,/g, ''), 10))
+                .filter(n => !isNaN(n));
+        }
+        return cleaned.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+    }
 
     function _loadSystemVenues(venueRows, fieldRows) {
         _allSystemVenues = venueRows.map(v => {
@@ -2989,7 +3012,7 @@
             const fields = fieldRows
                 .filter(f => (f.venue_id && f.venue_id === vPk) || (f['Venue ID'] && f['Venue ID'] === vCaId))
                 .map(f => f['Field Name']).filter(Boolean);
-            return { id: vPk, name: v['Venue Name'] || v.name || '', club_name: v.club_name || '', city: v.city || '', fields };
+            return { id: vPk, caId: vCaId, name: v['Venue Name'] || v.name || '', club_name: v.club_name || '', city: v.city || '', fields };
         }).filter(v => v.name);
     }
 
@@ -3034,10 +3057,23 @@
 
     async function removeClubVenue(venueId) {
         if (!confirm('Remove this venue from the club?')) return;
-        const { error } = await supabaseClient.client
-            .from('venues').update({ club_name: null }).eq('id', venueId);
-        if (error) { alert('Remove failed: ' + error.message); return; }
-        onEditClubChange();
+        const clubId = document.getElementById('editClubSelect').value;
+        try {
+            // legacy club_name tag
+            await supabaseClient.client.from('venues').update({ club_name: null }).eq('id', venueId);
+            // entity_venues junction
+            await supabaseClient.client.from('entity_venues')
+                .delete().eq('entity_type','club').eq('entity_id', String(clubId)).eq('venue_id', venueId);
+            // clubs.venues string — strip this venue's CA id so it leaves the portal too
+            const sysV = _allSystemVenues.find(v => String(v.id) === String(venueId));
+            const caId = sysV?.caId ? Math.round(sysV.caId) : null;
+            if (caId != null) {
+                const { data: cData } = await supabaseClient.client.from('clubs').select('venues').eq('id', clubId).single();
+                const remaining = parseAirtableIds(cData?.venues || '').filter(n => n !== caId);
+                await supabaseClient.client.from('clubs').update({ venues: remaining.join(',') }).eq('id', clubId);
+            }
+            onEditClubChange();
+        } catch(e) { alert('Remove failed: ' + e.message); }
     }
 
     function vPickerAddByClub() {
@@ -3047,7 +3083,7 @@
         if (!toAdd.length) { alert('No venues found for that club.'); return; }
         toAdd.forEach(v => {
             if (!_pendingVenues.find(p => p.name === v.name))
-                _pendingVenues.push({ name: v.name, fields: v.fields });
+                _pendingVenues.push({ name: v.name, fields: v.fields, id: v.id, caId: v.caId });
         });
         renderPendingVenues();
     }
@@ -3058,7 +3094,7 @@
         const v = _allSystemVenues.find(v => String(v.id) === String(id));
         if (!v) return;
         if (!_pendingVenues.find(p => p.name === v.name))
-            _pendingVenues.push({ name: v.name, fields: v.fields });
+            _pendingVenues.push({ name: v.name, fields: v.fields, id: v.id, caId: v.caId });
         renderPendingVenues();
     }
 
@@ -3083,10 +3119,59 @@
         const rawId = document.getElementById('editClubSelect').value;
         const isEv  = rawId.startsWith('e:');
         const isTn  = rawId.startsWith('t:');
-        if (!isEv && !isTn) return;
+        if (!_pendingVenues.length) { alert('Nothing queued to add.'); return; }
+
+        // ── Club path: dual-write clubs.venues (portal) + entity_venues (junction) + club_name (legacy list) ──
+        if (!isEv && !isTn) {
+            const clubId   = rawId;
+            const clubRec  = allClubRecords.find(c => String(c.id) === String(clubId));
+            const clubName = clubRec?.name || '';
+            const cbtn = document.getElementById('vPickerSaveBtn');
+            const clog = document.getElementById('editLog');
+            cbtn.disabled = true; cbtn.textContent = 'Saving…';
+            try {
+                const { data: cData, error: cErr } = await supabaseClient.client
+                    .from('clubs').select('venues').eq('id', clubId).single();
+                if (cErr) throw new Error(cErr.message);
+                let venuesStr = (cData?.venues || '').trim();
+                const caIds = new Set(parseAirtableIds(venuesStr));
+                let added = 0;
+                for (const pv of _pendingVenues) {
+                    if (!pv.id) continue;
+                    // entity_venues junction — insert only if not already linked
+                    const { data: ex } = await supabaseClient.client.from('entity_venues')
+                        .select('id').eq('entity_type','club').eq('entity_id', String(clubId)).eq('venue_id', pv.id).limit(1);
+                    if (!ex || !ex.length) {
+                        await supabaseClient.client.from('entity_venues')
+                            .insert({ entity_type:'club', entity_id: String(clubId), venue_id: pv.id });
+                    }
+                    // legacy club_name so the Current Venues list reflects it immediately
+                    await supabaseClient.client.from('venues').update({ club_name: clubName }).eq('id', pv.id);
+                    // clubs.venues string — what the club PORTAL reads
+                    const caId = pv.caId ? Math.round(pv.caId) : null;
+                    if (caId && !caIds.has(caId)) {
+                        venuesStr = venuesStr ? `${venuesStr},${caId}` : String(caId);
+                        caIds.add(caId);
+                    }
+                    added++;
+                }
+                const { error: upErr } = await supabaseClient.client
+                    .from('clubs').update({ venues: venuesStr }).eq('id', clubId);
+                if (upErr) throw new Error(upErr.message);
+                _pendingVenues = [];
+                await onEditClubChange();
+                clog.style.display = 'block';
+                clog.innerHTML = `<div class="log-ok">✅ ${added} venue(s) added to ${clubName}.</div>`;
+            } catch(e) {
+                clog.style.display = 'block';
+                clog.innerHTML = `<div class="log-err">✗ ${e.message}</div>`;
+            }
+            cbtn.disabled = false; cbtn.textContent = 'Save Venues ↗';
+            return;
+        }
+
         const entityId = rawId.slice(2);
         const table    = isEv ? 'events' : 'tournaments';
-        if (!_pendingVenues.length) { alert('Nothing queued to add.'); return; }
 
         const btn   = document.getElementById('vPickerSaveBtn');
         const logEl = document.getElementById('editLog');
