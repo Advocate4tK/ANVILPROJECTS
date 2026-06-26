@@ -1343,6 +1343,14 @@
             return slot === 'AR 1' ? rule.ar1 : slot === 'AR 2' ? rule.ar2 : true;
         }
 
+        // Single-ref game = U8 (always) OR a crew rule with both ARs off (e.g. GSL).
+        function isSingleRefGame(f) {
+            const age = f['Age Group'] || '';
+            if (age === 'U8' || age.toUpperCase().startsWith('U8')) return true;
+            const src = f['Source Club'] || '';
+            return !crewAllowed(src, age, 'AR 1') && !crewAllowed(src, age, 'AR 2');
+        }
+
         // "Seas 1" / "Seas 2" (strings) → 0 / 1.  Integer 2+ → that integer.  Missing → missing arg (default -1).
         // Scale: 0 = Season 1, 1 = Season 2, 2 = Year 2, 3 = Year 3, ...
         function parseYrs(v, missing) {
@@ -1466,7 +1474,7 @@
                 const cRef = resolveRefName(f['Center Referee']);
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
-                const fullyAssigned = cRef && ar1 && ar2;
+                const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
 
                 // Available refs for this game's date + club preference
                 const gameDate  = f['Date'] || '';
@@ -1591,7 +1599,7 @@
                 const cRef = resolveRefName(f['Center Referee']);
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
-                const fullyAssigned = cRef && (age === 'U8' || (ar1 && ar2));
+                const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
                 const isCancelled      = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
                 const isChangeRequested = (f['Game Status'] || '') === 'Change Requested';
                 const isCancelRequest   = isChangeRequested && /\[CANCELLATION REQUEST/i.test(f['Notes'] || '');
@@ -1664,8 +1672,8 @@
                     </div>
                     <div class="cmd-strips">
                         ${buildStrip('Center Referee', 'CR',  cRef, f['Center Referee'])}
-                        ${isU8 ? '' : buildStrip('AR 1', 'AR1', ar1, f['AR 1'])}
-                        ${isU8 ? '' : buildStrip('AR 2', 'AR2', ar2, f['AR 2'])}
+                        ${(isU8 || isSingleRefGame(f)) ? '' : buildStrip('AR 1', 'AR1', ar1, f['AR 1'])}
+                        ${(isU8 || isSingleRefGame(f)) ? '' : buildStrip('AR 2', 'AR2', ar2, f['AR 2'])}
                     </div>
                 </div>`;
             });
@@ -4865,7 +4873,7 @@
                 const cRef = resolveRefName(f['Center Referee']);
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
-                const fullyAssigned = cRef && (age === 'U8' || (ar1 && ar2));
+                const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
                 const isCancelled   = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
                 const isU8          = age === 'U8';
 
@@ -4977,8 +4985,8 @@
                     </div>
                     <div class="cmd-strips">
                         ${buildStrip2('Center Referee', 'CR',  cRef, f['Center Referee'])}
-                        ${isU8 ? '' : buildStrip2('AR 1', 'AR1', ar1, f['AR 1'])}
-                        ${isU8 ? '' : buildStrip2('AR 2', 'AR2', ar2, f['AR 2'])}
+                        ${(isU8 || isSingleRefGame(f)) ? '' : buildStrip2('AR 1', 'AR1', ar1, f['AR 1'])}
+                        ${(isU8 || isSingleRefGame(f)) ? '' : buildStrip2('AR 2', 'AR2', ar2, f['AR 2'])}
                     </div>
                 </div>`;
             });
@@ -6961,7 +6969,7 @@
                 const cRef = resolveRefName(f['Center Referee']);
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
-                const fullyAssigned = cRef && ar1 && ar2;
+                const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
                 const selected      = selectedGame && selectedGame.id === gid;
                 const isCancelled   = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
                 const isChangeReq   = (f['Game Status'] || '') === 'Change Requested';
@@ -6991,7 +6999,7 @@
             const ar2  = resolveRefName(f['AR 2']);
             const isCancelled = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
             const isChangeReq = (f['Game Status'] || '') === 'Change Requested';
-            const hideARs     = age === 'U8' || (hideU10Games && (age || '').startsWith('U10'));
+            const hideARs     = isSingleRefGame(f) || (hideU10Games && (age || '').startsWith('U10'));
 
             const gn = buildGameNumber(f);
 
