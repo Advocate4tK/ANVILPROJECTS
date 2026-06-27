@@ -724,8 +724,6 @@
             // Tournament/Event mode: strip required from hidden day-row inputs after rows are in DOM
             if (window._tournamentMode || window._eventMode) {
                 document.querySelectorAll('#availabilityDays [required]').forEach(el => el.removeAttribute('required'));
-                // "AR Only" lives in position prefs (not #availabilityDays) — never block event/tournament submissions on it
-                const _arOnly = document.getElementById('arOnly'); if (_arOnly) _arOnly.removeAttribute('required');
             }
 
             // Load referee-tool clubs + PAY_CLUBS + enabled tournaments + enabled events
@@ -770,15 +768,15 @@
                     if (ageCbGroup && evAgeGroups.length) {
                         ageCbGroup.innerHTML = evAgeGroups.map(ag => `<label><input type="checkbox" name="ageGroups" value="${ag}" checked> ${ag}</label>`).join('');
                     }
-                    // Single-ref events (no ARs) — "AR Only" is meaningless, hide it + drop its required flag
+                    // Single-ref events (no ARs, single age group): Position Preferences (AR Only + Age Groups)
+                    // are irrelevant — hide the whole fieldset and de-require it. Pre-checked age group still submits.
                     const _evAgs = window._eventData.age_groups || [];
                     const _singleRef = _evAgs.length && _evAgs.every(a => a.ar1 === false && a.ar2 === false);
                     if (_singleRef) {
-                        const arSel = document.getElementById('arOnly');
-                        if (arSel) {
-                            arSel.removeAttribute('required');
-                            const arGrp = arSel.closest('.form-group');
-                            if (arGrp) arGrp.style.display = 'none';
+                        const ppf = document.getElementById('positionPrefsFieldset');
+                        if (ppf) {
+                            ppf.querySelectorAll('[required]').forEach(el => el.removeAttribute('required'));
+                            ppf.style.display = 'none';
                         }
                     }
                 } else if (!window._eventMode) {
