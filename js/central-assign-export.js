@@ -84,6 +84,8 @@ let numericFieldToName = {}; // numeric Field ID → field name (primary)
 let clubLeagueMap      = {}; // club name → CA league ID
 let clubIdMap          = {}; // club name → clubs.id (int PK)
 let payRateByClubId    = {}; // club_id → ageBand → {center, ar}
+let eventLeagueMap     = {}; // event Club Name → CA league ID (from event age_groups)
+let eventDurationMap   = {}; // event Club Name → ageKey → {duration, durationTime}
 
 // ── Age group → pay_rates band ───────────────────────────────────────────────
 function ageBand(ageGroup) {
@@ -374,6 +376,26 @@ loadBtn.addEventListener('click', async () => {
             if (clubName && leagueId) clubLeagueMap[clubName] = parseInt(leagueId);
             if (clubName) clubIdMap[clubName] = parseInt(c.id);
         });
+
+        // Build EVENT overrides (league + duration) from event age_groups JSONB — events only, clubs untouched
+        eventLeagueMap   = {};
+        eventDurationMap = {};
+        try {
+            const { data: evRows } = await supabaseClient.client
+                .from('events').select('"Club Name", age_groups').eq('enabled', true);
+            (evRows || []).forEach(ev => {
+                const nm = ev['Club Name'] || '';
+                if (!nm) return;
+                (Array.isArray(ev.age_groups) ? ev.age_groups : []).forEach(ag => {
+                    if (ag.ca_league_id != null) eventLeagueMap[nm] = parseInt(ag.ca_league_id);
+                    if (ag.age_group && ag.duration) {
+                        if (!eventDurationMap[nm]) eventDurationMap[nm] = {};
+                        const k = String(ag.age_group).replace(/\s.*$/, '').replace(/[BGbg]$/, '').toUpperCase();
+                        eventDurationMap[nm][k] = { duration: ag.duration, durationTime: ag.durationTime };
+                    }
+                });
+            });
+        } catch(e) { /* event overrides optional */ }
 
         // Build pay rate lookup: club_id → age band → {center, ar}
         payRateByClubId = {};
@@ -671,7 +693,8 @@ exportBtn.addEventListener('click', () => {
         // Period length by age group — strip B/G suffix and division label before lookup
         const ageGroup = f['Age Group'] || '';
         const ageKey = ageGroup.replace(/\s.*$/, '').replace(/[BGbg]$/, '').toUpperCase();
-        const { duration, durationTime } = DURATION_BY_AGE[ageKey] || { duration: '2 x 40', durationTime: 90 };
+        const evDur = eventDurationMap[f['Source Club']]?.[ageKey];
+        const { duration, durationTime } = evDur || DURATION_BY_AGE[ageKey] || { duration: '2 x 40', durationTime: 90 };
 
         return [
             f['Home Team']  || '',
@@ -684,7 +707,7 @@ exportBtn.addEventListener('click', () => {
             gameGender,
             venueId || venueName,
             fieldName,
-            clubLeagueMap[f['Source Club']] || DEFAULTS.league,
+            eventLeagueMap[f['Source Club']] || clubLeagueMap[f['Source Club']] || DEFAULTS.league,
             refId, ar1Id, ar2Id, 0, 0,
             ageGroup === 'U8' ? 1 : 3,
             (() => {
