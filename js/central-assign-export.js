@@ -222,6 +222,19 @@ async function loadClubCheckboxes() {
                     <input type="checkbox" class="club-cb" value="${n}" checked> 🏆 ${n}
                 </label>`).join('');
         }
+
+        // Append enabled events with 📅 badge (events store games in the games table by Source Club)
+        const evRes = await supabaseClient.client.from('events').select('"Club Name"').eq('enabled', true).order('"Club Name"');
+        let evNames = (evRes.data || []).map(e => e['Club Name']).filter(Boolean);
+        if (allowedClubs && allowedClubs.length > 0) {
+            evNames = evNames.filter(n => allowedClubs.includes(n));
+        }
+        if (evNames.length) {
+            wrap.innerHTML += evNames.map(n => `
+                <label style="display:flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; white-space:nowrap;">
+                    <input type="checkbox" class="club-cb" value="${n}" checked> 📅 ${n}
+                </label>`).join('');
+        }
     } catch(e) {
         document.getElementById('clubCheckboxes').innerHTML =
             `<span style="color:#e74c3c; font-size:13px;">Could not load clubs: ${e.message}</span>`;
