@@ -6537,6 +6537,23 @@
                     }
                 }
 
+                // Event crew rules — events store crew flags in age_groups JSONB (not the crew_rules table).
+                // Only events whose flags are explicitly ar1=false & ar2=false become single-ref; all else default to full crew.
+                {
+                    const evSrc = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
+                    const { data: evRows } = await supabaseClient.client
+                        .from('events').select('"Club Name", age_groups').eq('enabled', true);
+                    (evRows || []).forEach(ev => {
+                        const nm = ev['Club Name'] || '';
+                        if (!nm || !evSrc.includes(nm)) return;
+                        (Array.isArray(ev.age_groups) ? ev.age_groups : []).forEach(ag => {
+                            if (!ag.age_group) return;
+                            if (!window._crewRules[nm]) window._crewRules[nm] = {};
+                            window._crewRules[nm][ag.age_group] = { ar1: ag.ar1 !== false, ar2: ag.ar2 !== false };
+                        });
+                    });
+                }
+
                 // Merge Airtable club names + Source Club game values into the known list
                 const sourceClubs  = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
                 const airtableClubs = clubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
