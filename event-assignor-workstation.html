@@ -1220,9 +1220,8 @@
             // Skip entirely in tournament mode — tournament games are not club-filtered
             if (!window.tournamentMode && chosen.clubs && chosen.clubs.length > 0 && chosen.role !== 'Admin') {
                 assignorClubRestriction = chosen.clubs.slice().sort();
-                // EVENT WORKSTATION: don't seed pills with the assignor's clubs — events populate via async load
-                clubsList     = [];
-                selectedClubs = new Set();
+                clubsList     = assignorClubRestriction.slice();
+                selectedClubs = new Set(clubsList);
                 userHasFilteredClubs = false;
             } else {
                 assignorClubRestriction = null;
@@ -5523,7 +5522,7 @@
         let loadedDateTo   = '';
         let availTimeByName = {}; // ref name → { date → { start, end } }
         const KNOWN_CLUBS = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
-        let clubsList     = []; // EVENT WORKSTATION: no club pre-seed — events populate via async load
+        let clubsList     = KNOWN_CLUBS.slice(); // pre-seeded so pills render on page load
         let selectedClubs = new Set(clubsList); // default: all selected
         let userHasFilteredClubs = false; // true once user manually picks specific clubs
         let assignorClubRestriction = null; // set when a non-Admin assignor logs in — limits visible clubs
@@ -5807,8 +5806,7 @@
                     const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || '').filter(Boolean);
                     const dbEvents = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
                     knownEventsList = dbEvents.slice();
-                    // EVENT WORKSTATION: pills + scope = EVENTS ONLY (ignore clubs)
-                    let merged = [...new Set(dbEvents)].sort();
+                    let merged = [...new Set([...KNOWN_CLUBS, ...dbClubs, ...dbEvents])].sort();
                     if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
                     clubsList = merged;
                     if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);
@@ -6261,6 +6259,7 @@
             // Short pill display labels — value/filtering stays the full name
             const PILL_LABELS = { 'Girls Summer League': 'GSL' };
             clubsList.forEach(club => {
+                if (!knownEventsList.includes(club)) return; // EVENT WORKSTATION: render ONLY event pills (no clubs)
                 const pill = document.createElement('span');
                 const isEvent = knownEventsList.includes(club);
                 const baseClass = isEvent ? 'club-pill event-pill' : 'club-pill';
