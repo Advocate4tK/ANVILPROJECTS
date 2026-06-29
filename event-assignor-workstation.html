@@ -1487,12 +1487,7 @@
                         (a.fields['Date'] || '') === gameDate
                     );
                     if (!hasDate) return false;
-                    if (gameClubLower) {
-                        const prefs = parsePreferences(r.fields['Club Preference'] || '');
-                        const availClubs = (availTimeByName[name.toLowerCase()]?.[gameDate] || []).flatMap(s => s.clubs || []);
-                        const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availClubs])];
-                        if (merged.length > 0 && !merged.some(p => p === gameClubLower)) return false;
-                    }
+                    // EVENT WORKSTATION: no club-preference match — a ref available on the game's date qualifies.
                     return true;
                 });
 
@@ -1616,12 +1611,7 @@
                         (a.fields['Date'] || '') === gameDate
                     );
                     if (!hasDate) return false;
-                    if (gameClubLower) {
-                        const prefs = parsePreferences(r.fields['Club Preference'] || '');
-                        const availClubs = (availTimeByName[name.toLowerCase()]?.[gameDate] || []).flatMap(s => s.clubs || []);
-                        const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availClubs])];
-                        if (merged.length > 0 && !merged.some(p => p === gameClubLower)) return false;
-                    }
+                    // EVENT WORKSTATION: no club-preference match — a ref available on the game's date qualifies.
                     return true;
                 });
                 const saved        = stageData[gid] || [];
@@ -3813,14 +3803,7 @@
                     if (a._conflict !== b._conflict) return a._conflict ? 1 : -1;
                     return a.date.localeCompare(b.date) || a.name.localeCompare(b.name);
                 });
-                // Filter by selected club when user has narrowed pills to specific clubs
-                if (selectedClubs.size > 0 && selectedClubs.size < clubsList.length) {
-                    const focusClubsLower = [...selectedClubs].map(c => c.toLowerCase());
-                    refRows = refRows.filter(r => {
-                        const prefs = (r.club || '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
-                        return prefs.some(p => focusClubsLower.includes(p));
-                    });
-                }
+                // EVENT WORKSTATION: no club-pill filtering of refs (events aren't club-scoped).
                 sheet3CachedRefRows = refRows;
                 if (sheet3RefSort.col === 'exp') {
                     sheet3CachedRefRows.sort((a, b) => (expVal(a) - expVal(b)) * sheet3RefSort.dir);
@@ -7796,15 +7779,9 @@
                 const name  = (r.fields['Name']  || '').trim().replace(/\s+/g, ' ').toLowerCase();
                 const email = (r.fields['Email'] || '').toLowerCase();
                 if (query && !name.includes(query) && !email.includes(query)) return false;
-                // Club preference gate: only show refs who listed a matching club.
-                // Refs with no preference set are hidden — use "Show all refs" to override.
-                // Also check what the ref put on their availability form (Preferred Locations).
-                if (!showAllRefs && focusClubs.length > 0 && !query) {
-                    const prefs = parsePreferences(r.fields['Club Preference']);
-                    const availFormClubs = Object.values(availTimeByName[name] || {}).flatMap(slot => slot.clubs || []);
-                    const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availFormClubs])];
-                    if (!merged.some(p => focusClubs.includes(p))) return false;
-                }
+                // EVENT WORKSTATION: NO club-preference gate. Event refs sign up for the event
+                // (not a club), so they must NOT be hidden for lacking a matching club preference.
+                // They're matched by availability DATE to the event's games (filter below).
                 if (yearsFilter !== 'any') {
                     const yrs = parseYrs(r.fields['Years Reffing'], -1);
                     if (yearsFilter === '0'    && yrs !== 0)             return false;
@@ -7825,13 +7802,9 @@
                 if (genderFilter && r.fields['Gender'] !== genderFilter) return false;
                 const refName = (r.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-                // Club scoping: restricted assignors only see refs who (a) prefer their clubs AND (b) submitted availability for the loaded dates
+                // EVENT WORKSTATION: drop the club-preference match (events aren't club-scoped).
+                // Keep only the date-availability requirement for restricted assignors.
                 if (assignorClubRestriction && !showAllRefs && !query) {
-                    const refPrefs = parsePreferences(r.fields['Club Preference'] || '');
-                    if (refPrefs.length > 0) {
-                        const matchesClub = refPrefs.some(p => assignorClubRestriction.some(c => c.toLowerCase() === p.toLowerCase()));
-                        if (!matchesClub) return false;
-                    }
                     const refDates = availByName[refName];
                     if (!refDates) return false;
                     const hasDateInRange = [...refDates].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo));
