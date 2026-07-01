@@ -409,8 +409,10 @@
         const client = supabaseClient.client;
         const { data: { session } } = await client.auth.getSession();
         if (!session) { window.location.href = 'admin.html'; return; }
-        const { data: rec } = await supabaseClient.client.from('assignors').select('role').eq('auth_user_id', session.user.id).single();
-        if (!rec || rec.role !== 'Admin') { window.location.href = 'admin.html'; }
+        const { data: rec } = await supabaseClient.client.from('assignors').select('role, permissions').eq('auth_user_id', session.user.id).single();
+        const isAdmin = rec && rec.role === 'Admin';
+        const hasPerm = rec && Array.isArray(rec.permissions) && rec.permissions.includes('cardBilling');
+        if (!isAdmin && !hasPerm) { window.location.href = 'admin.html'; }
     })();
 
     // ── State ────────────────────────────────────────────────────────────────

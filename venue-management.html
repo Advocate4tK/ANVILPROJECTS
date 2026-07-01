@@ -188,15 +188,13 @@
     <script>
         // Admin-only page — redirect non-authenticated and non-Admin users
         (async function() {
-            if (!isLoggedIn()) { window.location.href = 'admin.html'; return; }
-            const uid = currentUserId();
-            if (uid) {
-                const recs  = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
-                const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
-                if (myRec && (myRec.fields['Role'] || '').trim() !== 'Admin') {
-                    window.location.href = 'admin.html';
-                }
-            }
+            const client = supabaseClient.client;
+            const { data: { session } } = await client.auth.getSession();
+            if (!session) { window.location.href = 'admin.html'; return; }
+            const { data: rec } = await client.from('assignors').select('role, permissions').eq('auth_user_id', session.user.id).single();
+            const isAdmin = rec && rec.role === 'Admin';
+            const hasPerm = rec && Array.isArray(rec.permissions) && rec.permissions.includes('cardVenueManagement');
+            if (!isAdmin && !hasPerm) { window.location.href = 'admin.html'; }
         })();
     </script>
     <script>
