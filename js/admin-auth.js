@@ -39,6 +39,27 @@ function checkAdminAccess() {
     }
 }
 
+// Gate a tool page on a specific permission card (the users.html "heartbeat").
+// Admin role = master key; otherwise the user must have cardId in their permissions array.
+// Redirects to admin.html if not logged in or not permitted. Fails safe (deny on error).
+// Call at the top of any tool page: requireToolAccess('cardCentralAssign');
+async function requireToolAccess(cardId) {
+    try {
+        const client = supabaseClient.client;
+        const { data: { session } } = await client.auth.getSession();
+        if (!session) { window.location.href = 'admin.html'; return; }
+        const { data: rec } = await client.from('assignors')
+            .select('role, permissions')
+            .eq('auth_user_id', session.user.id)
+            .single();
+        const isAdmin = rec && rec.role === 'Admin';
+        const hasPerm = rec && Array.isArray(rec.permissions) && rec.permissions.includes(cardId);
+        if (!isAdmin && !hasPerm) { window.location.href = 'admin.html'; }
+    } catch (e) {
+        window.location.href = 'admin.html';
+    }
+}
+
 // Returns the current user's Supabase auth.uid() — use for assignor_id writes
 function currentUserId() {
     const s = _getSupabaseSession();
