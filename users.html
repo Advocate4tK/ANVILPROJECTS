@@ -513,13 +513,17 @@
         const [profilesRes, authRes, assignorsRes] = await Promise.all([
             supabaseClient.client.from('assignor_profiles').select('*').order('name'),
             adminClient ? adminClient.auth.admin.listUsers({ perPage: 200 }) : Promise.resolve({ data: null }),
-            supabaseClient.client.from('assignors').select('auth_user_id, permissions')
+            supabaseClient.client.from('assignors').select('auth_user_id, permissions, last_login')
         ]);
 
         // Build uid → permissions map
         const permMap = {};
+        const loginMap = {};
         (assignorsRes.data || []).forEach(r => {
-            if (r.auth_user_id) permMap[r.auth_user_id] = Array.isArray(r.permissions) ? r.permissions : ['cardWorkstation'];
+            if (r.auth_user_id) {
+                permMap[r.auth_user_id]  = Array.isArray(r.permissions) ? r.permissions : ['cardWorkstation'];
+                loginMap[r.auth_user_id] = r.last_login || null;
+            }
         });
 
         const { data: rawData, error } = profilesRes;
@@ -550,7 +554,7 @@
             const isAdmin   = (u.tier || '').toLowerCase() === 'admin'
                            || (u.username || '').toLowerCase().includes('admin');
             const cardClass = [isAdmin ? 'is-admin' : '', suspended ? 'is-suspended' : ''].filter(Boolean).join(' ');
-            const loginLine = adminClient ? `<div class="user-meta" style="margin-top:3px; color:#aaa;">${fmtLoginDate(lastLoginMap[u.id])}</div>` : '';
+            const loginLine = `<div class="user-meta" style="margin-top:3px; color:#aaa;">${fmtLoginDate(loginMap[u.id])}</div>`;
             const perms     = permMap[u.id] || ['cardWorkstation'];
             const toolChecks = TOOL_DEFS.map(t =>
                 `<label><input type="checkbox" id="tool-${u.id}-${t.id}" value="${t.id}"${perms.includes(t.id) ? ' checked' : ''}> ${t.label}</label>`

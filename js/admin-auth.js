@@ -150,6 +150,12 @@ if (loginSection) {
                 return;
             }
 
+            // Stamp last_login on this user's own assignors row — their session, no service key
+            supabaseClient.client.from('assignors')
+                .update({ last_login: new Date().toISOString() })
+                .eq('auth_user_id', data.user.id)
+                .then(() => {}, () => {});
+
             loginSection.style.display  = 'none';
             adminDashboard.style.display = 'block';
             _setSessionName(data.user.email || '');
