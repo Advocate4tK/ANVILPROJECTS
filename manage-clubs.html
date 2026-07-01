@@ -1135,13 +1135,15 @@
 <script src="js/cc-cards.js"></script>
 <script>var airtableClient = supabaseClient;</script>
 <script>
-    // Admin-only page — kick non-admins back to admin portal
+    // Access gate — Admin (master key) OR user granted the Command Center tool ('cardClubContacts')
     (async () => {
         const client = supabaseClient.client;
         const { data: { session } } = await client.auth.getSession();
         if (!session) { window.location.href = 'admin.html'; return; }
-        const { data: rec } = await client.from('assignors').select('role').eq('auth_user_id', session.user.id).single();
-        if (!rec || rec.role !== 'Admin') { window.location.href = 'admin.html'; }
+        const { data: rec } = await client.from('assignors').select('role, permissions').eq('auth_user_id', session.user.id).single();
+        const isAdmin = rec && rec.role === 'Admin';
+        const hasPerm = rec && Array.isArray(rec.permissions) && rec.permissions.includes('cardClubContacts');
+        if (!isAdmin && !hasPerm) { window.location.href = 'admin.html'; }
     })();
     let venueCount = 0;
     let fieldCounts = {}; // venueIndex → field count
