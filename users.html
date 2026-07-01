@@ -584,6 +584,7 @@
                         Change Password
                     </button>
                     ${isAdmin ? '' : `<button class="btn-tool-access" id="btn-tool-${u.id}" onclick="toggleToolAccess('${u.id}')">Tool Access</button>`}
+                    <button class="btn-tool-access" id="btn-log-${u.id}" onclick="showLoginLog('${u.id}')">📋 Log</button>
                     <span class="reset-msg" id="reset-msg-${u.id}"></span>
                     ${isAdmin
                         ? `<button class="btn-suspend active" style="margin-left:auto; opacity:0.35; cursor:default;" disabled title="Admin account cannot be suspended">Suspend</button>`
@@ -612,8 +613,29 @@
                     <button class="btn-save-tools" onclick="saveToolAccess('${u.id}')">Save</button>
                     <span class="tool-msg" id="tool-msg-${u.id}"></span>
                 </div>`}
+                <!-- Login history panel -->
+                <div class="tool-access-panel" id="login-log-${u.id}"></div>
             </div>`;
         }).join('');
+    }
+
+    async function showLoginLog(uid) {
+        const panel = document.getElementById('login-log-' + uid);
+        if (!panel) return;
+        if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+        panel.style.display = 'block';
+        const label = '<span class="tool-access-label">Login History</span>';
+        panel.innerHTML = label + '<div style="color:#888;font-size:0.85rem;">Loading…</div>';
+        const { data, error } = await supabaseClient.client
+            .from('login_log').select('logged_in_at')
+            .eq('auth_user_id', uid)
+            .order('logged_in_at', { ascending: false }).limit(200);
+        if (error) { panel.innerHTML = label + '<div style="color:#c00;font-size:0.85rem;">Error: ' + error.message + '</div>'; return; }
+        if (!data || !data.length) { panel.innerHTML = label + '<div style="color:#888;font-size:0.85rem;">No logins recorded yet.</div>'; return; }
+        const rows = data.map(r => '<div style="font-size:0.85rem;color:#333;padding:2px 0;">' +
+            new Date(r.logged_in_at).toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) +
+            '</div>').join('');
+        panel.innerHTML = '<span class="tool-access-label">Login History (' + data.length + ')</span>' + rows;
     }
 
     async function sendPasswordReset(email, id, btn) {

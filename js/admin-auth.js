@@ -155,6 +155,10 @@ if (loginSection) {
                 .update({ last_login: new Date().toISOString() })
                 .eq('auth_user_id', data.user.id)
                 .then(() => {}, () => {});
+            // Log this login into history (their own session)
+            supabaseClient.client.from('login_log')
+                .insert({ auth_user_id: data.user.id })
+                .then(() => {}, () => {});
 
             loginSection.style.display  = 'none';
             adminDashboard.style.display = 'block';
