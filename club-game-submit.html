@@ -733,7 +733,14 @@
     }
 
     function getCurrentSeason(dateStr) {
-        const d = dateStr ? new Date(dateStr) : new Date();
+        // Parse 'YYYY-MM-DD' as LOCAL (not UTC) so boundary dates (e.g. Jul 1) land in the right season
+        let d;
+        if (dateStr) {
+            const p = String(dateStr).slice(0, 10).split('-').map(Number);
+            d = (p.length === 3 && p.every(n => !isNaN(n))) ? new Date(p[0], p[1] - 1, p[2]) : new Date(dateStr);
+        } else {
+            d = new Date();
+        }
         const m = d.getMonth() + 1;
         const y = d.getFullYear();
         if (m >= 3 && m <= 6)  return `Spring ${y}`;
@@ -2101,6 +2108,22 @@
                 }
             });
 
+            // ── Season split: keep the current season live, tuck prior seasons into archives ──
+            // (club portals only — tournament/event views are self-contained, no archiving)
+            const archivedSeasons = {}; // { "Spring 2026": { regular: [], cancelled: [] } }
+            const liveSeason = getCurrentSeason();
+            if (!currentTournament && !currentLeagueLabel) {
+                const seasonOf = r => getCurrentSeason(r.fields['Date'] || '');
+                const _stashArchive = (r, kind) => {
+                    const s = seasonOf(r);
+                    (archivedSeasons[s] || (archivedSeasons[s] = { regular: [], cancelled: [] }))[kind].push(r);
+                };
+                for (let i = regularGames.length  - 1; i >= 0; i--)
+                    if (seasonOf(regularGames[i])  !== liveSeason) _stashArchive(regularGames.splice(i, 1)[0], 'regular');
+                for (let i = cancelledGames.length - 1; i >= 0; i--)
+                    if (seasonOf(cancelledGames[i]) !== liveSeason) _stashArchive(cancelledGames.splice(i, 1)[0], 'cancelled');
+            }
+
             let html = '';
 
             // ── Change Requests section (shown if any pending or recently resolved) ──
@@ -2322,7 +2345,48 @@
                         </div>
                     </div>`;
                 }
+            } else if (Object.keys(archivedSeasons).length > 0) {
+                html += `<p style="color:#6b7280; font-size:0.85rem; margin-bottom:14px;">No ${liveSeason} games on file yet — see archived season${Object.keys(archivedSeasons).length > 1 ? 's' : ''} below.</p>`;
             }
+
+            // ── Archived seasons — collapsed accordions, click to expand, read-only ──
+            window._archiveCollapsed = window._archiveCollapsed || {};
+            window._toggleArchive = function(aid) {
+                window._archiveCollapsed[aid] = !window._archiveCollapsed[aid];
+                const el = document.getElementById('archiveContainer_' + aid);
+                const ar = document.getElementById('archiveArrow_' + aid);
+                if (el) el.style.display = window._archiveCollapsed[aid] ? 'none' : 'block';
+                if (ar) ar.textContent = window._archiveCollapsed[aid] ? '▶' : '▼';
+            };
+            Object.keys(archivedSeasons).sort().reverse().forEach(seasonName => {
+                const { regular, cancelled } = archivedSeasons[seasonName];
+                const total = regular.length + cancelled.length;
+                const aid = seasonName.replace(/[^A-Za-z0-9]/g, '_');
+                if (!(aid in window._archiveCollapsed)) window._archiveCollapsed[aid] = true;
+                const collapsed = window._archiveCollapsed[aid];
+                const wk = {};
+                regular.forEach(r => { const g = getWeekLabel(r.fields['Date'] || ''); (wk[g.key] || (wk[g.key] = { label: g.label, games: [], cancelled: [] })).games.push(r); });
+                cancelled.forEach(r => { const g = getWeekLabel(r.fields['Date'] || ''); (wk[g.key] || (wk[g.key] = { label: g.label, games: [], cancelled: [] })).cancelled.push(r); });
+                const weeksHtml = Object.entries(wk).sort((a, b) => a[0].localeCompare(b[0])).map(([, w]) => `
+                    <div style="margin-bottom:14px;">
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.98rem; font-weight:800; color:#9ca3af; text-transform:uppercase; letter-spacing:0.6px; border-bottom:1px solid #e2d9ce; padding-bottom:5px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                            ${w.label}
+                            <span style="background:#e5e7eb; color:#6b7280; font-size:0.68rem; font-weight:700; padding:1px 8px; border-radius:8px; font-family:'DM Sans',sans-serif;">${w.games.length + w.cancelled.length}</span>
+                        </div>
+                        ${w.games.map(r => buildGameCard(r, {})).join('')}
+                        ${w.cancelled.map(r => buildGameCard(r, { cancelled: true })).join('')}
+                    </div>`).join('');
+                html += `<div style="margin-top:28px; opacity:0.92;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #d1d9e0; padding-bottom:6px; cursor:pointer; user-select:none;" onclick="window._toggleArchive('${aid}')">
+                        <span id="archiveArrow_${aid}" style="font-size:0.78rem; color:#9ca3af;">${collapsed ? '▶' : '▼'}</span>
+                        📦 ${seasonName} · Archived
+                        <span style="background:#e5e7eb; color:#6b7280; font-size:0.72rem; font-weight:700; padding:2px 10px; border-radius:8px; font-family:'DM Sans',sans-serif;">${total}</span>
+                    </div>
+                    <div id="archiveContainer_${aid}" style="display:${collapsed ? 'none' : 'block'};">
+                        ${weeksHtml}
+                    </div>
+                </div>`;
+            });
 
             content.innerHTML = html;
 
