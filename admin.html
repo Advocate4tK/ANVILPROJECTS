@@ -1106,9 +1106,12 @@
                 if (!upcoming.length) {
                     if (nextGameEl) nextGameEl.textContent = 'None scheduled';
                 } else {
-                    upcoming.sort((a, b) => new Date(a.fields['Date']) - new Date(b.fields['Date']));
-                    const nextDate = new Date(upcoming[0].fields['Date']);
-                    const diffDays = Math.ceil((nextDate - now) / 86400000);
+                    // Parse 'YYYY-MM-DD' as LOCAL (not UTC) so the label and day-count agree — see weekend block below
+                    const parseLocal = s => { const [y,m,d] = String(s).slice(0,10).split('-').map(Number); return new Date(y, m-1, d); };
+                    upcoming.sort((a, b) => parseLocal(a.fields['Date']) - parseLocal(b.fields['Date']));
+                    const nextDate = parseLocal(upcoming[0].fields['Date']);
+                    const today0   = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const diffDays = Math.round((nextDate - today0) / 86400000);
                     const dateStr  = nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                     if (nextGameEl) nextGameEl.textContent =
                         diffDays <= 0  ? `Today (${dateStr})` :
