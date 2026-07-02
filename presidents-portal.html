@@ -165,7 +165,8 @@
             <div class="pres-header">
                 <div>
                     <div class="pres-club-name" id="dashClubName">—</div>
-                    <div class="pres-subtitle" id="dashSeason">Spring 2026 Season</div>
+                    <div class="pres-subtitle" id="dashSeason">Season</div>
+                    <select id="seasonSelect" onchange="onSeasonChange(this.value)" style="margin-top:6px; padding:6px 10px; border:1.5px solid #e2d9ce; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.88rem; font-weight:700; color:#09142a; background:#fff; cursor:pointer;"></select>
                 </div>
                 <div class="pres-welcome">
                     <div id="dashWelcome" style="font-weight:700; color:var(--deep); margin-bottom:6px;"></div>
@@ -281,8 +282,40 @@ async function attemptLogin() {
     document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
 });
 
+// ── Season (date-derived; defaults to current, switchable via dropdown) ───────
+function seasonOfDate(dateStr) {
+    if (!dateStr) return null;
+    const p = String(dateStr).slice(0, 10).split('-').map(Number);
+    if (p.length !== 3 || p.some(isNaN)) return null;
+    const y = p[0], m = p[1];
+    if (m >= 3 && m <= 6)  return `Spring ${y}`;
+    if (m >= 7 && m <= 8)  return `Summer ${y}`;
+    if (m >= 9 && m <= 11) return `Fall ${y}`;
+    return `Winter ${y}`;
+}
+function computeCurrentSeason() {
+    const d = new Date();
+    return seasonOfDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+}
+function seasonSortKey(s) {
+    const [name, yr] = String(s).split(' ');
+    const order = { Spring: 1, Summer: 2, Fall: 3, Winter: 4 };
+    return (parseInt(yr, 10) || 0) * 10 + (order[name] || 0);
+}
+function populateSeasonSelect(seasons) {
+    const sel = document.getElementById('seasonSelect');
+    if (!sel) return;
+    const cur = computeCurrentSeason();
+    const sorted = [...new Set(seasons.filter(Boolean))].sort((a, b) => seasonSortKey(b) - seasonSortKey(a));
+    sel.innerHTML = sorted.map(s => `<option value="${s}"${s === CURRENT_SEASON ? ' selected' : ''}>${s}${s === cur ? ' (current)' : ' · archived'}</option>`).join('');
+}
+function onSeasonChange(val) {
+    CURRENT_SEASON = val;
+    if (_clubRecord) loadDashboard(_clubRecord);
+}
+
 // ── Contract Section ─────────────────────────────────────────────────────────
-const CURRENT_SEASON = 'Spring 2026';
+let CURRENT_SEASON = computeCurrentSeason();
 
 async function loadInvoiceSection(club) {
     const el = document.getElementById('invoiceSection');
@@ -537,6 +570,13 @@ async function loadDashboard(club) {
 
         const games = (rawGames.data || []).map(r => ({ id: r.id, fields: r }));
 
+        // Populate the season selector from the seasons this club actually has games in (+ always the current one)
+        const _seasonsSet = new Set(games.map(g => seasonOfDate(g.fields['date'])).filter(Boolean));
+        _seasonsSet.add(computeCurrentSeason());
+        populateSeasonSelect([..._seasonsSet]);
+        const _ds = document.getElementById('dashSeason');
+        if (_ds) _ds.textContent = CURRENT_SEASON + (CURRENT_SEASON === computeCurrentSeason() ? ' Season' : ' Season · Archived');
+
         // Per-slot paid map
         const slotPaidMap = {};
         (refPayResult.data || []).forEach(r => {
@@ -558,10 +598,10 @@ async function loadDashboard(club) {
             return refByName[(val || '').trim().toLowerCase()] || {};
         }
 
-        // Filter to games with at least one ref
+        // Filter to games with at least one ref, scoped to the selected season
         const allGames = games.filter(r => {
             const f = r.fields;
-            return (f['date']) && (f['Center Referee'] || f['AR 1'] || f['AR 2']);
+            return (f['date']) && (f['Center Referee'] || f['AR 1'] || f['AR 2']) && seasonOfDate(f['date']) === CURRENT_SEASON;
         }).sort((a, b) => (a.fields['date'] || '').localeCompare(b.fields['date'] || ''));
 
         // Separate past / upcoming / cancelled
