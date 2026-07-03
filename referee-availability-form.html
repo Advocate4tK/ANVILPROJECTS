@@ -731,7 +731,7 @@
                 supabaseClient.client.from('settings').select('value').eq('key','openings_form_config').maybeSingle(),
                 supabaseClient.client.from('clubs').select('name, payment_methods').eq('enabled', true).eq('avail_form_enabled', true),
                 (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks, avail_mode').eq('avail_enabled', true); if (tParam) q = q.eq('key', tParam); return q; })(),
-                (()=>{ const eParam = new URLSearchParams(window.location.search).get('event'); let q = supabaseClient.client.from('events').select('id, name, slug, min_age, session_blocks, avail_mode, start_date, end_date, age_groups').eq('avail_form_enabled', true).order('start_date'); if (eParam) q = q.eq('slug', eParam); return q; })()
+                (()=>{ const eParam = new URLSearchParams(window.location.search).get('event'); let q = supabaseClient.client.from('events').select('id, name, "Club Name", slug, min_age, session_blocks, avail_mode, start_date, end_date, age_groups').eq('avail_form_enabled', true).order('start_date'); if (eParam) q = q.eq('slug', eParam); return q; })()
             ]).then(([formRes, clubsRes, tournRes, eventsRes]) => {
                 const allClubs = (clubsRes.data || []).sort((a, b) => a.name.localeCompare(b.name));
                 const PAY_CLUBS = allClubs
@@ -767,7 +767,8 @@
                         const _today = new Date().toISOString().slice(0, 10);
                         const _WD = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
                         const _MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                        supabaseClient.client.from('games').select('*').eq('Source Club', evName)
+                        const _scName = window._eventData['Club Name'] || evName; // games' Source Club = proper name, not the slug in .name
+                        supabaseClient.client.from('games').select('*').eq('Source Club', _scName)
                             .then(({ data: evGames }) => {
                                 const byDate = {};
                                 (evGames || []).forEach(g => {
