@@ -1089,21 +1089,36 @@
                             <p style="color:#aaa; font-size:0.85rem;">No games scheduled yet.</p>
                         </div>`;
                     }
-                    const blockHtml = blocks.map(b => `
-                        <label style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #eee; cursor:pointer;">
-                            <input type="checkbox" name="event_sessions"
-                                data-ekey="${ekey}"
-                                data-date="${b.date}"
-                                data-session="${b.session||''}"
-                                data-label="${b.label||b.date}"
-                                data-start="${b.start_time||''}"
-                                data-end="${b.end_time||''}">
-                            <span style="font-size:0.88rem;">
-                                <strong>${b.label || b.date}</strong>
-                                ${b.start_time ? `<span style="color:#555;"> — ${fmtTime(b.start_time)}</span>` : ''}
-                                ${b.session ? `<span style="color:#888; font-size:0.83rem;"> · ${b.session}</span>` : ''}
-                            </span>
-                        </label>`).join('');
+                    // Group into pairs (same date + field). Each pair gets its own tinted background (alternating)
+                    // so refs see the 5:30 + 7:00 as a set to take TOGETHER, not one game.
+                    const _pairBg = ['#eff6ff', '#f0fdf4', '#fef9c3', '#faf5ff', '#fff1f2'];
+                    const _pairBd = ['#bfdbfe', '#bbf7d0', '#fde68a', '#e9d5ff', '#fecdd3'];
+                    const _pairs = [];
+                    blocks.forEach(b => {
+                        const p = (b.game_key || '').split('|');
+                        const pk = p.length === 3 ? `${p[0]}|${p[2]}` : `${b.date || ''}|${b.session || ''}`;
+                        const last = _pairs[_pairs.length - 1];
+                        if (last && last.pk === pk) last.items.push(b);
+                        else _pairs.push({ pk, items: [b] });
+                    });
+                    const blockHtml = _pairs.map((grp, gi) => {
+                        const bg = _pairBg[gi % _pairBg.length], bd = _pairBd[gi % _pairBd.length];
+                        const header = grp.items[0].label || grp.items[0].date;
+                        const rows = grp.items.map(b => {
+                            const age = (b.session || '').split(' · ')[0];
+                            return `<label style="display:flex; align-items:center; gap:10px; padding:6px 2px; cursor:pointer;">
+                                <input type="checkbox" name="event_sessions" data-ekey="${ekey}" data-date="${b.date}" data-session="${b.session||''}" data-label="${b.label||b.date}" data-start="${b.start_time||''}" data-end="${b.end_time||''}">
+                                <span style="font-size:0.9rem; font-weight:600; color:#1a2e4a;">${b.start_time ? fmtTime(b.start_time) : ''}${age ? ` <span style="color:#888; font-weight:400; font-size:0.82rem;">· ${age}</span>` : ''}</span>
+                            </label>`;
+                        }).join('');
+                        return `<div style="background:${bg}; border:1px solid ${bd}; border-radius:10px; padding:8px 13px 6px; margin-bottom:10px;">
+                            <div style="display:flex; align-items:center; gap:8px; padding-bottom:3px;">
+                                <span style="font-size:0.86rem; font-weight:800; color:#0f172a;">${header}</span>
+                                <span style="font-size:0.6rem; font-weight:800; background:#1e3a8a; color:#fff; padding:1px 7px; border-radius:8px; letter-spacing:0.5px; white-space:nowrap;">WORK THE PAIR</span>
+                            </div>
+                            ${rows}
+                        </div>`;
+                    }).join('');
                     return `
                     <div style="margin-bottom:18px;">
                         <div style="font-weight:700; font-size:0.95rem; color:#09142a; margin-bottom:6px; padding-bottom:6px; border-bottom:2px solid #0f766e;">📅 ${ev.name}</div>
