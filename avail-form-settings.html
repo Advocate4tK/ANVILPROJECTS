@@ -706,7 +706,8 @@
     function _fmtEvT(t) { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; }
     function _evFieldLabel(fieldId) { const raw = (window._evFieldMap || {})[String(fieldId)] || ''; const m = String(raw).match(/turf\s*(\d+)/i); return m ? `Field ${String.fromCharCode(64 + Number(m[1]))}` : raw; }
     function _evGameKey(g) { return `${g.date}|${g.time}|${g['Field ID']}`; }
-    function _evGameToBlock(g) { const fl = _evFieldLabel(g['Field ID']); const t = (g.time || '').slice(0, 5); return { date: g.date, start_time: t, end_time: '', session: [g['Age Group'], fl].filter(Boolean).join(' · '), label: `${_evAutoLabel(g.date)}${fl ? ' · ' + fl : ''}`, game_key: _evGameKey(g) }; }
+    function _evMatchup(g) { return [g['Home Team'], g['Away Team']].filter(Boolean).join(' vs '); }
+    function _evGameToBlock(g) { const fl = _evFieldLabel(g['Field ID']); const t = (g.time || '').slice(0, 5); return { date: g.date, start_time: t, end_time: '', session: [g['Age Group'], fl].filter(Boolean).join(' · '), matchup: _evMatchup(g), label: `${_evAutoLabel(g.date)}${fl ? ' · ' + fl : ''}`, game_key: _evGameKey(g) }; }
     function _evWeekKey(dateStr) { const d = new Date(dateStr + 'T12:00:00'); const day = d.getDay(); const mon = new Date(d); mon.setDate(d.getDate() - ((day + 6) % 7)); return mon.toISOString().slice(0, 10); }
 
     window._evToggleGame = function(slug, gk) {
@@ -737,8 +738,11 @@
             .sort((a, b) => (a.date || '').localeCompare(b.date || '')
                 || _evFieldLabel(a['Field ID']).localeCompare(_evFieldLabel(b['Field ID']))
                 || (a.time || '').localeCompare(b.time || ''));
-        // per-game event: drop any legacy hand-typed blocks so selection is purely game-based
-        if (games.length) _evBlocks[slug] = _evBlocks[slug].filter(b => b.game_key);
+        // per-game event: keep only game-based selections, and rebuild each from its game so labels/matchups stay current
+        if (games.length) {
+            const _gm = {}; ((window._evGamesByEvent || {})[slug] || []).forEach(x => { _gm[_evGameKey(x)] = x; });
+            _evBlocks[slug] = _evBlocks[slug].filter(b => b.game_key).map(b => _gm[b.game_key] ? _evGameToBlock(_gm[b.game_key]) : b);
+        }
         const badge = document.getElementById('evbadge_' + slug);
         if (badge) badge.textContent = `${_evBlocks[slug].length} game${_evBlocks[slug].length !== 1 ? 's' : ''}`;
         const selected = new Set(_evBlocks[slug].map(b => b.game_key).filter(Boolean));
@@ -763,9 +767,10 @@
             wg.forEach(g => {
                 const gk = _evGameKey(g); const on = selected.has(gk);
                 const fl = _evFieldLabel(g['Field ID']);
+                const mu = _evMatchup(g);
                 html += `<label style="display:flex; align-items:center; gap:9px; padding:5px 0; cursor:pointer; font-size:0.84rem;">
                     <input type="checkbox" ${on ? 'checked' : ''} onchange="_evToggleGame('${slug}','${gk}')">
-                    <span><strong>${_evAutoLabel(g.date)}</strong> · ${_fmtEvT((g.time || '').slice(0, 5))} · ${g['Age Group'] || ''}${fl ? ' · ' + fl : ''}</span>
+                    <span><strong>${_evAutoLabel(g.date)}</strong> · ${_fmtEvT((g.time || '').slice(0, 5))} · ${g['Age Group'] || ''}${fl ? ' · ' + fl : ''}${mu ? ' · ' + mu : ''}</span>
                 </label>`;
             });
             html += `</div></div>`;
