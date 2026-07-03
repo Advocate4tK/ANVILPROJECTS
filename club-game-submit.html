@@ -3260,9 +3260,10 @@
                         const age      = f['Age Group'] || '—';
                         const gameTime = f['Time'] ? ` @ ${formatTime(f['Time'])}` : '';
                         const game     = `${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}${gameTime}`;
+                        const gameOutsourced = isOutsourced(r);
                         const isPaid   = !!paidAtById[r.id] || (f['Payment Status'] || '').toLowerCase() === 'paid';
                         const paidAt   = paidAtById[r.id] ? new Date(paidAtById[r.id]).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
-                        const rowBg    = isPaid ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]};`;
+                        const rowBg    = gameOutsourced ? 'background:#f3f4f6;' : isPaid ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]};`;
 
                         const slots = [
                             { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
@@ -3295,11 +3296,13 @@
                                 : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
 
                             const slotAlreadyPaid = !!(slotPaidMap[r.id] && slotPaidMap[r.id][slot.pos]);
-                            const slotRowBg = slotAlreadyPaid ? 'background:#bbf7d0;' : rowBg;
+                            const slotRowBg = gameOutsourced ? 'background:#f3f4f6;' : slotAlreadyPaid ? 'background:#bbf7d0;' : rowBg;
                             const slotTs = slotAlreadyPaid
                                 ? new Date(slotPaidMap[r.id][slot.pos]).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
                                 : '';
-                            const cbHtml = allowPay
+                            const cbHtml = gameOutsourced
+                                ? `<span style="font-size:0.6rem; color:#9ca3af; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;" title="Paid externally — district pays at the field">ext</span>`
+                                : allowPay
                                 ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
                                     <button class="pay-slot-cb${slotAlreadyPaid ? ' paid' : ''}" onclick="markRefSlotPaid('${r.id}','${slot.pos}',this)" title="${slotAlreadyPaid ? 'Paid — click to undo' : 'Mark paid'}">${slotAlreadyPaid ? '✓' : ''}</button>
                                     ${slotTs ? `<span class="pay-slot-ts">${slotTs}</span>` : '<span class="pay-slot-ts"></span>'}
@@ -3334,7 +3337,7 @@
                                 <td>${idx === 0 ? age : ''}</td>
                                 <td>${refNameCell}</td>
                                 <td>${posBadge}</td>
-                                <td><span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span></td>
+                                <td>${gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>`}</td>
                                 <td>${venmoHtml}</td>
                                 <td style="text-align:center;">${cbHtml}</td>
                             </tr>
@@ -3383,10 +3386,12 @@
                                 <td colspan="3"></td>
                                 <td colspan="2" style="text-align:right; padding-right:4px; font-size:0.78rem; font-weight:600; color:#666;">Total</td>
                                 <td style="padding:6px 10px;">
-                                    <span class="pay-amount-wrap" style="opacity:1;">
+                                    ${outsourced
+                                        ? `<span style="color:#9ca3af; font-size:0.85rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>`
+                                        : `<span class="pay-amount-wrap" style="opacity:1;">
                                         <span class="pay-prefix">$</span>
                                         <span style="display:inline-block; width:60px; text-align:right; font-size:0.88rem; font-weight:800; color:#1a2e4a; padding-right:7px;">${gameTotal}</span>
-                                    </span>
+                                    </span>`}
                                 </td>
                                 <td colspan="2" style="text-align:right; padding:6px 10px;">
                                     <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">${markPaidBtn}</div>
