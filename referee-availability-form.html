@@ -761,7 +761,31 @@
                     document.title = evName + ' — Availability Form';
                     const _eh2 = document.getElementById('formPageTitle'); if (_eh2) _eh2.textContent = evName + ' Availability Form';
                     const sub = document.getElementById('tournamentSubtitle'); if (sub) { sub.textContent = evName; sub.style.display = 'block'; }
-                    renderEventSessions([window._eventData]);
+                    // AUTO-ROLL: build session dates from the event's actual UPCOMING games so the form never goes stale.
+                    // (Prior behavior used a saved session_blocks list that had to be hand-updated each week and wasn't.)
+                    (function _autoRollEventSessions() {
+                        const _today = new Date().toISOString().slice(0, 10);
+                        const _WD = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                        const _MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        supabaseClient.client.from('games').select('*').eq('Source Club', evName)
+                            .then(({ data: evGames }) => {
+                                const byDate = {};
+                                (evGames || []).forEach(g => {
+                                    const d = g['date'] || g['Date'];
+                                    const t = g['time'] || g['Time'] || '';
+                                    if (!d || d < _today) return;
+                                    (byDate[d] = byDate[d] || []).push(t);
+                                });
+                                const genBlocks = Object.keys(byDate).sort().map(d => {
+                                    const dt = new Date(d + 'T12:00:00');
+                                    const times = byDate[d].filter(Boolean).sort();
+                                    return { date: d, label: `${_WD[dt.getDay()]} ${_MO[dt.getMonth()]} ${dt.getDate()}`, session: '', start_time: times[0] || '', end_time: times[times.length - 1] || '' };
+                                });
+                                if (genBlocks.length) window._eventData.session_blocks = genBlocks;
+                                renderEventSessions([window._eventData]);
+                            })
+                            .catch(() => renderEventSessions([window._eventData]));
+                    })();
                     // Repopulate age group checkboxes from event data — pre-checked
                     const evAgeGroups = [...new Set((window._eventData.age_groups || []).map(g => g.age_group).filter(Boolean))];
                     const ageCbGroup  = document.querySelector('#positionPrefsFieldset .checkbox-group');
