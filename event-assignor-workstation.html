@@ -6055,8 +6055,20 @@
                     const clubId = clubIdByName[club];
                     const rates  = clubId ? (payRatesByClubId[clubId] || []) : (payRatesByEventName[club] || []);
 
-                    const gameLines = games.map((g, gi) => {
-                        const f = g.fields;
+                    const openCount = games.length;
+                    // Girls Summer League: refs must be 21+, work games in pairs (one ref = a field's 5:30 + 7:00)
+                    const isPairEvent = /girls\s*summer\s*league/i.test(club);
+                    const _u19rate = rates.find(r => /19/.test(r.age_group)) || rates[0];
+                    const _pairTotal = _u19rate && _u19rate.center ? (Number(_u19rate.center) * 2).toFixed(2) : null;
+
+                    // DB stores Turf 1/2; the public (kids/parents/refs) know them as Field A/B — translate for display
+                    const _fieldLabel = f => {
+                        const fo = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
+                        const raw = fo ? fo.name : (f['Field ID'] || '');
+                        const m = String(raw).match(/turf\s*(\d+)/i);
+                        return m ? `Field ${String.fromCharCode(64 + Number(m[1]))}` : raw;
+                    };
+                    const _fmtGameLine = (f, sep) => {
                         const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                         const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
                         const age = f['Age Group'] || '';
@@ -6068,16 +6080,31 @@
                         if (!soloOnly && !f['AR 1']?.trim()) openSlots.push('AR');
                         if (!soloOnly && !f['AR 2']?.trim()) openSlots.push('AR');
                         const positions = openSlots.join(' | ');
-                        // blank line between different days
-                        const daySep = (gi > 0 && f['Date'] !== games[gi-1].fields['Date']) ? '\n' : '';
-                        return `${daySep}${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age}${displayGender}    ${vName}   --   ${positions}`;
-                    }).join('\n');
+                        const fieldCol = isPairEvent ? (_fieldLabel(f) || '--') : '--';
+                        return `${sep}${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age}${displayGender}    ${vName}   ${fieldCol}   ${positions}`;
+                    };
 
-                    const openCount = games.length;
-                    // Girls Summer League: refs must be 21+, work games in pairs, single "work the pair" total
-                    const isPairEvent = /girls\s*summer\s*league/i.test(club);
-                    const _u19rate = rates.find(r => /19/.test(r.age_group)) || rates[0];
-                    const _pairTotal = _u19rate && _u19rate.center ? (Number(_u19rate.center) * 2).toFixed(2) : null;
+                    let gameLines;
+                    if (isPairEvent) {
+                        // Sort by day → field → time so each field's pair (5:30 + 7:00) is consecutive; blank line between pairs
+                        const sorted = [...games].sort((a,b) =>
+                            (a.fields['Date']||'').localeCompare(b.fields['Date']||'') ||
+                            (_fieldLabel(a.fields)||'').localeCompare(_fieldLabel(b.fields)||'') ||
+                            (a.fields['Time']||'').localeCompare(b.fields['Time']||''));
+                        gameLines = sorted.map((g, gi) => {
+                            const f = g.fields;
+                            const prev = gi > 0 ? sorted[gi-1].fields : null;
+                            const sep = (prev && (prev['Date'] !== f['Date'] || _fieldLabel(prev) !== _fieldLabel(f))) ? '\n' : '';
+                            return _fmtGameLine(f, sep);
+                        }).join('\n');
+                    } else {
+                        gameLines = games.map((g, gi) => {
+                            const f = g.fields;
+                            const daySep = (gi > 0 && f['Date'] !== games[gi-1].fields['Date']) ? '\n' : '';
+                            return _fmtGameLine(f, daySep);
+                        }).join('\n');
+                    }
+
                     const intro = isPairEvent
                         ? `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`} for referees that are 21 and older:`
                         : `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`}.  LMK if you wanna work!`;
