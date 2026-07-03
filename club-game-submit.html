@@ -3178,7 +3178,9 @@
             const pastGames     = grisGames.filter(r => (r.fields['Date'] || '') <  today);
             const upcomingGames = grisGames.filter(r => (r.fields['Date'] || '') >= today);
 
+            function isOutsourced(r) { return (r.fields['Payment Status'] || '').toLowerCase() === 'outsourced'; }
             function isGamePaid(r) {
+                if (isOutsourced(r)) return true; // paid externally (e.g. district pays refs at the field) — not owed
                 if (!!paidAtById[r.id] || (r.fields['Payment Status'] || '').toLowerCase() === 'paid') return true;
                 const f = r.fields;
                 const payablePos = ['CR','AR1','AR2'].filter(pos => {
@@ -3367,8 +3369,16 @@
                                 // Backfill game-level paid_at if missing
                                 if (latest) supabaseClient.client.from('games').update({ paid_at: latest, 'Payment Status': 'Paid' }).eq('id', r.id).then(() => {});
                             }
-                            const footerBg = effectivelyPaid ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]}; filter:brightness(0.96);`;
-                            const markPaidBtn = `<button class="btn-mark-paid${effectivelyPaid ? ' paid' : ''}" data-game-footer="${r.id}" disabled>${effectivelyPaid ? '✓ Paid' : 'Payment Pending'}</button>${effectivelyPaid && effectivePaidAt ? `<span class="pay-paid-at">${effectivePaidAt}</span>` : ''}`;
+                            const outsourced = isOutsourced(r);
+                            const footerBg = (effectivelyPaid || outsourced) ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]}; filter:brightness(0.96);`;
+                            let markPaidBtn;
+                            if (outsourced) {
+                                markPaidBtn = `<button class="btn-mark-paid paid" data-game-footer="${r.id}" disabled>✓ Paid Externally</button><button onclick="unmarkOutsourced('${r.id}')" title="Undo — put this game back in payment tracking" style="background:none; border:none; color:#6b7280; font-size:0.68rem; text-decoration:underline; cursor:pointer; padding:0 2px;">undo</button>`;
+                            } else if (effectivelyPaid) {
+                                markPaidBtn = `<button class="btn-mark-paid paid" data-game-footer="${r.id}" disabled>✓ Paid</button>${effectivePaidAt ? `<span class="pay-paid-at">${effectivePaidAt}</span>` : ''}`;
+                            } else {
+                                markPaidBtn = `<button class="btn-mark-paid" data-game-footer="${r.id}" disabled>Payment Pending</button><button onclick="markGameOutsourced('${r.id}')" title="Refs paid outside the tool (e.g. district pays at the field) — removes this game from owed" style="background:#0f3460; color:#fff; border:none; border-radius:7px; padding:5px 11px; font-size:0.72rem; font-weight:700; font-family:'DM Sans',sans-serif; cursor:pointer; white-space:nowrap;">Mark Paid Externally</button>`;
+                            }
                             html += `<tr style="${footerBg} border-top:1.5px solid rgba(0,0,0,0.08);">
                                 <td colspan="3"></td>
                                 <td colspan="2" style="text-align:right; padding-right:4px; font-size:0.78rem; font-weight:600; color:#666;">Total</td>
@@ -3620,6 +3630,19 @@
             btn.disabled = false;
             alert('Could not save payment status: ' + e.message);
         }
+    }
+
+    async function markGameOutsourced(gameId) {
+        try {
+            await supabaseClient.client.from('games').update({ 'Payment Status': 'Outsourced' }).eq('id', gameId);
+            await loadPaymentSection();
+        } catch(e) { alert('Could not mark paid externally: ' + e.message); }
+    }
+    async function unmarkOutsourced(gameId) {
+        try {
+            await supabaseClient.client.from('games').update({ 'Payment Status': null }).eq('id', gameId);
+            await loadPaymentSection();
+        } catch(e) { alert('Could not undo: ' + e.message); }
     }
 
     // ── End Griswold Payment Dashboard ────────────────────────────────────────

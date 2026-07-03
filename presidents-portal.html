@@ -627,27 +627,31 @@ async function loadDashboard(club) {
             if (slots.length > 0) assignedCount++;
             totalGameCount++;
 
+            const gameOutsourced = (f['Payment Status'] || '').toLowerCase() === 'outsourced';
             let gameOwed = 0;
             slots.forEach(slot => {
                 const rate     = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
                 const slotPaid = slotPaidMap[r.id]?.[slot.pos];
-                if (slotPaid) {
+                if (gameOutsourced) {
+                    // Paid externally (e.g. district pays refs at the field) — not owed, not paid by us, $0 in-tool
+                } else if (slotPaid) {
                     totalPaid += rate;
                 } else if (date < today) {
                     totalOwed += rate;
                     gameOwed  += rate;
                 }
                 const refName = resolveRef(slot.name).name || slot.name;
-                if (!refStats[refName]) refStats[refName] = { games: 0, earned: 0 };
+                if (!refStats[refName]) refStats[refName] = { games: 0, earned: 0, outsourced: 0 };
                 refStats[refName].games++;
-                if (slotPaid) refStats[refName].earned += rate;
+                if (gameOutsourced) refStats[refName].outsourced++;
+                else if (slotPaid) refStats[refName].earned += rate;
             });
 
-            // Late change check
+            // Late change check — skip outsourced games (not our financial responsibility)
             const status  = (f['Game Status'] || f['status'] || '').toLowerCase();
             const notes   = f['notes'] || '';
             const changeTs = getChangeTs(notes);
-            if ((status.includes('cancel') || status.includes('postpone') || changeTs) && isAfterThursday(changeTs || new Date().toISOString(), date)) {
+            if (!gameOutsourced && (status.includes('cancel') || status.includes('postpone') || changeTs) && isAfterThursday(changeTs || new Date().toISOString(), date)) {
                 let gameCost = 0;
                 slots.forEach(slot => {
                     gameCost += getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
@@ -718,6 +722,7 @@ function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
         let weekTotal = 0, weekGames = games.length;
         games.forEach(({ r }) => {
             const f   = r.fields;
+            if ((f['Payment Status'] || '').toLowerCase() === 'outsourced') return; // $0 — paid externally
             const age = f['Age Group'] || '';
             const slots = [
                 { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
@@ -751,14 +756,15 @@ function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
             ].filter(s => s.name && s.name.toUpperCase() !== 'EMPTY');
             const isSolo = slots.length === 1 && slots[0].pos === 'CR';
             const bg = _colors[gameIdx % _colors.length];
+            const gameOut = (f['Payment Status'] || '').toLowerCase() === 'outsourced';
 
             slots.forEach((slot, idx) => {
                 const rf       = resolveRef(slot.name);
                 const rate     = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
                 const slotPaid = slotPaidMap[r.id]?.[slot.pos];
                 const paidTs   = slotPaid ? new Date(slotPaid).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
-                const rowBg    = slotPaid ? '#dcfce7' : bg;
-                const pill     = slotPaid ? `<span class="pill-paid">✓ Paid</span>` : `<span class="pill-unpaid">Unpaid</span>`;
+                const rowBg    = gameOut ? '#f3f4f6' : slotPaid ? '#dcfce7' : bg;
+                const pill     = gameOut ? `<span style="background:#e5e7eb;color:#6b7280;font-size:0.66rem;font-weight:700;padding:2px 8px;border-radius:8px;">Outsourced</span>` : slotPaid ? `<span class="pill-paid">✓ Paid</span>` : `<span class="pill-unpaid">Unpaid</span>`;
 
                 let paidInHtml = '';
                 if (slotPaid && date && date !== '—') {
@@ -778,7 +784,7 @@ function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
                     <td>${idx === 0 ? age : ''}</td>
                     <td style="font-weight:600;color:#1a2e4a;">${rf.name || slot.name}</td>
                     <td>${posBadge}</td>
-                    <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#1a2e4a;">$${rate}</td>
+                    <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#1a2e4a;">${gameOut ? `$0 <span style="color:#9ca3af;font-weight:600;">(other)</span>` : `$${rate}`}</td>
                     <td>${pill}</td>
                     <td style="font-size:0.72rem;color:#555;">${paidTs}</td>
                     <td style="text-align:center;">${paidInHtml}</td>
@@ -892,7 +898,7 @@ function renderRefs(refStats) {
         html += `<tr>
             <td class="ref-row-name">${name}</td>
             <td class="ref-row-games" style="text-align:center;">${s.games}</td>
-            <td class="ref-row-total" style="text-align:right;">$${s.earned}</td>
+            <td class="ref-row-total" style="text-align:right;">${s.earned === 0 && s.outsourced > 0 ? `$0 <span style="color:#9ca3af;font-weight:600;">(other)</span>` : `$${s.earned}`}</td>
         </tr>`;
     });
     html += `</tbody></table></div>`;
