@@ -702,23 +702,72 @@
         </div>`;
     }
 
+    // ── Per-game picker helpers ───────────────────────────────────────────────
+    function _fmtEvT(t) { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; }
+    function _evFieldLabel(fieldId) { const raw = (window._evFieldMap || {})[String(fieldId)] || ''; const m = String(raw).match(/turf\s*(\d+)/i); return m ? `Field ${String.fromCharCode(64 + Number(m[1]))}` : raw; }
+    function _evGameKey(g) { return `${g.date}|${g.time}|${g['Field ID']}`; }
+    function _evGameToBlock(g) { const fl = _evFieldLabel(g['Field ID']); const t = (g.time || '').slice(0, 5); return { date: g.date, start_time: t, end_time: '', session: [g['Age Group'], fl].filter(Boolean).join(' · '), label: `${_evAutoLabel(g.date)}${fl ? ' · ' + fl : ''}`, game_key: _evGameKey(g) }; }
+    function _evWeekKey(dateStr) { const d = new Date(dateStr + 'T12:00:00'); const day = d.getDay(); const mon = new Date(d); mon.setDate(d.getDate() - ((day + 6) % 7)); return mon.toISOString().slice(0, 10); }
+
+    window._evToggleGame = function(slug, gk) {
+        const g = ((window._evGamesByEvent || {})[slug] || []).find(x => _evGameKey(x) === gk); if (!g) return;
+        _evBlocks[slug] = _evBlocks[slug] || [];
+        const i = _evBlocks[slug].findIndex(b => b.game_key === gk);
+        if (i >= 0) _evBlocks[slug].splice(i, 1); else _evBlocks[slug].push(_evGameToBlock(g));
+        _reRenderEvBlocks(slug);
+    };
+    window._evOpenWeek = function(slug, wk, open) {
+        _evBlocks[slug] = _evBlocks[slug] || [];
+        ((window._evGamesByEvent || {})[slug] || []).filter(g => _evWeekKey(g.date) === wk).forEach(g => {
+            const gk = _evGameKey(g); const i = _evBlocks[slug].findIndex(b => b.game_key === gk);
+            if (open && i < 0) _evBlocks[slug].push(_evGameToBlock(g));
+            if (!open && i >= 0) _evBlocks[slug].splice(i, 1);
+        });
+        _reRenderEvBlocks(slug);
+    };
+
     function _reRenderEvBlocks(slug) {
         const wrap = document.getElementById('evblocks_' + slug);
         if (!wrap) return;
-        const blocks = _evBlocks[slug] || [];
-        const badge  = document.getElementById('evbadge_' + slug);
-        if (badge) badge.textContent = `${blocks.length} game${blocks.length !== 1 ? 's' : ''}`;
-        const colHeader = blocks.length ? `
-            <div style="display:flex; align-items:center; gap:10px; padding:4px 0 6px; border-bottom:2px solid #e8e8e8; margin-bottom:2px;">
-                <span style="width:130px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px; flex-shrink:0;">Date</span>
-                <span style="width:108px; font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px; flex-shrink:0;">Time</span>
-                <span style="font-size:0.72rem; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:1px;">Description</span>
-            </div>` : '';
-        wrap.innerHTML = colHeader + blocks.map((b, i) => _buildEvGameRow(slug, i, b)).join('') + `
-            <div style="padding-top:10px;">
-                <button onclick="_addEvBlock('${slug}')"
-                    style="background:#f0fdf9; border:1px solid #0f766e; color:#0f766e; border-radius:6px; padding:5px 16px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit;">+ Add Game</button>
-            </div>`;
+        _evBlocks[slug] = _evBlocks[slug] || [];
+        const today = new Date().toISOString().slice(0, 10);
+        const games = ((window._evGamesByEvent || {})[slug] || [])
+            .filter(g => (g.date || '') >= today)
+            .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
+        // per-game event: drop any legacy hand-typed blocks so selection is purely game-based
+        if (games.length) _evBlocks[slug] = _evBlocks[slug].filter(b => b.game_key);
+        const badge = document.getElementById('evbadge_' + slug);
+        if (badge) badge.textContent = `${_evBlocks[slug].length} game${_evBlocks[slug].length !== 1 ? 's' : ''}`;
+        const selected = new Set(_evBlocks[slug].map(b => b.game_key).filter(Boolean));
+        if (!games.length) {
+            wrap.innerHTML = `<p style="color:#999; font-size:0.85rem;">No upcoming games for this event in the system. Add them in the assignor workstation and they'll appear here to select.</p>`;
+            return;
+        }
+        const weeks = {};
+        games.forEach(g => { const wk = _evWeekKey(g.date); (weeks[wk] = weeks[wk] || []).push(g); });
+        let html = `<p style="color:#555; font-size:0.82rem; margin:0 0 8px;">Check the games to show on the availability form. Past games hide automatically.</p>`;
+        Object.keys(weeks).sort().forEach(wk => {
+            const wg = weeks[wk];
+            const allOpen = wg.every(g => selected.has(_evGameKey(g)));
+            const mon = new Date(wk + 'T12:00:00'); const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+            const wlabel = `Week of ${_EV_MONTHS[mon.getMonth()]} ${mon.getDate()} – ${_EV_MONTHS[sun.getMonth()]} ${sun.getDate()}`;
+            html += `<div style="margin-bottom:12px; border:1px solid #e8e8e8; border-radius:8px; overflow:hidden;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; background:#f6f9f8; padding:7px 12px; border-bottom:1px solid #e8e8e8;">
+                    <strong style="font-size:0.85rem; color:#0f766e;">${wlabel}</strong>
+                    <button onclick="_evOpenWeek('${slug}','${wk}',${!allOpen})" style="background:${allOpen ? '#fee2e2' : '#0f766e'}; color:${allOpen ? '#b91c1c' : '#fff'}; border:none; border-radius:6px; padding:4px 12px; font-size:0.76rem; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap;">${allOpen ? 'Clear week' : 'Open this week'}</button>
+                </div>
+                <div style="padding:4px 12px 8px;">`;
+            wg.forEach(g => {
+                const gk = _evGameKey(g); const on = selected.has(gk);
+                const fl = _evFieldLabel(g['Field ID']);
+                html += `<label style="display:flex; align-items:center; gap:9px; padding:5px 0; cursor:pointer; font-size:0.84rem;">
+                    <input type="checkbox" ${on ? 'checked' : ''} onchange="_evToggleGame('${slug}','${gk}')">
+                    <span><strong>${_evAutoLabel(g.date)}</strong> · ${_fmtEvT((g.time || '').slice(0, 5))} · ${g['Age Group'] || ''}${fl ? ' · ' + fl : ''}</span>
+                </label>`;
+            });
+            html += `</div></div>`;
+        });
+        wrap.innerHTML = html;
     }
 
     window._updateEvBlock = function(slug, i, field, val) {
@@ -759,6 +808,22 @@
         }
 
         _allEvents = events;
+
+        // Fetch the real games + fields so the settings page shows them as a checklist to select (per-game events)
+        try {
+            const _clubNames = events.map(e => e['Club Name'] || e.name).filter(Boolean);
+            const [_gRes, _fRes] = await Promise.all([
+                supabaseClient.client.from('games').select('*').in('Source Club', _clubNames),
+                supabaseClient.client.from('fields').select('*')
+            ]);
+            window._evFieldMap = {};
+            (_fRes.data || []).forEach(f => { if (f['Field ID'] != null) window._evFieldMap[String(f['Field ID'])] = f['Field Name'] || ''; });
+            window._evGamesByEvent = {};
+            events.forEach(ev => {
+                const sc = ev['Club Name'] || ev.name;
+                window._evGamesByEvent[ev.slug || String(ev.id)] = (_gRes.data || []).filter(g => g['Source Club'] === sc);
+            });
+        } catch (e) { window._evGamesByEvent = window._evGamesByEvent || {}; }
 
         function fmtDate(iso) {
             if (!iso) return '';
