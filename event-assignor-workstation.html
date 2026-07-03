@@ -6055,7 +6055,7 @@
                     const clubId = clubIdByName[club];
                     const rates  = clubId ? (payRatesByClubId[clubId] || []) : (payRatesByEventName[club] || []);
 
-                    const gameLines = games.map(g => {
+                    const gameLines = games.map((g, gi) => {
                         const f = g.fields;
                         const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                         const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
@@ -6068,18 +6068,26 @@
                         if (!soloOnly && !f['AR 1']?.trim()) openSlots.push('AR');
                         if (!soloOnly && !f['AR 2']?.trim()) openSlots.push('AR');
                         const positions = openSlots.join(' | ');
-                        return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age}${displayGender}    ${vName}   --   ${positions}`;
+                        // blank line between different days
+                        const daySep = (gi > 0 && f['Date'] !== games[gi-1].fields['Date']) ? '\n' : '';
+                        return `${daySep}${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age}${displayGender}    ${vName}   --   ${positions}`;
                     }).join('\n');
 
                     const openCount = games.length;
-                    const intro = `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`}.  LMK if you wanna work!`;
+                    // Girls Summer League: refs must be 21+, work games in pairs, single "work the pair" total
+                    const isPairEvent = /girls\s*summer\s*league/i.test(club);
+                    const _u19rate = rates.find(r => /19/.test(r.age_group)) || rates[0];
+                    const _pairTotal = _u19rate && _u19rate.center ? (Number(_u19rate.center) * 2).toFixed(2) : null;
+                    const intro = isPairEvent
+                        ? `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`} for referees that are 21 and older:`
+                        : `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`}.  LMK if you wanna work!`;
 
                     const rateLines = rates.length
                         ? rates.sort((a,b) => parseInt(a.age_group.replace(/^U/i,'')) - parseInt(b.age_group.replace(/^U/i,'')))
                                .map(r => {
                                    const crew = window._crewRules?.[club]?.[r.age_group];
                                    const showAR = r.ar && (crew ? (crew.ar1 || crew.ar2) : true);
-                                   return showAR ? `${r.age_group} | C $${r.center} | AR $${r.ar} |` : `${r.age_group} | C $${r.center} |`;
+                                   return showAR ? `${r.age_group} | C $${r.center} | AR $${r.ar}` : `${r.age_group} | C $${r.center}`;
                                })
                                .join('\n')
                         : '(no pay rates on file for this club)';
@@ -6104,7 +6112,13 @@
                     }
                     const weekLabel2 = weekNum ? `Week ${weekNum}` : 'Week [#]';
 
-                    blocks.push(`${weekLabel2}  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${openingsLink}\n\nOR submit your availability directly:\n${`https://referee-tool.com/referee-availability-form.html?event=${encodeURIComponent(club.toLowerCase().replace(/\s+/g, '-'))}`}\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
+                    const availLink = `https://referee-tool.com/referee-availability-form.html?event=${encodeURIComponent(club.toLowerCase().replace(/\s+/g, '-'))}`;
+                    if (isPairEvent) {
+                        const pairLine = `Again you MUST be over 21 and must work the pair -- make $${_pairTotal || '110.00'} total`;
+                        blocks.push(`The following games are up for grabs for ${club.toUpperCase()}\n\n${intro}\n\n${gameLines}\n\n${pairLine}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${openingsLink}\n\nOR submit your availability directly:\n${availLink}\n\n${sig}`);
+                    } else {
+                        blocks.push(`${weekLabel2}  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${openingsLink}\n\nOR submit your availability directly:\n${availLink}\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
+                    }
                 }
                 document.getElementById('emailBodyText').value = blocks.join('\n\n' + '─'.repeat(60) + '\n\n');
             }
