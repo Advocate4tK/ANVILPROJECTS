@@ -3165,13 +3165,21 @@
                 return cancelDate >= cutoff;
             }
 
+            // ── Season split (per-club flip): the club's active_season shows in the LIVE pay view;
+            // prior seasons drop into the archive accordion below (still fully viewable, with an
+            // unpaid-flag so no debt is ever silently buried). Falls back to date-derived if unflipped. ──
+            const _paySeasonOf = r => getCurrentSeason(r.fields['Date'] || r.fields['date'] || '');
+            const _payLive     = (currentClubRecord?.fields?.active_season) || getCurrentSeason();
+            const _hasRef      = r => !!(r.fields['Center Referee'] || r.fields['AR 1'] || r.fields['AR 2']);
+
             const grisGames = games
                 .filter(r => {
                     const dateStr = r.fields['Date'] || '';
                     if (!dateStr) return false;
                     if ((r.fields['Game Status'] || '') === 'Cancelled') return false;
                     if (!_matchesClub(r)) return false;
-                    return !!(r.fields['Center Referee'] || r.fields['AR 1'] || r.fields['AR 2']);
+                    if (_paySeasonOf(r) !== _payLive) return false;   // prior season → archive (below)
+                    return _hasRef(r);
                 })
                 .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || ''));
 
@@ -3180,11 +3188,17 @@
                     if ((r.fields['Game Status'] || '') !== 'Cancelled') return false;
                     if (!_matchesClub(r)) return false;
                     if (!isCancellationPayable(r)) return false;
-                    return !!(r.fields['Center Referee'] || r.fields['AR 1'] || r.fields['AR 2']);
+                    if (_paySeasonOf(r) !== _payLive) return false;   // live season only
+                    return _hasRef(r);
                 })
                 .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || ''));
 
-            if (!grisGames.length) {
+            // Prior-season games with refs — for the archive accordion (not counted in live totals)
+            const _archivedPayGames = games.filter(r =>
+                (r.fields['Date'] || '') && _matchesClub(r) && _hasRef(r) &&
+                (r.fields['Game Status'] || '') !== 'Cancelled' && _paySeasonOf(r) !== _payLive);
+
+            if (!grisGames.length && !cancelledPayGames.length && !_archivedPayGames.length) {
                 document.getElementById('payContent').innerHTML = '<p style="color:#888; font-size:0.85rem;">No games with assigned refs yet.</p>';
                 return;
             }
@@ -3514,7 +3528,45 @@
                 html += _isMobile ? buildGameCardsMobile(completedGames, true) : buildGameRows(completedGames, true, true);
             }
             if (!cancelledPayGames.length && !needsPaymentGames.length && !completedGames.length && !upcomingGames.length) {
-                html = '<p style="color:#888; font-size:0.85rem;">No games with assigned refs yet.</p>';
+                html = _archivedPayGames.length
+                    ? `<p style="color:#888; font-size:0.85rem;">No games in the current season (${_payLive}) yet — prior seasons are archived below.</p>`
+                    : '<p style="color:#888; font-size:0.85rem;">No games with assigned refs yet.</p>';
+            }
+
+            // ── Archived prior seasons (per-club flip): collapsed, still show paid/unpaid, with an
+            // unpaid-flag on the header so no debt is ever silently buried. ──
+            if (_archivedPayGames.length) {
+                const _bySeason = {};
+                _archivedPayGames.forEach(r => { const s = _paySeasonOf(r) || 'Unknown'; (_bySeason[s] || (_bySeason[s] = [])).push(r); });
+                if (!window._payArchCollapsed) window._payArchCollapsed = {};
+                window._togglePayArch = function(sid) {
+                    window._payArchCollapsed[sid] = !window._payArchCollapsed[sid];
+                    const el = document.getElementById('payarch_' + sid);
+                    const ar = document.getElementById('payarcharrow_' + sid);
+                    if (el) el.style.display = window._payArchCollapsed[sid] ? 'none' : 'block';
+                    if (ar) ar.style.transform = window._payArchCollapsed[sid] ? 'rotate(0deg)' : 'rotate(90deg)';
+                };
+                html += `<div style="margin-top:26px; border-top:2px solid var(--border); padding-top:16px;">`;
+                Object.keys(_bySeason).sort().reverse().forEach(s => {
+                    const sid = s.replace(/[^a-z0-9]/gi, '');
+                    const gs  = _bySeason[s].slice().sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || ''));
+                    const unpaid = gs.filter(r => !isGamePaid(r)).length;
+                    if (!(sid in window._payArchCollapsed)) window._payArchCollapsed[sid] = true;   // start collapsed
+                    const collapsed = window._payArchCollapsed[sid];
+                    const flag = unpaid
+                        ? `<span style="background:#fee2e2; color:#991b1b; font-size:0.72rem; font-weight:800; padding:2px 9px; border-radius:20px; margin-left:8px;">⚠️ ${unpaid} unpaid</span>`
+                        : `<span style="background:#dcfce7; color:#14532d; font-size:0.72rem; font-weight:700; padding:2px 9px; border-radius:20px; margin-left:8px;">✓ all settled</span>`;
+                    html += `<div style="margin-bottom:12px;">
+                        <div onclick="window._togglePayArch('${sid}')" style="display:flex; align-items:center; gap:8px; cursor:pointer; font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">
+                            <span id="payarcharrow_${sid}" style="color:#00c853; font-size:0.8rem; display:inline-block; transition:transform 0.2s; transform:${collapsed ? 'rotate(0deg)' : 'rotate(90deg)'};">▶</span>
+                            📦 ${s} · Archived ${flag}
+                        </div>
+                        <div id="payarch_${sid}" style="display:${collapsed ? 'none' : 'block'}; margin-top:10px;">
+                            ${_isMobile ? buildGameCardsMobile(gs, true) : buildGameRows(gs, true, true)}
+                        </div>
+                    </div>`;
+                });
+                html += `</div>`;
             }
 
             document.getElementById('payContent').innerHTML = html;
