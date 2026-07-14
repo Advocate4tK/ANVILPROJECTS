@@ -242,6 +242,15 @@
                     </div>
                 </div>
 
+                <!-- ── Per-Club Season Flip (the real per-club flip) ── -->
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:#aaa; margin-bottom:8px;">Per-Club Season Flip</div>
+                <div style="margin-bottom:40px;">
+                    <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #00c853; border-radius:10px; padding:14px 18px;">
+                        <div style="font-size:0.85rem; color:#555; margin-bottom:12px;">Advance each club to its current season independently — some finish before others. Icons show which portals a club actually runs (🗓 scheduling · 👤 president · 💳 pay); the flip only touches those. Games are already tagged by season; this sets which season shows <strong>live</strong> vs slides into that club's archive.</div>
+                        <div id="perClubSeasonList"></div>
+                    </div>
+                </div>
+
             </div>
         </main>
 
@@ -273,6 +282,7 @@
             const seasonOverride = localStorage.getItem('seasonOverride');
             if (seasonOverride) document.getElementById('seasonOverrideInput').value = seasonOverride;
             loadAppVersion();
+            loadPerClubSeasons();
         })();
 
         function getAutoSeason() {
@@ -282,6 +292,56 @@
             if (m >= 7 && m <= 8)  return `Summer ${y}`;
             if (m >= 9 && m <= 11) return `Fall ${y}`;
             return `Winter ${y}`;
+        }
+
+        // ── Per-Club Season Flip ──────────────────────────────────────────────
+        async function loadPerClubSeasons() {
+            const wrap = document.getElementById('perClubSeasonList');
+            if (!wrap) return;
+            wrap.innerHTML = '<p style="color:#888;font-size:0.85rem;">Loading clubs…</p>';
+            try {
+                const { data, error } = await supabaseClient.client
+                    .from('clubs')
+                    .select('id, name, "Club Name", active_season, payment_portal_enabled, president, "President Email", "Club Game Upload", enabled')
+                    .order('name');
+                if (error) throw error;
+                const clubs = (data || []).filter(c => (c['Club Name'] || c.name));
+                const yr = new Date().getFullYear();
+                const seasons = [];
+                [yr, yr + 1].forEach(y => ['Spring', 'Summer', 'Fall', 'Winter'].forEach(s => seasons.push(`${s} ${y}`)));
+                const badge = (on, icon, label) => `<span title="${label}" style="opacity:${on ? 1 : 0.22};font-size:1rem;">${icon}</span>`;
+                wrap.innerHTML = clubs.map(c => {
+                    const name = c['Club Name'] || c.name;
+                    const hasSched = !!(c['Club Game Upload'] || c.enabled);
+                    const hasPres = !!(c.president || c['President Email']);
+                    const hasPay = !!c.payment_portal_enabled;
+                    const cur = c.active_season || '';
+                    const opts = ['<option value="">— not set —</option>']
+                        .concat(seasons.map(s => `<option value="${s}" ${s === cur ? 'selected' : ''}>${s}</option>`)).join('');
+                    return `<div style="display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid #e2d9ce;border-radius:8px;background:#fff;margin-bottom:8px;">
+                        <span style="flex:1;font-weight:700;color:#09142a;font-size:0.9rem;">${name}</span>
+                        <span style="display:flex;gap:8px;flex-shrink:0;">${badge(hasSched, '🗓', 'Scheduling portal')}${badge(hasPres, '👤', 'President portal')}${badge(hasPay, '💳', 'Pay portal')}</span>
+                        <select onchange="setClubSeason(${c.id}, this.value, this)" style="font-family:'DM Sans',sans-serif;font-size:0.85rem;padding:6px 10px;border:2px solid #e2d9ce;border-radius:8px;flex-shrink:0;">${opts}</select>
+                    </div>`;
+                }).join('') || '<p style="color:#888;font-size:0.85rem;">No clubs found.</p>';
+            } catch (err) {
+                const hint = /active_season/.test(err.message || '') ? ' — run the ALTER TABLE clubs SQL first, then reload.' : '';
+                wrap.innerHTML = `<p style="color:#e74c3c;font-size:0.85rem;">Could not load: ${err.message}${hint}</p>`;
+            }
+        }
+
+        async function setClubSeason(clubId, season, sel) {
+            sel.style.borderColor = '#f0a500';
+            try {
+                const { error } = await supabaseClient.client
+                    .from('clubs').update({ active_season: season || null }).eq('id', clubId);
+                if (error) throw error;
+                sel.style.borderColor = '#00c853';
+                setTimeout(() => { sel.style.borderColor = '#e2d9ce'; }, 1200);
+            } catch (err) {
+                sel.style.borderColor = '#e74c3c';
+                alert('Could not save season: ' + err.message);
+            }
         }
 
         // ── Orphan Game Scanner ───────────────────────────────────────────────
