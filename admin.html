@@ -90,7 +90,7 @@
                     <span>🗄 Database: <strong><span id="connection-status">Checking...</span></strong></span>
                     <span>📆 Season: <strong><span id="season-status">—</span></strong></span>
                     <span>⏱ Next Game: <strong><span id="next-game-status">Loading...</span></strong></span>
-                    <span>👤 Refs Available This Weekend: <strong><span id="refs-available-status">Loading...</span></strong></span>
+                    <span>👤 Refs Available This Week: <strong><span id="refs-available-status">Loading...</span></strong></span>
                 </div>
             </div>
 
@@ -166,7 +166,7 @@
 
                         <!-- Stats strip -->
                         <div id="workstationStats" style="margin-top:20px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.12);">
-                            <div style="color:rgba(255,255,255,0.45); font-size:0.75rem; font-family:'JetBrains Mono',monospace; letter-spacing:1px; margin-bottom:10px;">LOADING WEEKEND STATUS…</div>
+                            <div style="color:rgba(255,255,255,0.45); font-size:0.75rem; font-family:'JetBrains Mono',monospace; letter-spacing:1px; margin-bottom:10px;">LOADING WEEK STATUS…</div>
                         </div>
                     </div>
                 </div>
@@ -822,7 +822,7 @@
             const barColor  = pct >= 80 ? '#00c853' : pct >= 50 ? '#f59e0b' : '#e74c3c';
             const badgeBg   = unassigned === 0 ? '#00c853' : hasUrgent ? '#e74c3c' : '#f59e0b';
             const badgeColor = unassigned === 0 ? '#09142a' : '#fff';
-            const refs      = weekendRefsAvailable !== null ? weekendRefsAvailable : '—';
+            const refs      = weekRefsAvailable !== null ? weekRefsAvailable : '—';
 
             // Urgent games list (max 3 shown)
             const urgentHtml = hasUrgent ? `
@@ -835,7 +835,7 @@
             el.innerHTML = `
                 <!-- Coverage meter header -->
                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap;">
-                    <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.5);">Weekend Coverage</span>
+                    <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.5);">This Week's Coverage</span>
                     ${unassigned > 0
                         ? `<a href="assignor-workstation.html?filter=unassigned" style="background:${badgeBg}; color:${badgeColor}; font-family:'JetBrains Mono',monospace; font-size:0.78rem; font-weight:800; padding:3px 10px; border-radius:20px; flex-shrink:0; text-decoration:none; cursor:pointer;" title="Open unassigned games in workstation">${unassigned} Unassigned →</a>`
                         : `<span style="background:${badgeBg}; color:${badgeColor}; font-family:'JetBrains Mono',monospace; font-size:0.78rem; font-weight:800; padding:3px 10px; border-radius:20px; flex-shrink:0;">✓ All Covered</span>`
@@ -848,7 +848,7 @@
                 </div>
                 <!-- Coverage label -->
                 <div style="font-size:0.82rem; color:rgba(255,255,255,0.55);">
-                    ${total === 0 ? 'No games scheduled this weekend' : `${assigned} of ${total} game${total !== 1 ? 's' : ''} assigned &nbsp;·&nbsp; ${pct}% covered`}
+                    ${total === 0 ? 'No games scheduled this week' : `${assigned} of ${total} game${total !== 1 ? 's' : ''} assigned &nbsp;·&nbsp; ${pct}% covered`}
                 </div>
                 ${urgentHtml}`;
         }
@@ -1118,24 +1118,19 @@
                 }
             } catch(e) { if (nextGameEl) nextGameEl.textContent = '—'; }
 
-            // Refs available this weekend
+            // Refs available this WEEK (Mon–Sun, matching the workstation)
             try {
                 // Use local dates (not UTC) to avoid timezone shifts
                 const localStr = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-                const day = now.getDay(); // 0=Sun … 6=Sat
-                const sat = new Date(now);
-                if      (day === 0) sat.setDate(now.getDate() - 1); // Sunday → back to Saturday
-                else if (day !== 6) sat.setDate(now.getDate() + (6 - day)); // weekday → coming Saturday
-                // day === 6: sat stays as today
-                const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
-                const satStr = localStr(sat);
-                const sunStr = localStr(sun);
-                const avail = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, {
-                    filterByFormula: `OR(IS_SAME({Date},'${satStr}','day'), IS_SAME({Date},'${sunStr}','day'))`,
-                    maxRecords: 500
-                });
+                const _d = now.getDay(); // 0=Sun … 6=Sat
+                const mon = new Date(now); mon.setDate(now.getDate() + (_d === 0 ? -6 : 1 - _d)); mon.setHours(0,0,0,0);
+                const sunEnd = new Date(mon); sunEnd.setDate(mon.getDate() + 6);
+                const monStr = localStr(mon), sunStr = localStr(sunEnd);
+                const avail = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, { maxRecords: 1000 });
                 const unique = new Set();
                 avail.forEach(r => {
+                    const dateStr = String(r.fields['Date'] || '').slice(0, 10);
+                    if (!dateStr || dateStr < monStr || dateStr > sunStr) return;   // this week only
                     const name = r.fields['Referee Name'] || r.fields['Name'] ||
                         ((r.fields['First Name'] || '') + ' ' + (r.fields['Last Name'] || '')).trim();
                     if (name) unique.add(name);
@@ -1144,11 +1139,11 @@
                     refsEl.textContent = `${unique.size} referee${unique.size !== 1 ? 's' : ''}`;
                     refsEl.style.color = unique.size === 0 ? '#e74c3c' : '#27ae60';
                 }
-                weekendRefsAvailable = unique.size;
+                weekRefsAvailable = unique.size;
             } catch(e) { if (refsEl) refsEl.textContent = '—'; }
         });
 
-        let weekendRefsAvailable = null;
+        let weekRefsAvailable = null;
         let _activeRefList = [];
 
         async function loadStats() {
@@ -1313,9 +1308,9 @@
 
                 const now = new Date();
 
-                // This week range
+                // This week range — Monday–Sunday, matching the workstation's week boundary
                 const startOfWeek = new Date(now);
-                startOfWeek.setDate(now.getDate() - now.getDay());
+                startOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? -6 : 1 - now.getDay()));
                 startOfWeek.setHours(0,0,0,0);
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -1399,9 +1394,9 @@
                 });
 
                 const totalUnassigned  = Object.values(unassignedByClub).reduce((a, b) => a + b, 0);
-                const totalWeekendGames = Object.values(thisWeekByClub).reduce((a, b) => a + b, 0);
-                const totalAssigned    = totalWeekendGames - totalUnassigned;
-                updateWorkstationCard(totalWeekendGames, totalAssigned, totalUnassigned, urgent);
+                const totalWeekGames   = Object.values(thisWeekByClub).reduce((a, b) => a + b, 0);
+                const totalAssigned    = totalWeekGames - totalUnassigned;
+                updateWorkstationCard(totalWeekGames, totalAssigned, totalUnassigned, urgent);
 
 
                 // Heat meter — compare against start-of-today so games with no time
