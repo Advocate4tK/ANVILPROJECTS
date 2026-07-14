@@ -243,7 +243,7 @@ async function attemptLogin() {
     try {
         const { data: clubs, error } = await supabaseClient.client
             .from('clubs')
-            .select('id, name, president, "President Email", "President Phone", payment_coordinator, assignor');
+            .select('id, name, president, "President Email", "President Phone", payment_coordinator, assignor, active_season');
         if (error) throw error;
 
         const normalize     = s => (s || '').toLowerCase().replace(/[\s-]+/g, '');
@@ -264,6 +264,9 @@ async function attemptLogin() {
 
         _clubRecord = target;
         _clubId     = target.id;
+        // Per-club season flip (set in super-admin) drives which season the president lands on.
+        // Falls back to the date-derived guess if the club hasn't been flipped. Archive dropdown still browses the rest.
+        CURRENT_SEASON = target.active_season || computeCurrentSeason();
         document.getElementById('doorway').style.display   = 'none';
         document.getElementById('dashboard').style.display = 'block';
         document.getElementById('dashClubName').textContent  = (target.name || _clubSlug).toUpperCase();
