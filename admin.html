@@ -1332,7 +1332,12 @@
                 scopedGames.forEach(rec => {
                     const f = rec.fields;
                     if ((f['Game Status'] || '') === 'Cancelled') return;
-                    const gameDate = new Date(f['Date']);
+                    // Parse the game date as LOCAL (not UTC) — `new Date('2026-07-20')` reads as UTC
+                    // midnight and shifts back a day in Eastern, leaking next-week games into this week.
+                    const _dstr = String(f['Date'] || f['date'] || '').slice(0, 10).split('-').map(Number);
+                    const gameDate = (_dstr.length === 3 && _dstr.every(n => !isNaN(n)))
+                        ? new Date(_dstr[0], _dstr[1] - 1, _dstr[2])
+                        : new Date(f['Date'] || f['date']);
                     const isUnassigned = !f['Center Referee'] || (Array.isArray(f['Center Referee']) && f['Center Referee'].length === 0);
 
                     // Resolve club IDs and name
