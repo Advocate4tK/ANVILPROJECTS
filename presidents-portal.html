@@ -300,6 +300,17 @@ function computeCurrentSeason() {
     const d = new Date();
     return seasonOfDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
 }
+function seasonIcon(seasonStr) {
+    return { Spring:'🌱', Summer:'☀️', Fall:'🍂', Winter:'❄️' }[String(seasonStr || '').split(' ')[0]] || '📅';
+}
+function seasonBadge(seasonStr, sub) {
+    if (!seasonStr) return '';
+    sub = (sub === undefined) ? 'Current' : sub;
+    const n = String(seasonStr).split(' ')[0];
+    const t = { Spring:['#dcfce7','#14532d'], Summer:['#fef9c3','#854d0e'], Fall:['#ffedd5','#9a3412'], Winter:['#dbeafe','#1e3a8a'] }[n] || ['#e2e8f0','#334155'];
+    const subHtml = sub ? ` <span style="opacity:0.6; font-weight:600;">· ${sub}</span>` : '';
+    return `<span style="display:inline-flex; align-items:center; gap:8px; background:${t[0]}; color:${t[1]}; padding:6px 16px; border-radius:20px; font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:0.95rem; letter-spacing:1px; text-transform:uppercase;">${seasonIcon(seasonStr)} ${seasonStr}${subHtml}</span>`;
+}
 function seasonSortKey(s) {
     const [name, yr] = String(s).split(' ');
     const order = { Spring: 1, Summer: 2, Fall: 3, Winter: 4 };
@@ -578,7 +589,8 @@ async function loadDashboard(club) {
         _seasonsSet.add(computeCurrentSeason());
         populateSeasonSelect([..._seasonsSet]);
         const _ds = document.getElementById('dashSeason');
-        if (_ds) _ds.textContent = CURRENT_SEASON + (CURRENT_SEASON === computeCurrentSeason() ? ' Season' : ' Season · Archived');
+        const _liveSeason = club.active_season || computeCurrentSeason();
+        if (_ds) _ds.innerHTML = seasonBadge(CURRENT_SEASON, CURRENT_SEASON === _liveSeason ? 'Current' : 'Archived');
 
         // Per-slot paid map
         const slotPaidMap = {};
