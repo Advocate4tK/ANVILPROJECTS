@@ -2135,13 +2135,15 @@
             let html = '';
 
             // ── Change Requests section (shown if any pending or recently resolved) ──
-            // Club portal resolved strip = THIS WEEK only, auto-resets each week. Older resolved
-            // changes (including prior seasons) drop off on their own. The full permanent record of
-            // every change control lives in schedule-changes.html (the change control portal), so
-            // nothing is lost. Open/pending changes are NOT time-filtered — they stay until resolved.
+            // Club portal resolved strip = current-season AND resolved this week. Prior-season changes
+            // archive WITH the season (the real reason a Spring change must not show on a Summer club);
+            // within the live season, older resolutions still age out weekly. The full permanent record
+            // of every change lives in schedule-changes.html — nothing is lost here.
             const currentWeekKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
+            const _chgSeasonOf = r => getCurrentSeason(r.fields['Date'] || r.fields['date'] || '');
             const recentResolved = resolvedChanges.filter(r => {
-                const ts = extractResolvedTimestamp(r.fields['Notes'] || '');
+                if (_chgSeasonOf(r) !== liveSeason) return false;   // not this club's live season → archived
+                const ts = extractResolvedTimestamp(r.fields['Notes'] || r.fields['notes'] || '');
                 if (!ts) return false;              // undateable → treat as old, drop from live strip
                 const d = new Date(ts);
                 if (isNaN(d)) return false;
