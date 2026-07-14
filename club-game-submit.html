@@ -1156,12 +1156,14 @@
                     try {
                         const { data: _pcRow } = await supabaseClient.client
                             .from('clubs')
-                            .select('payment_coordinator, payment_portal_pin, payment_portal_enabled')
+                            .select('payment_coordinator, payment_portal_pin, payment_portal_enabled, active_season')
                             .eq('id', currentClubRecord.id)
                             .single();
                         _clubPayCoord        = (_pcRow?.payment_coordinator || '').trim().toLowerCase();
                         _clubPayPin          = (_pcRow?.payment_portal_pin  || '').trim();
                         _clubPayPortalEnabled = !!_pcRow?.payment_portal_enabled;
+                        // Per-club season flip (set in super-admin) — decides which season is LIVE vs archived
+                        if (currentClubRecord.fields) currentClubRecord.fields.active_season = _pcRow?.active_season || null;
                     } catch(e) { /* non-critical */ }
                 }
 
@@ -2114,7 +2116,9 @@
             // ── Season split: keep the current season live, tuck prior seasons into archives ──
             // (club portals only — tournament/event views are self-contained, no archiving)
             const archivedSeasons = {}; // { "Spring 2026": { regular: [], cancelled: [] } }
-            const liveSeason = getCurrentSeason();
+            // Live season = the per-club flip set in super-admin (clubs.active_season); falls back to
+            // the date-derived guess for leagues/events (no per-club season) or clubs not yet flipped.
+            const liveSeason = (currentClubRecord?.fields?.active_season) || getCurrentSeason();
             // Split for clubs AND leagues/events (recurring, span seasons). Only true one-shot tournaments skip.
             if (!currentTournament) {
                 const seasonOf = r => getCurrentSeason(r.fields['Date'] || r.fields['date'] || '');
