@@ -2131,20 +2131,25 @@
             let html = '';
 
             // ── Change Requests section (shown if any pending or recently resolved) ──
-            if (pendingChanges.length > 0 || resolvedChanges.length > 0) {
+            // Club portal resolved strip = THIS WEEK only, auto-resets each week. Older resolved
+            // changes (including prior seasons) drop off on their own. The full permanent record of
+            // every change control lives in schedule-changes.html (the change control portal), so
+            // nothing is lost. Open/pending changes are NOT time-filtered — they stay until resolved.
+            const currentWeekKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
+            const recentResolved = resolvedChanges.filter(r => {
+                const ts = extractResolvedTimestamp(r.fields['Notes'] || '');
+                if (!ts) return false;              // undateable → treat as old, drop from live strip
+                const d = new Date(ts);
+                if (isNaN(d)) return false;
+                return getWeekLabel(d.toISOString().split('T')[0]).key === currentWeekKey;
+            });
+
+            if (pendingChanges.length > 0 || recentResolved.length > 0) {
                 const pendingHtml = pendingChanges.map(r => buildGameCard(r, { changePending: true })).join('');
-                const currentWeekKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
-                const resolvedThisWeek = resolvedChanges.filter(r => {
-                    const ts = extractResolvedTimestamp(r.fields['Notes'] || '');
-                    if (!ts) return false;
-                    const d = new Date(ts);
-                    if (isNaN(d)) return false;
-                    const isoDate = d.toISOString().split('T')[0];
-                    return getWeekLabel(isoDate).key === currentWeekKey;
-                }).length;
+                const resolvedThisWeek = recentResolved.length;
 
                 // Store resolved data + state on window so inline onclick handlers can reach them
-                window._clubResolved = resolvedChanges.slice();
+                window._clubResolved = recentResolved.slice();
                 window._resolvedCollapsed = false;
                 window._resolvedSort = 'newest';
 
@@ -2228,7 +2233,7 @@
                         <span style="background:#fef3c7; color:#78350f; font-size:0.78rem; padding:2px 10px; border-radius:10px; font-weight:700; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif;">${pendingChanges.length}</span>
                     </div>
                     <div id="pendingCardsContainer" style="display:${window._pendingCollapsed ? 'none' : 'block'};">${pendingHtml}</div>
-                    ${resolvedChanges.length > 0 ? `
+                    ${recentResolved.length > 0 ? `
                     <div class="chg-section-hdr resolved" style="margin-top:16px; justify-content:space-between; flex-wrap:wrap; gap:6px; align-items:center;">
                         <span style="display:flex; align-items:center; gap:7px; cursor:pointer; user-select:none;" onclick="window._toggleResolved()">
                             <span id="resolvedArrow" style="font-size:0.8rem; transition:transform 0.2s;">▼</span>
