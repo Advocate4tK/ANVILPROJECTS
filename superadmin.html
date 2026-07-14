@@ -243,7 +243,7 @@
                 </div>
 
                 <!-- ── Per-Club Season Flip (the real per-club flip) ── -->
-                <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:#aaa; margin-bottom:8px;">Per-Club Season Flip</div>
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:#09142a; margin-bottom:10px;">Per-Club Season Flip</div>
                 <div style="margin-bottom:40px;">
                     <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #00c853; border-radius:10px; padding:14px 18px;">
                         <div style="font-size:0.85rem; color:#555; margin-bottom:12px;">Advance each club to its current season independently — some finish before others. Icons show which portals a club actually runs (🗓 scheduling · 👤 president · 💳 pay); the flip only touches those. Games are already tagged by season; this sets which season shows <strong>live</strong> vs slides into that club's archive.</div>
@@ -318,10 +318,11 @@
                     const cur = c.active_season || '';
                     const opts = ['<option value="">— not set —</option>']
                         .concat(seasons.map(s => `<option value="${s}" ${s === cur ? 'selected' : ''}>${s}</option>`)).join('');
-                    return `<div style="display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid #e2d9ce;border-radius:8px;background:#fff;margin-bottom:8px;">
-                        <span style="flex:1;font-weight:700;color:#09142a;font-size:0.9rem;">${name}</span>
-                        <span style="display:flex;gap:8px;flex-shrink:0;">${badge(hasSched, '🗓', 'Scheduling portal')}${badge(hasPres, '👤', 'President portal')}${badge(hasPay, '💳', 'Pay portal')}</span>
-                        <select onchange="setClubSeason(${c.id}, this.value, this)" style="font-family:'DM Sans',sans-serif;font-size:0.85rem;padding:6px 10px;border:2px solid #e2d9ce;border-radius:8px;flex-shrink:0;">${opts}</select>
+                    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid #e2d9ce;border-radius:8px;background:#fff;margin-bottom:8px;box-sizing:border-box;width:100%;">
+                        <span style="flex:1;min-width:0;font-weight:700;color:#09142a;font-size:0.9rem;">${name}</span>
+                        <span style="display:flex;gap:7px;flex-shrink:0;">${badge(hasSched, '📅', 'Scheduling portal')}${badge(hasPres, '👤', 'President portal')}${badge(hasPay, '💳', 'Pay portal')}</span>
+                        <select id="pcsSel${c.id}" data-orig="${cur}" onchange="pcsDirty(${c.id})" style="font-family:'DM Sans',sans-serif;font-size:0.85rem;padding:6px 8px;border:2px solid #e2d9ce;border-radius:8px;flex-shrink:0;width:130px;">${opts}</select>
+                        <button id="pcsBtn${c.id}" onclick="pcsCommit(${c.id})" disabled style="font-family:'DM Sans',sans-serif;font-size:0.8rem;font-weight:700;padding:7px 12px;border:none;border-radius:8px;flex-shrink:0;cursor:pointer;background:#e2d9ce;color:#999;transition:all 0.15s;">Flip</button>
                     </div>`;
                 }).join('') || '<p style="color:#888;font-size:0.85rem;">No clubs found.</p>';
             } catch (err) {
@@ -330,17 +331,35 @@
             }
         }
 
-        async function setClubSeason(clubId, season, sel) {
-            sel.style.borderColor = '#f0a500';
+        // Arm the Flip button only when the dropdown differs from the committed value.
+        function pcsDirty(clubId) {
+            const sel = document.getElementById('pcsSel' + clubId);
+            const btn = document.getElementById('pcsBtn' + clubId);
+            if (!sel || !btn) return;
+            const dirty = sel.value !== (sel.getAttribute('data-orig') || '');
+            btn.disabled = !dirty;
+            btn.textContent = 'Flip';
+            btn.style.background = dirty ? '#00c853' : '#e2d9ce';
+            btn.style.color = dirty ? '#fff' : '#999';
+        }
+
+        // Deliberate commit — writes the club's active_season only when Flip is clicked.
+        async function pcsCommit(clubId) {
+            const sel = document.getElementById('pcsSel' + clubId);
+            const btn = document.getElementById('pcsBtn' + clubId);
+            if (!sel || !btn) return;
+            const val = sel.value;
+            btn.disabled = true; btn.textContent = 'Saving…'; btn.style.background = '#f0a500'; btn.style.color = '#fff';
             try {
                 const { error } = await supabaseClient.client
-                    .from('clubs').update({ active_season: season || null }).eq('id', clubId);
+                    .from('clubs').update({ active_season: val || null }).eq('id', clubId);
                 if (error) throw error;
-                sel.style.borderColor = '#00c853';
-                setTimeout(() => { sel.style.borderColor = '#e2d9ce'; }, 1200);
+                sel.setAttribute('data-orig', val);
+                btn.textContent = '✓ Flipped'; btn.style.background = '#e2d9ce'; btn.style.color = '#999';
+                setTimeout(() => { btn.textContent = 'Flip'; }, 1600);
             } catch (err) {
-                sel.style.borderColor = '#e74c3c';
-                alert('Could not save season: ' + err.message);
+                btn.disabled = false; btn.textContent = 'Retry'; btn.style.background = '#e74c3c'; btn.style.color = '#fff';
+                alert('Could not flip season: ' + err.message);
             }
         }
 
