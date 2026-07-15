@@ -473,6 +473,16 @@
                     const src = r.fields['Source Club'];
                     if (!src || !myChangeClubs.includes(src)) return false;
                 }
+                // Season scope — a request shows only if its game is in that club's CURRENT season (its flip);
+                // prior-season requests drop out of the live view when a club flips. Fail open if unset.
+                if (activeSeasonByClub) {
+                    const src = r.fields['Source Club'];
+                    const clubSeason = src ? activeSeasonByClub[src] : null;
+                    if (clubSeason) {
+                        const gameSeason = seasonOfDate(r.fields['date'] || r.fields['Date'] || '');
+                        if (gameSeason && gameSeason !== clubSeason) return false;
+                    }
+                }
                 if (isShowingResolved()) return s === 'change requested' || s === 'change resolved' || s === 'cancelled';
                 return s === 'change requested';
             });
@@ -780,9 +790,24 @@
         } catch(e) { /* on error, leave null (fail open, matches admin.html behavior) */ }
     }
 
+    // ── Season scope: map each club → its current season (active_season) so change requests obey the flip ──
+    let activeSeasonByClub = null; // { "Griswold": "Summer 2026", ... } — null = no season filtering (fail open)
+    async function buildSeasonMap() {
+        try {
+            const { data: clubRows } = await supabaseClient.client
+                .from('clubs')
+                .select('name, "Club Name", active_season');
+            activeSeasonByClub = {};
+            (clubRows || []).forEach(c => {
+                const key = (c['Club Name'] || c.name || '').trim();
+                if (key) activeSeasonByClub[key] = c.active_season || null;
+            });
+        } catch(e) { activeSeasonByClub = null; /* fail open — skip season filtering */ }
+    }
+
     window.addEventListener('load', async () => {
         if (!airtableClient) { alert('Supabase client not initialized.'); return; }
-        await buildChangeScope();   // build per-assignor club scope before the first load
+        await Promise.all([buildChangeScope(), buildSeasonMap()]);   // per-assignor + per-season scope before first load
         loadChanges();
         setInterval(loadChanges, 2 * 60 * 1000); // auto-refresh every 2 minutes
     });
