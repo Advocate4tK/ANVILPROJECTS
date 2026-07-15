@@ -731,7 +731,7 @@
                 supabaseClient.client.from('settings').select('value').eq('key','openings_form_config').maybeSingle(),
                 supabaseClient.client.from('clubs').select('name, payment_methods').eq('enabled', true).eq('avail_form_enabled', true),
                 (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks, avail_mode').eq('avail_enabled', true); if (tParam) q = q.eq('key', tParam); return q; })(),
-                (()=>{ const eParam = new URLSearchParams(window.location.search).get('event'); let q = supabaseClient.client.from('events').select('id, name, "Club Name", slug, min_age, session_blocks, avail_mode, start_date, end_date, age_groups').eq('avail_form_enabled', true).order('start_date'); if (eParam) q = q.eq('slug', eParam); return q; })()
+                (()=>{ let q = supabaseClient.client.from('events').select('id, name, "Club Name", slug, min_age, session_blocks, avail_mode, start_date, end_date, age_groups').eq('avail_form_enabled', true).order('start_date'); return q; })()
             ]).then(([formRes, clubsRes, tournRes, eventsRes]) => {
                 const allClubs = (clubsRes.data || []).sort((a, b) => a.name.localeCompare(b.name));
                 const PAY_CLUBS = allClubs
@@ -754,7 +754,10 @@
                 // Render tournament/event sessions or link cards
                 const enabledTournaments = tournRes.data || [];
                 const enabledEvents = eventsRes.data || [];
-                window._eventData = window._eventMode ? (enabledEvents[0] || null) : null;
+                // Resolve the event by its real slug OR the Club-Name/name-derived slug, so links built from the
+                // display name (e.g. the email generator's ?event=ellis-tech-summer-league) still pass through to the
+                // real record (real slug ellis-tech-summer-soccer). Never rename the slug — the club portal keys on it.
+                window._eventData = window._eventMode ? (function(){ const eParam = new URLSearchParams(window.location.search).get('event'); const _norm = s => (s||'').toLowerCase().replace(/\s+/g,'-'); return enabledEvents.find(e => e.slug === eParam || _norm(e['Club Name']) === eParam || _norm(e.name) === eParam) || null; })() : null;
 
                 if (window._eventMode && window._eventData) {
                     const evName = window._eventData['Club Name'] || window._eventData['Display Name'] || window._eventData.name;
