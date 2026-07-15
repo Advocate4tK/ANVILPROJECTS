@@ -468,6 +468,11 @@
 
             const changeGames = games.filter(r => {
                 const s = (r.fields['Game Status'] || '').toLowerCase();
+                // Per-assignor scope — admin (myChangeClubs=null) sees all; each assignor sees only their own clubs
+                if (myChangeClubs) {
+                    const src = r.fields['Source Club'];
+                    if (!src || !myChangeClubs.includes(src)) return false;
+                }
                 if (isShowingResolved()) return s === 'change requested' || s === 'change resolved' || s === 'cancelled';
                 return s === 'change requested';
             });
@@ -757,8 +762,27 @@
         loadChanges();
     }
 
-    window.addEventListener('load', () => {
+    // ── Per-assignor scope: admin sees ALL change requests; each assignor sees only their own clubs ──
+    let myChangeClubs = null; // null = unrestricted (Admin sees everything)
+    async function buildChangeScope() {
+        try {
+            const uid = (typeof currentUserId === 'function') ? currentUserId() : null;
+            if (!uid) return;
+            const { data: myRow } = await supabaseClient.client
+                .from('assignors')
+                .select('name, role, clubs')
+                .eq('auth_user_id', uid)
+                .maybeSingle();
+            if (!myRow) return;
+            if ((myRow.role || 'Assignor').trim() === 'Admin') { myChangeClubs = null; return; } // admin = see all
+            const c = myRow.clubs;
+            myChangeClubs = !c ? [] : (Array.isArray(c) ? c.filter(Boolean) : [c]);
+        } catch(e) { /* on error, leave null (fail open, matches admin.html behavior) */ }
+    }
+
+    window.addEventListener('load', async () => {
         if (!airtableClient) { alert('Supabase client not initialized.'); return; }
+        await buildChangeScope();   // build per-assignor club scope before the first load
         loadChanges();
         setInterval(loadChanges, 2 * 60 * 1000); // auto-refresh every 2 minutes
     });
