@@ -770,6 +770,21 @@
                     const _todayISO = new Date().toISOString().slice(0, 10);
                     window._eventData.session_blocks = (window._eventData.session_blocks || []).filter(b => (b.date || '') >= _todayISO);
                     renderEventSessions([window._eventData]);
+                    // Coming from ref-openings: pre-check the session(s) for the game(s) the ref picked.
+                    // Openings passes ?date=&time= (per-game link; comma-lists tolerated) — match each session's
+                    // date + start time so the selection carries straight through onto the availability form.
+                    (function(){
+                        const _sp = new URLSearchParams(window.location.search);
+                        const _dates = (_sp.get('date') || '').split(',').map(s => s.trim()).filter(Boolean);
+                        const _times = (_sp.get('time') || '').split(',').map(s => s.trim().slice(0, 5)).filter(Boolean);
+                        if (!_dates.length || !_times.length) return;
+                        document.querySelectorAll('input[name="event_sessions"]').forEach(cb => {
+                            if (cb.disabled) return;
+                            if (_dates.includes(cb.dataset.date) && _times.includes((cb.dataset.start || '').slice(0, 5))) {
+                                cb.checked = true; cb.dispatchEvent(new Event('change'));
+                            }
+                        });
+                    })();
                     // Repopulate age group checkboxes from event data — pre-checked
                     const evAgeGroups = [...new Set((window._eventData.age_groups || []).map(g => g.age_group).filter(Boolean))];
                     const ageCbGroup  = document.querySelector('#positionPrefsFieldset .checkbox-group');
