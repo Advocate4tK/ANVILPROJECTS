@@ -1480,18 +1480,21 @@
                 const ar2  = resolveRefName(f['AR 2']);
                 const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
 
-                // Available refs for this game's date + club preference
+                // Available refs for this game's date + event (scoped so one event's signups don't bleed onto another's)
                 const gameDate  = f['Date'] || '';
                 const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
+                const gameEventSlug = (window._eventSlugByClub || {})[gameClubLower] || '';
                 const availRefs = allRefs.filter(r => {
                     const name = r.fields['Name'] || '';
                     if (!name) return false;
                     const hasDate = allAvail.some(a =>
                         (a.fields['Referee Name'] || '').trim().toLowerCase() === name.toLowerCase() &&
-                        (a.fields['Date'] || '') === gameDate
+                        (a.fields['Date'] || '') === gameDate &&
+                        // Scope to THIS event: if the game's event slug is known and the submission is event-tagged,
+                        // they must match — stops cross-event bleed (e.g. an Ellis Tech signup showing on GSL).
+                        (!gameEventSlug || !(a.fields['event_slug'] || '') || (a.fields['event_slug'] || '') === gameEventSlug)
                     );
                     if (!hasDate) return false;
-                    // EVENT WORKSTATION: no club-preference match — a ref available on the game's date qualifies.
                     return true;
                 });
 
@@ -1604,18 +1607,19 @@
                 const isCancelRequest   = isChangeRequested && /\[CANCELLATION REQUEST/i.test(f['Notes'] || '');
                 const isU8             = age === 'U8';
 
-                // Available refs for this date in staged order, filtered by club preference
+                // Available refs for this date + event, in staged order (scoped so events don't bleed together)
                 const gameDate  = f['Date'] || '';
                 const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
+                const gameEventSlug = (window._eventSlugByClub || {})[gameClubLower] || '';
                 const availRefs = allRefs.filter(r => {
                     const name = r.fields['Name'] || '';
                     if (!name) return false;
                     const hasDate = allAvail.some(a =>
                         (a.fields['Referee Name'] || '').trim().toLowerCase() === name.toLowerCase() &&
-                        (a.fields['Date'] || '') === gameDate
+                        (a.fields['Date'] || '') === gameDate &&
+                        (!gameEventSlug || !(a.fields['event_slug'] || '') || (a.fields['event_slug'] || '') === gameEventSlug)
                     );
                     if (!hasDate) return false;
-                    // EVENT WORKSTATION: no club-preference match — a ref available on the game's date qualifies.
                     return true;
                 });
                 const saved        = stageData[gid] || [];
@@ -6420,6 +6424,19 @@
                 clubs.forEach(c => {
                     clubLookup[c.id] = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || c.id;
                 });
+
+                // Build Club Name → event slug map so availability can be scoped to the correct event.
+                // Without this, an availability filter that matches on date alone lets one event's signups
+                // (tagged with event_slug) bleed onto another event's same-day games (e.g. Ellis Tech → GSL).
+                window._eventSlugByClub = {};
+                try {
+                    const { data: _evSlugRows } = await supabaseClient.client
+                        .from('events').select('"Club Name", name, slug').eq('enabled', true);
+                    (_evSlugRows || []).forEach(e => {
+                        const nm = (e['Club Name'] || e.name || '').trim().toLowerCase();
+                        if (nm && e.slug) window._eventSlugByClub[nm] = e.slug;
+                    });
+                } catch (_e) { /* fall back to date-only matching if events can't load */ }
 
                 // Build ref lookup by ID, name, email, and aliases
                 refLookup = {};
