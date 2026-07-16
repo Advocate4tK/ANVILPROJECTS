@@ -355,6 +355,8 @@
                         <!-- STEP 2: Availability + remaining sections (hidden until contact saved) -->
                         <div id="availabilitySection" style="display:none; opacity:0; transition:opacity 0.4s ease;">
 
+                    <div id="ageNotice" style="display:none; background:#fff8e1; border:1px solid #f1c40f; border-radius:10px; padding:12px 16px; margin-bottom:16px; color:#8a6d00; font-size:0.9rem; font-weight:600; line-height:1.5;"></div>
+
                     <!-- Availability Details -->
                     <fieldset id="availDetailFieldset">
                         <legend>Availability Details</legend>
@@ -1292,7 +1294,11 @@
 
             // Reveal the availability section with a fade
             function unlockAvailability() {
-                // Age gate for events with min_age
+                // Age is a HEADS-UP, not a block — every ref can submit availability regardless of age; the
+                // assignor decides who actually gets assigned. If they're under the league's typical minimum,
+                // show a friendly warning, then reveal the form as normal (no return/block).
+                const ageNoticeEl = document.getElementById('ageNotice');
+                if (ageNoticeEl) ageNoticeEl.style.display = 'none';
                 if (window._eventData?.min_age) {
                     const dob = window._foundRefDob || document.getElementById('refereeBirthDate')?.value;
                     if (dob) {
@@ -1301,16 +1307,9 @@
                         let age = today.getFullYear() - birth.getFullYear();
                         const m = today.getMonth() - birth.getMonth();
                         if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-                        if (age < window._eventData.min_age) {
-                            const msgEl = document.getElementById('contactSaveMessage');
-                            if (msgEl) {
-                                msgEl.className = 'form-message error';
-                                msgEl.textContent = `⛔ You must be ${window._eventData.min_age} or older to sign up for this event.`;
-                                msgEl.style.display = 'block';
-                            }
-                            const btn = document.getElementById('saveContactBtn');
-                            if (btn) { btn.disabled = false; btn.textContent = 'Save & Continue to Availability Page →'; }
-                            return;
+                        if (age < window._eventData.min_age && ageNoticeEl) {
+                            ageNoticeEl.innerHTML = `⚠️ Heads up: this league is normally <strong>${window._eventData.min_age}+</strong>. You're welcome to submit your availability — the assignor will reach out if you're needed.`;
+                            ageNoticeEl.style.display = 'block';
                         }
                     }
                 }
