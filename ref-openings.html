@@ -618,10 +618,54 @@
         render(games);
     }
 
+    // Distinct Source Clubs among games that pass the CURRENT WEEK filter (ignoring the club filter — the
+    // selector is what SETS the club filter). This is what the dropdown + rotator scope to.
+    function activeLeaguesForWeek() {
+        let games = _allOpenGames || [];
+        if (_weekFilter !== 'all') {
+            const bounds = getWeekBounds(_weekFilter === 'this' ? 0 : 1);
+            games = games.filter(g => g.date >= bounds.from && g.date <= bounds.to);
+        }
+        return new Set(games.map(g => g['Source Club']).filter(Boolean));
+    }
+
+    // Rebuild the club/event/tournament selector + rotator to ONLY leagues with games in the current week
+    // view. Enabled-but-empty leagues don't appear at all; if the active selection goes dry, reset to All.
+    function refreshLeagueSelector() {
+        const activeSrc    = activeLeaguesForWeek();
+        const activeClubs  = CLUBS.filter(c => activeSrc.has(c));
+        const activeTourns = TOURNAMENTS.filter(t => activeSrc.has(t.name));
+        const activeEvents = EVENTS.filter(e => activeSrc.has(e['Club Name'] || e.name));
+        const activeRec    = _recOrgs.length && activeSrc.has('RECREATION');
+        const activeNames  = [...activeClubs, ...(activeRec ? ['RECREATION'] : []),
+                              ...activeTourns.map(t => t.name), ...activeEvents.map(e => e['Club Name'] || e.name)];
+        if (_clubFilter !== 'all' && !activeNames.includes(_clubFilter)) _clubFilter = 'all';
+        const sel = document.getElementById('clubSelectNative');
+        if (sel) {
+            sel.innerHTML = `<option value="all">All</option>` +
+                activeClubs.map(c => `<option value="${c}">${c}</option>`).join('') +
+                (activeRec ? `<option value="RECREATION">Recreation</option>` : '') +
+                activeTourns.map(t => `<option value="${t.name}">🏆 ${t.name}</option>`).join('') +
+                activeEvents.map(e => `<option value="${e['Club Name'] || e.name}">☀️ ${e['Club Name'] || e.name}</option>`).join('');
+            sel.value = _clubFilter;
+        }
+        const selector = document.getElementById('clubSelector');
+        if (_clubFilter !== 'all') {
+            selector.classList.add('has-selection');
+            document.getElementById('clubRotatorName').textContent = _clubFilter === 'RECREATION' ? 'Recreation' : _clubFilter;
+            stopRotator();
+        } else {
+            selector.classList.remove('has-selection');
+            document.getElementById('clubRotatorName').textContent = 'All';
+        }
+        setRotatorClubs(activeNames.map(c => c === 'RECREATION' ? 'Recreation' : c));
+    }
+
     function setWeekFilter(val, btn) {
         _weekFilter = val;
         btn.closest('.filter-group').querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        refreshLeagueSelector();
         applyFilters();
     }
 
@@ -918,27 +962,8 @@
             window._eventSlugByName = {};
             EVENTS.forEach(e => { window._eventSlugByName[e['Club Name'] || e.name] = e.slug || e.name; });
 
-            // Build selector dropdown + rotator
-            const allFilterClubs = [...CLUBS, ...(_recOrgs.length ? ['RECREATION'] : []), ...TOURNAMENTS.map(t => t.name), ...EVENTS.map(e => e['Club Name'] || e.name)];
-            const savedClub = _clubFilter;
-            _clubFilter = (savedClub === 'all' || allFilterClubs.includes(savedClub)) ? savedClub : 'all';
-            const sel = document.getElementById('clubSelectNative');
-            sel.innerHTML = `<option value="all">All</option>` +
-                CLUBS.map(c => `<option value="${c}">${c}</option>`).join('') +
-                (_recOrgs.length ? `<option value="RECREATION">Recreation</option>` : '') +
-                (TOURNAMENTS.length ? TOURNAMENTS.map(t => `<option value="${t.name}">🏆 ${t.name}</option>`).join('') : '') +
-                (EVENTS.length ? EVENTS.map(e => `<option value="${e['Club Name'] || e.name}">☀️ ${e['Club Name'] || e.name}</option>`).join('') : '');
-            sel.value = _clubFilter;
-            const selector = document.getElementById('clubSelector');
-            if (_clubFilter !== 'all') {
-                selector.classList.add('has-selection');
-                document.getElementById('clubRotatorName').textContent = _clubFilter === 'RECREATION' ? 'Recreation' : _clubFilter;
-                stopRotator();
-            } else {
-                selector.classList.remove('has-selection');
-                document.getElementById('clubRotatorName').textContent = 'All';
-            }
-            setRotatorClubs(allFilterClubs.map(c => c === 'RECREATION' ? 'Recreation' : c));
+            // Selector dropdown + rotator are built by refreshLeagueSelector() — after games load below and on
+            // every week-filter change — scoped to only clubs/events/tournaments with games in the current week view.
 
             const [venueRes, ...allResults] = await Promise.all([
                 supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name').limit(500),
@@ -1011,6 +1036,7 @@
                     return da.localeCompare(db);
                 });
 
+            refreshLeagueSelector();
             applyFilters();
         } catch (err) {
             console.error('Load error:', err);
