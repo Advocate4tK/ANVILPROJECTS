@@ -381,6 +381,7 @@
         }
 
         .badge-age  { background: #e8eef7; color: #1a3a6b; }
+        .badge-pay  { background: #e6f7ed; color: #0f7a3d; font-weight: 700; }
         .badge-gri  { background: #1e3a5f; color: #7eb8f7; }
         .badge-eh   { background: #1e5f3e; color: #6ee7b7; }
         .badge-rhm  { background: #3e1e5f; color: #d8b4fe; }
@@ -763,6 +764,10 @@
         const club      = g['Source Club'] || '';
         const badgeInfo = CLUB_BADGE[club] || { cls: 'badge-def', label: club };
         const age       = g['Age Group'] || '';
+        const _rate     = (window._rateMap || {})[`${club}|${age}`];
+        const payChip   = _rate && _rate.center != null
+            ? `<span class="badge badge-pay">C&nbsp;$${_rate.center}${_rate.ar != null ? ` · AR&nbsp;$${_rate.ar}` : ''}</span>`
+            : '';
         const home      = g['Home Team'] || '?';
         const away      = g['Away Team'] || '?';
         const time      = formatTime(g['time'] || g['Time'] || '');
@@ -833,6 +838,7 @@
                 <span class="game-teams">${home} vs ${away}</span>
                 <span class="game-meta-line">${time}</span>
                 ${age ? `<span class="badge badge-age">${age}</span>` : ''}
+                ${payChip}
                 ${isRec && org ? `<span class="badge badge-def" style="font-size:0.6rem;">${org}</span>` : ''}
                 <span class="badge ${badgeInfo.cls}">${badgeInfo.label}</span>
                 ${isRec ? `<span class="badge badge-unsanctioned">Unsanctioned</span>` : ''}
@@ -842,6 +848,7 @@
                 ${venue ? `<div class="game-venue">${venue}</div>` : ''}
                 ${finalSlotsHtml}
                 ${isRec && payType ? `<div style="padding:6px 14px; background:#fffbeb; border-top:1px solid #fef3c7; font-size:0.75rem; color:#92400e;"><strong>Payment:</strong> ${payType}</div>` : ''}
+                ${_rate && _rate.center != null ? `<div style="text-align:center; padding:8px 14px 2px; font-size:0.95rem; font-weight:800; color:#0f7a3d;">💵 Center&nbsp;$${_rate.center}${_rate.ar != null ? ` &nbsp;·&nbsp; AR&nbsp;$${_rate.ar}` : ''}</div>` : ''}
                 <a class="avail-link" href="${availUrl}" ${isRec ? 'style="background:#1d4ed8;"' : ''}>${availLabel}</a>
             </div>
         </div>`;
@@ -967,6 +974,7 @@
 
             // Single-ref crew rules from enabled events (age_groups with both ARs off → one ref)
             _singleRef = {};
+            window._rateMap = {};
             try {
                 const { data: evCrew } = await supabaseClient.client
                     .from('events').select('"Club Name", age_groups').eq('enabled', true);
@@ -975,6 +983,10 @@
                     (Array.isArray(ev.age_groups) ? ev.age_groups : []).forEach(ag => {
                         if (nm && ag.age_group && ag.ar1 === false && ag.ar2 === false) {
                             _singleRef[`${nm}|${ag.age_group}`] = true;
+                        }
+                        // Pay rates for the collapsed-header chip (C $center · AR $ar), keyed Club|Age
+                        if (nm && ag.age_group && ag.center != null) {
+                            window._rateMap[`${nm}|${ag.age_group}`] = { center: ag.center, ar: ag.ar };
                         }
                     });
                 });
