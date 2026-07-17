@@ -5522,6 +5522,7 @@
         let assignedAt    = {}; // refId → Map<'date|time', Set<gameId>>
         const cancelledGameIds = new Set(); // belt-and-suspenders for cancelled state
         let availByName   = {}; // ref name → Set<date>
+        let availSlugsByName = {}; // ref name → { date → Set<event_slug> } — lets the roster honor the event filter
         let loadedDateFrom = '';
         let loadedDateTo   = '';
         let availTimeByName = {}; // ref name → { date → { start, end } }
@@ -6474,10 +6475,14 @@
                 // Build availability by referee name
                 availByName = {};
                 availTimeByName = {};
+                availSlugsByName = {};   // name → { date → Set<event_slug> } so the roster can honor the event filter
                 const normName = s => (s || '').trim().replace(/\s+/g, ' ').toLowerCase();
-                const _registerAvail = (key, date, slot) => {
+                const _registerAvail = (key, date, slot, slug) => {
                     if (!availByName[key]) availByName[key] = new Set();
                     availByName[key].add(date);
+                    if (!availSlugsByName[key]) availSlugsByName[key] = {};
+                    if (!availSlugsByName[key][date]) availSlugsByName[key][date] = new Set();
+                    availSlugsByName[key][date].add(slug || '');
                     if (!availTimeByName[key]) availTimeByName[key] = {};
                     if (!availTimeByName[key][date]) availTimeByName[key][date] = [];
                     availTimeByName[key][date].push(slot);
@@ -6487,7 +6492,7 @@
                     const date = a.fields['Date'];
                     if (!name || !date) return;
                     const slot = { start: a.fields['Start Time'] || '', end: a.fields['End Time'] || '', clubs: (a.fields['Preferred Locations'] || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean) };
-                    _registerAvail(name, date, slot);
+                    _registerAvail(name, date, slot, a.fields['event_slug']);
                     // If this name resolves to a real ref via alias or email, also register under canonical name
                     const realRef = refLookupByName[name] || (() => {
                         const em = (a.fields['Referee Email'] || '').trim().toLowerCase();
@@ -6495,7 +6500,7 @@
                     })();
                     if (realRef) {
                         const canonKey = (realRef.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
-                        if (canonKey && canonKey !== name) _registerAvail(canonKey, date, slot);
+                        if (canonKey && canonKey !== name) _registerAvail(canonKey, date, slot, a.fields['event_slug']);
                     }
                 });
 
@@ -7831,6 +7836,21 @@
                 : (selectedClubs.size > 0 && selectedClubs.size < clubsList.length)
                     ? [...selectedClubs].map(c => c.toLowerCase())
                     : [];
+            // Which EVENT(s) are in focus, by slug — so the roster only shows applicants who signed up for
+            // THIS event, not whoever's free that day. Empty/unknown = no scope (old behavior, safe fallback).
+            const _fes = focusClubs.length
+                ? new Set(focusClubs.map(c => (window._eventSlugByClub || {})[c]).filter(Boolean))
+                : null;
+            const focusEventSlugs = (_fes && _fes.size) ? _fes : null;
+            const _availOK = (refName, date) => {
+                if (!availByName[refName]?.has(date)) return false;
+                if (!focusEventSlugs) return true;                 // no event scope → date-only (unchanged)
+                const slugs = (availSlugsByName[refName] || {})[date];
+                if (!slugs) return false;
+                if (slugs.has('')) return true;                    // untagged legacy record → never hide
+                for (const s of focusEventSlugs) if (slugs.has(s)) return true;
+                return false;
+            };
             const prefClub     = document.getElementById('prefFilter').value;
             const yearsFilter  = document.getElementById('yearsFilter').value;
             const ageFilter    = document.getElementById('ageFilter').value;
@@ -7872,15 +7892,15 @@
                 if (assignorClubRestriction && !showAllRefs && !query) {
                     const refDates = availByName[refName];
                     if (!refDates) return false;
-                    const hasDateInRange = [...refDates].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo));
+                    const hasDateInRange = [...refDates].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo) && _availOK(refName, d));
                     if (!hasDateInRange) return false;
                 }
 
                 // When searching by name or Override is on, skip availability filters
                 if (!query && !showAllRefs) {
                     if (dateFilter) {
-                        // Specific date filter active — ref must be available on that date
-                        if (!availByName[refName]?.has(dateFilter)) return false;
+                        // Specific date filter active — ref must be available on that date FOR this event
+                        if (!_availOK(refName, dateFilter)) return false;
                         if (timeFilter) {
                             const slots = availTimeByName[refName]?.[dateFilter] || [];
                             const timed = slots.filter(s => s.start && s.end);
@@ -7891,7 +7911,7 @@
                         // skip when a specific game is selected (classify() handles coloring)
                         const refDates = availByName[refName];
                         if (!refDates || refDates.size === 0) return false;
-                        const matchingDates = [...visibleGameDates].filter(d => refDates.has(d));
+                        const matchingDates = [...visibleGameDates].filter(d => _availOK(refName, d));
                         if (matchingDates.length === 0) return false;
                         if (timeFilter) {
                             const hasTime = matchingDates.some(d => {
@@ -7911,9 +7931,9 @@
             const classify = r => {
                 const name = (r.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
                 const hasAvail = gameDate
-                    ? availByName[name]?.has(gameDate)
+                    ? _availOK(name, gameDate)
                     : availByName[name]
-                        ? [...availByName[name]].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo))
+                        ? [...availByName[name]].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo) && _availOK(name, d))
                         : false;
                 const hasConflict = gameDT && assignedAt[r.id] ?
                     [...(assignedAt[r.id].get(gameDT) || [])].filter(gid => !selectedGame || gid !== selectedGame.id).length > 0
