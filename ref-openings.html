@@ -950,7 +950,7 @@
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_recreation_orgs').maybeSingle(),
                 supabaseClient.client.from('tournaments').select('key, name').eq('avail_enabled', true).eq('status', 'active').order('name'),
-                supabaseClient.client.from('events').select('id, name, "Club Name", slug').eq('avail_form_enabled', true).order('name')
+                supabaseClient.client.from('events').select('id, name, "Club Name", slug, session_blocks').eq('avail_form_enabled', true).order('name')
             ]);
             if (settingRes.data?.value) {
                 try { CLUBS = JSON.parse(settingRes.data.value).filter(c => c !== 'on'); } catch(e) {}
@@ -1026,7 +1026,25 @@
                 (allResults[tournOffset + i]?.data || []).map(g => ({ ...g, _tournamentKey: t.key }))
             );
             const eventGames  = allResults.slice(tournOffset + TOURNAMENTS.length).flatMap(r => r.data || []);
-            const allGames    = [...clubGames, ...recGames, ...tournGames, ...eventGames];
+            // Event games only appear on the openings page if the assignor POSTED them in avail-form-settings
+            // (i.e. they're in the event's session_blocks). Nothing posted = nothing open — keeps the openings
+            // page in lockstep with the availability form instead of dumping every upcoming game.
+            const _postedByEvent = {};
+            EVENTS.forEach(e => {
+                const nm = e['Club Name'] || e.name;
+                const set = new Set();
+                (Array.isArray(e.session_blocks) ? e.session_blocks : []).forEach(b => {
+                    if (b.game_key) set.add(b.game_key);
+                    if (b.date && b.start_time) set.add(`${b.date}|${b.start_time.slice(0, 5)}`); // date|HH:MM fallback
+                });
+                _postedByEvent[nm] = set;
+            });
+            const eventGamesPosted = eventGames.filter(g => {
+                const set = _postedByEvent[g['Source Club']];
+                if (!set) return true;  // unknown/unconfigured event → don't hide (safe fallback)
+                return set.has(`${g.date}|${g.time}|${g['Field ID']}`) || set.has(`${g.date}|${(g.time || '').slice(0, 5)}`);
+            });
+            const allGames    = [...clubGames, ...recGames, ...tournGames, ...eventGamesPosted];
             _allOpenGames = allGames
                 .filter(g => (g['Game Status'] || '') !== 'Cancelled' && (g['Game Status'] || '') !== 'Filled')
                 .filter(hasOpenSlot)
