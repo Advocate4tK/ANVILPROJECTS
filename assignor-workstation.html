@@ -798,6 +798,14 @@
                         <label style="font-size:0.85rem; font-weight:700; color:#333; display:block; margin-bottom:4px;">Date To</label>
                         <input type="date" id="dateTo" onchange="clearQuickBtns()" style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; font-size:0.85rem; font-family:inherit;">
                     </div>
+                    <!-- Season scope (per club) — default to each club's active season; archive prior ones -->
+                    <div>
+                        <label style="font-size:0.85rem; font-weight:700; color:#333; display:block; margin-bottom:4px;">Season</label>
+                        <select id="seasonScope" onchange="onSeasonScopeChange()" style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; font-size:0.85rem; font-family:inherit;">
+                            <option value="active">Current (per club)</option>
+                            <option value="all">All seasons</option>
+                        </select>
+                    </div>
                                 <button class="btn btn-primary" id="loadBtn" style="align-self:flex-end; padding:7px 16px; font-size:0.82rem;">Load Games</button>
                     <span id="lastLoadedLabel" style="font-size:0.75rem; color:#aaa; align-self:flex-end; padding-bottom:8px; white-space:nowrap;"></span>
                 </div>
@@ -6329,6 +6337,7 @@
             document.getElementById('workstation').style.display = 'none';
 
             try {
+                await buildSeasonMap();   // per-club active_season map, before games render
                 let filter = '';
                 if (dateFrom && dateTo) {
                     filter = `AND(NOT(IS_BEFORE({Date}, '${dateFrom}')), NOT(IS_AFTER({Date}, '${dateTo}')))`;
@@ -6735,6 +6744,7 @@
                 }
 
                 document.getElementById('workstation').style.display = 'grid';
+                refreshSeasonOptions();   // populate the Season dropdown from the loaded games
 
                 // If launched with ?filter=unassigned, sync all filter controls
                 if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
@@ -6846,6 +6856,58 @@
         const AGE_ORDER = { 'U6':0,'U7':1,'U8':2,'U9':3,'U10':4,'U11':5,'U12':6,
                             'U13':7,'U14':8,'U15':9,'U16':10,'U17':11,'U18':12,'U19':13 };
 
+        // ── Season scope (per club) ─────────────────────────────────────────
+        // Clubs are seasonal; each club carries its own active_season (same backbone
+        // schedule-changes.html reads). Default the workstation to each club's active
+        // season so a flipped club stops showing last season's games — the Season
+        // dropdown archives to a prior season or shows all. A club with no active_season
+        // set fails OPEN (shows everything) so we never hide a club's games by accident.
+        let seasonView = 'active';       // 'active' | 'all' | e.g. 'Spring 2026'
+        let activeSeasonByClub = null;   // { "East Haddam": "Summer 2026", ... } — null = fail open
+        function seasonForDate(dstr) {
+            const p = String(dstr || '').slice(0, 10).split('-').map(Number);
+            if (p.length !== 3 || p.some(isNaN)) return '';
+            const m = p[1], y = p[0];
+            if (m >= 3 && m <= 6)  return `Spring ${y}`;
+            if (m >= 7 && m <= 8)  return `Summer ${y}`;
+            if (m >= 9 && m <= 11) return `Fall ${y}`;
+            return `Winter ${y}`;
+        }
+        async function buildSeasonMap() {
+            try {
+                const { data } = await supabaseClient.client.from('clubs').select('name, "Club Name", active_season');
+                activeSeasonByClub = {};
+                (data || []).forEach(c => {
+                    const key = (c['Club Name'] || c.name || '').trim();
+                    if (key) activeSeasonByClub[key] = c.active_season || null;
+                });
+            } catch(e) { activeSeasonByClub = null; }  // fail open
+        }
+        function _seasonAllows(g) {
+            if (seasonView === 'all') return true;
+            const gs = seasonForDate(g.fields['Date'] || g.fields['date']);
+            if (!gs) return true;                                    // undated → never hide
+            if (seasonView !== 'active') return gs === seasonView;   // a specific archived season chosen
+            const club = resolveGameClub(g.fields) || g.fields['Source Club'] || '';
+            const active = activeSeasonByClub && activeSeasonByClub[club];
+            if (!active) return true;                                // club has no active_season → fail open
+            return gs === active;
+        }
+        function onSeasonScopeChange() {
+            seasonView = document.getElementById('seasonScope')?.value || 'active';
+            renderGames();
+        }
+        function refreshSeasonOptions() {
+            const sel = document.getElementById('seasonScope');
+            if (!sel) return;
+            const seasons = [...new Set(allGames.map(g => seasonForDate(g.fields['Date'] || g.fields['date'])).filter(Boolean))].sort().reverse();
+            const cur = sel.value || 'active';
+            sel.innerHTML = `<option value="active">Current (per club)</option>`
+                + seasons.map(s => `<option value="${s}">${s}</option>`).join('')
+                + `<option value="all">All seasons</option>`;
+            sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'active';
+        }
+
         function renderGames() {
             const wrap = document.getElementById('gamesListWrap');
             const gameDateF      = document.getElementById('gameDateFilter')?.value  || '';
@@ -6861,6 +6923,8 @@
                 if (focusGameId) return String(g.id) === String(focusGameId);
                 // CLUB WORKSTATION: hide event games (events have their own workstation)
                 if (knownEventsList.includes(g.fields['Source Club'])) return false;
+                // Season scope (per club) — hide games outside the club's active season unless archived.
+                if (!_seasonAllows(g)) return false;
                 // Change Requested games stay visible — hidden only after assignor acts (cancel/resolve)
                 // Cancelled games bypass most filters but still respect the club pill selection
                 const isCancelledGame = cancelledGameIds.has(g.id) || g.fields['Game Status'] === 'Cancelled';
