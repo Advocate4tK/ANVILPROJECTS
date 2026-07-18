@@ -1505,6 +1505,24 @@
                 const _CAP = 4;
                 const _visible = _ordered.slice(0, _CAP);
                 const _overflow = _ordered.length - _visible.length;
+                // Route each game to the RIGHT workstation. Clubs, events, tournaments are three
+                // separate tables AND three separate workstations — an event game must open the
+                // EVENT workstation, never the club one. Classify by the game's Source Club.
+                const _evByName = new Map();
+                (allEvents || []).forEach(e => [e['Club Name'], e.name, e.slug].forEach(n => { if (n) _evByName.set(String(n).toLowerCase().trim(), e); }));
+                const _tourByName = new Map();
+                (allTournaments || []).forEach(t => [t.name, t.key].forEach(n => { if (n) _tourByName.set(String(n).toLowerCase().trim(), t); }));
+                const _wsUrlFor = r => {
+                    const f = r.fields, gid = r.id;
+                    const src = String(f['Source Club'] || '').toLowerCase().trim();
+                    const tkey = f['tournament_key'] || f['Tournament Key'] || '';
+                    if (tkey || _tourByName.has(src)) {
+                        const key = tkey || _tourByName.get(src).key;
+                        return `assignor-workstation.html?tournament=${encodeURIComponent(key)}&game=${gid}`;
+                    }
+                    if (_evByName.has(src)) return `event-assignor-workstation.html?game=${gid}`;
+                    return `assignor-workstation.html?game=${gid}`;
+                };
                 const _wsLink = 'assignor-workstation.html?filter=unassigned';
                 const _gapLine = g => {
                     const f = g.r.fields;
@@ -1514,8 +1532,8 @@
                     const chip = g.type === 'center'
                         ? `<span style="background:#fde8e8; color:#c0392b; border:1px solid #f5b7b1; border-radius:5px; padding:1px 8px; font-size:0.72rem; font-weight:800; white-space:nowrap;">needs a center</span>`
                         : `<span style="background:#fef5e7; color:#b9770e; border:1px solid #f8d488; border-radius:5px; padding:1px 8px; font-size:0.72rem; font-weight:700; white-space:nowrap;">needs an AR</span>`;
-                    // Deep-link straight to THIS game in the workstation (selects + scrolls to it), not a filtered list.
-                    return `<a href="assignor-workstation.html?game=${g.r.id}" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:7px 2px; border-bottom:1px solid #f0ece6; text-decoration:none; color:#09142a;">
+                    // Deep-link straight to THIS game in ITS OWN workstation (club/event/tournament), selected + scrolled.
+                    return `<a href="${_wsUrlFor(g.r)}" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:7px 2px; border-bottom:1px solid #f0ece6; text-decoration:none; color:#09142a;">
                         <span style="font-size:0.86rem; font-weight:600;">${when}${time} · ${_clubNameOf(g.r)}${match}</span>
                         ${chip}
                     </a>`;
