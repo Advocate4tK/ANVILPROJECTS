@@ -1429,31 +1429,65 @@
                 const in72Hours = new Date(now.getTime() + 72 * 60 * 60 * 1000);
                 const in7Days   = new Date(now.getTime() + 7  * 24 * 60 * 60 * 1000);
 
-                const isUnassignedGame = r => (r.fields['Game Status'] || '') !== 'Cancelled' && (!r.fields['Center Referee'] || (Array.isArray(r.fields['Center Referee']) && r.fields['Center Referee'].length === 0));
-                const gameDate = r => new Date((r.fields['Date'] || '') + 'T00:00:00');
+                // Heat meter — CENTER gaps drive the temperature (a game with nobody in the middle
+                // is the real fire); AR gaps are shown but treated as the cooler, secondary tier so a
+                // half-covered game doesn't cry wolf. Both list the ACTUAL games so the alarm is a
+                // punch-list you can click, not a "somewhere out there" haystack across 15 clubs.
+                const notCancelled = r => (r.fields['Game Status'] || '') !== 'Cancelled';
+                const gapDate = r => {
+                    const p = String(r.fields['Date'] || r.fields['date'] || '').slice(0, 10).split('-').map(Number);
+                    return (p.length === 3 && p.every(n => !isNaN(n))) ? new Date(p[0], p[1] - 1, p[2]) : new Date(r.fields['Date'] || r.fields['date']);
+                };
+                const _filled = v => Array.isArray(v) ? v.length > 0 : !!v;
+                const noCenter = r => !_filled(r.fields['Center Referee']);
+                // AR gap = clearly a 3-person crew (center in, one wing in) but short the other wing.
+                // Games have no crew-size field, so we can't tell a single-ref rec game from a short
+                // crew — we only flag when one AR slot is filled and the other is empty, so it never
+                // false-alarms. TODO: once games carry crew rules, flag center-only games that SHOULD
+                // have ARs too.
+                const arGap = r => _filled(r.fields['Center Referee']) && (_filled(r.fields['AR1']) !== _filled(r.fields['AR2']));
+                const _clubNameOf = r => {
+                    const raw = r.fields['Club'];
+                    const ids = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+                    return ids.length ? ids.map(id => clubLookup[id] || id).join(', ') : (r.fields['Source Club'] || 'Club');
+                };
 
-                const has7h  = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in7Hours  && isUnassignedGame(r); });
-                const has24h = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in24Hours && isUnassignedGame(r); });
-                const has48h = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in48Hours && isUnassignedGame(r); });
-                const has72h = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in72Hours && isUnassignedGame(r); });
-                const has7d  = scopedGames.some(r => { const d = gameDate(r); return d >= startOfToday && d <= in7Days   && isUnassignedGame(r); });
+                const centerGaps = [], arGaps = [];
+                scopedGames.forEach(r => {
+                    if (!notCancelled(r)) return;
+                    const d = gapDate(r);
+                    if (isNaN(d) || d < startOfToday || d > in7Days) return;
+                    if (noCenter(r)) centerGaps.push({ r, d });
+                    else if (arGap(r)) arGaps.push({ r, d });
+                });
+
+                const cWithin = limit => centerGaps.some(g => g.d <= limit);
+                const has7h  = cWithin(in7Hours);
+                const has24h = cWithin(in24Hours);
+                const has48h = cWithin(in48Hours);
+                const has72h = cWithin(in72Hours);
+                const has7d  = centerGaps.length > 0;
+                const _n = (arr, unit) => `${arr.length} game${arr.length !== 1 ? 's' : ''} ${unit}`;
 
                 let heatColor, heatLabel, heatMsg;
                 if (has7h) {
                     heatColor = '#6c3483'; heatLabel = '🟣 CRITICAL';
-                    heatMsg = 'Unassigned games starting within 7 hours!';
+                    heatMsg = `${_n(centerGaps, 'need a center')} — within 7 hours!`;
                 } else if (has24h) {
                     heatColor = '#e74c3c'; heatLabel = '🔴 URGENT';
-                    heatMsg = 'Unassigned games within the next 24 hours.';
+                    heatMsg = `${_n(centerGaps, 'need a center')} — within 24 hours.`;
                 } else if (has48h) {
                     heatColor = '#e67e22'; heatLabel = '🟠 WARNING';
-                    heatMsg = 'Unassigned games within the next 48 hours.';
+                    heatMsg = `${_n(centerGaps, 'need a center')} — within 48 hours.`;
                 } else if (has72h) {
                     heatColor = '#f1c40f'; heatLabel = '🟡 ATTENTION';
-                    heatMsg = 'Unassigned games within the next 72 hours.';
+                    heatMsg = `${_n(centerGaps, 'need a center')} — within 72 hours.`;
                 } else if (has7d) {
                     heatColor = '#3498db'; heatLabel = '🔵 PLAN AHEAD';
-                    heatMsg = 'Unassigned games coming up this week — get refs assigned.';
+                    heatMsg = `${_n(centerGaps, 'need a center')} this week.`;
+                } else if (arGaps.length) {
+                    heatColor = '#16a085'; heatLabel = '🔹 AR NEEDED';
+                    heatMsg = `All centers covered — ${_n(arGaps, 'short an assistant referee')}.`;
                 } else {
                     heatColor = '#27ae60'; heatLabel = '🟢 ALL CLEAR';
                     heatMsg = 'No unassigned games in the next 7 days.';
@@ -1461,14 +1495,44 @@
 
                 const throbClass = (has7h || has24h) ? 'heat-throb' : '';
 
+                // Punch-list: center gaps first (red), AR gaps below (amber), each by soonest
+                // kickoff, capped with a "+N more" roll-up so it never becomes a wall.
+                const _sortGaps = arr => arr.slice().sort((a, b) => a.d - b.d || String(a.r.fields['Time'] || '').localeCompare(String(b.r.fields['Time'] || '')));
+                const _ordered = [
+                    ..._sortGaps(centerGaps).map(g => ({ ...g, type: 'center' })),
+                    ..._sortGaps(arGaps).map(g => ({ ...g, type: 'ar' }))
+                ];
+                const _CAP = 4;
+                const _visible = _ordered.slice(0, _CAP);
+                const _overflow = _ordered.length - _visible.length;
+                const _wsLink = 'assignor-workstation.html?filter=unassigned';
+                const _gapLine = g => {
+                    const f = g.r.fields;
+                    const when = g.d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                    const time = f['Time'] ? ` · ${f['Time']}` : '';
+                    const chip = g.type === 'center'
+                        ? `<span style="background:#fde8e8; color:#c0392b; border:1px solid #f5b7b1; border-radius:5px; padding:1px 8px; font-size:0.72rem; font-weight:800; white-space:nowrap;">needs a center</span>`
+                        : `<span style="background:#fef5e7; color:#b9770e; border:1px solid #f8d488; border-radius:5px; padding:1px 8px; font-size:0.72rem; font-weight:700; white-space:nowrap;">needs an AR</span>`;
+                    return `<a href="${_wsLink}" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:7px 2px; border-bottom:1px solid #f0ece6; text-decoration:none; color:#09142a;">
+                        <span style="font-size:0.86rem; font-weight:600;">${when}${time} · ${_clubNameOf(g.r)}</span>
+                        ${chip}
+                    </a>`;
+                };
+                const _listHtml = _ordered.length ? `
+                    <div style="background:#fff; border:1px solid #eee; border-top:none; border-radius:0 0 10px 10px; padding:4px 24px 12px;">
+                        ${_visible.map(_gapLine).join('')}
+                        ${_overflow > 0 ? `<a href="${_wsLink}" style="display:inline-block; margin-top:8px; font-size:0.82rem; font-weight:800; color:#e94560; text-decoration:none;">+${_overflow} more →</a>` : ''}
+                    </div>` : '';
+
                 // Populate top heat meter
                 const heatMeterTop = document.getElementById('heatMeterTop');
                 if (heatMeterTop) {
-                    heatMeterTop.innerHTML = `<div class="${throbClass}" style="background:${heatColor}; border-radius:10px; padding:12px 24px; display:flex; align-items:center; gap:16px;">
+                    const _barRadius = _listHtml ? '10px 10px 0 0' : '10px';
+                    heatMeterTop.innerHTML = `<div class="${throbClass}" style="background:${heatColor}; border-radius:${_barRadius}; padding:12px 24px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                         <span style="font-size:1rem; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:rgba(255,255,255,0.8);">🌡 Heat Meter</span>
                         <div style="font-size:1.4rem; font-weight:900; color:white; letter-spacing:1px;">${heatLabel}</div>
                         <div style="color:rgba(255,255,255,0.9); font-size:0.9rem;">${heatMsg}</div>
-                    </div>`;
+                    </div>${_listHtml}`;
                 }
 
                 // Clubs being served — Supabase sources with optgroups matching manage-clubs.html
