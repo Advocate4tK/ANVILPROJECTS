@@ -432,7 +432,9 @@
             const clubRes = await supabaseClient.client.from('clubs')
                 .select('id, name, "Club Name", "Source Club", president, "President Email", enabled')
                 .order('"Club Name"');
-            allClubs = (clubRes.data || []).filter(c => c.enabled === true && (c['Club Name'] || c.name));
+            // Show all named clubs (not just live ones) — billing must happen BEFORE a club goes
+            // live, else it's a deadlock: can't go live w/o billing, can't bill unless already live.
+            allClubs = (clubRes.data || []).filter(c => (c['Club Name'] || c.name));
 
             // Billing tables — load independently, fail silently if not ready yet
             contracts  = {};
