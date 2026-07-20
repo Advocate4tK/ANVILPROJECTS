@@ -492,6 +492,41 @@
             </div>
         </div>
 
+        <!-- Age Groups Editor -->
+        <div style="margin-bottom:24px;">
+            <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #10b981;">
+                <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">⚽ Age Groups</h2>
+                <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Set which age groups a club runs (Rec vs Comp). Feeds the wizard and the readiness check. Legacy clubs: hit “Pull from Pay Rates.”</p>
+
+                <div class="fg" style="max-width:380px; margin-bottom:20px;">
+                    <label>Select Entity</label>
+                    <select id="ageGroupsClubSelect" onchange="loadAgeGroupsForClub()">
+                        <option value="">— Loading clubs… —</option>
+                    </select>
+                </div>
+
+                <div id="ageGroupsSection" style="display:none;">
+                    <div id="ageGroupsClubEditor">
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+                            <button onclick="pullAgeGroupsFromPay()" style="background:#f0fdf4; border:1.5px solid #22c55e; color:#15803d; padding:8px 16px; border-radius:8px; font-weight:700; font-size:0.85rem; cursor:pointer; font-family:'DM Sans',sans-serif;">⤵ Pull from Pay Rates</button>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 160px 32px; gap:8px; margin-bottom:6px; padding:0 2px;">
+                            <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa;">Age Group</div>
+                            <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa; text-align:center;">Game Type</div>
+                            <div></div>
+                        </div>
+                        <div id="mgAgeGroupList" style="margin-bottom:14px;"></div>
+                        <button onclick="addMgAgeGroupRow()" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:8px 18px; border-radius:8px; font-weight:700; font-size:0.88rem; cursor:pointer; font-family:'DM Sans',sans-serif;">+ Add Age Group</button>
+                        <div style="margin-top:18px;">
+                            <button onclick="saveAgeGroups()" id="saveAgeGroupsBtn" style="background:#10b981; color:#fff; border:none; padding:11px 32px; border-radius:8px; font-weight:800; font-size:1rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px; text-transform:uppercase;">Save Age Groups ↗</button>
+                            <div id="ageGroupsSaveMsg" style="display:none; margin-top:12px; font-size:0.88rem; font-weight:600;"></div>
+                        </div>
+                    </div>
+                    <div id="ageGroupsTourneyNote" style="display:none; font-size:0.85rem; color:#888; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px; padding:12px 16px;">Age groups for events and tournaments are managed in the setup wizard (they carry format, half length, and pay).</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Pay Rates Editor -->
         <div style="margin-bottom:24px;">
             <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #7c3aed;">
@@ -1175,7 +1210,7 @@
         if (!rawId) { card.innerHTML = ''; return; }
 
         // Sync all section selects (value only — don't fire handlers)
-        ['contactsClubSelect','editClubSelect','payClubSelect','crewClubSel','removeClubSelect'].forEach(id => {
+        ['contactsClubSelect','editClubSelect','payClubSelect','crewClubSel','removeClubSelect','ageGroupsClubSelect'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = rawId;
         });
@@ -2641,9 +2676,10 @@
             document.getElementById('contactsClubSelect').innerHTML = opts;
             document.getElementById('payClubSelect').innerHTML      = opts;
             document.getElementById('crewClubSel').innerHTML        = opts;
+            const agSel = document.getElementById('ageGroupsClubSelect'); if (agSel) agSel.innerHTML = opts;
         } catch(e) {
             const err = `<option value="">⚠ Error: ${e.message}</option>`;
-            ['ccMasterSelect','removeClubSelect','editClubSelect','contactsClubSelect','payClubSelect','crewClubSel']
+            ['ccMasterSelect','removeClubSelect','editClubSelect','contactsClubSelect','payClubSelect','crewClubSel','ageGroupsClubSelect']
                 .forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = err; });
         }
     }
@@ -3441,6 +3477,115 @@
         } finally {
             btn.disabled    = false;
             btn.textContent = 'Save Contacts ↗';
+        }
+    }
+
+    // ── Age Groups Editor (manual) ────────────────────────────────────────────
+    async function loadAgeGroupsForClub() {
+        const rawId   = document.getElementById('ageGroupsClubSelect').value;
+        syncMasterSelect(rawId);
+        const section = document.getElementById('ageGroupsSection');
+        const editor  = document.getElementById('ageGroupsClubEditor');
+        const note    = document.getElementById('ageGroupsTourneyNote');
+        const msg     = document.getElementById('ageGroupsSaveMsg');
+        msg.style.display = 'none';
+        if (!rawId) { section.style.display = 'none'; return; }
+        section.style.display = 'block';
+
+        if (rawId.startsWith('t:') || rawId.startsWith('e:')) {
+            editor.style.display = 'none';
+            note.style.display   = 'block';
+            return;
+        }
+        editor.style.display = 'block';
+        note.style.display   = 'none';
+
+        try {
+            const { data, error } = await supabaseClient.client
+                .from('clubs').select('age_groups').eq('id', parseInt(rawId)).single();
+            if (error) throw new Error(error.message);
+            const ags = Array.isArray(data.age_groups) ? data.age_groups : [];
+            document.getElementById('mgAgeGroupList').innerHTML = '';
+            ags.forEach(ag => addMgAgeGroupRow(ag.age_group, ag.game_type));
+        } catch(e) {
+            alert('Could not load age groups: ' + e.message);
+        }
+    }
+
+    function addMgAgeGroupRow(prefillName, prefillGameType) {
+        const row = document.createElement('div');
+        row.className = 'mg-age-group-row';
+        row.style.cssText = 'display:grid; grid-template-columns:1fr 160px 32px; gap:8px; margin-bottom:8px; align-items:center;';
+        row.innerHTML = `
+            <input type="text" placeholder="e.g. U12 or U11-U12" class="mg-ag-name" value="${prefillName || ''}" style="padding:8px 10px; border:1px solid #e2d9ce; border-radius:6px; font-size:0.85rem; font-family:'DM Sans',sans-serif;">
+            <select class="mg-ag-gametype" style="padding:8px 10px; border:1px solid #e2d9ce; border-radius:6px; font-size:0.85rem; font-family:'DM Sans',sans-serif; cursor:pointer;">
+                <option value="Rec"  ${prefillGameType === 'Rec'  || !prefillGameType ? 'selected' : ''}>Rec</option>
+                <option value="Comp" ${prefillGameType === 'Comp' ? 'selected' : ''}>Comp</option>
+            </select>
+            <button onclick="this.parentElement.remove()" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:6px; padding:6px 8px; cursor:pointer; font-size:0.85rem; font-weight:700;">✕</button>`;
+        document.getElementById('mgAgeGroupList').appendChild(row);
+    }
+
+    function collectMgAgeGroups() {
+        const rows = [];
+        document.querySelectorAll('#mgAgeGroupList .mg-age-group-row').forEach(row => {
+            const name = row.querySelector('.mg-ag-name').value.trim();
+            if (!name) return;
+            const gameType = row.querySelector('.mg-ag-gametype')?.value || 'Rec';
+            rows.push({ age_group: name, game_type: gameType });
+        });
+        return rows;
+    }
+
+    // Legacy heal: derive age groups from a club's existing pay_rates (band = Comp, single = Rec)
+    async function pullAgeGroupsFromPay() {
+        const rawId = document.getElementById('ageGroupsClubSelect').value;
+        if (!rawId || rawId.startsWith('t:') || rawId.startsWith('e:')) return;
+        try {
+            const { data, error } = await supabaseClient.client
+                .from('pay_rates').select('age_group, game_type').eq('club_id', parseInt(rawId));
+            if (error) throw new Error(error.message);
+            const ageOrder = ag => parseInt(((ag || '').match(/\d+/) || ['999'])[0], 10);
+            const seen = new Set();
+            const rows = (data || [])
+                .filter(r => { if (seen.has(r.age_group)) return false; seen.add(r.age_group); return true; })
+                .sort((a, b) => ageOrder(a.age_group) - ageOrder(b.age_group))
+                .map(r => ({
+                    age_group: r.age_group,
+                    game_type: (r.game_type === 'comp' || (r.age_group || '').includes('-')) ? 'Comp' : 'Rec'
+                }));
+            if (!rows.length) { alert('No pay rates on file for this club to pull from.'); return; }
+            document.getElementById('mgAgeGroupList').innerHTML = '';
+            rows.forEach(r => addMgAgeGroupRow(r.age_group, r.game_type));
+        } catch(e) {
+            alert('Could not pull from pay rates: ' + e.message);
+        }
+    }
+
+    async function saveAgeGroups() {
+        const rawId = document.getElementById('ageGroupsClubSelect').value;
+        if (!rawId || rawId.startsWith('t:') || rawId.startsWith('e:')) { alert('Select a club first.'); return; }
+        const btn = document.getElementById('saveAgeGroupsBtn');
+        const msg = document.getElementById('ageGroupsSaveMsg');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        msg.style.display = 'none';
+        try {
+            const ageGroups = collectMgAgeGroups();
+            const { error } = await supabaseClient.client
+                .from('clubs').update({ age_groups: ageGroups.length ? ageGroups : null }).eq('id', parseInt(rawId));
+            if (error) throw new Error(error.message);
+            msg.style.display = 'block';
+            msg.style.color   = '#15803d';
+            msg.textContent   = `✅ Saved ${ageGroups.length} age group${ageGroups.length === 1 ? '' : 's'}.`;
+            if (typeof loadClubStatus === 'function') loadClubStatus();
+        } catch(e) {
+            msg.style.display = 'block';
+            msg.style.color   = '#dc2626';
+            msg.textContent   = '✗ Save failed: ' + e.message;
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Save Age Groups ↗';
         }
     }
 
