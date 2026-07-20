@@ -209,8 +209,14 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
     const payUrl    = c.payment_portal_enabled ? `${submitUrl}&pay=portal` : '';
     const presUrl   = `https://referee-tool.com/presidents-portal.html?club=${slug}`;
 
-    const hasRec  = rates.filter(r => !r.game_type || r.game_type === 'rec');
-    const hasComp = rates.filter(r => r.game_type === 'comp');
+    // Comp is identified by age-band label (system convention — see manage-clubs COMP_AGE_GROUPS),
+    // with game_type === 'comp' still honored as a fallback. Sort numerically so U8 / bands order right.
+    const ageOrder   = ag => parseInt(((ag || '').match(/\d+/) || ['999'])[0], 10);
+    const COMP_BANDS = ['U9-U10', 'U11-U12', 'U13-U15'];
+    const isComp     = r => r.game_type === 'comp' || COMP_BANDS.includes(r.age_group);
+    const byAge      = (a, b) => ageOrder(a.age_group) - ageOrder(b.age_group);
+    const hasComp = rates.filter(isComp).sort(byAge);
+    const hasRec  = rates.filter(r => !isComp(r)).sort(byAge);
 
     const rateRow = r => `<tr style="border-bottom:1px solid #f1f5f9;">
         <td style="padding:6px 14px; font-weight:700; font-size:0.86rem; color:#09142a;">${r.age_group}</td>
