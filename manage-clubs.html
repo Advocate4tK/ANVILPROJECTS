@@ -1188,6 +1188,7 @@
         const shown = content.style.display === 'block';
         content.style.display = shown ? 'none' : 'block';
         btn.textContent = shown ? 'Show Wizard ▾' : 'Hide Wizard ▴';
+        if (!shown) _completeSteps = null;  // opening fresh for a new entity — not complete-mode
         if (!shown && venueCount === 0) addVenue();
     }
 
@@ -1328,6 +1329,7 @@
                 if (!billingClubIds.has(c.id)) missing.push('Billing');
                 return missing;
             };
+            const STATUS_STEP = { 'Contacts': 1, 'Venues': 2, 'Age Groups': 3, 'Referee Pay': 4, 'Crew Rules': 5, 'Billing': 6 };
 
             const tourns = (tournsRes.data || []);
             const statusColor = s => s === 'active' ? '#bbf7d0' : s === 'completed' ? '#e2e8f0' : '#fde68a';
@@ -1345,6 +1347,7 @@
                     </div>`;
                 }
                 const missing = checkClub(c);
+                const missSteps = missing.map(m => STATUS_STEP[m]).filter(Boolean).sort((a, b) => a - b);
                 const isReady = missing.length === 0;
                 return `<div style="padding:10px 14px; border:1px solid ${isReady ? '#bfdbfe' : '#e2d9ce'}; border-radius:8px; background:${isReady ? '#eff6ff' : '#fafafa'};">
                     <div style="display:flex; align-items:center; justify-content:space-between;">
@@ -1353,7 +1356,7 @@
                             ${isReady
                                 ? `<span style="font-size:0.72rem; font-weight:800; font-family:'Barlow Condensed',sans-serif; letter-spacing:1px; text-transform:uppercase; color:#1d4ed8;">◎ READY</span>
                                    <input type="checkbox" data-club-id="${c.id}" style="width:18px;height:18px;cursor:pointer;accent-color:#00c853;">`
-                                : `<button onclick="openWizardForEdit(${c.id})" style="background:#09142a; color:#fff; border:none; padding:5px 14px; border-radius:6px; font-weight:700; font-size:0.78rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Complete in Wizard →</button>
+                                : `<button onclick="openWizardForEdit(${c.id}, ${JSON.stringify(missSteps)})" style="background:#09142a; color:#fff; border:none; padding:5px 14px; border-radius:6px; font-weight:700; font-size:0.78rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Complete in Wizard →</button>
                                    <input type="checkbox" data-club-id="${c.id}" disabled style="width:18px;height:18px;cursor:not-allowed;opacity:0.35;">`
                             }
                         </div>
@@ -1459,17 +1462,20 @@
         }
         const ags = collectAgeGroups();
         if (!ags.length) { alert('Add at least one age group first.'); return; }
+        if (_completeSteps) { enterStep(nextMissingStep(3) || 7); return; }
         renderWizPayRows(ags);
         goToStep(4);
     }
 
     function goToStep5crew() {
+        if (_completeSteps) { enterStep(nextMissingStep(4) || 7); return; }
         const ags = collectAgeGroups();
         renderWizCrewRows(ags);
         goToStep(5);
     }
 
     function goToStep6billing() {
+        if (_completeSteps) { enterStep(nextMissingStep(5) || 7); return; }
         loadWizardBillingForm();
         goToStep(6);
     }
@@ -1487,6 +1493,22 @@
         } else {
             goToStep(6);
         }
+    }
+
+    // ── Complete-mode navigation: visit ONLY the steps flagged missing in Entity Status ──
+    // _completeSteps holds the missing step numbers (ascending). Each step's Next routes
+    // to the next missing step, then to Review (7). Normal create/edit flow is untouched.
+    function nextMissingStep(current) {
+        if (!_completeSteps) return null;
+        return _completeSteps.find(s => s > current);  // undefined when none remain
+    }
+    function enterStep(n) {
+        if (n === 2)      { loadWizardVenues().then(() => showVenueImportBanner()); goToStep(2); }
+        else if (n === 4) { renderWizPayRows(collectAgeGroups());  goToStep(4); }
+        else if (n === 5) { renderWizCrewRows(collectAgeGroups()); goToStep(5); }
+        else if (n === 6) { loadWizardBillingForm(); goToStep(6); }
+        else if (n === 7) { buildReview(); goToStep(7); }
+        else              { goToStep(n); }  // step 1 (contacts) — fields preloaded on edit
     }
 
     // ── Wizard Step 6: Billing helpers ───────────────────────────────────────
@@ -1696,6 +1718,7 @@
     let _clubTypeMode = 'managed';
     window._entityType = 'club';
     let _editClubId = null;
+    let _completeSteps = null;  // set from status "Complete in Wizard" → wizard visits ONLY these missing steps
 
     const _entityConfig = {
         club:        { name: 'Club Name',         pres: 'Club President',         admin: 'Organization Admin — Scheduling Contact', adminDesc: "This person logs into the club's scheduling page to submit games.",        createBtn: 'Create Club',         dates: false },
@@ -1992,6 +2015,7 @@
                 alert('Club admin name is required for managed clubs.');
                 return;
             }
+            if (_completeSteps) { enterStep(nextMissingStep(1) || 7); return; }
             goToStep(2);
         } else {
             buildReview();
@@ -2012,6 +2036,7 @@
         if (_clubTypeMode === 'reference') {
             goToStep6review();
         } else {
+            if (_completeSteps) { enterStep(nextMissingStep(2) || 7); return; }
             goToStep(3);
         }
     }
@@ -2243,8 +2268,9 @@
         });
     }
 
-    async function openWizardForEdit(clubId) {
+    async function openWizardForEdit(clubId, missSteps) {
         _editClubId = clubId;
+        _completeSteps = (Array.isArray(missSteps) && missSteps.length) ? missSteps.slice().sort((a, b) => a - b) : null;
         const content = document.getElementById('wizardContent');
         content.style.display = 'block';
         const toggleBtn = document.querySelector('.section-toggle-btn');
@@ -2312,7 +2338,9 @@
         _wizardExistingBilling = billingRes.data || null;
 
         document.getElementById('createBtn').textContent = 'Save Changes';
-        goToStep(1, true);
+        loadWizardBillingForm();  // preload existing billing so a SKIPPED billing step can't overwrite the contract with blanks
+        if (_completeSteps && _completeSteps.length) enterStep(_completeSteps[0]);  // jump to first missing step
+        else goToStep(1, true);
     }
 
     // ── Create Club ───────────────────────────────────────────────────────────
