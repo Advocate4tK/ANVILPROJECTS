@@ -904,6 +904,15 @@
                     <div id="wizAssignorRows"></div>
                 </div>
 
+                <!-- Workstation Access — which assignor ACCOUNT(s) this club is scoped to. Writes each checked
+                     assignor's `assignors.clubs` (the field the workstation actually reads). Different from the
+                     contact block above (that's just names/emails on the club record). -->
+                <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #00c853; border-radius:8px; padding:14px 16px; margin-top:16px;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;">Workstation Access</div>
+                    <div style="font-size:0.72rem; color:#aaa; margin-bottom:10px;">Which assignor(s) can see &amp; assign this club in their workstation. Check all that apply — co-assignors are fine (e.g. NECONN = Eric + Tod).</div>
+                    <div id="wizScopeAssignors" style="display:flex; flex-direction:column; gap:6px;"><span style="color:#aaa; font-size:0.82rem;">Loading assignors…</span></div>
+                </div>
+
                 <div class="wizard-nav">
                     <span></span>
                     <button onclick="goToStep2()" id="nextStep2Btn" class="btn btn-primary" style="background:#09142a; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Next: Venues &amp; Fields →</button>
@@ -1600,6 +1609,37 @@
         })).filter(t => t.age_group);
     }
 
+    // ── Workstation Access (scoping) — assignor ACCOUNTS this club is visible to ──────
+    // Writes each checked assignor's `assignors.clubs` (keyed by auth_user_id — the field
+    // the workstation reads). NOTE: assignors.clubs = NULL/empty means that assignor sees
+    // ALL clubs; a populated list restricts them to exactly those. So adding this club to an
+    // assignor who was NULL will begin restricting them — intended for full per-assignor scoping.
+    let _wizScopeAssignorList = [];   // {auth_user_id, name, clubs, role} for the real assignor accounts
+    async function loadWizScopeAssignors(clubName) {
+        const wrap = document.getElementById('wizScopeAssignors');
+        if (!wrap) return;
+        try {
+            const { data, error } = await supabaseClient.client
+                .from('assignors')
+                .select('auth_user_id, name, clubs, role')
+                .order('name');
+            if (error) throw error;
+            _wizScopeAssignorList = (data || []).filter(a => a.auth_user_id && a.role !== 'Admin');
+            if (!_wizScopeAssignorList.length) {
+                wrap.innerHTML = '<span style="color:#aaa; font-size:0.82rem;">No assignor accounts found.</span>';
+                return;
+            }
+            wrap.innerHTML = _wizScopeAssignorList.map(a => {
+                const has = Array.isArray(a.clubs) && clubName && a.clubs.includes(clubName);
+                return `<label style="display:flex; align-items:center; gap:8px; font-size:0.9rem; color:#1f2328; cursor:pointer;">
+                    <input type="checkbox" class="wiz-scope-assignor" data-uid="${a.auth_user_id}" ${has ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;accent-color:#00c853;">
+                    ${(a.name || a.auth_user_id)}</label>`;
+            }).join('');
+        } catch (e) {
+            wrap.innerHTML = '<span style="color:#e74c3c; font-size:0.82rem;">Could not load assignors: ' + e.message + '</span>';
+        }
+    }
+
     function renderWizAssignors(list) {
         const c = document.getElementById('wizAssignorRows');
         if (!list || !list.length) list = [{ name: '', email: '', phone: '', is_lead: true }];
@@ -1792,6 +1832,7 @@
 
         renderAgeGroupHeaders();
         renderWizAssignors([]);
+        loadWizScopeAssignors('');   // Workstation Access picker — none pre-checked for a brand-new club
         // Step visibility is handled dynamically in goToStep — force a refresh of step-1
         goToStep(1, true);
     }
@@ -2351,6 +2392,7 @@
             ? club.assignors_json
             : (club.assignor ? [{ name: club.assignor, email: club['Assignor Email'] || '', phone: club['Assignor Phone'] || '', is_lead: true }] : []);
         renderWizAssignors(existingAssignors);
+        loadWizScopeAssignors(club['Club Name'] || club.name || '');   // pre-check assignors already scoped to this club
 
         const ageGroups = Array.isArray(club.age_groups) ? club.age_groups : [];
         document.getElementById('ageGroupList').innerHTML = '';
@@ -2669,6 +2711,31 @@
                 }
                 if (savedVenueCount) log(`📍 ${savedVenueCount} venue(s) saved.`, 'ok');
             }
+
+            // ── Workstation Access: scope this club to the checked assignor accounts ──
+            // Reconcile against each assignor's CURRENT clubs (loaded into _wizScopeAssignorList):
+            //   checked + not present  → add club name
+            //   unchecked + present    → remove club name
+            // Writes `assignors.clubs` keyed by auth_user_id — the field the workstation reads.
+            try {
+                const checkedUids = new Set([...document.querySelectorAll('.wiz-scope-assignor:checked')].map(cb => cb.dataset.uid));
+                for (const a of _wizScopeAssignorList) {
+                    const cur = Array.isArray(a.clubs) ? a.clubs.slice() : [];
+                    const hasIt      = cur.includes(clubName);
+                    const shouldHave = checkedUids.has(a.auth_user_id);
+                    if (shouldHave && !hasIt) {
+                        const next = [...cur, clubName];
+                        const { error: sErr } = await supabaseClient.client.from('assignors').update({ clubs: next }).eq('auth_user_id', a.auth_user_id);
+                        if (sErr) log(`⚠ Scope → ${a.name}: ${sErr.message}`, 'err');
+                        else { a.clubs = next; log(`🔑 ${clubName} → ${a.name}'s workstation.`, 'ok'); }
+                    } else if (!shouldHave && hasIt) {
+                        const next = cur.filter(c => c !== clubName);
+                        const { error: sErr } = await supabaseClient.client.from('assignors').update({ clubs: next }).eq('auth_user_id', a.auth_user_id);
+                        if (sErr) log(`⚠ Unscope ← ${a.name}: ${sErr.message}`, 'err');
+                        else { a.clubs = next; log(`🔑 Removed ${clubName} from ${a.name}.`, 'ok'); }
+                    }
+                }
+            } catch (scopeErr) { log(`⚠ Workstation Access: ${scopeErr.message}`, 'err'); }
 
             // ── Done ─────────────────────────────────────────────────────────
             const url = `https://referee-tool.com/club-game-submit.html?club=${slug}`;
