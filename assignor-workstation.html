@@ -5552,6 +5552,7 @@
         let availTimeByName = {}; // ref name → { date → { start, end } }
         const KNOWN_CLUBS = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
         let clubsList     = KNOWN_CLUBS.slice(); // pre-seeded so pills render on page load
+        let _liveClubNames = new Set();   // enabled (live) clubs+events. When populated, club pills are filtered to these — so unbuilt/not-live clubs don't show.
         let selectedClubs = new Set(clubsList); // default: all selected
         let userHasFilteredClubs = false; // true once user manually picks specific clubs
         let assignorClubRestriction = null; // set when a non-Admin assignor logs in — limits visible clubs
@@ -5833,7 +5834,8 @@
                     const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || '').filter(Boolean);
                     const dbEvents = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
                     knownEventsList = dbEvents.slice();
-                    let merged = [...new Set([...KNOWN_CLUBS, ...dbClubs, ...dbEvents])].sort();
+                    _liveClubNames = new Set([...dbClubs, ...dbEvents]);   // authoritative live set (enabled clubs + events only)
+                    let merged = [...new Set([...dbClubs, ...dbEvents])].sort();   // live only — dropped hardcoded KNOWN_CLUBS so unbuilt clubs (RHAMYS etc.) no longer show
                     if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
                     clubsList = merged;
                     if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);
@@ -6574,6 +6576,7 @@
                 const sourceClubs  = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
                 const airtableClubs = clubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
                 let mergedAll = [...new Set([...KNOWN_CLUBS, ...airtableClubs, ...sourceClubs, ...knownEventsList])].sort();
+                if (_liveClubNames.size) mergedAll = mergedAll.filter(c => _liveClubNames.has(c));   // live-filter: only enabled clubs/events. Guarded — if the live set hasn't loaded yet, fall through (never blank the board).
                 if (assignorClubRestriction) mergedAll = mergedAll.filter(c => assignorClubRestriction.includes(c));
                 clubsList = mergedAll;
                 if (!userHasFilteredClubs) {
