@@ -1032,7 +1032,7 @@
 
                     <div class="fg" id="wizFlatAmountRow" style="display:none;">
                         <label>Flat Season Amount ($)</label>
-                        <input type="number" id="wizFlatAmount" placeholder="e.g. 100" min="0" step="1" style="max-width:160px;">
+                        <input type="number" id="wizFlatAmount" placeholder="e.g. 100" min="0" step="1" style="max-width:160px;" oninput="syncZeroPayTerms()">
                     </div>
 
                     <div id="wizRateTiersSection" class="fg">
@@ -1064,6 +1064,7 @@
                             <option value="Net 15 Days">Net 15 Days</option>
                             <option value="Net 30 Days">Net 30 Days</option>
                             <option value="Due on Receipt">Due on Receipt</option>
+                            <option value="N/A">N/A — No Charge</option>
                         </select>
                     </div>
 
@@ -1556,6 +1557,21 @@
         const isFlat = model === 'flat';
         document.getElementById('wizFlatAmountRow').style.display    = isFlat ? '' : 'none';
         document.getElementById('wizRateTiersSection').style.display = isFlat ? 'none' : '';
+        syncZeroPayTerms();
+    }
+
+    // Zero-pay clubs (Flat Season Rate = $0) have no payment terms — auto-select "N/A".
+    // Non-locking: enter a real flat amount and it restores a normal term.
+    function syncZeroPayTerms() {
+        const terms = document.getElementById('wizPaymentTerms');
+        if (!terms) return;
+        const model = document.getElementById('wizBillingModel').value;
+        const amt = parseFloat(document.getElementById('wizFlatAmount').value);
+        if (model === 'flat' && (!amt || amt === 0)) {
+            terms.value = 'N/A';
+        } else if (terms.value === 'N/A') {
+            terms.value = 'Net 15 Days';
+        }
     }
 
     function collectWizRateTiers() {
