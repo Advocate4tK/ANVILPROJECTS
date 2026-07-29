@@ -308,17 +308,85 @@
     const TOWN_LC  = {};
     CT_TOWNS.towns.forEach(t => { TOWN_LC[t.n.toLowerCase()] = t.n; });
 
-    function resolveTown(raw) {
-        if (!raw) return null;
-        let s = String(raw).trim().toLowerCase().replace(/\s+/g, ' ');
+    // Squashed index ("rockyhill" -> "Rocky Hill") catches missing spaces and punctuation
+    const TOWN_SQ  = {};
+    CT_TOWNS.towns.forEach(t => { TOWN_SQ[t.n.toLowerCase().replace(/[^a-z]/g,'')] = t.n; });
+    const ALIAS_SQ = {};
+    Object.entries(CT_TOWN_ALIASES).forEach(([k, v]) => { ALIAS_SQ[k.replace(/[^a-z]/g,'')] = v; });
+
+    const FUZZY = {};   // raw city text -> town, for anything matched by best guess
+
+    function lev(a, b) {
+        if (Math.abs(a.length - b.length) > 1) return 9;
+        const m = a.length, n = b.length;
+        let prev = Array.from({ length: n + 1 }, (_, i) => i);
+        for (let i = 1; i <= m; i++) {
+            const cur = [i];
+            for (let j = 1; j <= n; j++) {
+                cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1,
+                                  prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+            }
+            prev = cur;
+        }
+        return prev[n];
+    }
+
+    // One segment of a city string -> a town, or null. Exact paths only.
+    function tryPart(s) {
+        s = s.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
         if (!s) return null;
-        s = s.replace(/,?\s*(ct|conn|connecticut)\.?$/, '').trim();
+        if (/^(ct|conn|connecticut|ma|ri|ny|mass)$/.test(s)) return null;
+
         if (CT_TOWN_ALIASES[s]) return CT_TOWN_ALIASES[s];
         if (TOWN_LC[s]) return TOWN_LC[s];
-        // "Town of X" / "X Center" / "X Village"
-        const m = s.replace(/^town of /, '').replace(/ (center|centre|village|depot)$/, '').trim();
+
+        // "S. Glastonbury" -> "south glastonbury"; also Mt./Ft.
+        const dir = { s: 'south', n: 'north', e: 'east', w: 'west', mt: 'mount', ft: 'fort' };
+        const parts = s.split(' ');
+        if (parts.length > 1 && dir[parts[0]]) {
+            const x = [dir[parts[0]], ...parts.slice(1)].join(' ');
+            if (CT_TOWN_ALIASES[x]) return CT_TOWN_ALIASES[x];
+            if (TOWN_LC[x]) return TOWN_LC[x];
+        }
+
+        // "Town of X", "X Center", "X Village"
+        const m = s.replace(/^town of /, '').replace(/ (center|centre|village|depot|heights)$/, '').trim();
         if (CT_TOWN_ALIASES[m]) return CT_TOWN_ALIASES[m];
         if (TOWN_LC[m]) return TOWN_LC[m];
+
+        // "RockyHill" / "East  Lyme" / "Old-Saybrook"
+        const sq = s.replace(/[^a-z]/g, '');
+        if (ALIAS_SQ[sq]) return ALIAS_SQ[sq];
+        if (TOWN_SQ[sq])  return TOWN_SQ[sq];
+
+        return null;
+    }
+
+    // Typo rescue: one character off, and only if exactly one town is that close.
+    function tryFuzzy(s) {
+        const sq = s.replace(/[^a-z]/g, '');
+        if (sq.length < 5) return null;              // too short to guess safely
+        const hits = new Set();
+        Object.entries(TOWN_SQ).forEach(([k, v]) => { if (lev(sq, k) === 1) hits.add(v); });
+        Object.entries(ALIAS_SQ).forEach(([k, v]) => { if (lev(sq, k) === 1) hits.add(v); });
+        return hits.size === 1 ? [...hits][0] : null;
+    }
+
+    function resolveTown(raw) {
+        if (!raw) return null;
+        const base = String(raw).toLowerCase().replace(/\s+/g, ' ').trim();
+        if (!base) return null;
+
+        // "Storrs, Mansfield" / "Vernon, CT" — try the whole thing, then each piece
+        const segs = [base, ...base.split(',')].map(x => x.trim()).filter(Boolean);
+        for (const seg of segs) {
+            const hit = tryPart(seg);
+            if (hit) return hit;
+        }
+        for (const seg of segs) {
+            const hit = tryFuzzy(seg.replace(/[^a-z0-9 ]/g, ' ').trim());
+            if (hit) { FUZZY[raw] = hit; return hit; }
+        }
         return null;
     }
 
@@ -649,13 +717,28 @@
         });
         const list = Object.entries(bad).sort((a,b) => b[1] - a[1]);
         const total = list.reduce((a, [,n]) => a + n, 0);
-        if (!total && !noCity) return;
+        const guesses = Object.entries(FUZZY);
         const note = document.getElementById('modeNote');
-        note.insertAdjacentHTML('afterend',
-            `<p class="note" style="color:#e8b04b;">⚠ ${total} referee${total===1?'':'s'} in ${list.length} unrecognized
-             ${list.length===1?'place':'places'} aren't on the map${noCity?`, plus ${noCity} with no town at all`:''} —
-             ${esc(list.slice(0, 12).map(([c,n]) => `${c} (${n})`).join(', '))}${list.length>12?'…':''}</p>`);
-        console.log('[map] unmatched towns:', list);
+
+        if (total) {
+            note.insertAdjacentHTML('afterend',
+                `<p class="note" style="color:#e8b04b;">⚠ ${total} referee${total===1?'':'s'} in ${list.length}
+                 unrecognized ${list.length===1?'place':'places'} aren't on the map —
+                 ${esc(list.slice(0, 12).map(([c,n]) => `${c} (${n})`).join(', '))}${list.length>12?'…':''}</p>`);
+        }
+        if (noCity) {
+            note.insertAdjacentHTML('afterend',
+                `<p class="note" style="color:#e8b04b;">⚠ ${noCity} referees have no town on file at all —
+                 mostly the ones entered from Central Assign screenshots. They can't be mapped until
+                 someone fills in a town, or they come through the availability form.</p>`);
+        }
+        if (guesses.length) {
+            note.insertAdjacentHTML('afterend',
+                `<p class="note" style="color:#7fb0e8;">ℹ Best-guess matches (one character off):
+                 ${esc(guesses.map(([raw, t]) => `${raw} → ${t}`).join(', '))}. Fix the source record
+                 if any of those are wrong.</p>`);
+        }
+        console.log('[map] unmatched:', list, 'no city:', noCity, 'fuzzy:', FUZZY);
     }
 </script>
 </body>
