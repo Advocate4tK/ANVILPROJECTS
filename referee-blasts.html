@@ -423,6 +423,13 @@
                 <span id="addAllHint" style="font-size:0.8rem; color:#6b7280;"></span>
             </div>
 
+            <!-- Pool-view context bar — shows when viewing one pool's members -->
+            <div id="poolViewBar" style="display:none; align-items:center; gap:12px; flex-wrap:wrap; background:#f0fdf4; border:1px solid #bbf7d0; border-left:4px solid #00c853; border-radius:10px; padding:10px 14px; margin-bottom:14px;">
+                <span id="poolViewText" style="font-size:0.9rem; color:#065f46; font-weight:600;"></span>
+                <button class="btn-addall" id="poolViewAdd" style="margin-left:auto;">＋ Add referees to this pool</button>
+                <button class="pc-setactive" id="poolViewClear">Show all referees</button>
+            </div>
+
             <!-- ── Section 4: Directory table ── -->
             <div class="dir-card">
                 <table class="dir-table">
@@ -623,6 +630,21 @@
         if (fb) fb.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // Green context bar shown while viewing a single pool's members
+    function renderPoolViewBar() {
+        const bar = document.getElementById('poolViewBar');
+        if (!bar) return;
+        const poolId = document.getElementById('fPool').value;
+        const p = poolId ? POOLS.find(x => x.id === Number(poolId)) : null;
+        if (!p) { bar.style.display = 'none'; return; }
+        const cnt = poolCount(p.id);
+        document.getElementById('poolViewText').textContent =
+            `Viewing “${p.name}” — ${cnt} member${cnt === 1 ? '' : 's'}.`;
+        document.getElementById('poolViewAdd').onclick   = () => addMoreToPool(p.id);
+        document.getElementById('poolViewClear').onclick = () => { document.getElementById('fPool').value = ''; applyFilters(); };
+        bar.style.display = 'flex';
+    }
+
     // ── Filtering + table ─────────────────────────────────────────────────────
     function applyFilters() {
         const q      = document.getElementById('fSearch').value.trim().toLowerCase();
@@ -649,6 +671,7 @@
         });
 
         shown = PAGE_SIZE;
+        renderPoolViewBar();
         renderTable();
     }
 
@@ -793,6 +816,17 @@
         if (error) { alert('Could not set active: ' + error.message); return; }
         await loadPools();
         renderAll();
+    }
+
+    // From the pool-view bar: make this pool the bulk-add target, then show the
+    // full roster so you can filter a town + "Add all", or +Pool individuals.
+    async function addMoreToPool(poolId) {
+        await setActive(poolId);
+        const sel = document.getElementById('fPool');
+        if (sel) sel.value = '';   // clear the member-only filter → full roster
+        applyFilters();
+        const fb = document.querySelector('.filter-bar');
+        if (fb) fb.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     async function deletePool(poolId, name) {
