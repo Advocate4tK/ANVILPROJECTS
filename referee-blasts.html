@@ -325,6 +325,23 @@
         .addpool-menu button:hover { background: #f0fdf4; }
         .addpool-menu .apm-empty { color: #9ca3af; font-size: 0.8rem; padding: 7px 10px; }
 
+        .btn-addall {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #09142a;
+            background: #00c853;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn-addall:hover { background: #00e060; }
+        .btn-addall:disabled { background: #e2ded7; color: #a99f92; cursor: not-allowed; }
+
         .btn-showmore {
             display: block;
             margin: 16px auto 0;
@@ -384,6 +401,9 @@
                 <select id="fPool" onchange="applyFilters()">
                     <option value="">All Pools</option>
                 </select>
+                <select id="fTown" onchange="applyFilters()">
+                    <option value="">All Towns</option>
+                </select>
                 <select id="fCert" onchange="applyFilters()">
                     <option value="">All Certs</option>
                     <option value="has">Has cert</option>
@@ -397,6 +417,12 @@
                 <span class="filter-count" id="filterCount">—</span>
             </div>
 
+            <!-- Bulk action: add the whole filtered set to the ACTIVE pool at once -->
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+                <button class="btn-addall" id="btnAddAll" onclick="addAllShownToActive()" disabled>➕ Add all shown → active pool</button>
+                <span id="addAllHint" style="font-size:0.8rem; color:#6b7280;"></span>
+            </div>
+
             <!-- ── Section 4: Directory table ── -->
             <div class="dir-card">
                 <table class="dir-table">
@@ -405,13 +431,14 @@
                             <th>Name</th>
                             <th>Email</th>
                             <th>Phone</th>
+                            <th>Town</th>
                             <th>Cert</th>
                             <th>Pools</th>
                             <th style="text-align:right;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="dirBody">
-                        <tr><td colspan="6" class="empty-note">Loading referees…</td></tr>
+                        <tr><td colspan="7" class="empty-note">Loading referees…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -527,7 +554,21 @@
         renderPools();
         renderBanner();
         renderPoolFilterOptions();
+        renderTownFilterOptions();
         applyFilters();
+    }
+
+    function renderTownFilterOptions() {
+        const sel = document.getElementById('fTown');
+        if (!sel) return;
+        const cur = sel.value;
+        // distinct, non-blank towns with counts, alphabetical
+        const counts = {};
+        REFS.forEach(r => { const c = (r.city || '').trim(); if (c) counts[c] = (counts[c] || 0) + 1; });
+        const towns = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+        sel.innerHTML = '<option value="">All Towns</option>' +
+            towns.map(t => `<option value="${esc(t)}">${esc(t)} (${counts[t]})</option>`).join('');
+        sel.value = cur;
     }
 
     function renderPools() {
@@ -576,6 +617,7 @@
     function applyFilters() {
         const q      = document.getElementById('fSearch').value.trim().toLowerCase();
         const poolId = document.getElementById('fPool').value;
+        const town   = document.getElementById('fTown').value;
         const cert   = document.getElementById('fCert').value;
         const minor  = document.getElementById('fMinor').value;
 
@@ -588,6 +630,7 @@
                 const set = refPoolMap[r.id];
                 if (!set || !set.has(Number(poolId))) return false;
             }
+            if (town && (r.city || '').trim() !== town) return false;
             if (cert === 'has'  && !hasCert(r)) return false;
             if (cert === 'none' &&  hasCert(r)) return false;
             if (minor === 'minors' && !isMinor(r)) return false;
@@ -604,9 +647,10 @@
         const total = lastFiltered.length;
         document.getElementById('filterCount').textContent =
             `${total} referee${total === 1 ? '' : 's'}`;
+        updateAddAllBtn();
 
         if (!total) {
-            body.innerHTML = '<tr><td colspan="6" class="empty-note">No referees match these filters.</td></tr>';
+            body.innerHTML = '<tr><td colspan="7" class="empty-note">No referees match these filters.</td></tr>';
             document.getElementById('showMoreBtn').style.display = 'none';
             return;
         }
@@ -626,7 +670,7 @@
     function rowHtml(r) {
         const minor = isMinor(r);
         const agePart = (r.age != null && r.age !== '') ? ` · ${r.age}y` : '';
-        const loc = [r.city, r.state].filter(Boolean).join(', ');
+        const town = r.city && String(r.city).trim();
         const email = r.email && String(r.email).trim();
         const phone = r.phone && String(r.phone).trim();
 
@@ -663,10 +707,10 @@
         <tr>
             <td>
                 <span class="ref-name"><span class="ref-id">#${r.id}</span>${esc(r.name) || '—'}${agePart}${minor ? '<span class="minor-badge">Minor</span>' : ''}</span>
-                ${loc ? `<div class="ref-sub">${esc(loc)}</div>` : ''}
             </td>
             <td>${email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : '<span class="muted-dash">—</span>'}</td>
             <td>${phone ? `<a href="tel:${esc(phone)}">${esc(phone)}</a>` : '<span class="muted-dash">—</span>'}</td>
+            <td>${town ? `${esc(town)}${r.state ? ` <span style="color:#9ca3af;font-size:0.82em;">${esc(r.state)}</span>` : ''}` : '<span class="muted-dash">—</span>'}</td>
             <td>${certCell}</td>
             <td>${poolTags}</td>
             <td style="text-align:right;">${addMenu}</td>
@@ -674,6 +718,42 @@
     }
 
     function showMore() { shown += PAGE_SIZE; renderTable(); }
+
+    // ── Bulk add: everyone in the current filter → the ACTIVE pool ────────────
+    function activePool() { return POOLS.find(p => p.active) || null; }
+
+    function updateAddAllBtn() {
+        const btn  = document.getElementById('btnAddAll');
+        const hint = document.getElementById('addAllHint');
+        if (!btn) return;
+        const active = activePool();
+        if (!active) {
+            btn.disabled = true;
+            btn.textContent = '➕ Add all shown → active pool';
+            hint.textContent = 'Set a pool “Active” (click a pool chip) to enable bulk-add.';
+            return;
+        }
+        const toAdd = lastFiltered.filter(r => !(refPoolMap[r.id] && refPoolMap[r.id].has(active.id)));
+        btn.disabled = toAdd.length === 0;
+        btn.textContent = `➕ Add ${toAdd.length} shown → ${active.name}`;
+        hint.textContent = toAdd.length === 0
+            ? (lastFiltered.length ? `All shown are already in “${active.name}”.` : 'No referees shown.')
+            : `Adds the ${toAdd.length} not yet in “${active.name}” — filter by Town, then click.`;
+    }
+
+    async function addAllShownToActive() {
+        const active = activePool();
+        if (!active) { alert('Set a pool “Active” first — click “Set Active” on a pool chip.'); return; }
+        const toAdd = lastFiltered.filter(r => !(refPoolMap[r.id] && refPoolMap[r.id].has(active.id)));
+        if (!toAdd.length) { alert(`All shown referees are already in “${active.name}”.`); return; }
+        if (!confirm(`Add ${toAdd.length} referee${toAdd.length === 1 ? '' : 's'} to “${active.name}”?`)) return;
+        // Pre-filtered to non-members, so no unique-constraint collisions.
+        const rows = toAdd.map(r => ({ pool_id: active.id, referee_id: r.id }));
+        const { error } = await supabaseClient.client.from('pool_members').insert(rows);
+        if (error) { alert('Bulk add failed: ' + error.message); return; }
+        await loadPools();
+        renderAll();
+    }
 
     // ── Pool actions ──────────────────────────────────────────────────────────
     async function newPool() {
