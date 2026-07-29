@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Referee Map — Referee Tool</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            background-color: #060e20 !important;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            ) !important;
+        }
+        .map-wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px 120px; }
+
+        .bl-section-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.35rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 1.5px;
+            color: #09142a; margin: 0 0 12px;
+        }
+
+        /* ── Segmented Regions / Towns switch ── */
+        .seg {
+            display: inline-flex; background: #0d1c38; border: 1px solid #1e3358;
+            border-radius: 11px; padding: 4px; gap: 4px; margin-bottom: 18px;
+        }
+        .seg button {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.95rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 1.2px;
+            color: rgba(255,255,255,0.55); background: transparent;
+            border: 0; border-radius: 8px; padding: 9px 26px; cursor: pointer;
+            transition: color .18s ease, background .18s ease;
+        }
+        .seg button:hover { color: rgba(255,255,255,0.85); }
+        .seg button.on {
+            background: #00c853; color: #06210f;
+            box-shadow: 0 0 18px rgba(0,200,83,0.45);
+        }
+
+        /* ── The card that holds the map ── */
+        .map-card {
+            background: #f7f4ef; border: 1px solid #e2d9ce; border-radius: 14px;
+            padding: 16px; margin-bottom: 22px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+        }
+        /* Dark inset "screen" the map lives on */
+        .map-stage {
+            position: relative; border-radius: 11px; overflow: hidden;
+            background:
+                radial-gradient(120% 90% at 50% 0%, #14294c 0%, #0a1730 55%, #071122 100%);
+            box-shadow: inset 0 0 70px rgba(0,0,0,0.62), inset 0 0 0 1px rgba(255,255,255,0.05);
+            padding: 10px;
+        }
+        .map-stage svg { display: block; width: 100%; height: auto; }
+
+        /* ── Town shapes ── */
+        .twn {
+            stroke: rgba(255,255,255,0.16);
+            stroke-width: 0.7;
+            cursor: pointer;
+            transition: fill .16s ease, stroke .16s ease, opacity .16s ease;
+        }
+        .twn:hover { stroke: #7fffb0; stroke-width: 1.4; }
+        /* Regions mode: hovering one town lights the whole region it belongs to */
+        .twn.hot { stroke: #7fffb0; stroke-width: 1.2; filter: brightness(1.45); }
+        .twn.sel {
+            fill: #00c853 !important;
+            stroke: #b6ffd2; stroke-width: 1.5;
+            filter: url(#glow);
+        }
+        /* region outlines drawn on top in Regions view */
+        .rgn-edge { fill: none; stroke: rgba(255,255,255,0.30); stroke-width: 1.3; pointer-events: none; }
+
+        .rgn-label {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 12px; font-weight: 800; letter-spacing: 1.6px;
+            text-transform: uppercase; fill: rgba(255,255,255,0.92);
+            paint-order: stroke; stroke: rgba(0,0,0,0.55); stroke-width: 3px;
+            text-anchor: middle; pointer-events: none; user-select: none;
+        }
+
+        /* ── Hover tooltip ── */
+        .tip {
+            position: fixed; z-index: 50; pointer-events: none; display: none;
+            background: rgba(4,12,26,0.96);
+            border: 1px solid #00c853; border-radius: 9px;
+            padding: 8px 12px; color: #fff;
+            font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            white-space: nowrap;
+        }
+        .tip b { font-family: 'Barlow Condensed', sans-serif; font-size: 1.05rem;
+                 letter-spacing: 0.6px; text-transform: uppercase; display: block; }
+        .tip .tip-n { color: #00c853; font-weight: 700; }
+        .tip .tip-r { color: rgba(255,255,255,0.55); font-size: 0.78rem; }
+
+        /* ── Legend ── */
+        .legend {
+            display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+            margin-top: 12px; padding: 10px 4px 2px;
+            font-family: 'DM Sans', sans-serif; font-size: 0.78rem; color: #6b7280;
+        }
+        .legend .sw { display: inline-flex; align-items: center; gap: 6px; }
+        .legend .chip { width: 15px; height: 15px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.18); }
+
+        /* ── Selection panel ── */
+        .sel-card {
+            background: #f7f4ef; border: 1px solid #e2d9ce; border-radius: 14px;
+            padding: 18px 20px; margin-bottom: 22px;
+        }
+        .sel-head {
+            display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+            border-bottom: 2px solid #ece5db; padding-bottom: 10px; margin-bottom: 4px;
+        }
+        .sel-head h3 {
+            font-family: 'Barlow Condensed', sans-serif; margin: 0;
+            font-size: 1.5rem; font-weight: 800; letter-spacing: 0.8px;
+            text-transform: uppercase; color: #09142a;
+        }
+        .sel-head .cnt {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;
+            color: #00a844; font-weight: 700;
+        }
+        .sel-head .clr {
+            margin-left: auto; background: none; border: 0; cursor: pointer;
+            color: #9a8f82; font-size: 0.82rem; font-family: 'DM Sans', sans-serif;
+        }
+        .sel-head .clr:hover { color: #c2564e; text-decoration: underline; }
+
+        /* ── Referee rows (same language as the pools directory) ── */
+        .rrow {
+            display: grid; grid-template-columns: 18px 1.4fr 1fr 0.8fr 0.7fr 30px;
+            gap: 10px; align-items: center;
+            padding: 9px 4px; border-bottom: 1px solid #ece5db;
+            font-family: 'DM Sans', sans-serif; font-size: 0.87rem; color: #1f2937;
+        }
+        .rrow:last-child { border-bottom: 0; }
+        .rrow .tri {
+            color: #00c853; font-size: 0.7rem; cursor: pointer;
+            transition: transform .16s ease; display: inline-block;
+        }
+        .rrow.open .tri { transform: rotate(90deg); }
+        .rrow .nm { font-weight: 700; color: #09142a; }
+        .rrow .tn { color: #6b7280; }
+        .rrow .em { color: #6b7280; overflow: hidden; text-overflow: ellipsis; }
+        .rrow .x { color: #c9bfb2; cursor: pointer; text-align: right; }
+        .rrow .x:hover { color: #c2564e; }
+        .rdet {
+            display: none; padding: 10px 4px 14px 32px; border-bottom: 1px solid #ece5db;
+            font-family: 'DM Sans', sans-serif; font-size: 0.83rem; color: #4b5563;
+        }
+        .rdet.show { display: block; }
+        .rdet span { margin-right: 20px; }
+        .rdet b { color: #09142a; }
+        .badge-min {
+            background: #fde68a; color: #92400e; border-radius: 5px;
+            padding: 1px 6px; font-size: 0.7rem; font-weight: 800;
+        }
+
+        /* ── Sticky recipient tray ── */
+        .tray {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+            background: rgba(6,14,32,0.97);
+            border-top: 2px solid #00c853;
+            box-shadow: 0 -12px 40px rgba(0,0,0,0.55);
+            padding: 12px 20px;
+            display: none;
+        }
+        .tray.on { display: block; }
+        .tray-in {
+            max-width: 1120px; margin: 0 auto;
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+        }
+        .tray .big {
+            font-family: 'Barlow Condensed', sans-serif; font-size: 1.7rem;
+            font-weight: 800; color: #00c853; letter-spacing: 1px; line-height: 1;
+        }
+        .tray .lbl {
+            font-family: 'DM Sans', sans-serif; font-size: 0.82rem;
+            color: rgba(255,255,255,0.6);
+        }
+        .tray .where { color: rgba(255,255,255,0.85); font-weight: 600; }
+        .tbtn {
+            font-family: 'Barlow Condensed', sans-serif; font-size: 0.92rem;
+            font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
+            border-radius: 8px; padding: 9px 20px; cursor: pointer; border: 0;
+        }
+        .tbtn.gr { background: #00c853; color: #06210f; }
+        .tbtn.gr:hover { background: #00e060; }
+        .tbtn.gh {
+            background: transparent; color: rgba(255,255,255,0.75);
+            border: 1px solid rgba(255,255,255,0.25);
+        }
+        .tbtn.gh:hover { border-color: #00c853; color: #fff; }
+        .tbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .tray select {
+            background: #0d1c38; color: #fff; border: 1px solid #1e3358;
+            border-radius: 8px; padding: 9px 12px; font-family: 'DM Sans', sans-serif;
+            font-size: 0.85rem;
+        }
+        .tray-msg { font-size: 0.8rem; color: #00c853; font-family: 'DM Sans', sans-serif; }
+
+        .note {
+            font-family: 'DM Sans', sans-serif; font-size: 0.82rem;
+            color: rgba(255,255,255,0.45); margin: 0 0 18px;
+        }
+        .empty-note { text-align: center; color: #9ca3af; padding: 30px 0; font-size: 0.9rem; }
+
+        @media (max-width: 700px) {
+            .rrow { grid-template-columns: 18px 1.5fr 1fr 30px; }
+            .rrow .em, .rrow .ct { display: none; }
+        }
+    </style>
+</head>
+<!-- Hidden until auth confirms an admin/assignor session -->
+<body style="visibility:hidden">
+<div class="container">
+    <header style="position:relative;">
+        <h1 style="margin:0;">Referee Map</h1>
+        <p class="subtitle" style="font-size:1.05rem; color:rgba(255,255,255,0.6); margin-bottom:0;">
+            Click a region or a town. Everybody in it drops into the tray.
+        </p>
+    </header>
+
+    <main>
+        <div class="map-wrap">
+            <div style="margin-bottom:18px;">
+                <a href="referee-blasts.html" class="btn-back">← Back to Referee Blasts</a>
+            </div>
+
+            <div class="seg">
+                <button id="segRegions" class="on" onclick="setMode('regions')">Regions</button>
+                <button id="segTowns" onclick="setMode('towns')">Towns</button>
+            </div>
+
+            <p class="note" id="modeNote"></p>
+
+            <div class="map-card">
+                <div class="map-stage" id="stage">
+                    <div class="empty-note" style="color:rgba(255,255,255,0.5);" id="mapLoading">Loading map…</div>
+                </div>
+                <div class="legend" id="legend"></div>
+            </div>
+
+            <div class="sel-card">
+                <div class="sel-head">
+                    <h3 id="selTitle">Nothing selected</h3>
+                    <span class="cnt" id="selCount"></span>
+                    <button class="clr" id="selClear" onclick="clearSel()" style="display:none;">clear selection</button>
+                </div>
+                <div id="selList">
+                    <div class="empty-note">Click the map above to pull referees in.</div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<div class="tray" id="tray">
+    <div class="tray-in">
+        <div>
+            <div class="big" id="trayCount">0</div>
+            <div class="lbl">referees</div>
+        </div>
+        <div class="lbl">from <span class="where" id="trayWhere">—</span></div>
+        <div style="margin-left:auto; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <span class="tray-msg" id="trayMsg"></span>
+            <select id="poolPick"><option value="">Add to pool…</option></select>
+            <button class="tbtn gr" id="btnAddPool" onclick="addTrayToPool()">Add</button>
+            <button class="tbtn gh" onclick="copyEmails()">Copy Emails</button>
+            <button class="tbtn gh" onclick="clearSel()">Clear</button>
+        </div>
+    </div>
+</div>
+
+<script src="config.js?v=2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-client.js?v=12"></script>
+<script src="js/admin-auth.js?v=5"></script>
+<script src="js/ct-towns.js?v=1"></script>
+<script src="js/ct-regions.js?v=1"></script>
+<script>
+    checkAdminAccess();
+
+    let MY_UID = null;
+    let REFS = [];              // full referee directory
+    let POOLS = [];             // this assignor's pools
+    let byTown = {};            // "Putnam" -> [ref, ref, ...]
+    let townRegion = {};        // "Putnam" -> "Northeast"
+    let mode = 'regions';
+    let selected = new Set();   // town names currently selected
+    let dropped = new Set();    // ref ids manually pulled out of the tray
+    let selLabel = '';          // what the user clicked, for the tray readout
+
+    // ── Town resolution: alias the village, then match a real town ────────────
+    const TOWN_SET = new Set(CT_TOWNS.towns.map(t => t.n));
+    const TOWN_LC  = {};
+    CT_TOWNS.towns.forEach(t => { TOWN_LC[t.n.toLowerCase()] = t.n; });
+
+    function resolveTown(raw) {
+        if (!raw) return null;
+        let s = String(raw).trim().toLowerCase().replace(/\s+/g, ' ');
+        if (!s) return null;
+        s = s.replace(/,?\s*(ct|conn|connecticut)\.?$/, '').trim();
+        if (CT_TOWN_ALIASES[s]) return CT_TOWN_ALIASES[s];
+        if (TOWN_LC[s]) return TOWN_LC[s];
+        // "Town of X" / "X Center" / "X Village"
+        const m = s.replace(/^town of /, '').replace(/ (center|centre|village|depot)$/, '').trim();
+        if (CT_TOWN_ALIASES[m]) return CT_TOWN_ALIASES[m];
+        if (TOWN_LC[m]) return TOWN_LC[m];
+        return null;
+    }
+
+    // Region overrides live in localStorage so the lines are yours to move.
+    function loadRegions() {
+        let regions = JSON.parse(JSON.stringify(CT_REGIONS));
+        try {
+            const ov = JSON.parse(localStorage.getItem('ctRegionOverrides') || '{}');
+            Object.entries(ov).forEach(([town, rgn]) => {
+                Object.values(regions).forEach(r => {
+                    const i = r.towns.indexOf(town);
+                    if (i >= 0) r.towns.splice(i, 1);
+                });
+                if (regions[rgn]) regions[rgn].towns.push(town);
+            });
+        } catch(e) { /* bad override blob — ignore, defaults stand */ }
+        townRegion = {};
+        Object.entries(regions).forEach(([name, r]) =>
+            r.towns.forEach(t => { townRegion[t] = name; }));
+        return regions;
+    }
+    let REGIONS = loadRegions();
+
+    // ── Coverage shading ──────────────────────────────────────────────────────
+    const SCALE = [
+        { max: 0,        fill: '#16233f', label: 'none' },
+        { max: 2,        fill: '#1c4030', label: '1–2'  },
+        { max: 5,        fill: '#1d6440', label: '3–5'  },
+        { max: 10,       fill: '#1a8a4d', label: '6–10' },
+        { max: Infinity, fill: '#00c853', label: '11+'  }
+    ];
+    const shadeFor = n => (SCALE.find(s => n <= s.max) || SCALE[0]).fill;
+
+    function mix(hex, n) {
+        // Region hue, dimmed toward the background when coverage is thin.
+        const t = n === 0 ? 0.12 : Math.min(1, 0.34 + Math.log10(n + 1) * 0.62);
+        const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        const br = 0x16, bg = 0x23, bb = 0x3f;
+        const c = (a, bch) => Math.round(bch + (a - bch) * t).toString(16).padStart(2,'0');
+        return `#${c(r,br)}${c(g,bg)}${c(b,bb)}`;
+    }
+
+    const esc = s => String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async function init() {
+        MY_UID = typeof currentUserId === 'function' ? currentUserId() : null;
+        if (!MY_UID) { window.location.href = 'admin.html'; return; }
+        document.body.style.visibility = 'visible';
+
+        const [{ data: refs }, { data: pools }] = await Promise.all([
+            supabaseClient.client.from('referees').select('*').order('name'),
+            supabaseClient.client.from('referee_pools')
+                .select('id, name').eq('owner_uid', MY_UID).order('created_at', { ascending: true })
+        ]);
+        REFS  = refs  || [];
+        POOLS = pools || [];
+
+        byTown = {};
+        REFS.forEach(r => {
+            const t = resolveTown(r.city);
+            if (!t) return;
+            (byTown[t] = byTown[t] || []).push(r);
+        });
+
+        document.getElementById('poolPick').innerHTML =
+            '<option value="">Add to pool…</option>' +
+            POOLS.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+
+        drawMap();
+        setMode('regions');
+        reportUnmatched();
+    })();
+
+    // ── Draw ──────────────────────────────────────────────────────────────────
+    function drawMap() {
+        const vb = CT_TOWNS.viewBox;
+        const paths = CT_TOWNS.towns.map(t =>
+            `<path id="t-${t.n.replace(/[^A-Za-z]/g,'')}" class="twn" data-town="${esc(t.n)}" d="${t.d}" vector-effect="non-scaling-stroke"></path>`
+        ).join('');
+
+        // Region label anchors = mean of member town centroids
+        const labels = Object.entries(REGIONS).map(([name, r]) => {
+            const pts = r.towns.map(n => CT_TOWNS.towns.find(t => t.n === n)).filter(Boolean);
+            if (!pts.length) return '';
+            const cx = pts.reduce((a,p) => a + p.cx, 0) / pts.length;
+            const cy = pts.reduce((a,p) => a + p.cy, 0) / pts.length;
+            return `<text class="rgn-label rlab" x="${cx}" y="${cy}" data-rgn="${esc(name)}"
+                     style="font-size:0.028px;">${esc(name.toUpperCase())}</text>`;
+        }).join('');
+
+        document.getElementById('stage').innerHTML = `
+            <svg viewBox="${vb}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Connecticut towns">
+                <defs>
+                    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+                        <feDropShadow dx="0" dy="0" stdDeviation="0.006" flood-color="#00c853" flood-opacity="0.95"/>
+                        <feDropShadow dx="0" dy="0" stdDeviation="0.016" flood-color="#00c853" flood-opacity="0.55"/>
+                    </filter>
+                </defs>
+                <g id="gTowns">${paths}</g>
+                <g id="gLabels">${labels}</g>
+            </svg>`;
+
+        const stage = document.getElementById('stage');
+        stage.querySelectorAll('.twn').forEach(el => {
+            el.addEventListener('click', () => onClickTown(el.dataset.town));
+            el.addEventListener('mouseenter', () => hotRegion(el.dataset.town));
+            el.addEventListener('mousemove', e => showTip(e, el.dataset.town));
+            el.addEventListener('mouseleave', hideTip);
+        });
+    }
+
+    function paint() {
+        const showLabels = mode === 'regions';
+        document.querySelectorAll('.rlab').forEach(l => l.style.display = showLabels ? '' : 'none');
+
+        document.querySelectorAll('.twn').forEach(el => {
+            const name = el.dataset.town;
+            const n = (byTown[name] || []).length;
+            const rgn = townRegion[name];
+            el.classList.toggle('sel', selected.has(name));
+            el.style.fill = mode === 'regions'
+                ? (rgn ? mix(REGIONS[rgn].color, n) : '#16233f')
+                : shadeFor(n);
+        });
+
+        const legend = document.getElementById('legend');
+        legend.innerHTML = mode === 'towns'
+            ? '<span style="font-weight:700;color:#09142a;">Referees per town</span>' +
+              SCALE.map(s => `<span class="sw"><span class="chip" style="background:${s.fill}"></span>${s.label}</span>`).join('')
+            : '<span style="font-weight:700;color:#09142a;">Regions</span>' +
+              Object.entries(REGIONS).map(([n, r]) => {
+                  const tot = r.towns.reduce((a,t) => a + (byTown[t]||[]).length, 0);
+                  return `<span class="sw"><span class="chip" style="background:${r.color}"></span>${esc(n)} <b style="color:#00a844;">${tot}</b></span>`;
+              }).join('');
+    }
+
+    // ── Interaction ───────────────────────────────────────────────────────────
+    function setMode(m) {
+        mode = m;
+        document.getElementById('segRegions').classList.toggle('on', m === 'regions');
+        document.getElementById('segTowns').classList.toggle('on', m === 'towns');
+        document.getElementById('modeNote').textContent = m === 'regions'
+            ? 'Click anywhere in a region to take the whole region. Brightness shows how many referees are in each town.'
+            : 'Click individual towns — they add up. Solid green means plenty of referees, hollow means we have none on file.';
+        clearSel();
+        paint();
+    }
+
+    function onClickTown(name) {
+        if (mode === 'regions') {
+            const rgn = townRegion[name];
+            if (!rgn) return;
+            const towns = REGIONS[rgn].towns;
+            const allIn = towns.every(t => selected.has(t));
+            towns.forEach(t => allIn ? selected.delete(t) : selected.add(t));
+            selLabel = allIn ? '' : rgn;
+        } else {
+            selected.has(name) ? selected.delete(name) : selected.add(name);
+            selLabel = '';
+        }
+        dropped.clear();
+        paint();
+        renderSel();
+    }
+
+    function clearSel() {
+        selected.clear(); dropped.clear(); selLabel = '';
+        paint(); renderSel();
+    }
+
+    function trayRefs() {
+        const out = [];
+        selected.forEach(t => (byTown[t] || []).forEach(r => { if (!dropped.has(r.id)) out.push(r); }));
+        return out.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    }
+
+    function whereLabel() {
+        if (selLabel) return selLabel;
+        const t = [...selected];
+        if (!t.length) return '—';
+        if (t.length <= 3) return t.join(', ');
+        return `${t.length} towns`;
+    }
+
+    function renderSel() {
+        const refs = trayRefs();
+        const title = document.getElementById('selTitle');
+        const cnt   = document.getElementById('selCount');
+        const list  = document.getElementById('selList');
+
+        document.getElementById('selClear').style.display = selected.size ? '' : 'none';
+
+        if (!selected.size) {
+            title.textContent = 'Nothing selected';
+            cnt.textContent = '';
+            list.innerHTML = '<div class="empty-note">Click the map above to pull referees in.</div>';
+        } else {
+            title.textContent = whereLabel();
+            const towns = [...selected].length;
+            cnt.textContent = `${refs.length} referee${refs.length === 1 ? '' : 's'} · ${towns} town${towns === 1 ? '' : 's'}`;
+            list.innerHTML = refs.length ? refs.map(rowHtml).join('')
+                : '<div class="empty-note">No referees on file in that selection yet.</div>';
+        }
+
+        const tray = document.getElementById('tray');
+        tray.classList.toggle('on', refs.length > 0);
+        document.getElementById('trayCount').textContent = refs.length;
+        document.getElementById('trayWhere').textContent = whereLabel();
+        document.getElementById('btnAddPool').disabled = !POOLS.length;
+    }
+
+    function rowHtml(r) {
+        const town  = resolveTown(r.city) || '—';
+        const minor = r.age != null && r.age !== '' && Number(r.age) < 18;
+        const zipRaw = r['Zip Code'];
+        // int4 column: CT zips lost their leading zero on write — pad it back for display
+        const zip = zipRaw ? String(zipRaw).padStart(5, '0') : '—';
+        return `
+        <div class="rrow" id="row-${r.id}" onclick="toggleRow(${r.id})">
+            <span class="tri">▶</span>
+            <span class="nm">${esc(r.name)} ${minor ? '<span class="badge-min">MINOR</span>' : ''}</span>
+            <span class="tn">${esc(town)}</span>
+            <span class="em">${esc(r.email || '')}</span>
+            <span class="ct">${esc(r['Certification Level'] || '')}</span>
+            <span class="x" title="Remove" onclick="event.stopPropagation();dropRef(${r.id})">✕</span>
+        </div>
+        <div class="rdet" id="det-${r.id}">
+            <span><b>Email:</b> ${esc(r.email || '—')}</span>
+            <span><b>Phone:</b> ${esc(r.phone || '—')}</span>
+            <span><b>Zip:</b> ${esc(zip)}</span>
+            <span><b>Years:</b> ${esc(r['Years Reffing'] || '—')}</span>
+            <span><b>Raw city:</b> ${esc(r.city || '—')}</span>
+        </div>`;
+    }
+
+    function toggleRow(id) {
+        document.getElementById(`row-${id}`).classList.toggle('open');
+        document.getElementById(`det-${id}`).classList.toggle('show');
+    }
+
+    function dropRef(id) { dropped.add(id); renderSel(); }
+
+    // ── Tooltip ───────────────────────────────────────────────────────────────
+    function hotRegion(name) {
+        document.querySelectorAll('.twn.hot').forEach(el => el.classList.remove('hot'));
+        if (mode !== 'regions') return;
+        const rgn = townRegion[name];
+        if (!rgn) return;
+        const set = new Set(REGIONS[rgn].towns);
+        document.querySelectorAll('.twn').forEach(el => {
+            if (set.has(el.dataset.town)) el.classList.add('hot');
+        });
+    }
+
+    function showTip(e, name) {
+        const n = (byTown[name] || []).length;
+        const rgn = townRegion[name] || 'unassigned';
+        const tip = document.getElementById('tip');
+        if (mode === 'regions' && REGIONS[rgn]) {
+            const tot = REGIONS[rgn].towns.reduce((a,t) => a + (byTown[t]||[]).length, 0);
+            tip.innerHTML = `<b>${esc(rgn)}</b>
+                <span class="tip-n">${tot} referee${tot === 1 ? '' : 's'}</span>
+                <span class="tip-r"> · ${REGIONS[rgn].towns.length} towns · ${esc(name)} has ${n}</span>`;
+        } else {
+            tip.innerHTML = `<b>${esc(name)}</b>
+                <span class="tip-n">${n} referee${n === 1 ? '' : 's'}</span>
+                <span class="tip-r"> · ${esc(rgn)}</span>`;
+        }
+        tip.style.display = 'block';
+        const pad = 16;
+        let x = e.clientX + pad, y = e.clientY + pad;
+        const w = tip.offsetWidth, h = tip.offsetHeight;
+        if (x + w > window.innerWidth  - 8) x = e.clientX - w - pad;
+        if (y + h > window.innerHeight - 8) y = e.clientY - h - pad;
+        tip.style.left = x + 'px';
+        tip.style.top  = y + 'px';
+    }
+    function hideTip() {
+        document.getElementById('tip').style.display = 'none';
+        document.querySelectorAll('.twn.hot').forEach(el => el.classList.remove('hot'));
+    }
+
+    // ── Tray actions ──────────────────────────────────────────────────────────
+    function copyEmails() {
+        const list = trayRefs().map(r => r.email).filter(Boolean);
+        navigator.clipboard.writeText(list.join(', '))
+            .then(() => flash(`${list.length} email${list.length === 1 ? '' : 's'} copied`))
+            .catch(() => flash('Copy failed'));
+    }
+
+    async function addTrayToPool() {
+        const poolId = document.getElementById('poolPick').value;
+        if (!poolId) { flash('Pick a pool first'); return; }
+        const refs = trayRefs();
+        if (!refs.length) return;
+
+        const { data: existing } = await supabaseClient.client
+            .from('pool_members').select('referee_id').eq('pool_id', poolId);
+        const have = new Set((existing || []).map(m => m.referee_id));
+        const rows = refs.filter(r => !have.has(r.id))
+                         .map(r => ({ pool_id: Number(poolId), referee_id: r.id }));
+
+        if (!rows.length) { flash('All already in that pool'); return; }
+        const { error } = await supabaseClient.client.from('pool_members').insert(rows);
+        flash(error ? `Failed: ${error.message}` : `Added ${rows.length} to pool`);
+    }
+
+    let flashT = null;
+    function flash(msg) {
+        const el = document.getElementById('trayMsg');
+        el.textContent = msg;
+        clearTimeout(flashT);
+        flashT = setTimeout(() => { el.textContent = ''; }, 3500);
+    }
+
+    // ── Honesty check: who didn't land on the map, and why ────────────────────
+    function reportUnmatched() {
+        const bad = {};
+        let noCity = 0;
+        REFS.forEach(r => {
+            const c = (r.city || '').trim();
+            if (!c) { noCity++; return; }
+            if (!resolveTown(c)) bad[c] = (bad[c] || 0) + 1;
+        });
+        const list = Object.entries(bad).sort((a,b) => b[1] - a[1]);
+        const total = list.reduce((a, [,n]) => a + n, 0);
+        if (!total && !noCity) return;
+        const note = document.getElementById('modeNote');
+        note.insertAdjacentHTML('afterend',
+            `<p class="note" style="color:#e8b04b;">⚠ ${total} referee${total===1?'':'s'} in ${list.length} unrecognized
+             ${list.length===1?'place':'places'} aren't on the map${noCity?`, plus ${noCity} with no town at all`:''} —
+             ${esc(list.slice(0, 12).map(([c,n]) => `${c} (${n})`).join(', '))}${list.length>12?'…':''}</p>`);
+        console.log('[map] unmatched towns:', list);
+    }
+</script>
+</body>
+</html>
