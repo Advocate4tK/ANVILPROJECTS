@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Referee Blasts — Referee Tool</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            background-color: #060e20 !important;
+            background-image: repeating-linear-gradient(
+                15deg, transparent, transparent 56px,
+                rgba(255,255,255,0.016) 56px, rgba(255,255,255,0.016) 58px
+            ) !important;
+        }
+        .blasts-wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px 60px; }
+
+        /* ── Section headings ── */
+        .bl-section-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #09142a;
+            margin: 0 0 12px;
+        }
+        .bl-block { margin-bottom: 26px; }
+
+        /* ── Pool chips ── */
+        .pool-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+        .pool-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            background: #fff;
+            border: 1px solid #e2d9ce;
+            border-radius: 10px;
+            padding: 9px 13px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .pool-chip.is-active {
+            border: 1.5px solid #00c853;
+            background: #f0fdf4;
+            box-shadow: 0 0 0 3px rgba(0,200,83,0.10);
+        }
+        .pool-chip .pc-dot {
+            width: 11px; height: 11px; border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .pool-chip .pc-name {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.02rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #09142a;
+        }
+        .pool-chip .pc-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.74rem;
+            color: #6b7280;
+            background: rgba(9,20,42,0.06);
+            padding: 1px 6px;
+            border-radius: 5px;
+        }
+        .pc-active-label {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #065f46;
+            background: #d1fae5;
+            padding: 2px 8px;
+            border-radius: 20px;
+        }
+        .pc-setactive {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #09142a;
+            background: #f0ece6;
+            border: 1px solid #e2d9ce;
+            border-radius: 6px;
+            padding: 3px 9px;
+            cursor: pointer;
+        }
+        .pc-setactive:hover { background: #e6ded2; }
+        .pc-del {
+            border: none; background: none; cursor: pointer;
+            color: #b91c1c; font-size: 1rem; line-height: 1;
+            padding: 0 2px; opacity: 0.55;
+        }
+        .pc-del:hover { opacity: 1; }
+        .btn-new-pool {
+            background: #09142a;
+            color: #00c853;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 18px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── Amber eligibility banner ── */
+        .elig-banner {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-left: 4px solid #f59e0b;
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #78350f;
+            font-size: 0.9rem;
+        }
+        .elig-banner .eb-icon { font-size: 1.1rem; }
+        .btn-cleanup {
+            margin-left: auto;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #78350f;
+            background: #fde68a;
+            border: 1px solid #f59e0b;
+            border-radius: 6px;
+            padding: 5px 12px;
+            cursor: pointer;
+        }
+        .btn-cleanup:hover { background: #fcd34d; }
+
+        /* ── Filter bar ── */
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+            border: 1px solid #e2d9ce;
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+        }
+        .filter-bar input[type="text"],
+        .filter-bar select {
+            padding: 8px 12px;
+            border: 1.5px solid #e2d9ce;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.88rem;
+            color: #09142a;
+            background: #faf9f7;
+            outline: none;
+        }
+        .filter-bar input[type="text"] { flex: 1; min-width: 200px; }
+        .filter-bar input:focus, .filter-bar select:focus { border-color: #00c853; background:#fff; }
+        .minor-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            color: #09142a;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .filter-count {
+            margin-left: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            color: #09142a;
+            font-weight: 600;
+        }
+
+        /* ── Directory table ── */
+        .dir-card {
+            background: #fff;
+            border: 1px solid #e2d9ce;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .dir-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+        .dir-table thead th {
+            text-align: left;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6b7280;
+            background: #f4f6fa;
+            padding: 9px 14px;
+            border-bottom: 1px solid #e2d9ce;
+            white-space: nowrap;
+        }
+        .dir-table tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #f0ece6;
+            vertical-align: top;
+        }
+        .dir-table tbody tr:hover { background: #fafbfd; }
+        .ref-name {
+            font-weight: 700;
+            color: #09142a;
+        }
+        .ref-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            color: #9ca3af;
+            margin-right: 5px;
+        }
+        .ref-sub { font-size: 0.76rem; color: #6b7280; margin-top: 2px; }
+        .dir-table a { color: #2563eb; text-decoration: none; }
+        .dir-table a:hover { text-decoration: underline; }
+        .muted-dash { color: #c4bdb2; }
+
+        /* ── Pills / badges ── */
+        .cert-pill {
+            display: inline-block;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 2px 9px;
+            border-radius: 20px;
+            background: #dbeafe;
+            color: #1e40af;
+            white-space: nowrap;
+        }
+        .cert-none {
+            font-size: 0.74rem;
+            color: #b45309;
+            font-style: italic;
+        }
+        .minor-badge {
+            display: inline-block;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.66rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 1px 7px;
+            border-radius: 20px;
+            background: #fde68a;
+            color: #78350f;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .pool-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #eef2ff;
+            color: #3730a3;
+            border-radius: 20px;
+            padding: 2px 8px;
+            margin: 0 4px 4px 0;
+        }
+        .pool-tag .pt-x { cursor: pointer; opacity: 0.55; font-size: 0.85rem; }
+        .pool-tag .pt-x:hover { opacity: 1; }
+
+        /* ── Actions cell / add-to-pool menu ── */
+        .addpool-wrap { position: relative; display: inline-block; }
+        .btn-addpool {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.74rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #09142a;
+            background: #00c853;
+            border: none;
+            border-radius: 6px;
+            padding: 5px 11px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn-addpool:hover { background: #00e060; }
+        .addpool-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 4px;
+            background: #fff;
+            border: 1px solid #e2d9ce;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(9,20,42,0.18);
+            z-index: 50;
+            min-width: 180px;
+            padding: 5px;
+        }
+        .addpool-menu.open { display: block; }
+        .addpool-menu button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: none;
+            border: none;
+            border-radius: 5px;
+            padding: 7px 10px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.84rem;
+            color: #09142a;
+            cursor: pointer;
+        }
+        .addpool-menu button:hover { background: #f0fdf4; }
+        .addpool-menu .apm-empty { color: #9ca3af; font-size: 0.8rem; padding: 7px 10px; }
+
+        .btn-showmore {
+            display: block;
+            margin: 16px auto 0;
+            background: #f0ece6;
+            color: #09142a;
+            border: 1px solid #e2d9ce;
+            border-radius: 8px;
+            padding: 9px 24px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.92rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+        }
+        .btn-showmore:hover { background: #e6ded2; }
+        .empty-note { text-align: center; color: #9ca3af; padding: 34px 0; font-size: 0.9rem; }
+    </style>
+</head>
+<!-- Hidden until auth confirms an admin/assignor session (see gate script at bottom) -->
+<body style="visibility:hidden">
+<div class="container">
+    <header style="position:relative;">
+        <h1 style="margin:0;">Referee Blasts</h1>
+        <p class="subtitle" style="font-size:1.05rem; color:rgba(255,255,255,0.6); margin-bottom:0;">
+            Build referee pools and blast openings by email or text.
+        </p>
+    </header>
+
+    <main>
+        <div class="blasts-wrap">
+            <div style="margin-bottom:20px;">
+                <a href="admin.html" class="btn-back">← Back to Admin Portal</a>
+            </div>
+
+            <!-- ── Section 1: My Pools ── -->
+            <div class="bl-block">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+                    <h2 class="bl-section-title" style="margin:0;">My Pools</h2>
+                    <button class="btn-new-pool" onclick="newPool()">+ New Pool</button>
+                </div>
+                <div class="pool-chips" id="poolChips">
+                    <span style="color:#9ca3af; font-size:0.88rem;">Loading pools…</span>
+                </div>
+            </div>
+
+            <!-- ── Section 2: Eligibility warning banner ── -->
+            <div class="elig-banner" id="eligBanner">
+                <span class="eb-icon">⚠️</span>
+                <span id="eligText"></span>
+                <button class="btn-cleanup" onclick="cleanupNoCert()">Clean Up</button>
+            </div>
+
+            <!-- ── Section 3: Search + filters ── -->
+            <div class="filter-bar">
+                <input type="text" id="fSearch" placeholder="Search name, email, or city…" oninput="applyFilters()">
+                <select id="fPool" onchange="applyFilters()">
+                    <option value="">All Pools</option>
+                </select>
+                <select id="fCert" onchange="applyFilters()">
+                    <option value="">All Certs</option>
+                    <option value="has">Has cert</option>
+                    <option value="none">No cert</option>
+                </select>
+                <select id="fMinor" onchange="applyFilters()">
+                    <option value="">All ages</option>
+                    <option value="minors">Minors only</option>
+                    <option value="hide">Hide minors</option>
+                </select>
+                <span class="filter-count" id="filterCount">—</span>
+            </div>
+
+            <!-- ── Section 4: Directory table ── -->
+            <div class="dir-card">
+                <table class="dir-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Cert</th>
+                            <th>Pools</th>
+                            <th style="text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dirBody">
+                        <tr><td colspan="6" class="empty-note">Loading referees…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <button class="btn-showmore" id="showMoreBtn" style="display:none;" onclick="showMore()">Show more</button>
+        </div>
+    </main>
+</div>
+
+<script src="config.js?v=2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-client.js?v=12"></script>
+<script src="js/admin-auth.js?v=5"></script>
+<script>
+    // ── Auth gate: redirect to admin.html if not logged in ──────────────────
+    checkAdminAccess();
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MINOR HANDLING / COMPLIANCE NOTE:
+    // A referee is a MINOR when `age` is present and < 18. This page only makes
+    // minors clearly VISIBLE (MINOR badge) and FILTERABLE. The compose/send
+    // screen (v2, out of scope here) MUST enforce special handling for minors —
+    // especially SMS blasts, which require guardian consent. Do NOT blast minors
+    // by text without that gate. This v1 is pool-management only; no sending.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    let MY_UID   = null;   // logged-in assignor's Supabase auth uid
+    let MY_ROLE  = null;
+    let POOLS    = [];     // [{id, name, active, ...}]
+    let REFS     = [];     // referee directory (shared, all rows)
+    let MEMBERS  = [];     // pool_members rows for MY pools
+    let refPoolMap = {};   // referee_id -> Set(pool_id) (my pools only)
+    let PAGE_SIZE = 50;
+    let shown     = PAGE_SIZE;
+    let lastFiltered = [];
+
+    // Stable color per pool (by index) for the chip dot / tags
+    const POOL_COLORS = ['#00c853','#3498db','#9b59b6','#e67e22','#e74c3c','#16a085','#f39c12','#2c3e50'];
+    function poolColor(poolId) {
+        const idx = POOLS.findIndex(p => p.id === poolId);
+        return POOL_COLORS[(idx >= 0 ? idx : 0) % POOL_COLORS.length];
+    }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+            ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+    function isMinor(r) { return r.age != null && Number(r.age) < 18; }
+    function hasCert(r) {
+        const c = r['Certification Level'];
+        return !!(c && String(c).trim());
+    }
+
+    // ── Boot ────────────────────────────────────────────────────────────────
+    (async () => {
+        MY_UID = currentUserId();
+        if (!MY_UID) { window.location.href = 'admin.html'; return; }
+
+        // Current assignor record (scope key = their auth uid; clubs unused in v1)
+        const { data: me } = await supabaseClient.client
+            .from('assignors')
+            .select('auth_user_id, name, role, clubs')
+            .eq('auth_user_id', MY_UID)
+            .single();
+        MY_ROLE = me?.role || null;
+
+        document.body.style.visibility = 'visible';
+
+        await Promise.all([loadPools(), loadReferees()]);
+        renderAll();
+    })();
+
+    // ── Data loads ────────────────────────────────────────────────────────────
+    async function loadPools() {
+        // Pools are scoped per-assignor: only pools this assignor owns.
+        const { data: pools, error } = await supabaseClient.client
+            .from('referee_pools')
+            .select('id, name, description, active, created_at')
+            .eq('owner_uid', MY_UID)
+            .order('created_at', { ascending: true });
+        POOLS = error ? [] : (pools || []);
+
+        // Member rows for my pools (drives per-pool counts + the "Pools" column)
+        MEMBERS = [];
+        refPoolMap = {};
+        if (POOLS.length) {
+            const poolIds = POOLS.map(p => p.id);
+            const { data: mem } = await supabaseClient.client
+                .from('pool_members')
+                .select('id, pool_id, referee_id')
+                .in('pool_id', poolIds);
+            MEMBERS = mem || [];
+            MEMBERS.forEach(m => {
+                (refPoolMap[m.referee_id] = refPoolMap[m.referee_id] || new Set()).add(m.pool_id);
+            });
+        }
+    }
+
+    function poolCount(poolId) {
+        return MEMBERS.filter(m => m.pool_id === poolId).length;
+    }
+
+    async function loadReferees() {
+        // Directory is SHARED across all assignors — show every referee.
+        // Multi-word columns are Title Case WITH SPACES → must be quoted.
+        const { data: refs, error } = await supabaseClient.client
+            .from('referees')
+            .select('id, name, email, "Email 2", "Email 3", phone, city, state, age, "Certification Level", status')
+            .order('name');
+        REFS = error ? [] : (refs || []);
+    }
+
+    // ── Renderers ───────────────────────────────────────────────────────────
+    function renderAll() {
+        renderPools();
+        renderBanner();
+        renderPoolFilterOptions();
+        applyFilters();
+    }
+
+    function renderPools() {
+        const wrap = document.getElementById('poolChips');
+        if (!POOLS.length) {
+            wrap.innerHTML = '<span style="color:#9ca3af; font-size:0.88rem;">No pools yet — create one with “+ New Pool”.</span>';
+            return;
+        }
+        wrap.innerHTML = POOLS.map(p => {
+            const active = !!p.active;
+            const cnt = poolCount(p.id);
+            return `
+            <div class="pool-chip ${active ? 'is-active' : ''}">
+                <span class="pc-dot" style="background:${poolColor(p.id)};"></span>
+                <span class="pc-name">${esc(p.name)}</span>
+                <span class="pc-count">${cnt}</span>
+                ${active
+                    ? '<span class="pc-active-label">Active</span>'
+                    : `<button class="pc-setactive" onclick="setActive(${p.id})">Set Active</button>`}
+                <button class="pc-del" title="Delete pool" onclick="deletePool(${p.id}, '${esc(p.name).replace(/'/g,"\\'")}')">×</button>
+            </div>`;
+        }).join('');
+    }
+
+    function renderBanner() {
+        const noCert = REFS.filter(r => !hasCert(r)).length;
+        const banner = document.getElementById('eligBanner');
+        if (noCert > 0) {
+            document.getElementById('eligText').textContent =
+                `${noCert} referee${noCert === 1 ? ' has' : 's have'} no certification level on record.`;
+            banner.style.display = 'flex';
+        } else {
+            banner.style.display = 'none';
+        }
+    }
+
+    function renderPoolFilterOptions() {
+        const sel = document.getElementById('fPool');
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">All Pools</option>' +
+            POOLS.map(p => `<option value="${p.id}">${esc(p.name)} (${poolCount(p.id)})</option>`).join('');
+        sel.value = cur;
+    }
+
+    // ── Filtering + table ─────────────────────────────────────────────────────
+    function applyFilters() {
+        const q      = document.getElementById('fSearch').value.trim().toLowerCase();
+        const poolId = document.getElementById('fPool').value;
+        const cert   = document.getElementById('fCert').value;
+        const minor  = document.getElementById('fMinor').value;
+
+        lastFiltered = REFS.filter(r => {
+            if (q) {
+                const hay = `${r.name || ''} ${r.email || ''} ${r['Email 2'] || ''} ${r.city || ''}`.toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            if (poolId) {
+                const set = refPoolMap[r.id];
+                if (!set || !set.has(Number(poolId))) return false;
+            }
+            if (cert === 'has'  && !hasCert(r)) return false;
+            if (cert === 'none' &&  hasCert(r)) return false;
+            if (minor === 'minors' && !isMinor(r)) return false;
+            if (minor === 'hide'   &&  isMinor(r)) return false;
+            return true;
+        });
+
+        shown = PAGE_SIZE;
+        renderTable();
+    }
+
+    function renderTable() {
+        const body = document.getElementById('dirBody');
+        const total = lastFiltered.length;
+        document.getElementById('filterCount').textContent =
+            `${total} referee${total === 1 ? '' : 's'}`;
+
+        if (!total) {
+            body.innerHTML = '<tr><td colspan="6" class="empty-note">No referees match these filters.</td></tr>';
+            document.getElementById('showMoreBtn').style.display = 'none';
+            return;
+        }
+
+        const page = lastFiltered.slice(0, shown);
+        body.innerHTML = page.map(r => rowHtml(r)).join('');
+
+        const more = document.getElementById('showMoreBtn');
+        if (total > shown) {
+            more.style.display = 'block';
+            more.textContent = `Show more (${total - shown} more)`;
+        } else {
+            more.style.display = 'none';
+        }
+    }
+
+    function rowHtml(r) {
+        const minor = isMinor(r);
+        const agePart = (r.age != null && r.age !== '') ? ` · ${r.age}y` : '';
+        const loc = [r.city, r.state].filter(Boolean).join(', ');
+        const email = r.email && String(r.email).trim();
+        const phone = r.phone && String(r.phone).trim();
+
+        const certCell = hasCert(r)
+            ? `<span class="cert-pill">${esc(r['Certification Level'])}</span>`
+            : `<span class="cert-none">no cert</span>`;
+
+        // "Pools" column — which of MY pools this ref is in (with remove ×)
+        const set = refPoolMap[r.id];
+        const poolTags = (set && set.size)
+            ? [...set].map(pid => {
+                const p = POOLS.find(x => x.id === pid);
+                if (!p) return '';
+                return `<span class="pool-tag" style="background:${poolColor(pid)}22; color:${poolColor(pid)};">
+                    ${esc(p.name)}
+                    <span class="pt-x" title="Remove from ${esc(p.name)}" onclick="removeFromPool(${r.id}, ${pid})">×</span>
+                </span>`;
+              }).join('')
+            : '<span class="muted-dash">—</span>';
+
+        // Add-to-pool menu (only pools this ref is NOT already in)
+        const addable = POOLS.filter(p => !(set && set.has(p.id)));
+        const menuItems = addable.length
+            ? addable.map(p => `<button onclick="addToPool(${r.id}, ${p.id})">+ ${esc(p.name)}</button>`).join('')
+            : '<div class="apm-empty">In all pools</div>';
+        const addMenu = POOLS.length
+            ? `<div class="addpool-wrap">
+                    <button class="btn-addpool" onclick="toggleAddMenu(event, ${r.id})">+ Pool</button>
+                    <div class="addpool-menu" id="apm-${r.id}">${menuItems}</div>
+               </div>`
+            : '<span class="muted-dash" style="font-size:0.76rem;">no pools</span>';
+
+        return `
+        <tr>
+            <td>
+                <span class="ref-name"><span class="ref-id">#${r.id}</span>${esc(r.name) || '—'}${agePart}${minor ? '<span class="minor-badge">Minor</span>' : ''}</span>
+                ${loc ? `<div class="ref-sub">${esc(loc)}</div>` : ''}
+            </td>
+            <td>${email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : '<span class="muted-dash">—</span>'}</td>
+            <td>${phone ? `<a href="tel:${esc(phone)}">${esc(phone)}</a>` : '<span class="muted-dash">—</span>'}</td>
+            <td>${certCell}</td>
+            <td>${poolTags}</td>
+            <td style="text-align:right;">${addMenu}</td>
+        </tr>`;
+    }
+
+    function showMore() { shown += PAGE_SIZE; renderTable(); }
+
+    // ── Pool actions ──────────────────────────────────────────────────────────
+    async function newPool() {
+        const name = (prompt('Name for the new pool:') || '').trim();
+        if (!name) return;
+        // First pool becomes active automatically; otherwise inactive.
+        const makeActive = POOLS.length === 0;
+        const { error } = await supabaseClient.client
+            .from('referee_pools')
+            .insert({ name, owner_uid: MY_UID, active: makeActive });
+        if (error) { alert('Could not create pool: ' + error.message); return; }
+        await loadPools();
+        renderAll();
+    }
+
+    async function setActive(poolId) {
+        // Only one active pool at a time per assignor.
+        await supabaseClient.client
+            .from('referee_pools')
+            .update({ active: false })
+            .eq('owner_uid', MY_UID);
+        const { error } = await supabaseClient.client
+            .from('referee_pools')
+            .update({ active: true })
+            .eq('id', poolId)
+            .eq('owner_uid', MY_UID);
+        if (error) { alert('Could not set active: ' + error.message); return; }
+        await loadPools();
+        renderAll();
+    }
+
+    async function deletePool(poolId, name) {
+        if (!confirm(`Delete pool "${name}"? Members are removed from the pool (referees themselves are NOT deleted).`)) return;
+        const { error } = await supabaseClient.client
+            .from('referee_pools')
+            .delete()
+            .eq('id', poolId)
+            .eq('owner_uid', MY_UID);   // pool_members cascade via FK ON DELETE CASCADE
+        if (error) { alert('Could not delete pool: ' + error.message); return; }
+        await loadPools();
+        renderAll();
+    }
+
+    // ── Membership actions ──────────────────────────────────────────────────
+    async function addToPool(refId, poolId) {
+        closeAllMenus();
+        const { error } = await supabaseClient.client
+            .from('pool_members')
+            .insert({ pool_id: poolId, referee_id: refId });
+        // 23505 = unique_violation (already a member) → treat as success/no-op
+        if (error && error.code !== '23505') { alert('Could not add to pool: ' + error.message); return; }
+        await loadPools();
+        renderPools();
+        renderPoolFilterOptions();
+        renderTable();
+    }
+
+    async function removeFromPool(refId, poolId) {
+        const { error } = await supabaseClient.client
+            .from('pool_members')
+            .delete()
+            .eq('pool_id', poolId)
+            .eq('referee_id', refId);
+        if (error) { alert('Could not remove from pool: ' + error.message); return; }
+        await loadPools();
+        renderPools();
+        renderPoolFilterOptions();
+        renderTable();
+    }
+
+    // ── Add-to-pool dropdown menu handling ──────────────────────────────────
+    function toggleAddMenu(evt, refId) {
+        evt.stopPropagation();
+        const menu = document.getElementById('apm-' + refId);
+        const wasOpen = menu.classList.contains('open');
+        closeAllMenus();
+        if (!wasOpen) menu.classList.add('open');
+    }
+    function closeAllMenus() {
+        document.querySelectorAll('.addpool-menu.open').forEach(m => m.classList.remove('open'));
+    }
+    document.addEventListener('click', closeAllMenus);
+
+    // ── "Clean Up" — filter table to no-cert refs ─────────────────────────────
+    function cleanupNoCert() {
+        document.getElementById('fCert').value = 'none';
+        document.getElementById('fSearch').value = '';
+        document.getElementById('fPool').value = '';
+        document.getElementById('fMinor').value = '';
+        applyFilters();
+        document.querySelector('.filter-bar').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+</script>
+</body>
+</html>
