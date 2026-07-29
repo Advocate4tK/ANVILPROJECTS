@@ -226,6 +226,21 @@
         .dir-table a:hover { text-decoration: underline; }
         .muted-dash { color: #c4bdb2; }
 
+        /* ── Expandable detail row (chevron) ── */
+        .row-chevron {
+            color: #00c853; font-size: 0.6rem; cursor: pointer;
+            display: inline-block; transition: transform 0.2s; margin-right: 7px;
+            vertical-align: middle;
+        }
+        .detail-row > td {
+            background: #f7f9fc;
+            border-bottom: 1px solid #f0ece6;
+            padding: 4px 14px 14px 40px;
+        }
+        .det-field { min-width: 170px; }
+        .det-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.6px; color: #9ca3af; margin-bottom: 1px; }
+        .det-value { font-size: 0.86rem; color: #09142a; }
+
         /* ── Pills / badges ── */
         .cert-pill {
             display: inline-block;
@@ -551,7 +566,7 @@
         // Multi-word columns are Title Case WITH SPACES → must be quoted.
         const { data: refs, error } = await supabaseClient.client
             .from('referees')
-            .select('id, name, email, "Email 2", "Email 3", phone, city, state, age, "Certification Level", status')
+            .select('*')
             .order('name');
         REFS = error ? [] : (refs || []);
     }
@@ -739,6 +754,7 @@
         return `
         <tr>
             <td>
+                <span class="row-chevron" id="chev-${r.id}" onclick="toggleDetail(event, ${r.id})" title="Show details">▶</span>
                 <span class="ref-name"><span class="ref-id">#${r.id}</span>${esc(r.name) || '—'}${agePart}${minor ? '<span class="minor-badge">Minor</span>' : ''}</span>
             </td>
             <td>${email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : '<span class="muted-dash">—</span>'}</td>
@@ -747,7 +763,47 @@
             <td>${certCell}</td>
             <td>${poolTags}</td>
             <td style="text-align:right;">${addMenu}</td>
-        </tr>`;
+        </tr>
+        <tr class="detail-row" id="det-${r.id}" style="display:none;"><td colspan="7">${detailHtml(r)}</td></tr>`;
+    }
+
+    // Full detail shown when a row's chevron is expanded
+    function detailHtml(r) {
+        const addr = [r.address, r.city, r.state, r['Zip Code'] || r.zip].filter(Boolean).join(', ');
+        const optEmail = r.email_opt_in === false ? 'No' : 'Yes';
+        const optSms   = r.sms_opt_in   === false ? 'No' : 'Yes';
+        const fields = [
+            ['Email 2', r['Email 2']],
+            ['Email 3', r['Email 3']],
+            ['Phone', r.phone],
+            ['Address', addr],
+            ['Age', r.age],
+            ['Years Reffing', r['Years Reffing']],
+            ['Certification', r['Certification Level']],
+            ['Age Groups Preferred', r['Age Groups Preferred']],
+            ['Gender', r.Gender],
+            ['Rating', r.rating],
+            ['Club Preference', r['Club Preference']],
+            ['Source Club', r.source_club],
+            ['Email opt-in', optEmail],
+            ['Text opt-in', optSms],
+            ['Notes', r.notes],
+        ];
+        const cells = fields
+            .filter(([, v]) => v != null && String(v).trim() !== '')
+            .map(([k, v]) => `<div class="det-field"><div class="det-label">${k}</div><div class="det-value">${esc(String(v))}</div></div>`)
+            .join('');
+        return `<div style="display:flex; flex-wrap:wrap; gap:14px 26px;">${cells || '<span class="muted-dash">No extra details on file yet — fills in when they log in.</span>'}</div>`;
+    }
+
+    function toggleDetail(evt, id) {
+        if (evt) evt.stopPropagation();
+        const row = document.getElementById('det-' + id);
+        const ch  = document.getElementById('chev-' + id);
+        if (!row) return;
+        const open = row.style.display === 'none';
+        row.style.display = open ? 'table-row' : 'none';
+        if (ch) ch.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
     }
 
     function showMore() { shown += PAGE_SIZE; renderTable(); }
