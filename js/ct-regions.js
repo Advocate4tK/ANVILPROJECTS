@@ -20,8 +20,10 @@ window.CT_REGIONS = {
         color: '#d98f2b',
         towns: ['Avon','Berlin','Bloomfield','Bristol','Burlington','Canton','East Granby','East Hartford','East Windsor','Enfield','Farmington','Glastonbury','Granby','Hartford','Hartland','Manchester','Marlborough','New Britain','Newington','Plainville','Rocky Hill','Simsbury','South Windsor','Southington','Suffield','West Hartford','Wethersfield','Windsor','Windsor Locks']
     },
+    // NOTE: no region may use green. #00c853 means "selected" everywhere in this
+    // tool — a green region would be indistinguishable from a chosen one.
     'Northeast': {
-        color: '#2fa36b',
+        color: '#4a6fd0',
         towns: ['Andover','Ashford','Bolton','Brooklyn','Canterbury','Chaplin','Columbia','Coventry','Eastford','Ellington','Hampton','Hebron','Killingly','Mansfield','Plainfield','Pomfret','Putnam','Scotland','Somers','Stafford','Sterling','Thompson','Tolland','Union','Vernon','Willington','Windham','Woodstock']
     },
     'Southeast': {
@@ -35,11 +37,11 @@ window.CT_REGIONS = {
         towns: ['Chester','Clinton','Cromwell','Deep River','Durham','East Haddam','East Hampton','Essex','Haddam','Killingworth','Middlefield','Middletown','Old Saybrook','Portland','Westbrook']
     },
     'South Central': {
-        color: '#3aa8a0',
+        color: '#5fb3c9',
         towns: ['Ansonia','Beacon Falls','Bethany','Branford','Cheshire','Derby','East Haven','Guilford','Hamden','Madison','Meriden','Middlebury','Milford','Naugatuck','New Haven','North Branford','North Haven','Orange','Oxford','Prospect','Seymour','Southbury','Wallingford','Waterbury','West Haven','Wolcott','Woodbridge']
     },
     'Southwest': {
-        color: '#4a7fc1',
+        color: '#9a8f6a',
         towns: ['Bethel','Bridgeport','Brookfield','Danbury','Darien','Easton','Fairfield','Greenwich','Monroe','New Canaan','New Fairfield','Newtown','Norwalk','Redding','Ridgefield','Shelton','Sherman','Stamford','Stratford','Trumbull','Weston','Westport','Wilton']
     }
 };
