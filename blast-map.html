@@ -289,7 +289,7 @@
 <script src="js/supabase-client.js?v=12"></script>
 <script src="js/admin-auth.js?v=5"></script>
 <script src="js/ct-towns.js?v=1"></script>
-<script src="js/ct-regions.js?v=1"></script>
+<script src="js/ct-regions.js?v=3"></script>
 <script>
     checkAdminAccess();
 
@@ -336,6 +336,9 @@
         s = s.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
         if (!s) return null;
         if (/^(ct|conn|connecticut|ma|ri|ny|mass)$/.test(s)) return null;
+        // "South Windsor CT" — drop a trailing state token before matching
+        s = s.replace(/ (ct|conn|connecticut|mass|ma|ri|ny)$/, '').trim();
+        if (!s) return null;
 
         if (CT_TOWN_ALIASES[s]) return CT_TOWN_ALIASES[s];
         if (TOWN_LC[s]) return TOWN_LC[s];
@@ -709,12 +712,14 @@
     // ── Honesty check: who didn't land on the map, and why ────────────────────
     function reportUnmatched() {
         const bad = {};
-        let noCity = 0;
+        const blank = [];
         REFS.forEach(r => {
             const c = (r.city || '').trim();
-            if (!c) { noCity++; return; }
+            if (!c) { blank.push({ id: r.id, name: r.name, email: r.email, zip: r['Zip Code'] }); return; }
             if (!resolveTown(c)) bad[c] = (bad[c] || 0) + 1;
         });
+        const noCity = blank.length;
+        if (noCity) console.table(blank);
         const list = Object.entries(bad).sort((a,b) => b[1] - a[1]);
         const total = list.reduce((a, [,n]) => a + n, 0);
         const guesses = Object.entries(FUZZY);
@@ -728,9 +733,9 @@
         }
         if (noCity) {
             note.insertAdjacentHTML('afterend',
-                `<p class="note" style="color:#e8b04b;">⚠ ${noCity} referees have no town on file at all —
-                 mostly the ones entered from Central Assign screenshots. They can't be mapped until
-                 someone fills in a town, or they come through the availability form.</p>`);
+                `<p class="note" style="color:#e8b04b;">⚠ ${noCity} referees have a blank town and can't be
+                 placed. The availability form now requires a zip, so this heals as they come through —
+                 open the console for the full list if you want to fix them by hand.</p>`);
         }
         if (guesses.length) {
             note.insertAdjacentHTML('afterend',
