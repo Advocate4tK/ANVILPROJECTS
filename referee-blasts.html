@@ -1429,12 +1429,15 @@
     // Density is BLUE, never green. Green (#00c853) means "selected" everywhere in
     // this tool — if it also meant "lots of referees", clicking a busy town would
     // be green-to-green and read as nothing happening.
+    // Each step changes HUE as well as lightness (deep indigo -> cyan). Steps that
+    // differ only in lightness are genuinely hard to tell apart — the first version
+    // of this ramp made you squint at the top two tiers.
     const SCALE = [
-        { max: 0,        fill: '#243553', label: 'none' },
-        { max: 2,        fill: '#2d4c7d', label: '1–2'  },
-        { max: 5,        fill: '#3568a6', label: '3–5'  },
-        { max: 10,       fill: '#3d88cc', label: '6–10' },
-        { max: Infinity, fill: '#5cb4ee', label: '11+'  }
+        { max: 0,        fill: '#1e2c47', label: 'none' },
+        { max: 2,        fill: '#2a4d90', label: '1–2'  },
+        { max: 5,        fill: '#2f7bc7', label: '3–5'  },
+        { max: 10,       fill: '#2fa6dd', label: '6–10' },
+        { max: Infinity, fill: '#62d6f7', label: '11+'  }
     ];
     const shadeFor = n => (SCALE.find(s => n <= s.max) || SCALE[0]).fill;
 
@@ -1507,11 +1510,17 @@
         });
 
         mapDrawn = true;
-        document.getElementById('mapNote').textContent = mapMode === 'regions'
-            ? 'Click anywhere in a region to take the whole region. Brightness shows how many referees are in each town.'
-            : 'Click individual towns — they add up. Solid green means plenty of referees, hollow means none on file.';
+        setMapNote();
         reportUnmatched();
         paintMap();
+    }
+
+    // One source for this copy — it lived in two places and went stale in one
+    // of them the moment green stopped meaning "lots of referees".
+    function setMapNote() {
+        document.getElementById('mapNote').textContent = mapMode === 'regions'
+            ? 'Click anywhere in a region to take the whole region. Stronger colour means more referees in that town. Selected turns green.'
+            : 'Click individual towns — they add up. Brighter blue means more referees on file, dark navy means none. Selected turns green.';
     }
 
     function paintMap() {
@@ -1554,9 +1563,7 @@
         mapMode = m;
         document.getElementById('segRegions').classList.toggle('on', m === 'regions');
         document.getElementById('segTowns').classList.toggle('on', m === 'towns');
-        document.getElementById('mapNote').textContent = m === 'regions'
-            ? 'Click anywhere in a region to take the whole region. Brightness shows how many referees are in each town.'
-            : 'Click individual towns — they add up. Solid green means plenty of referees, hollow means none on file.';
+        setMapNote();
         clearMapSel();
     }
 
