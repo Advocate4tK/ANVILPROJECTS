@@ -6603,7 +6603,17 @@
                     changeLink.style.display = 'inline-block';
                 }
                 allRefs   = refs;
-                allAvail  = avail;
+                // Club mode fetches the WHOLE availability table for the date window, so
+                // submissions belonging to an EVENT or a TOURNAMENT ride along with it.
+                // The event workstation filters on event_slug; this file never learned the
+                // column exists, so Edvin Halilovic — who signed up for Ellis Tech Summer
+                // League on Aug 3 — was offered as a candidate for East Haddam's Aug 5 game.
+                // A club never owns those rows. Filtered here, at the single point
+                // availability enters this workstation, rather than in each render path.
+                // Tournament mode already queried by tournament_key, so leave it alone.
+                allAvail  = window.tournamentMode
+                    ? avail
+                    : avail.filter(a => !((a.fields || {})['event_slug'] || (a.fields || {})['tournament_key']));
                 allVenues = venues
                     .map(v => {
                         const clubName = (v.fields['club_name'] || '').toLowerCase();
