@@ -28,7 +28,11 @@ const db = createClient('https://kaniccdqieyesezpousu.supabase.co',
 // CA's Categories column (Statewide, Male, Female, Minor, New Referee) is a tag.
 function certLevel(s) {
   const tags = [s.cert_note, s.categories].flat().filter(Boolean).map(t => String(t).toLowerCase());
-  if (tags.some(t => t.includes('national'))) return 'National';
+  // "National CANDIDATE" is not National — it is a Regional referee working
+  // toward the badge. Victor Borges (#29435, Trumbull) carries Regional,
+  // Statewide AND National Candidate at once; a naive substring match would
+  // have promoted him two grades above what he actually holds.
+  if (tags.some(t => t.includes('national') && !t.includes('candidate'))) return 'National';
   if (tags.some(t => t.includes('regional'))) return 'Regional';
   return 'Grassroots';
 }
