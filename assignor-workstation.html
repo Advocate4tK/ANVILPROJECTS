@@ -5827,11 +5827,18 @@
             (async () => {
                 try {
                     const [clubsRes, eventsRes] = await Promise.all([
-                        supabaseClient.client.from('clubs').select('"Club Name"').eq('enabled', true).order('"Club Name"'),
+                        // BOTH name columns. A club's name lives in `name`; `Club Name` is
+                        // populated on only some rows. Selecting Club Name alone made every
+                        // club without it invisible to the live set below — which silently
+                        // stripped it from clubsList, then from selectedClubs, so the club
+                        // filter at ~6966 rejected every one of its games. East Haddam and
+                        // Griswold (2 of the 4 enabled clubs) showed "10 games" in the banner
+                        // and "0 games" in the panel because of exactly this.
+                        supabaseClient.client.from('clubs').select('name, "Club Name"').eq('enabled', true),
                         supabaseClient.client.from('events').select('"Club Name"').eq('enabled', true).order('"Club Name"')
                     ]);
                     if (clubsRes.error) throw clubsRes.error;
-                    const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || '').filter(Boolean);
+                    const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || c['name'] || '').filter(Boolean).sort();
                     const dbEvents = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
                     knownEventsList = dbEvents.slice();
                     _liveClubNames = new Set([...dbClubs, ...dbEvents]);   // authoritative live set (enabled clubs + events only)
