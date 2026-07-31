@@ -377,8 +377,14 @@
 
         /* Lapsed USSF registration. Deliberately loud — this referee cannot
            legally work a game, and it must not read like just another pill. */
+        /* Registration year, current. Quiet on purpose — the loud styling is
+           reserved for the one that means "cannot work a game". */
+        .reg-ok {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+            color: #087a3c; font-weight: 600;
+        }
         .exp-badge {
-            display: inline-block; margin-left: 6px;
+            display: inline-block;
             background: #c2564e; color: #fff;
             border-radius: 5px; padding: 1px 7px;
             font-family: 'Barlow Condensed', sans-serif;
@@ -751,12 +757,13 @@
                             <th>Phone</th>
                             <th>Town</th>
                             <th>Cert</th>
+                            <th>Status</th>
                             <th>Pools</th>
                             <th style="text-align:right;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="dirBody">
-                        <tr><td colspan="7" class="empty-note">Loading referees…</td></tr>
+                        <tr><td colspan="8" class="empty-note">Loading referees…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1097,7 +1104,7 @@
         updateAddAllBtn();
 
         if (!total) {
-            body.innerHTML = '<tr><td colspan="7" class="empty-note">No referees match these filters.</td></tr>';
+            body.innerHTML = '<tr><td colspan="8" class="empty-note">No referees match these filters.</td></tr>';
             document.getElementById('showMoreBtn').style.display = 'none';
             return;
         }
@@ -1121,12 +1128,17 @@
         const email = r.email && String(r.email).trim();
         const phone = r.phone && String(r.phone).trim();
 
-        const certCell = (hasCert(r)
+        const certCell = hasCert(r)
             ? `<span class="cert-pill">${esc(r['Certification Level'])}</span>`
-            : `<span class="cert-none">no cert</span>`)
-            + (isExpired(r)
-                ? `<span class="exp-badge" title="USSF registration lapsed in ${esc(r.registration_year)} — cannot be assigned">EXPIRED ${esc(r.registration_year)}</span>`
-                : '');
+            : `<span class="cert-none">no cert</span>`;
+
+        // Registration standing is a STATUS, not a certification. A referee can
+        // hold a perfectly valid Grassroots grade and still be ineligible.
+        const statusCell = isExpired(r)
+            ? `<span class="exp-badge" title="USSF registration lapsed in ${esc(r.registration_year)} — cannot be assigned">EXPIRED ${esc(r.registration_year)}</span>`
+            : (r.registration_year
+                ? `<span class="reg-ok" title="USSF registration current">${esc(r.registration_year)}</span>`
+                : '<span class="muted-dash">—</span>');
 
         // "Pools" column — which of MY pools this ref is in (with remove ×)
         const set = refPoolMap[r.id];
@@ -1163,10 +1175,11 @@
             <td>${phone ? `<a href="tel:${esc(phone)}">${esc(phone)}</a>` : '<span class="muted-dash">—</span>'}</td>
             <td>${town ? `${esc(town)}${r.state ? ` <span style="color:#9ca3af;font-size:0.82em;">${esc(r.state)}</span>` : ''}` : '<span class="muted-dash">—</span>'}</td>
             <td>${certCell}</td>
+            <td>${statusCell}</td>
             <td>${poolTags}</td>
             <td style="text-align:right;">${addMenu}</td>
         </tr>
-        <tr class="detail-row" id="det-${r.id}" style="display:none;"><td colspan="7">${detailHtml(r)}</td></tr>`;
+        <tr class="detail-row" id="det-${r.id}" style="display:none;"><td colspan="8">${detailHtml(r)}</td></tr>`;
     }
 
     // Full detail shown when a row's chevron is expanded
