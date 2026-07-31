@@ -752,8 +752,21 @@ exportBtn.addEventListener('click', () => {
         const { duration } = evDur || DURATION_BY_AGE[ageKey] || { duration: '2 x 40' };
         const halfLength = halfLengthFromDuration(duration);
 
-        // Crew size — the event config is authoritative when there is one
-        const crew = eventCrewMap[src]?.[ageKey] ?? (ageKey === 'U8' ? 1 : 3);
+        // Crew size = how many EMPTY referee slots CA opens on the game.
+        // This is CA's number, not ours: CA validates it against its own league
+        // configuration per league + age group and rejects the whole row on a
+        // mismatch ("# Refs 1 does not match league configuration (3) for
+        // CT Northeast District Travel League U19"). Do NOT derive it from our
+        // ar1/ar2 flags — those describe how WE staff a game, which is a
+        // separate question from how many positions CA expects to exist.
+        const crew = ageKey === 'U8' ? 1 : 3;
+
+        // Whether we actually USE ARs is still ours, and it drives the AR fee.
+        // A solo-centre event (GSL) gets 3 slots in CA but a $0 AR fee, so an
+        // unfilled AR position never implies a payment.
+        const usesARs = eventCrewMap[src]?.[ageKey] != null
+            ? eventCrewMap[src][ageKey] > 1
+            : true;
 
         // Fees — event age_group rates first, then club pay_rates, then defaults
         const band     = ageBand(ageGroup);
@@ -761,7 +774,7 @@ exportBtn.addEventListener('click', () => {
         const evRates  = eventRateMap[src]?.[ageKey] || null;
         const clubRate = (clubId && band) ? (payRateByClubId[clubId]?.[band] || null) : null;
         const refFee   = evRates?.center ?? clubRate?.center ?? DEFAULTS.refRate;
-        const arFee    = crew > 1 ? (evRates?.ar ?? clubRate?.ar ?? DEFAULTS.arRate) : 0;
+        const arFee    = usesARs ? (evRates?.ar ?? clubRate?.ar ?? DEFAULTS.arRate) : 0;
         const fourthFee = DEFAULTS.fourthRate;
 
         return [
@@ -792,9 +805,10 @@ exportBtn.addEventListener('click', () => {
         ].map(csvCell).join(',');
     });
 
+    // No BOM, CRLF endings — byte-for-byte the shape of CA's own
+    // game_import_sample.csv, and of the file CA's importer parsed cleanly.
     const content = [headers.map(csvCell).join(','), ...rows].join('\r\n') + '\r\n';
-    // BOM so Excel opens it as UTF-8 rather than guessing
-    const blob = new Blob(['﻿' + content], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

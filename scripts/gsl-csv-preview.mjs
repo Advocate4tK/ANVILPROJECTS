@@ -20,7 +20,10 @@ const src = ev['Club Name'];
 const ag  = ev.age_groups[0];
 const ageKey = String(ag.age_group).replace(/\s.*$/,'').replace(/[BGbg]$/,'').toUpperCase();
 const league = CA_LEAGUE_NAMES[ag.ca_league_id] || '';
-const crew   = 1 + (ag.ar1 ? 1 : 0) + (ag.ar2 ? 1 : 0);
+// CA validates # Refs against its own league configuration (Northeast U19 = 3)
+// and rejects the row on a mismatch. This is CA's number, not our staffing.
+const crew    = ageKey === 'U8' ? 1 : 3;
+const usesARs = (ag.ar1 || ag.ar2) ? true : false;
 
 const { data: venues } = await db.from('venues').select('"Venue ID","Venue Name"');
 const { data: fields } = await db.from('fields').select('"Field ID","Field Name"');
@@ -48,7 +51,7 @@ const rows = (games || [])
       g['Home Team'] || '', g['Away Team'] || '',
       vName[g['Venue ID']] || '', fName[g['Field ID']] || '',
       '', 'League', '', '', '', '', '', '',
-      'Referee Tool', g.id, ag.center ?? '', crew > 1 ? (ag.ar ?? '') : 0, 0
+      'Referee Tool', g.id, ag.center ?? '', usesARs ? (ag.ar ?? '') : 0, 0
     ].map(csvCell).join(',');
   });
 
@@ -56,3 +59,11 @@ console.log(`event: ${src} | league: ${league || '(NONE — export would refuse)
 console.log(`games Aug 1-7: ${rows.length}\n`);
 console.log(headers.map(csvCell).join(','));
 rows.forEach(r => console.log(r));
+
+// Write the file. No BOM, CRLF — byte-for-byte the shape of CA's own
+// game_import_sample.csv, which has neither a BOM nor LF-only endings.
+const { writeFileSync } = await import('node:fs');
+const out = [headers.map(csvCell).join(','), ...rows].join('\r\n') + '\r\n';
+const path = 'C:\\Users\\Daddy\\Desktop\\ANVIL PROJECTS\\referee-tool\\Central Assign\\UPLOADS\\GSL-2026-08-03_to_08-06.csv';
+writeFileSync(path, out, { encoding: 'utf8' });
+console.log(`\nwrote ${out.length} bytes -> ${path}`);
