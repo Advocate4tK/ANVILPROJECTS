@@ -92,7 +92,14 @@
                             <div style="font-size:1.3rem; font-weight:900; color:#0f3460;" id="cardTitle"></div>
                             <div style="font-size:0.8rem; color:#aaa; margin-top:2px;" id="cardSubtitle"></div>
                         </div>
-                        <button onclick="closeCard()" style="background:none; border:1px solid #ddd; border-radius:6px; padding:5px 12px; font-size:0.8rem; color:#888; cursor:pointer;">✕ Close</button>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <!-- Archive is the DEFAULT way to retire a referee: reversible, and it
+                                 keeps their game and payment history intact. Hard delete is for
+                                 genuine data errors only and is guarded below. -->
+                            <button id="btnArchive" onclick="archiveRef()" style="background:none; border:1px solid #d8c9a8; border-radius:6px; padding:5px 12px; font-size:0.8rem; color:#8a6114; cursor:pointer; display:none;">📥 Archive</button>
+                            <button id="btnDelete" onclick="deleteRef()" style="background:none; border:1px solid #e8c4c0; border-radius:6px; padding:5px 12px; font-size:0.8rem; color:#c2564e; cursor:pointer; display:none;">🗑 Delete</button>
+                            <button onclick="closeCard()" style="background:none; border:1px solid #ddd; border-radius:6px; padding:5px 12px; font-size:0.8rem; color:#888; cursor:pointer;">✕ Close</button>
+                        </div>
                     </div>
 
                     <!-- Contact -->
@@ -158,15 +165,28 @@
                             </div>
                             <div class="field-item">
                                 <label>Certification Level</label>
+                                <!-- Current USSF grades. The old Grade 9-5 scale is retired but
+                                     KEPT below: existing records still hold those values, and a
+                                     select that can't represent a stored value silently rewrites
+                                     it to blank the next time the card is saved. -->
                                 <select id="f_cert">
                                     <option value="">— Select —</option>
                                     <option>Grassroots</option>
-                                    <option>Grade 9 Referee</option>
-                                    <option>Grade 8 Referee</option>
-                                    <option>Grade 7 Referee</option>
-                                    <option>Grade 6 Referee</option>
-                                    <option>Grade 5 Referee</option>
+                                    <option>Regional</option>
+                                    <option>National</option>
+                                    <optgroup label="Legacy USSF grades (retired)">
+                                        <option>Grade 9 Referee</option>
+                                        <option>Grade 8 Referee</option>
+                                        <option>Grade 7 Referee</option>
+                                        <option>Grade 6 Referee</option>
+                                        <option>Grade 5 Referee</option>
+                                    </optgroup>
                                 </select>
+                            </div>
+                            <div class="field-item">
+                                <label>USSF Registration Year</label>
+                                <input type="number" id="f_regYear" min="2000" max="2100" placeholder="2026">
+                                <div style="font-size:0.72rem; color:#999; margin-top:3px;" id="regYearNote"></div>
                             </div>
                             <div class="field-item">
                                 <label>Gender</label>
@@ -472,6 +492,11 @@
             })();
             document.getElementById('f_cert').value       = f['Certification Level'] || '';
             document.getElementById('f_gender').value     = f['Gender']     || '';
+            document.getElementById('f_regYear').value    = f['registration_year'] ?? '';
+            renderRegYearNote(f['registration_year']);
+            // Archive / Delete only make sense on a referee that already exists
+            document.getElementById('btnArchive').style.display = '';
+            document.getElementById('btnDelete').style.display  = '';
             // Normalize DOB to YYYY-MM-DD for date input (legacy records may store MM/DD/YYYY)
             const rawDob = f['Date of Birth'] || '';
             let normDob = rawDob;
@@ -547,6 +572,99 @@
             renderCAFields(caName, caId);
         }
 
+        // ── Registration standing ─────────────────────────────────────────────
+        function renderRegYearNote(y) {
+            const el = document.getElementById('regYearNote');
+            if (!el) return;
+            const now = new Date().getFullYear();
+            if (y == null || y === '') { el.textContent = 'Not on file'; el.style.color = '#999'; return; }
+            if (Number(y) < now) { el.textContent = '⚠ EXPIRED — cannot be assigned'; el.style.color = '#c2564e'; }
+            else { el.textContent = '✓ Registration current'; el.style.color = '#087a3c'; }
+        }
+        document.addEventListener('input', e => {
+            if (e.target && e.target.id === 'f_regYear') renderRegYearNote(e.target.value);
+        });
+
+        // ── Archive / Delete ──────────────────────────────────────────────────
+        // Archive is reversible and keeps history. Hard delete is not, so it
+        // refuses outright when the referee has games, payments or availability
+        // attached — deleting someone who worked eleven games last spring would
+        // tear a hole straight through payroll.
+        async function refFootprint(id) {
+            const tag = `[${id}]`;
+            const [games, pays, avail, pools] = await Promise.all([
+                supabaseClient.client.from('games').select('id', { count: 'exact', head: true })
+                    .or(`"Center Referee".eq.${tag},"AR 1".eq.${tag},"AR 2".eq.${tag}`),
+                supabaseClient.client.from('ref_payments').select('id', { count: 'exact', head: true })
+                    .eq('referee_id', id),
+                supabaseClient.client.from('availability').select('id', { count: 'exact', head: true })
+                    .eq('"Referee Name"', (document.getElementById('f_firstName').value.trim() + ' ' +
+                                           document.getElementById('f_lastName').value.trim()).trim()),
+                supabaseClient.client.from('pool_members').select('id', { count: 'exact', head: true })
+                    .eq('referee_id', id),
+            ]);
+            return {
+                games: games.count ?? 0,
+                payments: pays.count ?? 0,
+                availability: avail.count ?? 0,
+                pools: pools.count ?? 0,
+                errored: [games, pays, avail, pools].some(r => r.error),
+            };
+        }
+
+        async function archiveRef() {
+            if (!currentId || currentId === '__new__') return;
+            const name = document.getElementById('cardTitle').textContent.trim();
+            if (!confirm(`Archive ${name}?\n\nThey stop appearing in assignments and blasts, but all their history is kept. This can be undone.`)) return;
+            const { error } = await supabaseClient.client
+                .from('referees').update({ status: 'Archived' }).eq('id', currentId);
+            if (error) { alert('Could not archive: ' + error.message); return; }
+            alert(`${name} archived.`);
+            closeCard();
+            loadReferees();
+        }
+
+        async function deleteRef() {
+            if (!currentId || currentId === '__new__') return;
+            const name = document.getElementById('cardTitle').textContent.trim();
+
+            const fp = await refFootprint(currentId);
+            if (fp.errored) {
+                alert('Could not verify this referee has no history, so the delete is blocked.\n\nUse Archive instead.');
+                return;
+            }
+            const blockers = [];
+            if (fp.games)    blockers.push(`${fp.games} game assignment(s)`);
+            if (fp.payments) blockers.push(`${fp.payments} payment record(s)`);
+            if (blockers.length) {
+                alert(`${name} cannot be deleted.\n\nThey have ${blockers.join(' and ')}. ` +
+                      `Deleting them would break payroll and game history.\n\nUse Archive instead — ` +
+                      `they disappear from assignments and blasts, and nothing is lost.`);
+                return;
+            }
+
+            const extra = [];
+            if (fp.availability) extra.push(`${fp.availability} availability submission(s)`);
+            if (fp.pools)        extra.push(`membership in ${fp.pools} pool(s)`);
+
+            const typed = prompt(
+                `PERMANENTLY DELETE ${name}?\n\n` +
+                `This cannot be undone.` +
+                (extra.length ? `\n\nThis will also drop ${extra.join(' and ')}.` : '') +
+                `\n\nType the referee's full name to confirm:`);
+            if (!typed || typed.trim().toLowerCase() !== name.toLowerCase()) {
+                if (typed !== null) alert('Name did not match — nothing was deleted.');
+                return;
+            }
+
+            if (fp.pools) await supabaseClient.client.from('pool_members').delete().eq('referee_id', currentId);
+            const { error } = await supabaseClient.client.from('referees').delete().eq('id', currentId);
+            if (error) { alert('Delete failed: ' + error.message); return; }
+            alert(`${name} deleted.`);
+            closeCard();
+            loadReferees();
+        }
+
         // ── Save card ─────────────────────────────────────────────────────────
         function newRef() {
             closeCard();
@@ -559,6 +677,10 @@
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
+            document.getElementById('f_regYear').value = '';
+            document.getElementById('regYearNote').textContent = '';
+            document.getElementById('btnArchive').style.display = 'none';
+            document.getElementById('btnDelete').style.display  = 'none';
             document.getElementById('cardTitle').innerHTML = 'New Referee';
             document.getElementById('cardSubtitle').textContent = 'Fill in the details below and hit Save';
             const refCard = document.getElementById('refCard');
@@ -595,6 +717,8 @@
             updates['Zip Code']         = document.getElementById('f_zip').value.trim();
             updates['Years Reffing']    = document.getElementById('f_years').value.trim();
             updates['Certification Level'] = document.getElementById('f_cert').value;
+            const regYear = document.getElementById('f_regYear').value.trim();
+            updates['registration_year'] = regYear ? parseInt(regYear, 10) : null;
             updates['Gender']           = document.getElementById('f_gender').value;
             updates['Date of Birth']    = document.getElementById('f_dob').value;
             updates['Guardian Name']    = document.getElementById('f_guardianName').value.trim();
