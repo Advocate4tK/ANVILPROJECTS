@@ -6372,7 +6372,7 @@
                 // Tournament mode: query tournament_games (separate table, never pollutes games)
                 const gamesTableName = window.tournamentMode ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
 
-                const [games, refs, avail, clubs] = await Promise.all([
+                let [games, refs, avail, clubs] = await Promise.all([
                     window.tournamentMode
                         ? supabaseClient.getRecords(gamesTableName, { filterByFormula: filter, maxRecords: 1000 })
                         : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, gameOpts),
@@ -6397,6 +6397,24 @@
                         : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, availOpts),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 })
                 ]);
+
+                // ── ENTITY SCOPE — do this ONCE, here, before anything reads `avail` ──
+                // Club mode fetches the whole availability table for the date window, so
+                // submissions belonging to an EVENT or a TOURNAMENT ride along with it.
+                // A club never owns those rows.
+                // This has to happen at the fetch, not at a consumer: `avail` feeds at
+                // least two independent things — availByName/availTimeByName (which drive
+                // the Referees panel) and allAvail (which drives the day strip). Filtering
+                // at one of them fixed the strip and left Edvin Halilovic, an Ellis Tech
+                // Summer League signup, still listed as assignable for East Haddam.
+                // Tournament mode already queried by tournament_key, so leave it alone.
+                if (!window.tournamentMode) {
+                    avail = (avail || []).filter(a => {
+                        const f = a.fields || {};
+                        return !(f['event_slug'] || f['tournament_key']);
+                    });
+                }
+
                 const [venueRes, fieldRes] = await Promise.allSettled([
                     CONFIG.AIRTABLE_TABLES.VENUES ? airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }) : Promise.resolve([]),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
@@ -6603,17 +6621,7 @@
                     changeLink.style.display = 'inline-block';
                 }
                 allRefs   = refs;
-                // Club mode fetches the WHOLE availability table for the date window, so
-                // submissions belonging to an EVENT or a TOURNAMENT ride along with it.
-                // The event workstation filters on event_slug; this file never learned the
-                // column exists, so Edvin Halilovic — who signed up for Ellis Tech Summer
-                // League on Aug 3 — was offered as a candidate for East Haddam's Aug 5 game.
-                // A club never owns those rows. Filtered here, at the single point
-                // availability enters this workstation, rather than in each render path.
-                // Tournament mode already queried by tournament_key, so leave it alone.
-                allAvail  = window.tournamentMode
-                    ? avail
-                    : avail.filter(a => !((a.fields || {})['event_slug'] || (a.fields || {})['tournament_key']));
+                allAvail  = avail;   // already entity-scoped at the fetch, above
                 allVenues = venues
                     .map(v => {
                         const clubName = (v.fields['club_name'] || '').toLowerCase();
