@@ -29,16 +29,37 @@
 })();
 
 // ── Default values for Central Assign fields ──────────────────────────────────
+// NOTE: there is deliberately no `league` default. Central Assign's importer
+// matches the League column by NAME; a wrong-but-valid name lands the games in
+// another assignor's district and disappears silently (that is what happened to
+// East Haddam under league 518 — Ron Packard had to move them by hand). A game
+// with no resolvable league is now refused at export instead.
 const DEFAULTS = {
     type:         'League',
-    gender:       'F',
-    league:       21,
-    diagSysCtl:   1,
     refRate:      40,
     arRate:       25,
     fourthRate:   0,
-    assessorRate: 0
+    externalSys:  'Referee Tool'
 };
+
+// ── Central Assign league names — these strings must match CA exactly ─────────
+// The old importer took numeric league IDs; the CSV importer takes the name.
+// Legacy ca_league_id values are translated here. Anything not in this map has
+// to be set as text on the club (clubs.ca_league) before its games can export.
+const CA_LEAGUE_NAMES = {
+    19: 'CT Northeast District Travel League'
+};
+
+// The 9 leagues Central Assign accepts, for reference and for the wizard:
+//   CJSA Connecticut Cup
+//   CJSA State Cup
+//   CJSA State League
+//   CT Central/North Central District Travel League
+//   CT Northeast District Travel League
+//   CT Northwest District Travel League
+//   CT Southcentral District Travel League
+//   CT Southeast District Travel League
+//   General Non-League Games
 
 // ── Period lengths by age group (REC) ─────────────────────────────────────────
 // durationTime = (2 × period) + halftime  (U8–U12 = 5 min HT, U13+ = 10 min HT)
@@ -81,11 +102,14 @@ let venueNameMap       = {}; // Supabase record ID → venue name (legacy fallba
 let fieldNameMap       = {}; // Supabase record ID → field name (legacy fallback)
 let numericVenueToName = {}; // numeric Venue ID → venue name (primary)
 let numericFieldToName = {}; // numeric Field ID → field name (primary)
-let clubLeagueMap      = {}; // club name → CA league ID
+let clubLeagueMap      = {}; // club name → CA league ID (legacy numeric)
+let clubLeagueNameMap  = {}; // club name → CA league NAME (clubs.ca_league) — primary
 let clubIdMap          = {}; // club name → clubs.id (int PK)
 let payRateByClubId    = {}; // club_id → ageBand → {center, ar}
 let eventLeagueMap     = {}; // event Club Name → CA league ID (from event age_groups)
 let eventDurationMap   = {}; // event Club Name → ageKey → {duration, durationTime}
+let eventCrewMap       = {}; // event Club Name → ageKey → crew size (1/2/3)
+let eventRateMap       = {}; // event Club Name → ageKey → {center, ar}
 
 // ── Age group → pay_rates band ───────────────────────────────────────────────
 function ageBand(ageGroup) {
@@ -367,19 +391,25 @@ loadBtn.addEventListener('click', async () => {
             if (venueNumId) venueCAId[f.id]    = venueNumId;
         });
 
-        // Build club → CA league ID lookup + club name → integer id
-        clubLeagueMap = {};
-        clubIdMap     = {};
+        // Build club → CA league lookups + club name → integer id
+        clubLeagueMap     = {};
+        clubLeagueNameMap = {};
+        clubIdMap         = {};
         clubRecs.forEach(c => {
             const clubName = c.fields['name'] || c.fields['Club Name'] || c.fields['Name'] || '';
             const leagueId = c.fields['ca_league_id'];
+            const leagueNm = (c.fields['ca_league'] || '').trim();
             if (clubName && leagueId) clubLeagueMap[clubName] = parseInt(leagueId);
+            if (clubName && leagueNm) clubLeagueNameMap[clubName] = leagueNm;
             if (clubName) clubIdMap[clubName] = parseInt(c.id);
         });
 
-        // Build EVENT overrides (league + duration) from event age_groups JSONB — events only, clubs untouched
+        // Build EVENT overrides (league, duration, crew size, pay) from event age_groups JSONB
+        // — events only, clubs untouched
         eventLeagueMap   = {};
         eventDurationMap = {};
+        eventCrewMap     = {};
+        eventRateMap     = {};
         try {
             const { data: evRows } = await supabaseClient.client
                 .from('events').select('"Club Name", age_groups').eq('enabled', true);
@@ -388,10 +418,19 @@ loadBtn.addEventListener('click', async () => {
                 if (!nm) return;
                 (Array.isArray(ev.age_groups) ? ev.age_groups : []).forEach(ag => {
                     if (ag.ca_league_id != null) eventLeagueMap[nm] = parseInt(ag.ca_league_id);
-                    if (ag.age_group && ag.duration) {
+                    if (!ag.age_group) return;
+                    const k = String(ag.age_group).replace(/\s.*$/, '').replace(/[BGbg]$/, '').toUpperCase();
+                    if (ag.duration) {
                         if (!eventDurationMap[nm]) eventDurationMap[nm] = {};
-                        const k = String(ag.age_group).replace(/\s.*$/, '').replace(/[BGbg]$/, '').toUpperCase();
                         eventDurationMap[nm][k] = { duration: ag.duration, durationTime: ag.durationTime };
+                    }
+                    // Crew size: the event config says which of AR1 / AR2 are used.
+                    // GSL runs a solo centre, so this must not silently become 3.
+                    if (!eventCrewMap[nm]) eventCrewMap[nm] = {};
+                    eventCrewMap[nm][k] = 1 + (ag.ar1 ? 1 : 0) + (ag.ar2 ? 1 : 0);
+                    if (ag.center != null || ag.ar != null) {
+                        if (!eventRateMap[nm]) eventRateMap[nm] = {};
+                        eventRateMap[nm][k] = { center: ag.center, ar: ag.ar };
                     }
                 });
             });
@@ -633,7 +672,9 @@ exportBtn.addEventListener('click', () => {
         return;
     }
 
-    const gamesOnly = document.getElementById('gamesOnly').checked;
+    // NOTE: the "games only" checkbox no longer changes anything. CA's CSV
+    // importer has no referee columns at all, so every export is games-only and
+    // assignments are made inside Central Assign.
 
     // Gender check — block export if any selected game is missing gender
     const missingGender = selected.filter(rec => {
@@ -646,6 +687,21 @@ exportBtn.addEventListener('click', () => {
             return `  • ${formatDate(f['Date'])} ${fmtTime(f['Time'])} — ${f['Home Team']} vs ${f['Away Team']}`;
         }).join('\n');
         alert(`⚠️ ${missingGender.length} game${missingGender.length > 1 ? 's are' : ' is'} missing a Gender value and cannot be exported:\n\n${lines}\n\nFix the Gender field in the database before exporting.`);
+        return;
+    }
+
+    // League check — a game with no resolvable CA league name cannot be exported.
+    // No default: a wrong league silently files the games under another district.
+    const missingLeague = selected.filter(rec => !resolveLeague(rec.fields));
+    if (missingLeague.length > 0) {
+        const clubs = [...new Set(missingLeague.map(r => r.fields['Source Club'] || '(no club)'))];
+        alert(
+            `⛔ ${missingLeague.length} game${missingLeague.length > 1 ? 's have' : ' has'} no Central Assign league and cannot be exported.\n\n` +
+            `Missing a league:\n${clubs.map(c => '  • ' + c).join('\n')}\n\n` +
+            `Set the CT district on the club (or the event's age group) first. ` +
+            `Central Assign matches the league by name — guessing puts the games in the wrong district, ` +
+            `where they vanish from your list until CA staff move them back.`
+        );
         return;
     }
 
@@ -662,81 +718,90 @@ exportBtn.addEventListener('click', () => {
         if (!proceed) return;
     }
 
-    // Headers matched exactly to CA template
+    // Headers matched exactly to CA's game_import_sample.csv (24 columns).
+    // Referee assignments are NOT part of this format — CA dropped the
+    // Referee Id / AR1 / AR2 / Assessor columns. Games go up unassigned and
+    // are assigned inside Central Assign.
     const headers = [
-        'Home Team', 'Visiting Team', 'Duration', 'Duration Time',
-        'Game Date', 'Start Time', 'Type (League/Cup/Other)', 'Gender',
-        'Venue', 'Venue Field', 'League', 'Referee Id', 'AR1', 'AR2',
-        '4th', 'Assessor', 'Diag Sys Ctl', 'Referee Rate', 'AR Rate',
-        '4th Rate', 'Assessor Rate', 'External Game Id'
+        'Date', 'Time', 'League', 'Age Group', 'Gender', '# Refs',
+        'Half Length (min)', 'Home Team', 'Visiting Team', 'Venue', 'Field',
+        'Division', 'Game Type', 'Home Club', 'Visiting Club',
+        'Home Coach Email', 'Visiting Coach Email',
+        'Primary Assignor Email', 'Secondary Assignor Email',
+        'External System', 'External Game ID',
+        'Referee Fee', 'AR Fee', 'Fourth Official Fee'
     ];
 
     const rows = selected.map(rec => {
         const f = rec.fields;
-        const { name: venueName, caId: venueId, fieldName } = resolveVenue(f);
+        const src = f['Source Club'] || '';
+        const { name: venueName, fieldName } = resolveVenue(f);
 
-        // Resolve refs — blank everything if gamesOnly is checked
-        let refId = 0, ar1Id = 0, ar2Id = 0;
-        if (!gamesOnly) {
-            const crRaw  = extractRefVal(f['Center Referee']);
-            const ar1Raw = extractRefVal(f['AR 1']);
-            const ar2Raw = extractRefVal(f['AR 2']);
-            refId = crRaw  ? (resolveRefCA(crRaw)  || 0) : 0;
-            ar1Id = ar1Raw ? (resolveRefCA(ar1Raw) || 0) : 0;
-            ar2Id = ar2Raw ? (resolveRefCA(ar2Raw) || 0) : 0;
-        }
-
-        // Map Gender field to CA format (M/F) — handles both legacy "Male/Female" and form "Boys/Girls"
+        // Gender — CA wants the full word, not M/F
         const gRaw = (f['Gender'] || '').trim();
-        const gameGender = ['Male','Boys'].includes(gRaw) ? 'M' : ['Female','Girls'].includes(gRaw) ? 'F' : DEFAULTS.gender;
+        const gameGender = ['Male','Boys'].includes(gRaw)   ? 'Male'
+                         : ['Female','Girls'].includes(gRaw) ? 'Female'
+                         : 'Coed';
 
-        // Period length by age group — strip B/G suffix and division label before lookup
+        // Age group — strip B/G suffix and division label before lookup
         const ageGroup = f['Age Group'] || '';
         const ageKey = ageGroup.replace(/\s.*$/, '').replace(/[BGbg]$/, '').toUpperCase();
-        const evDur = eventDurationMap[f['Source Club']]?.[ageKey];
-        const { duration, durationTime } = evDur || DURATION_BY_AGE[ageKey] || { duration: '2 x 40', durationTime: 90 };
+
+        // Half length in minutes, parsed out of "2 x 35"
+        const evDur = eventDurationMap[src]?.[ageKey];
+        const { duration } = evDur || DURATION_BY_AGE[ageKey] || { duration: '2 x 40' };
+        const halfLength = halfLengthFromDuration(duration);
+
+        // Crew size — the event config is authoritative when there is one
+        const crew = eventCrewMap[src]?.[ageKey] ?? (ageKey === 'U8' ? 1 : 3);
+
+        // Fees — event age_group rates first, then club pay_rates, then defaults
+        const band     = ageBand(ageGroup);
+        const clubId   = clubIdMap[src];
+        const evRates  = eventRateMap[src]?.[ageKey] || null;
+        const clubRate = (clubId && band) ? (payRateByClubId[clubId]?.[band] || null) : null;
+        const refFee   = evRates?.center ?? clubRate?.center ?? DEFAULTS.refRate;
+        const arFee    = crew > 1 ? (evRates?.ar ?? clubRate?.ar ?? DEFAULTS.arRate) : 0;
+        const fourthFee = DEFAULTS.fourthRate;
 
         return [
-            f['Home Team']  || '',
-            f['Away Team']  || '',
-            duration,
-            durationTime,
             formatDateForExport(f['Date'] || ''),
             formatTimeForExport(f['Time'] || ''),
-            DEFAULTS.type,
+            resolveLeague(f),
+            ageKey,
             gameGender,
-            venueId || venueName,
+            crew,
+            halfLength,
+            f['Home Team'] || '',
+            f['Away Team'] || '',
+            venueName,
             fieldName,
-            eventLeagueMap[f['Source Club']] || clubLeagueMap[f['Source Club']] || DEFAULTS.league,
-            refId, ar1Id, ar2Id, 0, 0,
-            ageGroup === 'U8' ? 1 : 3,
-            (() => {
-                const band   = ageBand(ageGroup);
-                const clubId = clubIdMap[f['Source Club']];
-                const rates  = (clubId && band) ? (payRateByClubId[clubId]?.[band] || null) : null;
-                return rates ? rates.center : DEFAULTS.refRate;
-            })(),
-            (() => {
-                const band   = ageBand(ageGroup);
-                const clubId = clubIdMap[f['Source Club']];
-                const rates  = (clubId && band) ? (payRateByClubId[clubId]?.[band] || null) : null;
-                return (rates && rates.ar != null) ? rates.ar : DEFAULTS.arRate;
-            })(),
-            DEFAULTS.fourthRate,
-            DEFAULTS.assessorRate,
-            ''  // External Game Id — blank, CA assigns on import
-        ].join('\t');
+            '',                      // Division — we don't carry one
+            DEFAULTS.type,
+            '',                      // Home Club — left blank; CA fills from the team
+            '',                      // Visiting Club
+            '',                      // Home Coach Email
+            '',                      // Visiting Coach Email
+            '',                      // Primary Assignor Email
+            '',                      // Secondary Assignor Email
+            DEFAULTS.externalSys,
+            rec.id || '',            // our game id, so a re-import can be matched
+            refFee,
+            arFee,
+            fourthFee
+        ].map(csvCell).join(',');
     });
 
-    const content = [headers.join('\t'), ...rows].join('\r\n');
-    const blob = new Blob([content], { type: 'text/plain' });
+    const content = [headers.map(csvCell).join(','), ...rows].join('\r\n') + '\r\n';
+    // BOM so Excel opens it as UTF-8 rather than guessing
+    const blob = new Blob(['﻿' + content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     const ts = new Date();
     const datePart = ts.toISOString().split('T')[0];
     const timePart = `${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}`;
-    a.download = `central-assign-export-${datePart}-${timePart}.txt`;
+    a.download = `central-assign-export-${datePart}-${timePart}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 
@@ -746,6 +811,34 @@ exportBtn.addEventListener('click', () => {
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Quote a value for CSV. Anything with a comma, quote, or newline gets wrapped
+// and its quotes doubled. Times like "5:30 PM" and team names with commas in
+// them both go through here.
+function csvCell(v) {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// "2 x 35" → 35. CA wants the half length as a bare number of minutes.
+function halfLengthFromDuration(duration) {
+    const m = String(duration || '').match(/(\d+)\s*$/);
+    return m ? parseInt(m[1]) : '';
+}
+
+// Resolve a game's Central Assign league NAME. Returns '' when it cannot be
+// resolved — the caller refuses to export rather than guessing.
+//   1. clubs.ca_league  (text, exactly as CA spells it)   ← preferred
+//   2. legacy numeric ca_league_id, translated
+function resolveLeague(f) {
+    const src = f['Source Club'] || '';
+    if (!src) return '';
+    const byName = clubLeagueNameMap[src];
+    if (byName) return byName;
+    const numeric = eventLeagueMap[src] ?? clubLeagueMap[src];
+    if (numeric != null && CA_LEAGUE_NAMES[numeric]) return CA_LEAGUE_NAMES[numeric];
+    return '';
+}
 
 // Extract the raw ref identifier from a Center Referee / AR field value.
 // Handles: null, integer, name string, actual array, JSON array string "[42]".
@@ -802,12 +895,13 @@ function formatDate(dateStr) {
     return `${parseInt(parts[1])}/${parseInt(parts[2])}/${parts[0]}`;
 }
 
+// CA's sample uses zero-padded MM/DD/YYYY ("09/15/2026")
 function formatDateForExport(dateStr) {
     if (!dateStr) return '';
-    const parts = dateStr.split('-');
+    const parts = String(dateStr).slice(0, 10).split('-');
     if (parts.length !== 3) return dateStr;
     const [y, m, d] = parts;
-    return `${parseInt(m)}/${parseInt(d)}/${y}`;
+    return `${String(parseInt(m)).padStart(2,'0')}/${String(parseInt(d)).padStart(2,'0')}/${y}`;
 }
 
 function formatTimeForExport(timeStr) {
