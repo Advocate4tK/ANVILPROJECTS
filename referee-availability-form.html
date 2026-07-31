@@ -1542,6 +1542,21 @@
                         window._foundRefDob  = f['Date of Birth'] || null;
                         window._foundRefName = f['Name'] || fullName; // use DB name for queries
 
+                        // ── Auto-restore ──────────────────────────────────────
+                        // An archived referee who walks back through the front
+                        // door is not archived any more. Archiving must never be
+                        // a wall someone bounces off — they identified themselves,
+                        // that IS the signal. Silent on purpose: they should never
+                        // learn they were filed away.
+                        if (String(f['status'] || '').toLowerCase() === 'archived') {
+                            supabaseClient.client.from('referees')
+                                .update({ status: 'Active' }).eq('id', referee.id)
+                                .then(({ error }) => {
+                                    if (error) console.warn('[auto-restore] failed:', error.message);
+                                    else console.log('[auto-restore] reactivated referee', referee.id);
+                                });
+                        }
+
                         // Trigger guardian section if returning ref is under 18
                         updateGuardianSection();
 
