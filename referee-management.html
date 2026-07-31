@@ -76,6 +76,12 @@
                     <select class="filter-club" id="clubFilter" onchange="applyFilters()">
                         <option value="">All Clubs</option>
                     </select>
+                    <select class="filter-club" id="statusFilter" onchange="applyFilters()">
+                        <option value="active">Active referees</option>
+                        <option value="expired">⚠ Registration expired</option>
+                        <option value="archived">📥 Archived</option>
+                        <option value="all">Active + Archived</option>
+                    </select>
                     <span id="countNote" class="count-note"></span>
                 </div>
                 <div style="font-size:0.8rem; color:#aaa; margin-bottom:12px;">Filter by join date or club, or search by name/email. Click any referee to view and edit their record.</div>
@@ -376,8 +382,23 @@
             const q         = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
             const clubVal   = (document.getElementById('clubFilter')?.value  || '').toLowerCase();
 
+            const statusVal = (document.getElementById('statusFilter')?.value || 'active');
+
             let matches = allRefs.filter(r => {
                 const f = r.fields;
+
+                // Status filter. Defaults to ACTIVE so an archived referee really
+                // does disappear — without this, archiving changed a database value
+                // and nothing else, which is worse than having no feature at all.
+                const archived = String(f['status'] || '').toLowerCase() === 'archived';
+                const ry = f['registration_year'];
+                const expired = ry != null && ry !== '' && Number(ry) < new Date().getFullYear();
+                if (statusVal === 'active'   && archived) return false;
+                if (statusVal === 'archived' && !archived) return false;
+                // The recertification list: everyone whose USSF registration has
+                // lapsed. Archived people are excluded — no point chasing someone
+                // who already left.
+                if (statusVal === 'expired'  && (!expired || archived)) return false;
 
                 // Date filter
                 if (!passesDateFilter(r)) return false;
@@ -495,7 +516,13 @@
             document.getElementById('f_regYear').value    = f['registration_year'] ?? '';
             renderRegYearNote(f['registration_year']);
             // Archive / Delete only make sense on a referee that already exists
-            document.getElementById('btnArchive').style.display = '';
+            const arch = String(f['status'] || '').toLowerCase() === 'archived';
+            const bArch = document.getElementById('btnArchive');
+            bArch.style.display = '';
+            bArch.dataset.archived = arch ? '1' : '0';
+            bArch.textContent = arch ? '↩ Restore to Active' : '📥 Archive';
+            bArch.style.color = arch ? '#087a3c' : '#8a6114';
+            bArch.style.borderColor = arch ? '#bbf7d0' : '#d8c9a8';
             document.getElementById('btnDelete').style.display  = '';
             // Normalize DOB to YYYY-MM-DD for date input (legacy records may store MM/DD/YYYY)
             const rawDob = f['Date of Birth'] || '';
@@ -615,13 +642,23 @@
         async function archiveRef() {
             if (!currentId || currentId === '__new__') return;
             const name = document.getElementById('cardTitle').textContent.trim();
-            if (!confirm(`Archive ${name}?\n\nThey stop appearing in assignments and blasts, but all their history is kept. This can be undone.`)) return;
-            const { error } = await supabaseClient.client
-                .from('referees').update({ status: 'Archived' }).eq('id', currentId);
-            if (error) { alert('Could not archive: ' + error.message); return; }
-            alert(`${name} archived.`);
+            const btn  = document.getElementById('btnArchive');
+            const isArchived = btn.dataset.archived === '1';
+
+            if (isArchived) {
+                const { error } = await supabaseClient.client
+                    .from('referees').update({ status: 'Active' }).eq('id', currentId);
+                if (error) { alert('Could not restore: ' + error.message); return; }
+                alert(`${name} restored to active.`);
+            } else {
+                if (!confirm(`Archive ${name}?\n\nThey stop appearing in the active list, in assignments and in blasts. All their history is kept, and you can restore them any time from the Archived filter.`)) return;
+                const { error } = await supabaseClient.client
+                    .from('referees').update({ status: 'Archived' }).eq('id', currentId);
+                if (error) { alert('Could not archive: ' + error.message); return; }
+                alert(`${name} archived.\n\nTo find them again: the status dropdown above the list → 📥 Archived.`);
+            }
             closeCard();
-            loadReferees();
+            loadRefs();
         }
 
         async function deleteRef() {
@@ -662,7 +699,7 @@
             if (error) { alert('Delete failed: ' + error.message); return; }
             alert(`${name} deleted.`);
             closeCard();
-            loadReferees();
+            loadRefs();
         }
 
         // ── Save card ─────────────────────────────────────────────────────────
