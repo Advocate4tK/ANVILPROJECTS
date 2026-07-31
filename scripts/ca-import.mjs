@@ -32,8 +32,15 @@ function certLevel(s) {
   // toward the badge. Victor Borges (#29435, Trumbull) carries Regional,
   // Statewide AND National Candidate at once; a naive substring match would
   // have promoted him two grades above what he actually holds.
-  if (tags.some(t => t.includes('national') && !t.includes('candidate'))) return 'National';
-  if (tags.some(t => t.includes('regional'))) return 'Regional';
+  // Keep CA's EXACT wording for the higher grades. "National AR" is a national
+  // Assistant Referee badge and is not the same credential as plain "National";
+  // flattening them would misstate what an official actually holds. Tod's rule:
+  // whatever Central Assign says, that is what they are.
+  const raw = [s.cert_note, s.categories].flat().filter(Boolean).map(String);
+  const nat = raw.find(t => /national/i.test(t) && !/candidate/i.test(t));
+  if (nat) return nat.trim();
+  const reg = raw.find(t => /regional/i.test(t) && !/candidate/i.test(t));
+  if (reg) return reg.trim();
   return 'Grassroots';
 }
 
