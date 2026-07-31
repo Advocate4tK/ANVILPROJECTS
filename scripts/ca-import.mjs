@@ -33,6 +33,34 @@ function certLevel(s) {
   return 'Grassroots';
 }
 
+// ── Guards ────────────────────────────────────────────────────────────────────
+// Central Assign's directory is not purely people. Page 1 alone held
+// "CT Referee Admin", "Referee Administration" (technical@ctreferee.net) and
+// "USOfficials Account" (a vendor). Imported blind they become referees, sit in
+// the roster, and receive "we need refs Saturday".
+const SYSTEM_DOMAINS = ['ctreferee.net', 'atelogics.com', 'ussoccer.org'];
+const SYSTEM_WORDS   = /\b(admin|administration|administrator|account|test|support|technical|system)\b/i;
+
+function isSystemAccount(s) {
+  const name = (s.name || '').trim();
+  if (SYSTEM_WORDS.test(name)) return 'name looks administrative';
+  const dom = (s.email || '').split('@')[1];
+  if (dom && SYSTEM_DOMAINS.some(d => dom.toLowerCase().endsWith(d))) return `system domain @${dom}`;
+  if (name && !name.includes(' ')) return 'single-word name, not a person';
+  return null;
+}
+
+// Out-of-state is a per-harvest decision, not a hardcoded rule. Skipping a
+// South Salem NY result on a CT town search is right; skipping a Massachusetts
+// referee during a deliberate MA harvest would defeat the point. Each staging
+// file declares the state it was harvested from.
+function isOutOfState(s, harvestState) {
+  if (!harvestState) return null;
+  const st = (s.state || '').trim().toUpperCase();
+  if (st && st !== harvestState.toUpperCase()) return `${st}, harvesting ${harvestState}`;
+  return null;
+}
+
 const norm      = s => (s || '').toString().trim().toLowerCase();
 const normEmail = s => norm(s).replace(/\s+/g, '');
 const normPhone = s => (s || '').toString().replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
@@ -43,14 +71,29 @@ if (!fs.existsSync(STAGING)) { console.log('no staging directory'); process.exit
 const files = fs.readdirSync(STAGING).filter(f => f.endsWith('.json'));
 if (!files.length) { console.log('no staged sweeps'); process.exit(1); }
 
-let staged = [];
+let staged = [];   // mutated by the guard filter below
 for (const f of files) {
   const blob = JSON.parse(fs.readFileSync(path.join(STAGING, f), 'utf8'));
   const rows = blob.referees || [];
   console.log(`  ${f}: ${rows.length} referees` +
               (blob._page_reported_total && blob._page_reported_total !== rows.length
                 ? `  ⚠ page reported ${blob._page_reported_total}` : ''));
-  staged.push(...rows.map(r => ({ ...r, _file: f })));
+  staged.push(...rows.map(r => ({ ...r, _file: f, _state: blob._harvest_state || 'CT' })));
+}
+
+// ── Apply guards before anything else touches the database ────────────────────
+const skipped = [];
+staged = staged.filter(s => {
+  const sys = isSystemAccount(s);
+  if (sys) { skipped.push({ s, why: sys }); return false; }
+  const oos = isOutOfState(s, s._state);
+  if (oos) { skipped.push({ s, why: oos }); return false; }
+  return true;
+});
+if (skipped.length) {
+  console.log(`\n⏭  SKIPPED ${skipped.length} — not imported, listed so you can overrule:`);
+  skipped.forEach(({ s, why }) => console.log(
+    `   ${(s.name || '?').padEnd(28)} ${(s.email || '—').padEnd(32)} — ${why}`));
 }
 
 // ── Duplicates inside Central Assign itself (e.g. Aneesh Amaram) ─────────────
