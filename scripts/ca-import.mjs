@@ -65,7 +65,9 @@ for (const [, group] of byCaId) if (group.length > 1) caDupes.push(group);
 
 // ── Load ours ─────────────────────────────────────────────────────────────────
 const { data: ours, error } = await db.from('referees')
-  .select('id,name,email,phone,city,state,age,"Certification Level","Central Assign ID",registration_year');
+  // "Gender" must be selected or fill() sees undefined, treats it as blank,
+  // and overwrites a gender that was already on file.
+  .select('id,name,email,phone,city,state,age,"Gender","Certification Level","Central Assign ID",registration_year');
 if (error) { console.log('DB error:', error.message); process.exit(1); }
 
 const byCa    = new Map(ours.filter(r => r['Central Assign ID']).map(r => [String(r['Central Assign ID']), r]));
@@ -104,6 +106,7 @@ for (const s of staged) {
   fill('city',  s.city);
   fill('state', s.state);
   fill('age',   s.age);
+  fill('Gender', s.gender);   // "Gender" Title Case — lowercase throws a schema error
   fill('Central Assign ID', s.ca_id);
   if (s.registration_year && match.registration_year !== s.registration_year) {
     changes.registration_year = s.registration_year;
@@ -177,6 +180,7 @@ for (const s of isNew) {
   const row = {
     name: s.name, email: s.email || null, phone: normPhone(s.phone) || null,
     city: s.city, state: s.state, age: s.age ?? null,
+    'Gender': s.gender || null,
     'Central Assign ID': s.ca_id ?? null,
     // CA's "Categories" column mixes tags with grades. Statewide / Male /
     // Female / Minor / New Referee are TAGS, not certification levels — only
