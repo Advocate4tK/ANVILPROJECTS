@@ -154,6 +154,16 @@ for (const s of staged) {
   if (s.registration_year && match.registration_year !== s.registration_year) {
     changes.registration_year = s.registration_year;
   }
+  // Tod: "anybody in there as Grassroots can be rewritten as Regional if they
+  // are confirmed in Central Assign." CA is authoritative on grade, so a real
+  // grade OVERWRITES a stored one — fill-blanks-only would have left a promoted
+  // referee sitting at Grassroots forever. Never downgrades: an existing
+  // Regional is not demoted just because CA showed no badge on this pass.
+  const caGrade = certLevel(s);
+  const RANK = { 'Grassroots': 1, 'Regional': 2, 'National': 3 };
+  if (RANK[caGrade] > (RANK[match['Certification Level']] || 0)) {
+    changes['Certification Level'] = caGrade;
+  }
 
   if (Object.keys(changes).length) toUpdate.push({ s, match, how, changes });
   else unchanged.push({ s, match, how });
