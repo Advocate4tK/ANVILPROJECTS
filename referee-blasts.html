@@ -375,6 +375,18 @@
         .btn-showmore:hover { background: #e6ded2; }
         .empty-note { text-align: center; color: #9ca3af; padding: 34px 0; font-size: 0.9rem; }
 
+        /* Lapsed USSF registration. Deliberately loud — this referee cannot
+           legally work a game, and it must not read like just another pill. */
+        .exp-badge {
+            display: inline-block; margin-left: 6px;
+            background: #c2564e; color: #fff;
+            border-radius: 5px; padding: 1px 7px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.72rem; font-weight: 800;
+            letter-spacing: 0.6px; text-transform: uppercase;
+            white-space: nowrap;
+        }
+
         /* ── Primary tabs: Pools | Map ─────────────────────────────────────────
            These sit on the CREAM content area, not the navy header — text must be
            dark. White here is invisible. */
@@ -705,6 +717,8 @@
                     <option value="">All Certs</option>
                     <option value="has">Has cert</option>
                     <option value="none">No cert</option>
+                    <option value="expired">⚠ Registration expired</option>
+                    <option value="current">Registration current</option>
                 </select>
                 <select id="fMinor" onchange="applyFilters()">
                     <option value="">All ages</option>
@@ -869,6 +883,17 @@
             ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     }
     function isMinor(r) { return r.age != null && Number(r.age) < 18; }
+
+    // A referee whose USSF registration year has lapsed cannot work a game,
+    // whatever their certification says. Derived, never stored — a stored flag
+    // would go stale the moment the calendar turns over.
+    // Unknown (null) is NOT treated as expired: most of the roster predates the
+    // column, and flagging 580 people red would make the badge meaningless.
+    const SEASON_YEAR = new Date().getFullYear();
+    function isExpired(r) {
+        const y = r.registration_year;
+        return y != null && Number(y) < SEASON_YEAR;
+    }
     function hasCert(r) {
         const c = r['Certification Level'];
         return !!(c && String(c).trim());
@@ -1048,6 +1073,10 @@
             }
             if (cert === 'has'  && !hasCert(r)) return false;
             if (cert === 'none' &&  hasCert(r)) return false;
+            // The renewal-campaign filter: expired referees are the ones you
+            // most want to email and least want to assign.
+            if (cert === 'expired' && !isExpired(r)) return false;
+            if (cert === 'current' && (isExpired(r) || r.registration_year == null)) return false;
             if (minor === 'minors' && !isMinor(r)) return false;
             if (minor === 'hide'   &&  isMinor(r)) return false;
             return true;
@@ -1092,9 +1121,12 @@
         const email = r.email && String(r.email).trim();
         const phone = r.phone && String(r.phone).trim();
 
-        const certCell = hasCert(r)
+        const certCell = (hasCert(r)
             ? `<span class="cert-pill">${esc(r['Certification Level'])}</span>`
-            : `<span class="cert-none">no cert</span>`;
+            : `<span class="cert-none">no cert</span>`)
+            + (isExpired(r)
+                ? `<span class="exp-badge" title="USSF registration lapsed in ${esc(r.registration_year)} — cannot be assigned">EXPIRED ${esc(r.registration_year)}</span>`
+                : '');
 
         // "Pools" column — which of MY pools this ref is in (with remove ×)
         const set = refPoolMap[r.id];
