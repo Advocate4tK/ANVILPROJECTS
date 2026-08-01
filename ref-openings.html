@@ -395,7 +395,11 @@
         .game-card.is-covered .game-card-header { padding: 7px 14px; }
         .game-card.is-covered .game-teams { font-size: 0.84rem; }
         .game-card.is-covered .filled-stamp span { font-size: 1.45rem; }
-        .game-card.is-covered .game-card-header { position: relative; cursor: default; }
+        /* Covered games stay expandable on purpose. A referee who already has the
+           game comes back here to check where they're driving — the board is the
+           only public place that answers that, and it does it without ever naming
+           who is assigned. */
+        .game-card.is-covered .game-card-header { position: relative; cursor: pointer; }
         .game-card.is-covered .game-card-header:hover { background: transparent; }
         .game-card.is-covered .game-teams,
         .game-card.is-covered .game-meta-line,
@@ -522,13 +526,35 @@
 
         /* ── Venue line ── */
         .game-venue {
-            padding: 4px 14px 5px;
-            font-size: 0.72rem;
-            color: #888;
+            padding: 9px 14px 10px;
+            font-size: 0.78rem;
+            color: #555;
             background: #fafbfc;
             border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            align-items: flex-start;
         }
-        .game-venue::before { content: '📍 '; }
+        .venue-name { font-weight: 800; color: #0f1e3c; font-size: 0.88rem; }
+        /* Tappable — a phone opens Maps straight from here, which is the whole
+           point of putting the address in the expanded view. */
+        .venue-map {
+            color: #1d4ed8;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 5px 9px;
+            margin-left: -3px;
+            border: 1px solid #dbe4f5;
+            border-radius: 6px;
+            background: #fff;
+        }
+        .venue-map:hover { background: #f3f7ff; border-color: #b9cdf0; }
+        .venue-league { margin-top: 1px; }
+
+        /* Town in the collapsed row — the one thing that decides whether a
+           referee can take the game at all. */
+        .badge-town { background: #eef2f7; color: #33415c; font-weight: 700; }
 
         /* ── Slots grid ── */
         .slots-row {
@@ -950,7 +976,12 @@
         const away      = g['Away Team'] || '?';
         const time      = formatTime(g['time'] || g['Time'] || '');
         const venueId   = g['Venue ID'];
-        const venue     = venueId ? (venueMap[String(venueId)] || '') : '';
+        const venueRec  = venueId ? (venueMap[String(venueId)] || null) : null;
+        const venue     = venueRec ? venueRec.name : '';
+        const town      = venueRec ? venueRec.city : '';
+        const fullAddr  = venueRec
+            ? [venueRec.address, venueRec.city, venueRec.state].filter(Boolean).join(', ')
+            : '';
         const u8        = isSingleRefGame(g);
 
         const crFilled  = isFilled(g['Center Referee']);
@@ -1022,20 +1053,29 @@
                 <span class="game-teams">${home} vs ${away}</span>
                 <span class="game-meta-line">${time}</span>
                 ${age ? `<span class="badge badge-age">${age}</span>` : ''}
-                ${/* A covered game drops its pay chip and league badge. Both exist to
-                      help someone decide whether to take the game, and it is already
-                      taken — and they were crowding the FILLED stamp into unreadable
-                      overlap. Time and age stay so the row is still identifiable. */''}
-                ${covered ? '' : payChip}
+                ${/* The collapsed row answers only what decides a tap: when, what
+                      level, WHERE, and is it open. The town replaces the league
+                      badge — a referee's first question is whether they can get
+                      there, and the league was the widest, least useful chip on a
+                      phone. Pay and league both moved into the expanded view. */''}
+                ${town ? `<span class="badge badge-town">📍 ${town}</span>` : ''}
                 ${isRec && org ? `<span class="badge badge-def" style="font-size:0.6rem;">${org}</span>` : ''}
-                ${covered ? '' : `<span class="badge ${badgeInfo.cls}">${badgeInfo.label}</span>`}
                 ${isRec ? `<span class="badge badge-unsanctioned">Unsanctioned</span>` : ''}
                 ${covered
                     ? ''
                     : (!isJotform ? `<span class="badge badge-open">${openCount} Open</span>` : '')}
             </div>
             <div class="game-card-body">
-                ${venue ? `<div class="game-venue">${venue}</div>` : ''}
+                ${/* The expanded view is the reference card — it carries everything
+                      the collapsed row deliberately leaves out. This is also where a
+                      referee who ALREADY has the game comes back to, to remember
+                      where they're driving. It never names who is assigned; it just
+                      describes the game. */''}
+                ${venue ? `<div class="game-venue">
+                        <span class="venue-name">${venue}</span>
+                        ${fullAddr ? `<a class="venue-map" href="https://maps.google.com/?q=${encodeURIComponent(venue + ', ' + fullAddr)}" target="_blank" rel="noopener">📍 ${fullAddr} &nbsp;›</a>` : ''}
+                        <span class="venue-league"><span class="badge ${badgeInfo.cls}">${badgeInfo.label}</span></span>
+                    </div>` : ''}
                 ${finalSlotsHtml}
                 ${isRec && payType ? `<div style="padding:6px 14px; background:#fffbeb; border-top:1px solid #fef3c7; font-size:0.75rem; color:#92400e;"><strong>Payment:</strong> ${payType}</div>` : ''}
                 ${_rate && _rate.center != null ? `<div style="text-align:center; padding:8px 14px 2px; font-size:0.95rem; font-weight:800; color:#0f7a3d;">💵 Center&nbsp;$${_rate.center}${_rate.ar != null ? ` &nbsp;·&nbsp; AR&nbsp;$${_rate.ar}` : ''}</div>` : ''}
@@ -1116,7 +1156,7 @@
             // every week-filter change — scoped to only clubs/events/tournaments with games in the current week view.
 
             const [venueRes, ...allResults] = await Promise.all([
-                supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name').limit(500),
+                supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name, address, city, state').limit(500),
                 ...CLUBS.map(club =>
                     supabaseClient.client.from('games').select('*')
                         .eq('Source Club', club).gte('date', today)
@@ -1140,11 +1180,20 @@
             ]);
 
             // Build venue lookup
+            // Venue lookup now carries the town and street address, not just the
+            // name. A referee's first question about a game is "where is it" —
+            // both before they take one and, just as often, afterwards when
+            // they're trying to remember where they're driving.
             venueMap = {};
             (venueRes.data || []).forEach(v => {
-                const nm = v['Venue Name'] || v.name || '';
-                if (v['Venue ID']) venueMap[String(v['Venue ID'])] = nm;
-                if (v.id)          venueMap[String(v.id)]          = nm;
+                const rec = {
+                    name:    v['Venue Name'] || v.name || '',
+                    city:    v.city    || '',
+                    address: v.address || '',
+                    state:   v.state   || ''
+                };
+                if (v['Venue ID']) venueMap[String(v['Venue ID'])] = rec;
+                if (v.id)          venueMap[String(v.id)]          = rec;
             });
 
             // Single-ref crew rules from enabled events (age_groups with both ARs off → one ref)
