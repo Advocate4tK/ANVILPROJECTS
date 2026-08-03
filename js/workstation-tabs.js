@@ -72,17 +72,12 @@
                 .ws-tab .ws-count { display: none; }
             }
 
-            /* Compact mode. The rest of the top bar is hidden outright, but these are
-               navigation — you still want to cross between workstations while
-               collapsed. So they shrink rather than disappear: counts drop, padding
-               tightens, and the strip stops taking a whole row of vertical space. */
-            #wsTabs.is-compact { margin-bottom: 8px; gap: 3px; }
-            #wsTabs.is-compact .ws-tab {
-                font-size: 0.82rem; padding: 4px 12px; letter-spacing: 0.2px;
-                border-radius: 6px 6px 0 0;
-            }
-            #wsTabs.is-compact .ws-tab .ws-count { display: none; }
-            #wsTabs.is-compact .ws-tab.is-current { border-top-width: 2px; padding-top: 3px; }
+            /* Compact mode hides the strip outright, same as #topButtonBar.
+               First attempt only shrank it — the reasoning being that navigation should
+               survive collapsing. Tod's answer, looking at it on a real assigning
+               screen: even compressed it is still a whole row, and in compact every
+               row belongs to the games grid. Expand brings it back. */
+            #wsTabs.is-compact { display: none !important; }
         `;
         document.head.appendChild(s);
     }
