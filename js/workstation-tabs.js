@@ -71,6 +71,18 @@
                 .ws-tab { font-size: 0.9rem; padding: 8px 13px; }
                 .ws-tab .ws-count { display: none; }
             }
+
+            /* Compact mode. The rest of the top bar is hidden outright, but these are
+               navigation — you still want to cross between workstations while
+               collapsed. So they shrink rather than disappear: counts drop, padding
+               tightens, and the strip stops taking a whole row of vertical space. */
+            #wsTabs.is-compact { margin-bottom: 8px; gap: 3px; }
+            #wsTabs.is-compact .ws-tab {
+                font-size: 0.82rem; padding: 4px 12px; letter-spacing: 0.2px;
+                border-radius: 6px 6px 0 0;
+            }
+            #wsTabs.is-compact .ws-tab .ws-count { display: none; }
+            #wsTabs.is-compact .ws-tab.is-current { border-top-width: 2px; padding-top: 3px; }
         `;
         document.head.appendChild(s);
     }
@@ -90,6 +102,26 @@
         return isCurrent
             ? `<span class="${cls}" title="${title}">${label}${badge}</span>`
             : `<a class="${cls}" href="${PAGES[key]}" title="${title}">${label}${badge}</a>`;
+    }
+
+    /**
+     * Mirror the header's compact state onto the tab strip.
+     *
+     * Compact mode toggles `header-collapsed` on <header> and hides #topButtonBar
+     * outright. The tabs sit outside that bar (deliberately — they're navigation and
+     * should survive collapsing), so they'd otherwise stay full-size while everything
+     * around them shrank. Watching the header rather than editing toggleHeaderCompact()
+     * keeps this entirely inside the shared file: neither 8,000-line twin has to know
+     * the tabs exist.
+     */
+    function followCompact(host) {
+        const hdr = document.querySelector('header');
+        if (!hdr) return;
+        const sync = () => host.classList.toggle('is-compact', hdr.classList.contains('header-collapsed'));
+        sync();                                   // compact may already be restored from localStorage
+        if (host._compactWatcher) host._compactWatcher.disconnect();
+        host._compactWatcher = new MutationObserver(sync);
+        host._compactWatcher.observe(hdr, { attributes: true, attributeFilter: ['class'] });
     }
 
     /**
@@ -163,6 +195,8 @@
                 tabHtml('clubs',       'Clubs',       counts.clubs,       current, available.clubs) +
                 tabHtml('events',      'Events',      counts.events,      current, available.events) +
                 tabHtml('tournaments', 'Tournaments', counts.tournaments, current, available.tournaments);
+
+            followCompact(host);
         } catch (err) {
             // A broken tab strip must never take a workstation down with it.
             console.warn('workstation tabs failed to render:', err);
