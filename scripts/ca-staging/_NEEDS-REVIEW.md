@@ -1,47 +1,73 @@
-# Referees NOT imported — need a second look
+# Central Assign harvest — what's done, what's left
 
-Every one of these was **deliberately left out**, not missed. Each sat on a frame
-edge with a field cut off, and a guessed value would look identical to a real one
-once it was in the table.
+**Last updated: 2026-08-03**
 
-None of them need a re-sweep of the whole page. Find them by Central Assign ID,
-read the row, and add them to a staging file — the importer matches on `ca_id`,
-so nobody duplicates.
+## Status: pages 1–15 COMPLETE
 
-| CA ID | Name | Page | What was missing |
+All 50 rows of every page from 1 through 15 have been read off the archived
+frames and imported. The nine-page backlog (pages 4–13, roughly 245 rows that
+were captured but never transcribed) was cleared on 2026-08-03.
+
+```
+page 01   50/50   page 06   50/50   page 11   50/50
+page 02   49/50   page 07   50/50   page 12   50/50
+page 03   50/50   page 08   50/50   page 13   50/50
+page 04   50/50   page 09   50/50   page 14   50/50
+page 05   50/50   page 10   50/50   page 15   50/50
+```
+
+Directory is 66 pages. **Pages 16–66 have never been captured.**
+
+---
+
+## The one row still outstanding
+
+| CA ID | Name | Page | What's missing |
 |---|---|---|---|
-| 40504 | Raheem Anderson | 2 | email, phone, town, age — only name and ID were legible |
-| 40962 | Deisy Cisneros | 12 | phone and town cut off (email `deisy.referee@gmail.com` was readable) |
+| 40504 | Raheem Anderson | 2 | email, phone, town, age — only the name and ID were legible |
 
-## Fastest way to clear these
+His row sat on a frame edge with everything but the name cut off. A guessed
+value would look identical to a real one once it was in the table, so he was
+deliberately left out rather than filled in.
 
-For each: search the name in Central Assign, then **F4** (manual capture), scroll
-so the row sits mid-screen, **F4** off. One frame, one referee. Faster than
-re-sweeping a page, and no frame-edge problem because you control where the row
-sits.
+**How to clear it:** search his name in Central Assign, press **F4**, scroll so
+the row sits mid-screen, F4 off. One frame, one referee. Faster than
+re-sweeping page 2, and no frame-edge problem because you control where the row
+lands.
 
-## Also outstanding — pages captured but only partly READ
+### ✅ Resolved
+- **Deisy Cisneros #40962** — was on this list for the same reason. Her row
+  turned out to be fully legible on page 12 frame 6 (Glastonbury,
+  deisy.referee@gmail.com, 917-940-7700). Imported 2026-08-03, nothing guessed.
 
-All frames are archived in `Ralph/EYES/harvest/`. **No re-sweeping needed** —
-these just need reading, and reading resumes at the named referee.
+---
 
-| Page | Read | Resume after |
-|---|---|---|
-| 4  | 12 of 50 | Furkan Bahat |
-| 5  | 27 of 50 | Avery Bednarz |
-| 6  | 27 of 50 | James Bishop |
-| 7  | 24 of 50 | Kevin Boyd |
-| 8  | 26 of 50 | William Bucklin |
-| 9  | 26 of 50 | Linton Cameron |
-| 10 | 26 of 50 | Zach Carr |
-| 11 | 30 of 50 | TJ Charbonneau |
-| 12 | 27 of 50 | Sophie Cipolla |
+## Two data problems found in Central Assign itself
 
-Pages 1, 2 and 3 are complete (page 2 is 49 of 50 — Raheem Anderson above).
+Neither is a capture fault — these are wrong in *their* directory.
 
-## Why the partials happen
+- **Hannah Casano #39676** (page 10) — phone renders as `(917) 549-75`, two
+  digits short, on both frames. Stored as null rather than invent an ending.
+- **Owen Baillargeon #41010** (page 4) — email reads `oballlargeon@...`; the
+  l/i is genuinely ambiguous at that resolution. Written as the form matching
+  his surname and flagged. **Verify before emailing him.**
+- **Alessio Cappetta #40489** (page 9) — same ambiguity, `seolcappetta@...`.
 
-Reading a page means transcribing 50 names, emails and phone numbers off a dozen
-screenshots by eye. Accuracy degrades with fatigue, and the failure mode is not
-dropping records — it is quietly filling gaps. Stopping a page short and marking
-where is the safe move; the frames keep indefinitely.
+---
+
+## How the reading works, and why partials happen
+
+Reading a page means transcribing 50 names, emails and phone numbers off a
+dozen screenshots by eye. The failure mode is **not** dropping records — it is
+quietly filling a gap with something plausible. Stopping short and writing down
+where is the safe move; the frames keep indefinitely in
+`Ralph/EYES/harvest/page-NN`.
+
+⚠️ **Shift+F4 does NOT archive.** Sweeps write to `EYES/live/`, which
+self-deletes on a ~5-minute window. Copy to `EYES/harvest/page-NN` immediately
+or the sweep is lost.
+
+⚠️ **Out-of-staters are listed, never silently dropped.** Each page file has an
+`_omitted_out_of_state` block naming who was left out and why, per Tod's rule
+("always leave out of towners and out of staters out"). They can be pulled in
+later if an assignor in that state ever comes aboard.
