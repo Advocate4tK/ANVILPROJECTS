@@ -2,7 +2,15 @@
 
 **Last updated: 2026-08-04**
 
-## Status: pages 1–19 COMPLETE
+## Status: pages 1–20 COMPLETE
+
+Page 20 swept AT 150% and imported 2026-08-04 (Fairclough → Ficacelli). 50 rows: 47 CT
+imported, 3 out-of-state omitted (Fallis MI, Feigenbaum NY, Fernandes NY). 32 new referees,
+13 gap-fills, 0 ambiguous. Roster 1,345 → **1,377**. Thomas Felice #788 landed as
+**National AR** and Anthony Fiatarone #31018 as **Regional**.
+
+⭐ Both Fauxbels reconciled: Alex #2520 now carries CA 19823, Jonathan #2461 carries CA 29256.
+Jonathan is the referee whose disappearance exposed the 1000-row cap.
 
 Page 19 swept, RE-SWEPT AT 150% ZOOM, and imported 2026-08-04 (Eltaeib → Fairclough).
 50 rows: 49 CT imported, 1 out-of-state omitted (Matthew Evans NY). 43 new referees,
