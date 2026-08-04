@@ -1,6 +1,15 @@
 # Central Assign harvest — what's done, what's left
 
-**Last updated: 2026-08-03**
+**Last updated: 2026-08-04**
+
+## Status: pages 1–16 COMPLETE
+
+Page 16 swept and imported 2026-08-04 (Demko → Dissa). 50 rows: 48 CT imported,
+2 out-of-state omitted (Del Desousa FL, Matthew Dias MA). 38 new referees, 7 gap-fills,
+0 ambiguous. Roster 1,188 → **1,226**.
+
+**Directory total is confirmed at 3,278 referees across 66 pages** (visible in the page-16
+header). At ~48 CT rows per page, pages 17–66 hold roughly 2,400 more.
 
 ## Status: pages 1–15 COMPLETE
 
