@@ -11,6 +11,27 @@ Page 16 swept and imported 2026-08-04 (Demko → Dissa). 50 rows: 48 CT imported
 **Directory total is confirmed at 3,278 referees across 66 pages** (visible in the page-16
 header). At ~48 CT rows per page, pages 17–66 hold roughly 2,400 more.
 
+---
+
+## ⭐ WORKFLOW RULE (Tod, 2026-08-04) — import after every pass
+
+**One page = one complete cycle. Do not batch pages and import them later.**
+
+```
+sweep (F4) → archive frames to EYES/harvest/page-NN → transcribe to page-NN.json
+           → node scripts/ca-import.mjs           (preview, read the skips)
+           → node scripts/ca-import.mjs --write    (writes + backs up first)
+           → verify roster count → update this file → next page
+```
+
+A page is not "done" until the rows are **in the database**. Staged-but-not-imported is the
+state that caused the pages 4–13 backlog — 245 rows sat captured and unread for days, and Tod
+found out only when he went looking for a referee who should have been there.
+
+Verify after each write: paginated count went up by the expected number, and **0 duplicate
+Central Assign IDs**. That second check is what catches a truncated read before it becomes
+another 81-person dedupe job.
+
 ## Status: pages 1–15 COMPLETE
 
 All 50 rows of every page from 1 through 15 have been read off the archived
