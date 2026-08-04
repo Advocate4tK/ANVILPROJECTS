@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- ⚠️⚠️⚠️ CLUB ASSIGNOR WORKSTATION ⚠️⚠️⚠️
-         This file handles CLUBS (and tournaments via ?tournament=KEY).
-         The EVENT version is a SEPARATE file: event-assignor-workstation.html
+    <!-- ⚠️⚠️⚠️ EVENT ASSIGNOR WORKSTATION ⚠️⚠️⚠️
+         This file handles EVENTS only (event_slug availability, NO club-preference gating).
+         The CLUB version is a SEPARATE file: assignor-workstation.html
          Make sure you are editing the RIGHT file. Do NOT assume line numbers match between them. -->
-    <title>Club Assignor Workstation</title>
+    <title>Event Assignor Workstation</title>
     <link rel="stylesheet" href="css/styles.css">
     <style>
         header { transition: max-height 0.25s ease, padding 0.25s ease; max-height: 300px; }
@@ -687,7 +687,7 @@
 <body>
     <div class="container">
         <header>
-            <h1 id="workstationTitle">📋 Club Assignor Workstation</h1>
+            <h1 id="workstationTitle">📋 Event Assignor Workstation</h1>
             <p class="subtitle">Assign referees to games by club</p>
             <div id="profileBadge" style="display:none; position:absolute; top:14px; right:20px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); border-radius:20px; padding:6px 14px; font-size:0.8rem; color:white; align-items:center; gap:10px;">
                 <span>🔒 <strong id="profileBadgeName"></strong></span>
@@ -782,7 +782,7 @@
                             <button class="date-quick-btn" onclick="setDateRange('next-sat', event)">Next Sat</button>
                             <button class="date-quick-btn" onclick="setDateRange('next-sun', event)">Next Sun</button>
                             <button class="date-quick-btn" onclick="setDateRange('next-weekend', event)">Next Weekend</button>
-                            <button class="date-quick-btn" onclick="setDateRange('all', event)">📅 All Games</button>
+                            <button class="date-quick-btn" onclick="setDateRange('all', event)" style="background:#152d55; color:#fff; border-color:#152d55;">📅 All Games</button>
                         </div>
                     </div>
                 </div>
@@ -797,14 +797,6 @@
                     <div>
                         <label style="font-size:0.85rem; font-weight:700; color:#333; display:block; margin-bottom:4px;">Date To</label>
                         <input type="date" id="dateTo" onchange="clearQuickBtns()" style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; font-size:0.85rem; font-family:inherit;">
-                    </div>
-                    <!-- Season scope (per club) — default to each club's active season; archive prior ones -->
-                    <div>
-                        <label style="font-size:0.85rem; font-weight:700; color:#333; display:block; margin-bottom:4px;">Season</label>
-                        <select id="seasonScope" onchange="onSeasonScopeChange()" style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; font-size:0.85rem; font-family:inherit;">
-                            <option value="active">Current (per club)</option>
-                            <option value="all">All seasons</option>
-                        </select>
                     </div>
                                 <button class="btn btn-primary" id="loadBtn" style="align-self:flex-end; padding:7px 16px; font-size:0.82rem;">Load Games</button>
                     <span id="lastLoadedLabel" style="font-size:0.75rem; color:#aaa; align-self:flex-end; padding-bottom:8px; white-space:nowrap;"></span>
@@ -1089,7 +1081,6 @@
     <script src="js/supabase-client.js?v=13"></script>
     <script>var airtableClient = supabaseClient;</script>
     <script src="js/admin-auth.js"></script>
-    <script src="js/workstation-tabs.js?v=3"></script>
     <script>
         checkAdminAccess();
 
@@ -1225,14 +1216,6 @@
             currentAssignor = chosen;
             localStorage.setItem('lastAssignorProfileId', String(chosen.id));
 
-            // Clubs · Events · Tournaments strip — lets an assignor cross between the
-            // three workstations without going back out to the dashboard and in again.
-            // This file serves BOTH clubs and tournaments (tournaments arrive with
-            // ?tournament=KEY), so which tab is lit depends on that parameter.
-            if (window.renderWorkstationTabs) {
-                renderWorkstationTabs(window.tournamentMode ? 'tournaments' : 'clubs', chosen);
-            }
-
             // Restrict club pills to this assignor's assigned clubs (non-Admin only)
             // Skip entirely in tournament mode — tournament games are not club-filtered
             if (!window.tournamentMode && chosen.clubs && chosen.clubs.length > 0 && chosen.role !== 'Admin') {
@@ -1289,7 +1272,8 @@
             // If coming from schedule-changes, re-apply focus after DOM settles from setViewMode render
             const focusGameId = new URLSearchParams(window.location.search).get('game');
             if (focusGameId) {
-                // Banner visibility is decided in applyGameFocus — shown only for a real change request.
+                const banner = document.getElementById('changeRequestBanner');
+                if (banner) banner.style.display = 'flex';
                 if (allGames.length > 0) {
                     setTimeout(() => applyGameFocus(focusGameId), 100);
                 }
@@ -1430,12 +1414,9 @@
             }
             // Parse requested date/time from game notes and update banner
             const focusedGame = allGames.find(g => String(g.id) === String(focusGameId));
-            const _crBanner = document.getElementById('changeRequestBanner');
             if (focusedGame) {
                 const f      = focusedGame.fields;
                 const notes  = f['Notes'] || '';
-                // Reset — these only apply if THIS game actually carries a pending change request.
-                requestedChangeDate = null; requestedChangeTime = null;
                 const blocks = notes.split(/\[CHANGE REQUEST/i);
                 if (blocks.length > 1) {
                     const last = '[CHANGE REQUEST' + blocks[blocks.length - 1];
@@ -1443,20 +1424,18 @@
                     requestedChangeTime = (last.match(/Requested Time:\s*(\S+)/i))?.[1] || null;
                 }
                 if (requestedChangeDate) { renderGames(); renderRefs(''); selectGame(focusGameId); }
-                // Only surface the change-request banner for a REAL change request. A plain
-                // "assign this game" deep-link (e.g. from the admin heat meter) shows nothing.
-                if (requestedChangeDate) {
-                    const reqLabel = ` &nbsp;→&nbsp; <span style="color:#c0392b; font-weight:700;">Requested: ${requestedChangeDate}${requestedChangeTime ? ' @ ' + formatTime(requestedChangeTime) : ''}</span>`;
-                    const refsVisible = document.getElementById('refsListWrap')?.querySelectorAll('.ref-card').length || 0;
-                    const noAvailMsg  = (refsVisible === 0) ? ' &nbsp;⚠️ No refs available for the requested date.' : '';
-                    if (_crBanner) _crBanner.style.display = 'flex';
-                    document.getElementById('changeRequestBannerText').innerHTML =
-                        `<strong>${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</strong> &nbsp;·&nbsp; Current: ${f['Date'] || '—'} @ ${formatTime(f['Time'] || '')}${reqLabel}${noAvailMsg}`;
-                } else if (_crBanner) {
-                    _crBanner.style.display = 'none';
-                }
-            } else if (_crBanner) {
-                _crBanner.style.display = 'none';
+                const reqLabel = requestedChangeDate
+                    ? ` &nbsp;→&nbsp; <span style="color:#c0392b; font-weight:700;">Requested: ${requestedChangeDate}${requestedChangeTime ? ' @ ' + formatTime(requestedChangeTime) : ''}</span>`
+                    : '';
+                const refsVisible = document.getElementById('refsListWrap')?.querySelectorAll('.ref-card').length || 0;
+                const noAvailMsg  = (requestedChangeDate && refsVisible === 0)
+                    ? ' &nbsp;⚠️ No refs available for the requested date.'
+                    : '';
+                document.getElementById('changeRequestBannerText').innerHTML =
+                    `<strong>${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</strong> &nbsp;·&nbsp; Current: ${f['Date'] || '—'} @ ${formatTime(f['Time'] || '')}${reqLabel}${noAvailMsg}`;
+            } else {
+                document.getElementById('changeRequestBannerText').textContent =
+                    'Game not found in the current date range — try widening the date filter.';
             }
         }
 
@@ -1501,23 +1480,21 @@
                 const ar2  = resolveRefName(f['AR 2']);
                 const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
 
-                // Available refs for this game's date + club preference
+                // Available refs for this game's date + event (scoped so one event's signups don't bleed onto another's)
                 const gameDate  = f['Date'] || '';
                 const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
+                const gameEventSlug = (window._eventSlugByClub || {})[gameClubLower] || '';
                 const availRefs = allRefs.filter(r => {
                     const name = r.fields['Name'] || '';
                     if (!name) return false;
                     const hasDate = allAvail.some(a =>
                         (a.fields['Referee Name'] || '').trim().toLowerCase() === name.toLowerCase() &&
-                        (a.fields['Date'] || '') === gameDate
+                        (a.fields['Date'] || '') === gameDate &&
+                        // Scope to THIS event: if the game's event slug is known and the submission is event-tagged,
+                        // they must match — stops cross-event bleed (e.g. an Ellis Tech signup showing on GSL).
+                        (!gameEventSlug || !(a.fields['event_slug'] || '') || (a.fields['event_slug'] || '') === gameEventSlug)
                     );
                     if (!hasDate) return false;
-                    if (gameClubLower) {
-                        const prefs = parsePreferences(r.fields['Club Preference'] || '');
-                        const availClubs = (availTimeByName[name.toLowerCase()]?.[gameDate] || []).flatMap(s => s.clubs || []);
-                        const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availClubs])];
-                        if (merged.length > 0 && !merged.some(p => p === gameClubLower)) return false;
-                    }
                     return true;
                 });
 
@@ -1630,23 +1607,19 @@
                 const isCancelRequest   = isChangeRequested && /\[CANCELLATION REQUEST/i.test(f['Notes'] || '');
                 const isU8             = age === 'U8';
 
-                // Available refs for this date in staged order, filtered by club preference
+                // Available refs for this date + event, in staged order (scoped so events don't bleed together)
                 const gameDate  = f['Date'] || '';
                 const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
+                const gameEventSlug = (window._eventSlugByClub || {})[gameClubLower] || '';
                 const availRefs = allRefs.filter(r => {
                     const name = r.fields['Name'] || '';
                     if (!name) return false;
                     const hasDate = allAvail.some(a =>
                         (a.fields['Referee Name'] || '').trim().toLowerCase() === name.toLowerCase() &&
-                        (a.fields['Date'] || '') === gameDate
+                        (a.fields['Date'] || '') === gameDate &&
+                        (!gameEventSlug || !(a.fields['event_slug'] || '') || (a.fields['event_slug'] || '') === gameEventSlug)
                     );
                     if (!hasDate) return false;
-                    if (gameClubLower) {
-                        const prefs = parsePreferences(r.fields['Club Preference'] || '');
-                        const availClubs = (availTimeByName[name.toLowerCase()]?.[gameDate] || []).flatMap(s => s.clubs || []);
-                        const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availClubs])];
-                        if (merged.length > 0 && !merged.some(p => p === gameClubLower)) return false;
-                    }
                     return true;
                 });
                 const saved        = stageData[gid] || [];
@@ -3838,14 +3811,7 @@
                     if (a._conflict !== b._conflict) return a._conflict ? 1 : -1;
                     return a.date.localeCompare(b.date) || a.name.localeCompare(b.name);
                 });
-                // Filter by selected club when user has narrowed pills to specific clubs
-                if (selectedClubs.size > 0 && selectedClubs.size < clubsList.length) {
-                    const focusClubsLower = [...selectedClubs].map(c => c.toLowerCase());
-                    refRows = refRows.filter(r => {
-                        const prefs = (r.club || '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
-                        return prefs.some(p => focusClubsLower.includes(p));
-                    });
-                }
+                // EVENT WORKSTATION: no club-pill filtering of refs (events aren't club-scoped).
                 sheet3CachedRefRows = refRows;
                 if (sheet3RefSort.col === 'exp') {
                     sheet3CachedRefRows.sort((a, b) => (expVal(a) - expVal(b)) * sheet3RefSort.dir);
@@ -5561,7 +5527,6 @@
         let availTimeByName = {}; // ref name → { date → { start, end } }
         const KNOWN_CLUBS = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
         let clubsList     = KNOWN_CLUBS.slice(); // pre-seeded so pills render on page load
-        let _liveClubNames = new Set();   // enabled (live) clubs+events. When populated, club pills are filtered to these — so unbuilt/not-live clubs don't show.
         let selectedClubs = new Set(clubsList); // default: all selected
         let userHasFilteredClubs = false; // true once user manually picks specific clubs
         let assignorClubRestriction = null; // set when a non-Admin assignor logs in — limits visible clubs
@@ -5752,7 +5717,9 @@
             loadProfiles();
 
             if (focusGameId) {
-                // Banner visibility is decided in applyGameFocus — shown only for a real change request.
+                // Show the banner immediately
+                const banner = document.getElementById('changeRequestBanner');
+                if (banner) banner.style.display = 'flex';
                 // Set a wide date range so the game is guaranteed to be in scope
                 const today = new Date();
                 const from  = new Date(today); from.setDate(today.getDate() - 30);
@@ -5836,22 +5803,14 @@
             (async () => {
                 try {
                     const [clubsRes, eventsRes] = await Promise.all([
-                        // BOTH name columns. A club's name lives in `name`; `Club Name` is
-                        // populated on only some rows. Selecting Club Name alone made every
-                        // club without it invisible to the live set below — which silently
-                        // stripped it from clubsList, then from selectedClubs, so the club
-                        // filter at ~6966 rejected every one of its games. East Haddam and
-                        // Griswold (2 of the 4 enabled clubs) showed "10 games" in the banner
-                        // and "0 games" in the panel because of exactly this.
-                        supabaseClient.client.from('clubs').select('name, "Club Name"').eq('enabled', true),
+                        supabaseClient.client.from('clubs').select('"Club Name"').eq('enabled', true).order('"Club Name"'),
                         supabaseClient.client.from('events').select('"Club Name"').eq('enabled', true).order('"Club Name"')
                     ]);
                     if (clubsRes.error) throw clubsRes.error;
-                    const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || c['name'] || '').filter(Boolean).sort();
+                    const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || '').filter(Boolean);
                     const dbEvents = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
                     knownEventsList = dbEvents.slice();
-                    _liveClubNames = new Set([...dbClubs, ...dbEvents]);   // authoritative live set (enabled clubs + events only)
-                    let merged = [...new Set([...dbClubs, ...dbEvents])].sort();   // live only — dropped hardcoded KNOWN_CLUBS so unbuilt clubs (RHAMYS etc.) no longer show
+                    let merged = [...new Set([...KNOWN_CLUBS, ...dbClubs, ...dbEvents])].sort();
                     if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
                     clubsList = merged;
                     if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);
@@ -6100,8 +6059,20 @@
                     const clubId = clubIdByName[club];
                     const rates  = clubId ? (payRatesByClubId[clubId] || []) : (payRatesByEventName[club] || []);
 
-                    const gameLines = games.map(g => {
-                        const f = g.fields;
+                    const openCount = games.length;
+                    // Girls Summer League: refs must be 21+, work games in pairs (one ref = a field's 5:30 + 7:00)
+                    const isPairEvent = /girls\s*summer\s*league/i.test(club);
+                    const _u19rate = rates.find(r => /19/.test(r.age_group)) || rates[0];
+                    const _pairTotal = _u19rate && _u19rate.center ? (Number(_u19rate.center) * 2).toFixed(2) : null;
+
+                    // DB stores Turf 1/2; the public (kids/parents/refs) know them as Field A/B — translate for display
+                    const _fieldLabel = f => {
+                        const fo = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
+                        const raw = fo ? fo.name : (f['Field ID'] || '');
+                        const m = String(raw).match(/turf\s*(\d+)/i);
+                        return m ? `Field ${String.fromCharCode(64 + Number(m[1]))}` : raw;
+                    };
+                    const _fmtGameLine = (f, sep) => {
                         const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                         const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
                         const age = f['Age Group'] || '';
@@ -6113,18 +6084,41 @@
                         if (!soloOnly && !f['AR 1']?.trim()) openSlots.push('AR');
                         if (!soloOnly && !f['AR 2']?.trim()) openSlots.push('AR');
                         const positions = openSlots.join(' | ');
-                        return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age}${displayGender}    ${vName}   --   ${positions}`;
-                    }).join('\n');
+                        const fieldCol = isPairEvent ? (_fieldLabel(f) || '--') : '--';
+                        return `${sep}${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age}${displayGender}    ${vName}   ${fieldCol}   ${positions}`;
+                    };
 
-                    const openCount = games.length;
-                    const intro = `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`}.  LMK if you wanna work!`;
+                    let gameLines;
+                    if (isPairEvent) {
+                        // Sort by day → field → time so each field's pair (5:30 + 7:00) is consecutive; blank line between pairs
+                        const sorted = [...games].sort((a,b) =>
+                            (a.fields['Date']||'').localeCompare(b.fields['Date']||'') ||
+                            (_fieldLabel(a.fields)||'').localeCompare(_fieldLabel(b.fields)||'') ||
+                            (a.fields['Time']||'').localeCompare(b.fields['Time']||''));
+                        gameLines = sorted.map((g, gi) => {
+                            const f = g.fields;
+                            const prev = gi > 0 ? sorted[gi-1].fields : null;
+                            const sep = (prev && (prev['Date'] !== f['Date'] || _fieldLabel(prev) !== _fieldLabel(f))) ? '\n' : '';
+                            return _fmtGameLine(f, sep);
+                        }).join('\n');
+                    } else {
+                        gameLines = games.map((g, gi) => {
+                            const f = g.fields;
+                            const daySep = (gi > 0 && f['Date'] !== games[gi-1].fields['Date']) ? '\n' : '';
+                            return _fmtGameLine(f, daySep);
+                        }).join('\n');
+                    }
+
+                    const intro = isPairEvent
+                        ? `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`} for referees that are 21 and older:`
+                        : `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`}.  LMK if you wanna work!`;
 
                     const rateLines = rates.length
                         ? rates.sort((a,b) => parseInt(a.age_group.replace(/^U/i,'')) - parseInt(b.age_group.replace(/^U/i,'')))
                                .map(r => {
                                    const crew = window._crewRules?.[club]?.[r.age_group];
                                    const showAR = r.ar && (crew ? (crew.ar1 || crew.ar2) : true);
-                                   return showAR ? `${r.age_group} | C $${r.center} | AR $${r.ar} |` : `${r.age_group} | C $${r.center} |`;
+                                   return showAR ? `${r.age_group} | C $${r.center} | AR $${r.ar}` : `${r.age_group} | C $${r.center}`;
                                })
                                .join('\n')
                         : '(no pay rates on file for this club)';
@@ -6149,7 +6143,13 @@
                     }
                     const weekLabel2 = weekNum ? `Week ${weekNum}` : 'Week [#]';
 
-                    blocks.push(`${weekLabel2}  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${openingsLink}\n\nOR submit your availability directly:\n${`https://referee-tool.com/referee-availability-form.html?dates=${gameDates}&club=${encodeURIComponent(club)}`}\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
+                    const availLink = `https://referee-tool.com/referee-availability-form.html?event=${encodeURIComponent(club.toLowerCase().replace(/\s+/g, '-'))}`;
+                    if (isPairEvent) {
+                        const pairLine = `Again you MUST be over 21 and must work the pair -- make $${_pairTotal || '110.00'} total`;
+                        blocks.push(`The following games are up for grabs for ${club.toUpperCase()}\n\n${intro}\n\n${gameLines}\n\n${pairLine}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${openingsLink}\n\nOR submit your availability directly:\n${availLink}\n\n${sig}`);
+                    } else {
+                        blocks.push(`${weekLabel2}  ${club}\n\n${intro}\n\n${gameLines}\n\nPLEASE USE THIS LINK TO REQUEST GAMES:\n\n${openingsLink}\n\nOR submit your availability directly:\n${availLink}\n\n\npay rate:\n${rateLines}\n\nKeep having fun!\n\n${sig}`);
+                    }
                 }
                 document.getElementById('emailBodyText').value = blocks.join('\n\n' + '─'.repeat(60) + '\n\n');
             }
@@ -6274,7 +6274,7 @@
             // "All Clubs" master toggle — visually distinct, restores original toggle behavior
             const all = document.createElement('span');
             all.className = allSelected ? 'club-pill-all' : 'club-pill-all inactive';
-            all.textContent = 'All Clubs';
+            all.textContent = 'All Events';
             all.dataset.club = '__all__';
             all.addEventListener('click', () => {
                 if (selectedClubs.size === clubsList.length) {
@@ -6304,7 +6304,7 @@
             // Short pill display labels — value/filtering stays the full name
             const PILL_LABELS = { 'Girls Summer League': 'GSL' };
             clubsList.forEach(club => {
-                if (knownEventsList.includes(club)) return; // CLUB WORKSTATION: render only club pills (no events)
+                if (!knownEventsList.includes(club)) return; // EVENT WORKSTATION: render ONLY event pills (no clubs)
                 const pill = document.createElement('span');
                 const isEvent = knownEventsList.includes(club);
                 const baseClass = isEvent ? 'club-pill event-pill' : 'club-pill';
@@ -6355,7 +6355,6 @@
             document.getElementById('workstation').style.display = 'none';
 
             try {
-                await buildSeasonMap();   // per-club active_season map, before games render
                 let filter = '';
                 if (dateFrom && dateTo) {
                     filter = `AND(NOT(IS_BEFORE({Date}, '${dateFrom}')), NOT(IS_AFTER({Date}, '${dateTo}')))`;
@@ -6388,7 +6387,7 @@
                 // Tournament mode: query tournament_games (separate table, never pollutes games)
                 const gamesTableName = window.tournamentMode ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
 
-                let [games, refs, avail, clubs] = await Promise.all([
+                const [games, refs, avail, clubs] = await Promise.all([
                     window.tournamentMode
                         ? supabaseClient.getRecords(gamesTableName, { filterByFormula: filter, maxRecords: 1000 })
                         : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, gameOpts),
@@ -6413,24 +6412,6 @@
                         : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.AVAILABILITY, availOpts),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 })
                 ]);
-
-                // ── ENTITY SCOPE — do this ONCE, here, before anything reads `avail` ──
-                // Club mode fetches the whole availability table for the date window, so
-                // submissions belonging to an EVENT or a TOURNAMENT ride along with it.
-                // A club never owns those rows.
-                // This has to happen at the fetch, not at a consumer: `avail` feeds at
-                // least two independent things — availByName/availTimeByName (which drive
-                // the Referees panel) and allAvail (which drives the day strip). Filtering
-                // at one of them fixed the strip and left Edvin Halilovic, an Ellis Tech
-                // Summer League signup, still listed as assignable for East Haddam.
-                // Tournament mode already queried by tournament_key, so leave it alone.
-                if (!window.tournamentMode) {
-                    avail = (avail || []).filter(a => {
-                        const f = a.fields || {};
-                        return !(f['event_slug'] || f['tournament_key']);
-                    });
-                }
-
                 const [venueRes, fieldRes] = await Promise.allSettled([
                     CONFIG.AIRTABLE_TABLES.VENUES ? airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }) : Promise.resolve([]),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
@@ -6443,6 +6424,19 @@
                 clubs.forEach(c => {
                     clubLookup[c.id] = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || c.id;
                 });
+
+                // Build Club Name → event slug map so availability can be scoped to the correct event.
+                // Without this, an availability filter that matches on date alone lets one event's signups
+                // (tagged with event_slug) bleed onto another event's same-day games (e.g. Ellis Tech → GSL).
+                window._eventSlugByClub = {};
+                try {
+                    const { data: _evSlugRows } = await supabaseClient.client
+                        .from('events').select('"Club Name", name, slug').eq('enabled', true);
+                    (_evSlugRows || []).forEach(e => {
+                        const nm = (e['Club Name'] || e.name || '').trim().toLowerCase();
+                        if (nm && e.slug) window._eventSlugByClub[nm] = e.slug;
+                    });
+                } catch (_e) { /* fall back to date-only matching if events can't load */ }
 
                 // Build ref lookup by ID, name, email, and aliases
                 refLookup = {};
@@ -6610,7 +6604,6 @@
                 const sourceClubs  = [...new Set(allGames.map(g => g.fields['Source Club']).filter(Boolean))];
                 const airtableClubs = clubs.map(c => c.fields['Name'] || c.fields['Club Name'] || '').filter(Boolean);
                 let mergedAll = [...new Set([...KNOWN_CLUBS, ...airtableClubs, ...sourceClubs, ...knownEventsList])].sort();
-                if (_liveClubNames.size) mergedAll = mergedAll.filter(c => _liveClubNames.has(c));   // live-filter: only enabled clubs/events. Guarded — if the live set hasn't loaded yet, fall through (never blank the board).
                 if (assignorClubRestriction) mergedAll = mergedAll.filter(c => assignorClubRestriction.includes(c));
                 clubsList = mergedAll;
                 if (!userHasFilteredClubs) {
@@ -6637,7 +6630,7 @@
                     changeLink.style.display = 'inline-block';
                 }
                 allRefs   = refs;
-                allAvail  = avail;   // already entity-scoped at the fetch, above
+                allAvail  = avail;
                 allVenues = venues
                     .map(v => {
                         const clubName = (v.fields['club_name'] || '').toLowerCase();
@@ -6781,7 +6774,6 @@
                 }
 
                 document.getElementById('workstation').style.display = 'grid';
-                refreshSeasonOptions();   // populate the Season dropdown from the loaded games
 
                 // If launched with ?filter=unassigned, sync all filter controls
                 if (new URLSearchParams(window.location.search).get('filter') === 'unassigned') {
@@ -6893,58 +6885,6 @@
         const AGE_ORDER = { 'U6':0,'U7':1,'U8':2,'U9':3,'U10':4,'U11':5,'U12':6,
                             'U13':7,'U14':8,'U15':9,'U16':10,'U17':11,'U18':12,'U19':13 };
 
-        // ── Season scope (per club) ─────────────────────────────────────────
-        // Clubs are seasonal; each club carries its own active_season (same backbone
-        // schedule-changes.html reads). Default the workstation to each club's active
-        // season so a flipped club stops showing last season's games — the Season
-        // dropdown archives to a prior season or shows all. A club with no active_season
-        // set fails OPEN (shows everything) so we never hide a club's games by accident.
-        let seasonView = 'active';       // 'active' | 'all' | e.g. 'Spring 2026'
-        let activeSeasonByClub = null;   // { "East Haddam": "Summer 2026", ... } — null = fail open
-        function seasonForDate(dstr) {
-            const p = String(dstr || '').slice(0, 10).split('-').map(Number);
-            if (p.length !== 3 || p.some(isNaN)) return '';
-            const m = p[1], y = p[0];
-            if (m >= 3 && m <= 6)  return `Spring ${y}`;
-            if (m >= 7 && m <= 8)  return `Summer ${y}`;
-            if (m >= 9 && m <= 11) return `Fall ${y}`;
-            return `Winter ${y}`;
-        }
-        async function buildSeasonMap() {
-            try {
-                const { data } = await supabaseClient.client.from('clubs').select('name, "Club Name", active_season');
-                activeSeasonByClub = {};
-                (data || []).forEach(c => {
-                    const key = (c['Club Name'] || c.name || '').trim();
-                    if (key) activeSeasonByClub[key] = c.active_season || null;
-                });
-            } catch(e) { activeSeasonByClub = null; }  // fail open
-        }
-        function _seasonAllows(g) {
-            if (seasonView === 'all') return true;
-            const gs = seasonForDate(g.fields['Date'] || g.fields['date']);
-            if (!gs) return true;                                    // undated → never hide
-            if (seasonView !== 'active') return gs === seasonView;   // a specific archived season chosen
-            const club = resolveGameClub(g.fields) || g.fields['Source Club'] || '';
-            const active = activeSeasonByClub && activeSeasonByClub[club];
-            if (!active) return true;                                // club has no active_season → fail open
-            return gs === active;
-        }
-        function onSeasonScopeChange() {
-            seasonView = document.getElementById('seasonScope')?.value || 'active';
-            renderGames();
-        }
-        function refreshSeasonOptions() {
-            const sel = document.getElementById('seasonScope');
-            if (!sel) return;
-            const seasons = [...new Set(allGames.map(g => seasonForDate(g.fields['Date'] || g.fields['date'])).filter(Boolean))].sort().reverse();
-            const cur = sel.value || 'active';
-            sel.innerHTML = `<option value="active">Current (per club)</option>`
-                + seasons.map(s => `<option value="${s}">${s}</option>`).join('')
-                + `<option value="all">All seasons</option>`;
-            sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'active';
-        }
-
         function renderGames() {
             const wrap = document.getElementById('gamesListWrap');
             const gameDateF      = document.getElementById('gameDateFilter')?.value  || '';
@@ -6958,10 +6898,8 @@
             const filtered = allGames.filter(g => {
                 // When opened from schedule-changes, only show the focused game
                 if (focusGameId) return String(g.id) === String(focusGameId);
-                // CLUB WORKSTATION: hide event games (events have their own workstation)
-                if (knownEventsList.includes(g.fields['Source Club'])) return false;
-                // Season scope (per club) — hide games outside the club's active season unless archived.
-                if (!_seasonAllows(g)) return false;
+                // EVENT WORKSTATION: only show games for events (not club games)
+                if (knownEventsList.length && !knownEventsList.includes(g.fields['Source Club'])) return false;
                 // Change Requested games stay visible — hidden only after assignor acts (cancel/resolve)
                 // Cancelled games bypass most filters but still respect the club pill selection
                 const isCancelledGame = cancelledGameIds.has(g.id) || g.fields['Game Status'] === 'Cancelled';
@@ -7906,15 +7844,9 @@
                 const name  = (r.fields['Name']  || '').trim().replace(/\s+/g, ' ').toLowerCase();
                 const email = (r.fields['Email'] || '').toLowerCase();
                 if (query && !name.includes(query) && !email.includes(query)) return false;
-                // Club preference gate: only show refs who listed a matching club.
-                // Refs with no preference set are hidden — use "Show all refs" to override.
-                // Also check what the ref put on their availability form (Preferred Locations).
-                if (!showAllRefs && focusClubs.length > 0 && !query) {
-                    const prefs = parsePreferences(r.fields['Club Preference']);
-                    const availFormClubs = Object.values(availTimeByName[name] || {}).flatMap(slot => slot.clubs || []);
-                    const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availFormClubs])];
-                    if (!merged.some(p => focusClubs.includes(p))) return false;
-                }
+                // EVENT WORKSTATION: NO club-preference gate. Event refs sign up for the event
+                // (not a club), so they must NOT be hidden for lacking a matching club preference.
+                // They're matched by availability DATE to the event's games (filter below).
                 if (yearsFilter !== 'any') {
                     const yrs = parseYrs(r.fields['Years Reffing'], -1);
                     if (yearsFilter === '0'    && yrs !== 0)             return false;
@@ -7935,13 +7867,9 @@
                 if (genderFilter && r.fields['Gender'] !== genderFilter) return false;
                 const refName = (r.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-                // Club scoping: restricted assignors only see refs who (a) prefer their clubs AND (b) submitted availability for the loaded dates
+                // EVENT WORKSTATION: drop the club-preference match (events aren't club-scoped).
+                // Keep only the date-availability requirement for restricted assignors.
                 if (assignorClubRestriction && !showAllRefs && !query) {
-                    const refPrefs = parsePreferences(r.fields['Club Preference'] || '');
-                    if (refPrefs.length > 0) {
-                        const matchesClub = refPrefs.some(p => assignorClubRestriction.some(c => c.toLowerCase() === p.toLowerCase()));
-                        if (!matchesClub) return false;
-                    }
                     const refDates = availByName[refName];
                     if (!refDates) return false;
                     const hasDateInRange = [...refDates].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo));
@@ -8430,15 +8358,10 @@
                     if (!confirm(`${refName} has not submitted availability for this date.\n\nAssign anyway?`)) return;
                 }
 
-                // Ref has not listed this game's club in their preferences
+                // EVENT WORKSTATION: skip the club-preference warning — event refs sign up for the
+                // event (event_slug), not via a club preference, so this check does not apply.
                 const ref = refLookup[refId];
                 const gameClub = resolveGameClub(targetGame.fields);
-                if (ref && gameClub && !override && !window.tournamentMode) {
-                    const prefs = parsePreferences(ref.fields['Club Preference']);
-                    if (!prefs.some(p => p.toLowerCase() === gameClub.toLowerCase())) {
-                        if (!confirm(`${refName} has not listed "${gameClub}" as a preferred location.\n\nAssign anyway?`)) return;
-                    }
-                }
 
                 // Tournament: warn if game time falls outside ALL of the ref's availability windows
                 if (window.tournamentMode && gameDate && !override) {
@@ -9058,3 +8981,5 @@
 
 </body>
 </html>
+
+<!-- redeploy nudge 2026-07-03T03:20:19Z -->

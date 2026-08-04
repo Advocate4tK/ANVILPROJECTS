@@ -247,13 +247,31 @@ class SupabaseClientWrapper {
                 query = query.order('created_at', { ascending: false });
             }
 
-            if (options.maxRecords) {
-                query = query.limit(options.maxRecords);
+            // ⚠️ Supabase caps EVERY request at 1000 rows. It does not error and it
+            // does not warn — you just get a short array and no way to tell it apart
+            // from a small table. Asking for maxRecords: 2000 silently returns 1000.
+            //
+            // This bit us hard on 2026-08-04: the referees table passed 1000 rows and
+            // referee-management.html (capped at 1000, ordered newest-first) quietly
+            // stopped showing the OLDEST referees. Tod looked up a ref he knew existed
+            // and got nothing. The same truncation in the CA importer's "who do we
+            // already have" read duplicated 81 people.
+            //
+            // So: page through in 1000-row slices up to whatever was asked for. Callers
+            // keep passing maxRecords as before; they just now actually get that many.
+            const want = options.maxRecords || 1000;
+            const PAGE  = 1000;
+            let rows = [], from = 0;
+            while (from < want) {
+                const size = Math.min(PAGE, want - from);
+                const { data, error } = await query.range(from, from + size - 1);
+                if (error) throw new Error(error.message);
+                if (!data || !data.length) break;
+                rows = rows.concat(data);
+                if (data.length < size) break;   // table exhausted
+                from += size;
             }
-
-            const { data, error } = await query;
-            if (error) throw new Error(error.message);
-            return this._wrapAll(data);
+            return this._wrapAll(rows);
         } catch (error) {
             console.error('SupabaseClient getRecords error:', error);
             throw error;

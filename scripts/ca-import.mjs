@@ -118,11 +118,31 @@ for (const r of staged) {
 for (const [, group] of byCaId) if (group.length > 1) caDupes.push(group);
 
 // ── Load ours ─────────────────────────────────────────────────────────────────
-const { data: ours, error } = await db.from('referees')
-  // "Gender" must be selected or fill() sees undefined, treats it as blank,
-  // and overwrites a gender that was already on file.
-  .select('id,name,email,phone,city,state,age,"Gender","Certification Level","Central Assign ID",registration_year');
-if (error) { console.log('DB error:', error.message); process.exit(1); }
+// ⚠️ MUST PAGINATE. Supabase silently caps a plain .select() at 1000 rows — no
+// error, no warning, just a short array. This read is how the importer decides
+// who already exists, so a truncated result means everyone past row 1000 looks
+// NEW and gets inserted again.
+//
+// That is exactly what happened on 2026-08-03: the roster crossed 1000 during
+// the page 5-13 backfill, the importer lost sight of the older half, and 81
+// referees ended up duplicated (83 extra rows) before Tod happened to look up
+// one referee and find him missing from a page with the same cap.
+// Repaired by scripts/dedupe-referees.mjs. Do not remove the pagination.
+async function loadOurs() {
+  const cols = 'id,name,email,phone,city,state,age,"Gender","Certification Level","Central Assign ID",registration_year';
+  let out = [], from = 0;
+  for (;;) {
+    const { data, error } = await db.from('referees').select(cols).range(from, from + 999);
+    if (error) { console.log('DB error:', error.message); process.exit(1); }
+    if (!data || !data.length) break;
+    out = out.concat(data);
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  return out;
+}
+const ours = await loadOurs();
+console.log(`existing roster loaded: ${ours.length} referees`);
 
 const byCa    = new Map(ours.filter(r => r['Central Assign ID']).map(r => [String(r['Central Assign ID']), r]));
 const byEmail = new Map(ours.filter(r => r.email).map(r => [normEmail(r.email), r]));
