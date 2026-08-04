@@ -120,7 +120,16 @@ Directory is 66 pages. **Pages 16–66 have never been captured.**
 
 ---
 
-## The one row still outstanding
+## The one row still outstanding — ✅ CLEARED 2026-08-04
+
+**Raheem Anderson #40504 is resolved and imported.** A targeted name search in Central Assign
+returned his full row: 27, raheem2anderson@gmail.com, (860) 890-4885, East Hartford, reg 2026,
+adult with no Minor tag. Nothing guessed. Staged as `page-02-raheem.json`, imported as db #3585.
+Frame archived at `Ralph/EYES/harvest/cleanup-02`.
+
+**Every row of pages 1–22 is now read and uploaded. No outstanding partials.**
+
+### Previously outstanding
 
 | CA ID | Name | Page | What's missing |
 |---|---|---|---|
