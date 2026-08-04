@@ -935,6 +935,50 @@
         return !!_singleRef[`${src}|${ageBase}`];
     }
 
+    // A referee decides whether to take a game partly on whether it's a boys or
+    // a girls match — different pace, different game to manage, and a newer ref
+    // especially needs to know what they're walking into. It belongs on the
+    // COLLAPSED row because it's a decision input, not a detail.
+    //
+    // The age badge alone cannot carry it here: the Girls Summer League (48
+    // games) and the Ellis Tech Summer League (3 games) are BOTH U19, so every
+    // fixture on the board reads "U19". The matchup text is no help either —
+    // "Ellis Tech" is a TEAM in the girls league as well as the name of the boys
+    // league, so "Ellis Tech vs Woodstock B" is a girls game and "Ellis Tech vs
+    // NFA 2" is a boys game. Only the venue hints at it, and nobody should have
+    // to know that.
+    function gameGender(g) {
+        const raw = String(g['Gender'] || '').trim().toLowerCase();
+        if (raw) {
+            // 'Male'/'Female' appear on a handful of rows — same thing, sloppier.
+            if (raw.startsWith('b') || raw === 'male')   return 'Boys';
+            if (raw.startsWith('g') || raw === 'female') return 'Girls';
+            if (raw.startsWith('c'))                     return 'Coed';
+        }
+        // Gender is blank on some games but baked into the Age Group as free
+        // text instead: "U10 Boys", "U12 Girls", "U8G", "U10B".
+        const ag = String(g['Age Group'] || '').trim();
+        if (/\bgirls?\b/i.test(ag) || /\d\s*G$/i.test(ag)) return 'Girls';
+        if (/\bboys?\b/i.test(ag)  || /\d\s*B$/i.test(ag)) return 'Boys';
+        if (/\bcoed\b/i.test(ag))                          return 'Coed';
+        return '';
+    }
+
+    // "U19" + Girls -> "U19 Girls". Strips whatever gender the Age Group already
+    // carries so nothing doubles up ("U10 Boys" must not become "U10 Boys Boys").
+    // Unknown stays exactly as it was — never guessed. Display only: the raw
+    // Age Group still drives the pay-rate lookup and the single-ref crew rule.
+    function ageLabel(g) {
+        const ag = String(g['Age Group'] || '').trim();
+        if (!ag) return '';
+        const base = ag.replace(/\s*(boys?|girls?|coed)\s*$/i, '')
+                       .replace(/(\d)\s*[BG]$/i, '$1')
+                       .trim();
+        if (!base) return ag;              // Age Group was only a gender word
+        const gender = gameGender(g);
+        return gender ? `${base} ${gender}` : ag;
+    }
+
     function formatDate(d) {
         if (!d) return '—';
         const dt = new Date(d + 'T12:00:00');
@@ -967,7 +1011,8 @@
     function buildCard(g) {
         const club      = g['Source Club'] || '';
         const badgeInfo = CLUB_BADGE[club] || { cls: 'badge-def', label: club };
-        const age       = g['Age Group'] || '';
+        const age       = g['Age Group'] || '';        // RAW — drives the pay-rate key below
+        const ageDisp   = ageLabel(g);                 // display only: "U19" -> "U19 Girls"
         const _rate     = (window._rateMap || {})[`${club}|${age}`];
         const payChip   = _rate && _rate.center != null
             ? `<span class="badge badge-pay">C&nbsp;$${_rate.center}${_rate.ar != null ? ` · AR&nbsp;$${_rate.ar}` : ''}</span>`
@@ -1062,7 +1107,7 @@
                 <span class="game-chevron">▶</span>
                 <span class="game-teams">${home} vs ${away}</span>
                 <span class="game-meta-line">${time}</span>
-                ${age ? `<span class="badge badge-age">${age}</span>` : ''}
+                ${ageDisp ? `<span class="badge badge-age">${ageDisp}</span>` : ''}
                 ${/* The collapsed row answers only what decides a tap: when, what
                       level, WHERE, and is it open. The VENUE replaces the league
                       badge — a referee's first question is whether they can get
