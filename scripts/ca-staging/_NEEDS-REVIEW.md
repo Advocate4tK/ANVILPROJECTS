@@ -2,7 +2,12 @@
 
 **Last updated: 2026-08-04**
 
-## Status: pages 1–21 COMPLETE
+## Status: pages 1–22 COMPLETE ✅ (Tods target reached)
+
+Page 22 swept AT 150% and imported 2026-08-04 (Francis → Garcia). 50 rows: 48 CT imported,
+2 out-of-state omitted (Turner Frankosky MA, August Frazier VT). 35 new referees, 13 gap-fills,
+0 ambiguous. Roster 1,413 → **1,448**. Luke Gallagher #39408 phone truncated in CA (8 digits)
+— stored null, third instance of that CA defect.
 
 Page 21 swept AT 150% and imported 2026-08-04 (Field → Franchini). 50 rows: 48 CT imported,
 2 out-of-state omitted (Robin Foley FL, Nilton Fortes NY). 36 new referees, 12 gap-fills,
