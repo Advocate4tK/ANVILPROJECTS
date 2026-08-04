@@ -2,6 +2,40 @@
 
 **Last updated: 2026-08-04**
 
+## Status: pages 1–19 COMPLETE
+
+Page 19 swept, RE-SWEPT AT 150% ZOOM, and imported 2026-08-04 (Eltaeib → Fairclough).
+50 rows: 49 CT imported, 1 out-of-state omitted (Matthew Evans NY). 43 new referees,
+6 gap-fills, 0 ambiguous. Roster 1,302 → **1,345**. Colin and Tyler Fairchild both
+landed with `Certification Level = Regional`.
+
+Page 18 swept and imported 2026-08-04 (Duelm → Elsendyouney). 50 rows: 47 CT imported,
+3 out-of-state omitted (Dolce PA, Dowling MA, Dryden CA). 36 new, 10 gap-fills.
+Roster 1,266 → 1,302. **Noah Duelm was blocked** — see the CA-ID collision section below.
+
+---
+
+## ⚠️⚠️ SWEEP AT 150% BROWSER ZOOM — NOT 100%
+
+**Ctrl + twice before arming F4.** This is not optional and it is not cosmetic.
+
+At 100% on a 1500px capture, the glyphs **`i` and `l` are visually identical** in this
+font, and a **period inside an email is invisible**. Page 19 was read twice to measure it:
+
+- 3 rows flagged as i/l-ambiguous at 100% — all three turned out correct at 150%
+- **1 row was silently WRONG**: John Evans read as `ynwa96je@gmail.com`, actually
+  `ynwa96.je@gmail.com`. Nothing about it looked suspicious. Re-reading the 100% frames
+  a hundred times would never have caught it.
+
+**That is a ~2% silent error rate on emails**, and email is the only channel to a referee
+who has never submitted availability. A wrong address does not error — it just never
+arrives, and the referee looks unresponsive.
+
+Cost: ~15 scroll steps per page instead of 10. Pages 1–18 were swept at 100% and carry
+an unmeasured error rate; see the cleanup list below.
+
+---
+
 ## Status: pages 1–17 COMPLETE
 
 Page 17 swept and imported 2026-08-04 (DiTommaso → Dudley). 50 rows: 47 CT imported,
