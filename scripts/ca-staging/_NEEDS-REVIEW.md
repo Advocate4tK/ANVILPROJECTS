@@ -2,7 +2,12 @@
 
 **Last updated: 2026-08-04**
 
-## Status: pages 1–20 COMPLETE
+## Status: pages 1–21 COMPLETE
+
+Page 21 swept AT 150% and imported 2026-08-04 (Field → Franchini). 50 rows: 48 CT imported,
+2 out-of-state omitted (Robin Foley FL, Nilton Fortes NY). 36 new referees, 12 gap-fills,
+0 ambiguous. Roster 1,377 → **1,413**. Ben Foley #35197 imported flagged EXPIRED (reg 2022).
+⭐ Liam Forsyth #39886 (Canterbury) is in ALL FOUR pools — East Haddam, Griswold, NorthEast, REFS.
 
 Page 20 swept AT 150% and imported 2026-08-04 (Fairclough → Ficacelli). 50 rows: 47 CT
 imported, 3 out-of-state omitted (Fallis MI, Feigenbaum NY, Fernandes NY). 32 new referees,
