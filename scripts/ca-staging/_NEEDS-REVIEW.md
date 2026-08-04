@@ -36,6 +36,20 @@ Verify after each write: paginated count went up by the expected number, and **0
 Central Assign IDs**. That second check is what catches a truncated read before it becomes
 another 81-person dedupe job.
 
+### ⭐ SAY IT EXPLICITLY (Tod, 2026-08-04)
+
+Every page must be reported to Tod with the word **UPLOADED**, plainly, in these terms:
+
+> **Page NN — UPLOADED to Referee Tool.** X inserted, Y updated. Roster is now Z.
+
+Never let "read", "staged", "transcribed", "processed" or "done" stand in for it. Those words
+describe a JSON file on disk and Tod cannot use a JSON file. Only "UPLOADED" means the referees
+are in the database and searchable in the workstation.
+
+If a page has been transcribed but NOT written, say that just as plainly — **"Page NN is staged,
+NOT uploaded"** — and say what is blocking it. Silence on this point is how 245 rows sat unread
+for days while everyone assumed they were in.
+
 ## Status: pages 1–15 COMPLETE
 
 All 50 rows of every page from 1 through 15 have been read off the archived
