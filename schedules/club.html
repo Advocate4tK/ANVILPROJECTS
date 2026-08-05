@@ -146,6 +146,25 @@
   .cal-dots { display: none; gap: 3px; flex-wrap: wrap; }
   .cal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
   .cal-legend { text-align: center; font-size: 0.68rem; color: var(--muted); margin-top: 12px; }
+  .cal-cell.selected { border-color: var(--deep); border-width: 2px; background: #eef2f9; }
+
+  /* The day panel opens under the grid. A single NECONN Saturday can be 17
+     games across 5 venues, so it is a schedule in its own right — it gets the
+     same venue/time treatment as the list rather than a cramped popover. */
+  .cal-detail-head {
+    margin: 18px 0 10px; padding-top: 16px; border-top: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .cal-detail-head h2 {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 1.15rem; font-weight: 800;
+    letter-spacing: 1.5px; text-transform: uppercase; color: var(--deep); margin: 0;
+  }
+  .cal-detail-head .count { font-size: 0.72rem; color: var(--muted); font-weight: 700; white-space: nowrap; }
+  .cal-close {
+    background: none; border: 1.5px solid var(--border); border-radius: 7px;
+    width: 28px; height: 28px; cursor: pointer; color: var(--muted); font-size: 1rem; line-height: 1;
+  }
+  .cal-close:hover { border-color: #ef4444; color: #ef4444; }
 
   .content { padding: 28px 32px 36px; }
 
@@ -286,7 +305,8 @@
         <button id="calNext" aria-label="Next month">›</button>
       </div>
       <div class="cal-grid" id="calGrid"></div>
-      <div class="cal-legend">Tap a day to jump to it in the list</div>
+      <div class="cal-legend" id="calLegend">Tap any highlighted day to see its games</div>
+      <div id="calDetail"></div>
     </div>
 
     <div id="sched"><div class="state-msg">Loading schedule…</div></div>
@@ -402,6 +422,43 @@ function render() {
     renderCal();
 }
 
+// ONE renderer for a single day's games, grouped venue → time. Both the list
+// and the calendar's day panel call this, so the two can never drift apart.
+// A day is a real unit of schedule here: one NECONN Saturday is 17 games across
+// 5 venues, which is why it gets full venue treatment rather than a popover.
+function dayBlocksHTML(games) {
+    const byVenue = {};
+    games.forEach(g => { (byVenue[venueName(g)] = byVenue[venueName(g)] || []).push(g); });
+
+    let html = '';
+    Object.keys(byVenue).sort().forEach(vName => {
+        const list = byVenue[vName], town = venueTown(list[0]);
+        html += `<div class="night">
+            <div class="night-header">
+                <span>${esc(vName)}</span>
+                <span class="sit-out">${town ? esc(town) + ' · ' : ''}${list.length} game${list.length === 1 ? '' : 's'}</span>
+            </div>`;
+        const byTime = {};
+        list.forEach(g => { (byTime[g.time || ''] = byTime[g.time || ''] || []).push(g); });
+        Object.keys(byTime).sort().forEach(t => {
+            html += `<div class="time-slot"><div class="time-label">${esc(fmtTime(t))}</div>`;
+            byTime[t].forEach(g => {
+                const div = divisionLabel(g);
+                html += `<div class="game-row">
+                    ${g.field ? `<span class="${fieldClass(g.field)}">${esc(g.field)}</span>` : ''}
+                    ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
+                    <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
+                    <span class="vs">vs</span>
+                    <span class="team-b">${esc(g['Away Team'] || 'TBD')}</span>
+                </div>`;
+            });
+            html += `</div>`;
+        });
+        html += `</div>`;
+    });
+    return html;
+}
+
 function renderList() {
     const rows = filtered();
     const host = document.getElementById('sched');
@@ -415,45 +472,17 @@ function renderList() {
     Object.keys(byDate).sort().forEach(date => {
         const isToday = date === TODAY;
         const isPast  = date < TODAY;
-        // id lets the calendar jump straight to a date in this view
         html += `<div class="week-block${isPast ? ' past-block' : ''}" id="d-${date}">
-            <div class="week-label">${esc(fmtDateHeading(date))}${isToday ? '<span class="today-pill">Today</span>' : ''}</div>`;
-
-        const byVenue = {};
-        byDate[date].forEach(g => { (byVenue[venueName(g)] = byVenue[venueName(g)] || []).push(g); });
-
-        Object.keys(byVenue).sort().forEach(vName => {
-            const list = byVenue[vName], town = venueTown(list[0]);
-            html += `<div class="night">
-                <div class="night-header">
-                    <span>${esc(vName)}</span>
-                    <span class="sit-out">${town ? esc(town) + ' · ' : ''}${list.length} game${list.length === 1 ? '' : 's'}</span>
-                </div>`;
-            const byTime = {};
-            list.forEach(g => { (byTime[g.time || ''] = byTime[g.time || ''] || []).push(g); });
-            Object.keys(byTime).sort().forEach(t => {
-                html += `<div class="time-slot"><div class="time-label">${esc(fmtTime(t))}</div>`;
-                byTime[t].forEach(g => {
-                    const div = divisionLabel(g);
-                    html += `<div class="game-row">
-                        ${g.field ? `<span class="${fieldClass(g.field)}">${esc(g.field)}</span>` : ''}
-                        ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
-                        <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
-                        <span class="vs">vs</span>
-                        <span class="team-b">${esc(g['Away Team'] || 'TBD')}</span>
-                    </div>`;
-                });
-                html += `</div>`;
-            });
-            html += `</div>`;
-        });
-        html += `</div>`;
+            <div class="week-label">${esc(fmtDateHeading(date))}${isToday ? '<span class="today-pill">Today</span>' : ''}</div>`
+            + dayBlocksHTML(byDate[date])
+            + `</div>`;
     });
     host.innerHTML = html;
 }
 
 // ── Calendar view ────────────────────────────────────────────────────────────
 let CAL_Y = 0, CAL_M = 0;          // month currently on screen
+let CAL_SEL = null;                // the date whose day panel is open, if any
 
 // Never open on an empty grid. Prefer the month holding the next game still to
 // be played; if the season is done, the last month that actually had one.
@@ -510,15 +539,41 @@ function renderCal() {
     const grid = document.getElementById('calGrid');
     grid.innerHTML = html;
 
-    // Tapping a day drops you into the list at that date — the calendar answers
-    // "when", the list answers "where and who".
+    // Tapping a day opens that day's games IN PLACE, under the grid. Jumping to
+    // the list would throw away the calendar the parent is navigating by.
     grid.querySelectorAll('.cal-cell[data-date]').forEach(cell => {
-        cell.addEventListener('click', () => {
-            setView('list');
-            const target = document.getElementById('d-' + cell.dataset.date);
-            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
+        cell.addEventListener('click', () => openDay(cell.dataset.date));
     });
+
+    // Keep the open day open across a re-render (month nav, filter change), but
+    // drop it if the current filters no longer leave anything on that date.
+    if (CAL_SEL && byDate[CAL_SEL]) openDay(CAL_SEL, true); else closeDay();
+}
+
+function openDay(iso, keepScroll) {
+    const rows = filtered().filter(g => g.date === iso);
+    if (!rows.length) return closeDay();
+    CAL_SEL = iso;
+
+    document.querySelectorAll('.cal-cell').forEach(c =>
+        c.classList.toggle('selected', c.dataset.date === iso));
+
+    const isToday = iso === TODAY;
+    document.getElementById('calDetail').innerHTML = `
+        <div class="cal-detail-head">
+            <h2>${esc(fmtDateHeading(iso))}${isToday ? ' <span class="today-pill">Today</span>' : ''}</h2>
+            <span class="count">${rows.length} game${rows.length === 1 ? '' : 's'} · ${new Set(rows.map(venueName)).size} location${new Set(rows.map(venueName)).size === 1 ? '' : 's'}</span>
+            <button class="cal-close" id="calClose" aria-label="Close">✕</button>
+        </div>` + dayBlocksHTML(rows);
+
+    document.getElementById('calClose').addEventListener('click', closeDay);
+    if (!keepScroll) document.getElementById('calDetail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeDay() {
+    CAL_SEL = null;
+    document.getElementById('calDetail').innerHTML = '';
+    document.querySelectorAll('.cal-cell.selected').forEach(c => c.classList.remove('selected'));
 }
 
 function setView(v) {
