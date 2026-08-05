@@ -180,6 +180,20 @@
   }
   .past-block { opacity: 0.62; }
 
+  /* Divides "still to play" from "already played" so the drop in relevance is
+     announced rather than just implied by the dimming. */
+  .section-rule {
+    display: flex; align-items: center; gap: 12px;
+    margin: 30px 0 20px; color: var(--muted);
+  }
+  .section-rule::before, .section-rule::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .section-rule span {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.72rem; font-weight: 800;
+    letter-spacing: 3px; text-transform: uppercase; white-space: nowrap;
+  }
+
   .night {
     background: white; border-left: 4px solid var(--deep);
     border-radius: 0 8px 8px 0; margin-bottom: 10px; overflow: hidden;
@@ -468,15 +482,26 @@ function renderList() {
     const byDate = {};
     rows.forEach(g => { (byDate[g.date] = byDate[g.date] || []).push(g); });
 
-    let html = '';
-    Object.keys(byDate).sort().forEach(date => {
+    // WHAT'S NEXT FIRST. Nobody opens a schedule to read three months of games
+    // already played — they want Saturday. Upcoming dates run forwards from
+    // today; finished ones follow, most recent first, so the season reads
+    // backwards from the present rather than forwards from May.
+    const all      = Object.keys(byDate);
+    const upcoming = all.filter(d => d >= TODAY).sort();
+    const past     = all.filter(d => d <  TODAY).sort().reverse();
+
+    const block = date => {
         const isToday = date === TODAY;
-        const isPast  = date < TODAY;
-        html += `<div class="week-block${isPast ? ' past-block' : ''}" id="d-${date}">
+        return `<div class="week-block${date < TODAY ? ' past-block' : ''}" id="d-${date}">
             <div class="week-label">${esc(fmtDateHeading(date))}${isToday ? '<span class="today-pill">Today</span>' : ''}</div>`
-            + dayBlocksHTML(byDate[date])
-            + `</div>`;
-    });
+            + dayBlocksHTML(byDate[date]) + `</div>`;
+    };
+
+    let html = upcoming.map(block).join('');
+    if (past.length) {
+        html += `<div class="section-rule"><span>${upcoming.length ? 'Already Played' : 'Season Complete'}</span></div>`
+              + past.map(block).join('');
+    }
     host.innerHTML = html;
 }
 
@@ -650,6 +675,13 @@ function fail(title, detail) {
             from += 1000;
         }
 
+        // Venue names. Without this every block reads "Location TBD" — which is
+        // exactly what shipped the first time, because this fetch was dropped
+        // when club.html was split out of neconn.html.
+        const { data: vens, error: vErr } = await sb.from('venues').select('"Venue ID","Venue Name",city,state');
+        if (vErr) console.error('venues failed to load:', vErr.message);
+        (vens || []).forEach(v => { VENUES[String(v['Venue ID'])] = v; });
+
         // A cancelled game is not a game a family should drive to.
         GAMES = games.filter(g => !/cancel/i.test(String(g.status || '') + String(g['Game Status'] || '')));
         GAMES.sort((a, b) => (a.date || '').localeCompare(b.date || '') || String(a.time || '').localeCompare(String(b.time || '')));
@@ -665,9 +697,10 @@ function fail(title, detail) {
             fmtShort(dates[0]) + ' – ' + fmtShort(dates[dates.length - 1]) +
             (upcoming ? ` · ${upcoming} game${upcoming === 1 ? '' : 's'} still to play` : ' · season complete');
 
+        const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
         document.getElementById('infoBar').innerHTML =
-            `<span>${teams.size} Teams</span><span>${GAMES.length} Games</span>` +
-            `<span>${new Set(dates).size} Game Days</span><span>${venues.size} Locations</span>`;
+            `<span>${plural(teams.size, 'Team')}</span><span>${plural(GAMES.length, 'Game')}</span>` +
+            `<span>${plural(new Set(dates).size, 'Game Day')}</span><span>${plural(venues.size, 'Location')}</span>`;
 
         document.getElementById('stamp').textContent =
             ' · Updated ' + new Date().toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
