@@ -226,12 +226,39 @@
     text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px;
   }
 
+  /* The alternating tint keys off .game-item now, not .game-row — the row is
+     wrapped so it can carry an expandable body beneath it. */
+  .game-item + .game-item { margin-top: 6px; }
+  .game-item + .game-item .game-row { background: #edf7f2; }
+
   .game-row {
     display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 0.88rem;
     background: white; border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06); cursor: pointer;
   }
-  .game-row + .game-row { margin-top: 6px; background: #edf7f2; }
+  .game-row:hover { background: #f4faf7; }
+  .game-item.open .game-row { border-radius: 0 6px 0 0; box-shadow: none; }
+  .game-chevron {
+    color: var(--accent); font-size: 0.6rem; flex-shrink: 0;
+    transition: transform 0.18s; display: inline-block;
+  }
+  .game-item.open .game-chevron { transform: rotate(90deg); }
+
+  .game-body { display: none; background: #fbfcfd; border-left: 3px solid var(--accent);
+    border-radius: 0 0 6px 0; padding: 11px 14px 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .game-item.open .game-body { display: block; }
+  .gb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
+  @media (max-width: 480px) { .gb-grid { grid-template-columns: 1fr; } }
+  .gb-k {
+    display: block; font-size: 0.6rem; font-weight: 800; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .gb-v { display: block; font-size: 0.83rem; font-weight: 600; color: var(--text); }
+  .gb-map {
+    display: block; margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--border);
+    font-size: 0.78rem; font-weight: 600; color: #0369a1; text-decoration: none;
+  }
+  .gb-map:hover { text-decoration: underline; }
 
   .field-chip, .div-chip {
     font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
@@ -506,13 +533,31 @@ function dayBlocksHTML(games) {
         Object.keys(byTime).sort().forEach(t => {
             html += `<div class="time-slot"><div class="time-label">${esc(fmtTime(t))}</div>`;
             byTime[t].forEach(g => {
-                const div = divisionLabel(g);
-                html += `<div class="game-row">
-                    ${g.field ? `<span class="${fieldClass(g.field)}">${esc(g.field)}</span>` : ''}
-                    ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
-                    <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
-                    <span class="vs">vs</span>
-                    <span class="team-b">${esc(g['Away Team'] || 'TBD')}</span>
+                const div  = divisionLabel(g);
+                const href = venueMapsHref(g), addr = venueAddr(g);
+                // Collapsed row answers "is this my kid's game". The body answers
+                // "where exactly am I going and who is home" — the two questions a
+                // parent actually has, in that order.
+                html += `<div class="game-item" data-gid="${esc(g.id)}">
+                    <div class="game-row">
+                        <span class="game-chevron">▶</span>
+                        ${g.field ? `<span class="${fieldClass(g.field)}">${esc(g.field)}</span>` : ''}
+                        ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
+                        <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
+                        <span class="vs">vs</span>
+                        <span class="team-b">${esc(g['Away Team'] || 'TBD')}</span>
+                    </div>
+                    <div class="game-body">
+                        <div class="gb-grid">
+                            <div><span class="gb-k">Kickoff</span><span class="gb-v">${esc(fmtDateHeading(g.date))} · ${esc(fmtTime(g.time))}</span></div>
+                            <div><span class="gb-k">Division</span><span class="gb-v">${div ? esc(div) : '—'}</span></div>
+                            <div><span class="gb-k">Home</span><span class="gb-v">${esc(g['Home Team'] || 'TBD')}</span></div>
+                            <div><span class="gb-k">Away</span><span class="gb-v">${esc(g['Away Team'] || 'TBD')}</span></div>
+                            ${g.field ? `<div><span class="gb-k">Field</span><span class="gb-v">${esc(g.field)}</span></div>` : ''}
+                            <div><span class="gb-k">Season</span><span class="gb-v">${esc(seasonOf(g) || '—')}</span></div>
+                        </div>
+                        ${href ? `<a class="gb-map" href="${href}" target="_blank" rel="noopener">📍 ${esc(vName)}${addr ? ' — ' + esc(addr) : ''} &nbsp;›</a>` : ''}
+                    </div>
                 </div>`;
             });
             html += `</div>`;
@@ -649,6 +694,16 @@ function closeDay() {
     document.getElementById('calDetail').innerHTML = '';
     document.querySelectorAll('.cal-cell.selected').forEach(c => c.classList.remove('selected'));
 }
+
+// Delegated once on document, so it survives every re-render — month paging,
+// filter changes, opening a day panel. Binding per row would leak listeners and
+// silently stop working after the first redraw.
+document.addEventListener('click', e => {
+    if (e.target.closest('.venue-link, .gb-map')) return;   // let map links through
+    const row = e.target.closest('.game-row');
+    if (!row) return;
+    row.closest('.game-item').classList.toggle('open');
+});
 
 function setView(v) {
     document.querySelectorAll('.view-tab').forEach(b => b.classList.toggle('is-on', b.dataset.view === v));
