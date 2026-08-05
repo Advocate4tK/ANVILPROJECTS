@@ -87,6 +87,66 @@
   }
   .filter-bar select option { background: #0a1830; }
 
+  /* ── List / Calendar tabs ── */
+  .view-tabs {
+    display: flex; gap: 0; background: #0a1830;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .view-tab {
+    flex: 1; padding: 11px 10px; background: none; border: none;
+    border-bottom: 3px solid transparent; cursor: pointer;
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.9rem; font-weight: 800;
+    letter-spacing: 2.5px; text-transform: uppercase; color: rgba(255,255,255,0.45);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .view-tab:hover { color: rgba(255,255,255,0.8); }
+  .view-tab.is-on { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Calendar ── */
+  .cal-nav {
+    display: flex; align-items: center; justify-content: center; gap: 18px;
+    margin-bottom: 14px;
+  }
+  .cal-nav span {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 1.15rem; font-weight: 800;
+    letter-spacing: 2px; text-transform: uppercase; color: var(--deep);
+    min-width: 190px; text-align: center;
+  }
+  .cal-nav button {
+    width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
+    background: white; border: 1.5px solid var(--border);
+    color: var(--deep); font-size: 1.2rem; line-height: 1;
+  }
+  .cal-nav button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .cal-nav button:disabled { opacity: 0.3; cursor: default; }
+
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-dow {
+    text-align: center; font-size: 0.62rem; font-weight: 800; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--muted); padding-bottom: 4px;
+  }
+  .cal-cell {
+    background: white; border-radius: 6px; min-height: 74px; padding: 4px 5px;
+    border: 1px solid var(--border); font-size: 0.7rem; overflow: hidden;
+  }
+  .cal-cell.blank { background: transparent; border-color: transparent; }
+  .cal-cell.past  { opacity: 0.55; }
+  .cal-cell.today { border-color: #ef4444; border-width: 2px; }
+  .cal-cell.has-games { cursor: pointer; }
+  .cal-cell.has-games:hover { border-color: var(--accent); }
+  .cal-daynum { font-weight: 800; color: var(--deep); font-size: 0.72rem; margin-bottom: 2px; }
+  .cal-cell.today .cal-daynum { color: #ef4444; }
+  .cal-ev {
+    background: #e8fdf1; border-left: 2px solid var(--accent); border-radius: 3px;
+    padding: 1px 3px; margin-bottom: 2px; line-height: 1.25;
+    font-size: 0.62rem; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cal-more { font-size: 0.58rem; color: var(--muted); font-weight: 700; }
+  .cal-dots { display: none; gap: 3px; flex-wrap: wrap; }
+  .cal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .cal-legend { text-align: center; font-size: 0.68rem; color: var(--muted); margin-top: 12px; }
+
   .content { padding: 28px 32px 36px; }
 
   .week-block { margin-bottom: 26px; }
@@ -166,6 +226,14 @@
     .info-bar { gap: 14px; font-size: 0.7rem; }
     .game-row { flex-wrap: wrap; row-gap: 5px; }
     .team, .team-b { flex: 1 0 40%; }
+
+    /* A 7-column grid on a phone is ~45px per cell — text is hopeless there.
+       Each game becomes a dot; tapping the day jumps to it in the list. */
+    .cal-grid  { gap: 3px; }
+    .cal-cell  { min-height: 46px; padding: 3px; }
+    .cal-ev, .cal-more { display: none; }
+    .cal-dots  { display: flex; }
+    .cal-nav span { font-size: 1rem; min-width: 140px; }
   }
   @media print {
     body { background: white; }
@@ -205,7 +273,22 @@
     <select id="venueFilter"><option value="">All locations</option></select>
   </div>
 
+  <div class="view-tabs" id="viewTabs" style="display:none;">
+    <button class="view-tab is-on" data-view="list">List</button>
+    <button class="view-tab" data-view="cal">Calendar</button>
+  </div>
+
   <div class="content">
+    <div id="calWrap" style="display:none;">
+      <div class="cal-nav">
+        <button id="calPrev" aria-label="Previous month">‹</button>
+        <span id="calTitle"></span>
+        <button id="calNext" aria-label="Next month">›</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-legend">Tap a day to jump to it in the list</div>
+    </div>
+
     <div id="sched"><div class="state-msg">Loading schedule…</div></div>
 
     <div class="notes" id="notesBox" style="display:none;">
@@ -300,18 +383,27 @@ function fieldClass(f) {
     return 'field-chip';
 }
 
-function render() {
+// The filters own the data; the two views are just different drawings of the
+// same filtered set. Narrowing to one team narrows the calendar too.
+function filtered() {
     const sn = document.getElementById('seasonFilter').value;
     const dv = document.getElementById('divFilter').value;
     const tm = document.getElementById('teamFilter').value;
     const vn = document.getElementById('venueFilter').value;
-
-    const rows = GAMES.filter(g =>
+    return GAMES.filter(g =>
         (!sn || g.season === sn) &&
         (!dv || divisionLabel(g) === dv) &&
         (!tm || g['Home Team'] === tm || g['Away Team'] === tm) &&
         (!vn || venueName(g) === vn));
+}
 
+function render() {
+    renderList();
+    renderCal();
+}
+
+function renderList() {
+    const rows = filtered();
     const host = document.getElementById('sched');
     if (!rows.length) { host.innerHTML = `<div class="state-msg">No games match that filter.</div>`; return; }
 
@@ -323,7 +415,8 @@ function render() {
     Object.keys(byDate).sort().forEach(date => {
         const isToday = date === TODAY;
         const isPast  = date < TODAY;
-        html += `<div class="week-block${isPast ? ' past-block' : ''}">
+        // id lets the calendar jump straight to a date in this view
+        html += `<div class="week-block${isPast ? ' past-block' : ''}" id="d-${date}">
             <div class="week-label">${esc(fmtDateHeading(date))}${isToday ? '<span class="today-pill">Today</span>' : ''}</div>`;
 
         const byVenue = {};
@@ -357,6 +450,94 @@ function render() {
         html += `</div>`;
     });
     host.innerHTML = html;
+}
+
+// ── Calendar view ────────────────────────────────────────────────────────────
+let CAL_Y = 0, CAL_M = 0;          // month currently on screen
+
+// Never open on an empty grid. Prefer the month holding the next game still to
+// be played; if the season is done, the last month that actually had one.
+function defaultCalMonth(rows) {
+    const dates = rows.map(g => g.date).filter(Boolean).sort();
+    if (!dates.length) { const n = new Date(); return [n.getFullYear(), n.getMonth()]; }
+    const next = dates.find(d => d >= TODAY) || dates[dates.length - 1];
+    const dt = new Date(next + 'T12:00:00');
+    return [dt.getFullYear(), dt.getMonth()];
+}
+
+function renderCal() {
+    const rows = filtered();
+    const byDate = {};
+    rows.forEach(g => { (byDate[g.date] = byDate[g.date] || []).push(g); });
+
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    document.getElementById('calTitle').textContent = `${MONTHS[CAL_M]} ${CAL_Y}`;
+
+    // Disable navigation past the ends of the season — there is nothing out there.
+    const all = rows.map(g => g.date).filter(Boolean).sort();
+    const key = (y, m) => y * 12 + m;
+    if (all.length) {
+        const f = new Date(all[0] + 'T12:00:00'), l = new Date(all[all.length-1] + 'T12:00:00');
+        document.getElementById('calPrev').disabled = key(CAL_Y, CAL_M) <= key(f.getFullYear(), f.getMonth());
+        document.getElementById('calNext').disabled = key(CAL_Y, CAL_M) >= key(l.getFullYear(), l.getMonth());
+    }
+
+    const first = new Date(CAL_Y, CAL_M, 1);
+    const days  = new Date(CAL_Y, CAL_M + 1, 0).getDate();
+    let html = ['S','M','T','W','T','F','S'].map(d => `<div class="cal-dow">${d}</div>`).join('');
+    for (let i = 0; i < first.getDay(); i++) html += `<div class="cal-cell blank"></div>`;
+
+    for (let d = 1; d <= days; d++) {
+        const iso = `${CAL_Y}-${String(CAL_M+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const list = byDate[iso] || [];
+        const cls = ['cal-cell'];
+        if (iso === TODAY) cls.push('today');
+        else if (iso < TODAY) cls.push('past');
+        if (list.length) cls.push('has-games');
+
+        let inner = `<div class="cal-daynum">${d}</div>`;
+        // Desktop: up to two readable entries, then a "+N more".
+        list.slice(0, 2).forEach(g => {
+            const div = divisionLabel(g);
+            inner += `<div class="cal-ev">${esc(fmtTime(g.time).replace(':00',''))}${div ? ' · ' + esc(div) : ''}</div>`;
+        });
+        if (list.length > 2) inner += `<div class="cal-more">+${list.length - 2} more</div>`;
+        // Phone: dots only (see the media query).
+        if (list.length) inner += `<div class="cal-dots">${list.map(() => '<span class="cal-dot"></span>').join('')}</div>`;
+
+        html += `<div class="${cls.join(' ')}"${list.length ? ` data-date="${iso}"` : ''}>${inner}</div>`;
+    }
+    const grid = document.getElementById('calGrid');
+    grid.innerHTML = html;
+
+    // Tapping a day drops you into the list at that date — the calendar answers
+    // "when", the list answers "where and who".
+    grid.querySelectorAll('.cal-cell[data-date]').forEach(cell => {
+        cell.addEventListener('click', () => {
+            setView('list');
+            const target = document.getElementById('d-' + cell.dataset.date);
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+}
+
+function setView(v) {
+    document.querySelectorAll('.view-tab').forEach(b => b.classList.toggle('is-on', b.dataset.view === v));
+    document.getElementById('calWrap').style.display = v === 'cal'  ? '' : 'none';
+    document.getElementById('sched').style.display   = v === 'list' ? '' : 'none';
+}
+
+function wireViews(rows) {
+    [CAL_Y, CAL_M] = defaultCalMonth(rows);
+    document.querySelectorAll('.view-tab').forEach(b =>
+        b.addEventListener('click', () => setView(b.dataset.view)));
+    document.getElementById('calPrev').addEventListener('click', () => {
+        if (--CAL_M < 0) { CAL_M = 11; CAL_Y--; } renderCal();
+    });
+    document.getElementById('calNext').addEventListener('click', () => {
+        if (++CAL_M > 11) { CAL_M = 0; CAL_Y++; } renderCal();
+    });
+    document.getElementById('viewTabs').style.display = '';
 }
 
 function fillFilters() {
@@ -438,6 +619,7 @@ function fail(title, detail) {
         document.getElementById('notesBox').style.display = '';
 
         fillFilters();
+        wireViews(GAMES);
         render();
     } catch (e) {
         console.error(e);
