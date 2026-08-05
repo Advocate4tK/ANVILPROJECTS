@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Club Schedule — Referee Tool</title>
+
+<link rel="stylesheet" href="../css/styles.css">
+<style>
+  /* ── Master logo (from logo-preview.html) ── */
+  .logo-mark { position: relative; display: inline-block; --sz: 110px; width: var(--sz); height: var(--sz); }
+  .lcard { position: absolute; border-radius: calc(var(--sz)*0.065); }
+  .lcard-red {
+    width: calc(var(--sz)*0.58); height: calc(var(--sz)*0.82);
+    background: linear-gradient(145deg,#f87171 0%,#ef4444 55%,#b91c1c 100%);
+    box-shadow: 0 calc(var(--sz)*0.02) calc(var(--sz)*0.12) rgba(239,68,68,0.45);
+    top: calc(var(--sz)*0.21); left: calc(var(--sz)*0.32); transform: rotate(22deg);
+  }
+  .lcard-yellow {
+    width: calc(var(--sz)*0.64); height: calc(var(--sz)*0.88);
+    background: linear-gradient(145deg,#fde047 0%,#f59e0b 55%,#b45309 100%);
+    box-shadow: 0 0 calc(var(--sz)*0.2) rgba(245,158,11,0.6), 0 0 calc(var(--sz)*0.4) rgba(245,158,11,0.2), 0 calc(var(--sz)*0.05) calc(var(--sz)*0.18) rgba(0,0,0,0.5);
+    top: calc(var(--sz)*0.12); left: calc(var(--sz)*0.18); transform: rotate(10deg);
+  }
+  .lcard-yellow::before {
+    content:''; position:absolute; top:8%; left:10%; width:14%; height:52%;
+    background: linear-gradient(180deg,rgba(255,255,255,0.38) 0%,rgba(255,255,255,0) 100%);
+    border-radius: 3px;
+  }
+  .logo-text {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding-top: calc(var(--sz)*0.10);
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    text-transform: uppercase; text-align: center; z-index: 10;
+    line-height: 0.88; letter-spacing: 2px;
+  }
+  .logo-line1 { color:#fff; text-shadow: 0 2px 12px rgba(0,0,0,0.95), 0 0 24px rgba(0,0,0,0.7); font-size: calc(var(--sz)*0.2); }
+  .logo-line2 { color:#00c853; text-shadow: 0 2px 12px rgba(0,0,0,0.95), 0 0 28px rgba(0,200,83,0.5); font-size: calc(var(--sz)*0.32); margin-top: calc(var(--sz)*-0.01); transform: skewX(-14deg); display: block; }
+  .logo-underline { display:block; height:calc(var(--sz)*0.022); width:calc(var(--sz)*0.58); margin-top:calc(var(--sz)*0.025); background:#ef4444; border-radius:calc(var(--sz)*0.01); box-shadow: 0 0 calc(var(--sz)*0.012) #ef4444, 0 0 calc(var(--sz)*0.04) rgba(239,68,68,0.85), 0 0 calc(var(--sz)*0.08) rgba(239,68,68,0.5); transform:skewX(-14deg); }
+
+  .page {
+    max-width: 860px; margin: 0 auto; background: var(--bg);
+    border-radius: 16px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+  }
+  header {
+    background: var(--deep); color: white;
+    padding: 28px 36px 22px; text-align: center; position: relative;
+  }
+  header::after {
+    content: ''; display: block; height: 4px; background: var(--accent);
+    position: absolute; bottom: 0; left: 0; right: 0;
+  }
+  header h1 {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 2.2rem; font-weight: 800;
+    letter-spacing: 2px; text-transform: uppercase; color: white; margin: 0;
+  }
+  header p { font-size: 0.9rem; color: rgba(255,255,255,0.65); margin-top: 6px; }
+
+  .info-bar {
+    background: var(--accent); color: #060e20;
+    display: flex; justify-content: center; gap: 28px;
+    padding: 9px 20px; font-size: 0.78rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px; flex-wrap: wrap;
+  }
+
+  .filter-bar {
+    background: #0e2040; padding: 10px 20px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .filter-bar label {
+    font-size: 0.7rem; font-weight: 800; letter-spacing: 2px;
+    text-transform: uppercase; color: rgba(255,255,255,0.4);
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .filter-bar select {
+    background: #060e20; color: white; border: 1.5px solid var(--accent);
+    border-radius: 7px; padding: 7px 32px 7px 12px;
+    font-family: 'DM Sans', sans-serif; font-size: 0.86rem; font-weight: 600;
+    cursor: pointer; appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2300c853' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+    outline: none; flex: 1 1 130px; min-width: 120px; max-width: 210px;
+  }
+  .filter-bar select option { background: #0a1830; }
+
+  .content { padding: 28px 32px 36px; }
+
+  .week-block { margin-bottom: 26px; }
+  .week-label {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.7rem; font-weight: 800;
+    letter-spacing: 3px; text-transform: uppercase; color: var(--accent);
+    margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .today-pill {
+    background: #ef4444; color: white; border-radius: 4px;
+    padding: 1px 7px; font-size: 0.6rem; letter-spacing: 1.5px;
+  }
+  .past-block { opacity: 0.62; }
+
+  .night {
+    background: white; border-left: 4px solid var(--deep);
+    border-radius: 0 8px 8px 0; margin-bottom: 10px; overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  }
+  .night-header {
+    background: var(--deep); color: white; padding: 7px 14px; font-size: 0.82rem;
+    font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .night-header .sit-out {
+    font-size: 0.68rem; color: rgba(255,255,255,0.55); font-weight: 400; white-space: nowrap;
+  }
+
+  .time-slot { padding: 9px 14px; border-top: 1px solid #f0ebe4; }
+  .time-slot:first-of-type { border-top: none; }
+  .time-label {
+    font-size: 0.7rem; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px;
+  }
+
+  .game-row {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 0.88rem;
+    background: white; border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .game-row + .game-row { margin-top: 6px; background: #edf7f2; }
+
+  .field-chip, .div-chip {
+    font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+    border-radius: 4px; padding: 1px 6px; white-space: nowrap; flex-shrink: 0;
+  }
+  .field-chip    { color:#00c853; background:#e8fdf1; border:1px solid #00c853; }
+  .field-chip.f2 { color:#0369a1; background:#e0f2fe; border-color:#7dd3fc; }
+  .field-chip.f3 { color:#92400e; background:#fff8e1; border-color:#f59e0b; }
+  .div-chip      { color:var(--deep); background:#eef2f9; border:1px solid #cfd9e8; }
+
+  .team   { flex: 1; font-weight: 600; text-align: right; color: var(--text); }
+  .vs     { color: var(--muted); font-size: 0.7rem; font-weight: 700; width: 22px; text-align: center; flex-shrink: 0; }
+  .team-b { flex: 1; font-weight: 600; color: var(--text); }
+
+  .notes {
+    margin-top: 20px; background: #fff8e1; border-left: 4px solid var(--amber);
+    border-radius: 0 8px 8px 0; padding: 13px 16px;
+    font-size: 0.82rem; line-height: 1.6; color: var(--text);
+  }
+  .notes strong {
+    display: block; font-size: 0.7rem; font-weight: 800; letter-spacing: 2px;
+    text-transform: uppercase; color: #92400e; margin-bottom: 5px;
+  }
+
+  .state-msg { text-align: center; padding: 50px 20px; color: var(--muted); font-size: 0.92rem; line-height: 1.7; }
+  .state-msg strong { color: var(--deep); }
+
+  footer {
+    text-align: center; padding: 16px; font-size: 0.72rem;
+    color: var(--muted); border-top: 1px solid var(--border); margin-top: 20px;
+  }
+
+  @media (max-width: 600px) {
+    .content { padding: 18px 16px 24px; }
+    header { padding: 20px 16px 16px; }
+    .night-header { flex-direction: column; align-items: flex-start; gap: 2px; }
+    .info-bar { gap: 14px; font-size: 0.7rem; }
+    .game-row { flex-wrap: wrap; row-gap: 5px; }
+    .team, .team-b { flex: 1 0 40%; }
+  }
+  @media print {
+    body { background: white; }
+    .page { box-shadow: none; border-radius: 0; }
+    .week-block { page-break-inside: avoid; }
+    .filter-bar { display: none; }
+    .past-block { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div style="padding: 24px 16px;">
+<div class="page">
+
+  <header>
+    <div class="logo-mark" style="position:absolute;top:12px;right:14px;--sz:54px;">
+      <div class="lcard lcard-red"></div>
+      <div class="lcard lcard-yellow"></div>
+      <div class="logo-text">
+        <span class="logo-line1">Referee</span>
+        <span class="logo-line2">Tool</span>
+        <span class="logo-underline"></span>
+      </div>
+    </div>
+    <h1 id="clubName">Schedule</h1>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--accent);margin:4px 0 6px;">Schedule</div>
+    <p id="subhead">Loading…</p>
+  </header>
+
+  <div class="info-bar" id="infoBar"></div>
+
+  <div class="filter-bar" id="filterBar" style="display:none;">
+    <label>Filter</label>
+    <select id="seasonFilter" style="display:none;"><option value="">All seasons</option></select>
+    <select id="divFilter"><option value="">All divisions</option></select>
+    <select id="teamFilter"><option value="">All teams</option></select>
+    <select id="venueFilter"><option value="">All locations</option></select>
+  </div>
+
+  <div class="content">
+    <div id="sched"><div class="state-msg">Loading schedule…</div></div>
+
+    <div class="notes" id="notesBox" style="display:none;">
+      <strong>Schedule Changes</strong>
+      This schedule is generated live from the club's game records — when a game is
+      rescheduled it updates here automatically. There is no separate copy to fall out
+      of date. Always check here before you travel.
+    </div>
+  </div>
+
+  <footer>
+    <span id="footClub"></span> Schedule powered by <strong>Referee&nbsp;Tool</strong> by Anvil&nbsp;Art
+    <span id="stamp"></span>
+  </footer>
+
+</div>
+</div>
+
+<script src="../config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-client.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Public club schedule.  /schedules/club.html?club=East Haddam
+//
+// One page for every club. CLUBS ONLY, by Tod's scope call — events and
+// tournaments are separate entity types with their own code paths and are
+// deliberately out of scope here.
+//
+// PUBLIC PAGE. It renders date, time, division, matchup, venue and field, and
+// NOTHING ELSE. Referee names and pay rates live on the same game rows and must
+// never reach this page — most of the referee roster are minors, and publishing
+// a child's name against a specific field and kickoff time on an open URL is not
+// something we do. The select list below is explicit for exactly that reason:
+// DO NOT change it to '*'.
+// ─────────────────────────────────────────────────────────────────────────────
+const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season';
+
+let GAMES = [], VENUES = {};
+const TODAY = new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD, local
+
+const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const esc  = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// Same normalisation the openings board uses — "U10" alone can't tell a parent
+// whether it's the boys' or the girls' team playing.
+function gameGender(g) {
+    const raw = String(g['Gender'] || '').trim().toLowerCase();
+    if (raw) {
+        if (raw.startsWith('b') || raw === 'male')   return 'Boys';
+        if (raw.startsWith('g') || raw === 'female') return 'Girls';
+        if (raw.startsWith('c'))                     return 'Coed';
+    }
+    const ag = String(g['Age Group'] || '').trim();
+    if (/\bgirls?\b/i.test(ag) || /\d\s*G$/i.test(ag)) return 'Girls';
+    if (/\bboys?\b/i.test(ag)  || /\d\s*B$/i.test(ag)) return 'Boys';
+    if (/\bcoed\b/i.test(ag))                          return 'Coed';
+    return '';
+}
+function divisionLabel(g) {
+    const ag = String(g['Age Group'] || '').trim();
+    if (!ag) return '';
+    const base = ag.replace(/\s*(boys?|girls?|coed)\s*$/i, '')
+                   .replace(/(\d)\s*[BG]$/i, '$1').trim();
+    if (!base) return ag;
+    const gender = gameGender(g);
+    return gender ? `${base} ${gender}` : ag;
+}
+function fmtDateHeading(d) {
+    const dt = new Date(d + 'T12:00:00');
+    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    return `${days[dt.getDay()]}, ${months[dt.getMonth()]} ${dt.getDate()}`;
+}
+function fmtShort(d) {
+    const dt = new Date(d + 'T12:00:00');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[dt.getMonth()]} ${dt.getDate()}`;
+}
+function fmtTime(t) {
+    if (!t) return 'TBD';
+    const [h, m] = String(t).split(':').map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+const venueOf   = g => VENUES[String(g['Venue ID'])] || null;
+const venueName = g => (venueOf(g) || {})['Venue Name'] || 'Location TBD';
+const venueTown = g => (venueOf(g) || {}).city || '';
+function fieldClass(f) {
+    const s = String(f || '');
+    if (/2/.test(s)) return 'field-chip f2';
+    if (/3/.test(s)) return 'field-chip f3';
+    return 'field-chip';
+}
+
+function render() {
+    const sn = document.getElementById('seasonFilter').value;
+    const dv = document.getElementById('divFilter').value;
+    const tm = document.getElementById('teamFilter').value;
+    const vn = document.getElementById('venueFilter').value;
+
+    const rows = GAMES.filter(g =>
+        (!sn || g.season === sn) &&
+        (!dv || divisionLabel(g) === dv) &&
+        (!tm || g['Home Team'] === tm || g['Away Team'] === tm) &&
+        (!vn || venueName(g) === vn));
+
+    const host = document.getElementById('sched');
+    if (!rows.length) { host.innerHTML = `<div class="state-msg">No games match that filter.</div>`; return; }
+
+    // date → venue → time. A family travels to a place on a day, so that's the shape.
+    const byDate = {};
+    rows.forEach(g => { (byDate[g.date] = byDate[g.date] || []).push(g); });
+
+    let html = '';
+    Object.keys(byDate).sort().forEach(date => {
+        const isToday = date === TODAY;
+        const isPast  = date < TODAY;
+        html += `<div class="week-block${isPast ? ' past-block' : ''}">
+            <div class="week-label">${esc(fmtDateHeading(date))}${isToday ? '<span class="today-pill">Today</span>' : ''}</div>`;
+
+        const byVenue = {};
+        byDate[date].forEach(g => { (byVenue[venueName(g)] = byVenue[venueName(g)] || []).push(g); });
+
+        Object.keys(byVenue).sort().forEach(vName => {
+            const list = byVenue[vName], town = venueTown(list[0]);
+            html += `<div class="night">
+                <div class="night-header">
+                    <span>${esc(vName)}</span>
+                    <span class="sit-out">${town ? esc(town) + ' · ' : ''}${list.length} game${list.length === 1 ? '' : 's'}</span>
+                </div>`;
+            const byTime = {};
+            list.forEach(g => { (byTime[g.time || ''] = byTime[g.time || ''] || []).push(g); });
+            Object.keys(byTime).sort().forEach(t => {
+                html += `<div class="time-slot"><div class="time-label">${esc(fmtTime(t))}</div>`;
+                byTime[t].forEach(g => {
+                    const div = divisionLabel(g);
+                    html += `<div class="game-row">
+                        ${g.field ? `<span class="${fieldClass(g.field)}">${esc(g.field)}</span>` : ''}
+                        ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
+                        <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
+                        <span class="vs">vs</span>
+                        <span class="team-b">${esc(g['Away Team'] || 'TBD')}</span>
+                    </div>`;
+                });
+                html += `</div>`;
+            });
+            html += `</div>`;
+        });
+        html += `</div>`;
+    });
+    host.innerHTML = html;
+}
+
+function fillFilters() {
+    const seasons = [...new Set(GAMES.map(g => g.season).filter(Boolean))].sort();
+    const put = (id, arr) => {
+        const el = document.getElementById(id);
+        arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); });
+        el.addEventListener('change', render);
+    };
+    // Only offer a season picker when there is more than one to pick from.
+    if (seasons.length > 1) { document.getElementById('seasonFilter').style.display = ''; put('seasonFilter', seasons); }
+    put('divFilter',   [...new Set(GAMES.map(divisionLabel).filter(Boolean))].sort());
+    put('teamFilter',  [...new Set(GAMES.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean))].sort());
+    put('venueFilter', [...new Set(GAMES.map(venueName).filter(Boolean))].sort());
+    document.getElementById('filterBar').style.display = '';
+}
+
+function fail(title, detail) {
+    document.getElementById('sched').innerHTML = `<div class="state-msg"><strong>${esc(title)}</strong><br>${esc(detail)}</div>`;
+    document.getElementById('subhead').textContent = '';
+}
+
+(async function init() {
+    const slug = new URLSearchParams(window.location.search).get('club') || '';
+    if (!slug) { document.getElementById('clubName').textContent = 'Club Schedule';
+        return fail('No club specified.', 'Add ?club= to the address, for example ?club=East Haddam'); }
+
+    try {
+        const sb = supabaseClient.client;
+
+        // Resolve the club against the clubs table so a typo'd slug gives a clean
+        // message instead of a convincing-looking empty schedule.
+        const { data: clubs } = await sb.from('clubs').select('id,name,"Club Name"');
+        const match = (clubs || []).find(c =>
+            norm(c.name) === norm(slug) || norm(c['Club Name']) === norm(slug));
+        const clubLabel = match ? (match['Club Name'] || match.name) : slug;
+
+        document.getElementById('clubName').textContent = clubLabel;
+        document.getElementById('footClub').textContent = clubLabel + ' · ';
+        document.title = clubLabel + ' — Schedule';
+
+        if (!match) return fail('That club was not found.', `Nothing in the system matches "${slug}".`);
+
+        // Paginated. Supabase silently caps a request at 1000 rows — no error,
+        // just a short array. See .claude-memory/FIXES_LOG.md, 2026-08-04.
+        let games = [], from = 0;
+        for (;;) {
+            const { data, error } = await sb.from('games').select(SAFE_COLUMNS)
+                .or(`"Source Club".eq.${clubLabel},club.eq.${clubLabel}`)
+                .range(from, from + 999);
+            if (error) throw error;
+            if (!data || !data.length) break;
+            games = games.concat(data);
+            if (data.length < 1000) break;
+            from += 1000;
+        }
+
+        // A cancelled game is not a game a family should drive to.
+        GAMES = games.filter(g => !/cancel/i.test(String(g.status || '') + String(g['Game Status'] || '')));
+        GAMES.sort((a, b) => (a.date || '').localeCompare(b.date || '') || String(a.time || '').localeCompare(String(b.time || '')));
+
+        if (!GAMES.length) return fail('No games posted yet.', 'Check back once the season schedule is released.');
+
+        const dates    = GAMES.map(g => g.date).filter(Boolean).sort();
+        const teams    = new Set(GAMES.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean));
+        const venues   = new Set(GAMES.map(venueName));
+        const upcoming = GAMES.filter(g => g.date >= TODAY).length;
+
+        document.getElementById('subhead').textContent =
+            fmtShort(dates[0]) + ' – ' + fmtShort(dates[dates.length - 1]) +
+            (upcoming ? ` · ${upcoming} game${upcoming === 1 ? '' : 's'} still to play` : ' · season complete');
+
+        document.getElementById('infoBar').innerHTML =
+            `<span>${teams.size} Teams</span><span>${GAMES.length} Games</span>` +
+            `<span>${new Set(dates).size} Game Days</span><span>${venues.size} Locations</span>`;
+
+        document.getElementById('stamp').textContent =
+            ' · Updated ' + new Date().toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+        document.getElementById('notesBox').style.display = '';
+
+        fillFilters();
+        render();
+    } catch (e) {
+        console.error(e);
+        fail('The schedule could not be loaded right now.', 'Please refresh in a moment.');
+    }
+})();
+</script>
+</body>
+</html>
