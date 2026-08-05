@@ -283,6 +283,27 @@
     text-transform: uppercase; color: #92400e; margin-bottom: 5px;
   }
 
+  /* Archive — prior seasons, collapsed. Same idea as the club and president
+     portals: the current season lives up top, everything else folds away. */
+  .archive { margin-top: 34px; }
+  .archive-head {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 11px 15px; cursor: pointer;
+    background: white; border: 1px solid var(--border); border-radius: 9px;
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.86rem; font-weight: 800;
+    letter-spacing: 2px; text-transform: uppercase; color: var(--deep);
+  }
+  .archive-head:hover { border-color: var(--accent); color: var(--accent); }
+  .arch-chev { font-size: 0.62rem; color: var(--accent); transition: transform 0.18s; }
+  .archive.open .arch-chev { transform: rotate(90deg); }
+  .archive-body { display: none; padding-top: 20px; }
+  .archive.open .archive-body { display: block; }
+  .arch-season {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin: 6px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .arch-count { font-size: 0.7rem; color: var(--muted); font-weight: 700; }
+
   .state-msg { text-align: center; padding: 50px 20px; color: var(--muted); font-size: 0.92rem; line-height: 1.7; }
   .state-msg strong { color: var(--deep); }
 
@@ -478,6 +499,17 @@ function seasonOf(g) {
     if (m >= 9 && m <= 11) return `Fall ${y}`;
     return `Winter ${y}`;
 }
+// The season a club is actually IN. Today's season if it has games, otherwise
+// the most recent one that does — Griswold finished in June and would otherwise
+// get a header describing a season with nothing in it.
+function primarySeason(rows) {
+    const now = seasonOf({ date: TODAY });
+    const seasons = [...new Set(rows.map(seasonOf).filter(Boolean))];
+    if (seasons.includes(now)) return now;
+    const latest = rows.map(g => g.date).filter(Boolean).sort().pop();
+    return latest ? seasonOf({ date: latest }) : now;
+}
+
 function seasonChip(g) {
     const s = seasonOf(g); if (!s) return '';
     const icon = /spring/i.test(s) ? '🌱' : /summer/i.test(s) ? '☀️' : /fall/i.test(s) ? '🍂' : '❄️';
@@ -576,14 +608,6 @@ function renderList() {
     const byDate = {};
     rows.forEach(g => { (byDate[g.date] = byDate[g.date] || []).push(g); });
 
-    // WHAT'S NEXT FIRST. Nobody opens a schedule to read three months of games
-    // already played — they want Saturday. Upcoming dates run forwards from
-    // today; finished ones follow, most recent first, so the season reads
-    // backwards from the present rather than forwards from May.
-    const all      = Object.keys(byDate);
-    const upcoming = all.filter(d => d >= TODAY).sort();
-    const past     = all.filter(d => d <  TODAY).sort().reverse();
-
     const block = date => {
         const isToday = date === TODAY;
         return `<div class="week-block${date < TODAY ? ' past-block' : ''}" id="d-${date}">
@@ -591,12 +615,58 @@ function renderList() {
             + dayBlocksHTML(byDate[date]) + `</div>`;
     };
 
+    // WHAT'S NEXT FIRST, and only THIS season. A parent opening the page in
+    // August should not have to read past May. Upcoming dates run forwards from
+    // today; finished ones in the same season follow below a rule, most recent
+    // first. Everything from earlier seasons drops into a collapsed archive —
+    // same shape the club and president portals already use.
+    const seasonOfDate = d => seasonOf(byDate[d][0]);
+    const PRIMARY = document.getElementById('seasonFilter').value || primarySeason(rows);
+
+    const dates   = Object.keys(byDate);
+    const current = dates.filter(d => seasonOfDate(d) === PRIMARY);
+    const older   = dates.filter(d => seasonOfDate(d) !== PRIMARY);
+
+    const upcoming = current.filter(d => d >= TODAY).sort();
+    const played   = current.filter(d => d <  TODAY).sort().reverse();
+
     let html = upcoming.map(block).join('');
-    if (past.length) {
+    if (played.length) {
         html += `<div class="section-rule"><span>${upcoming.length ? 'Already Played' : 'Season Complete'}</span></div>`
-              + past.map(block).join('');
+              + played.map(block).join('');
     }
+
+    // Archive — one collapsed group per prior season, newest first.
+    if (older.length) {
+        const bySeason = {};
+        older.forEach(d => { (bySeason[seasonOfDate(d)] = bySeason[seasonOfDate(d)] || []).push(d); });
+        // Newest season first, ordered by its latest game date — not by name,
+        // since "Spring 2026" sorts before "Summer 2026" only by accident.
+        const seasons = Object.keys(bySeason).sort((a, b) =>
+            bySeason[b].slice().sort().pop().localeCompare(bySeason[a].slice().sort().pop()));
+
+        html += `<div class="archive">
+            <button class="archive-head" id="archToggle">
+                <span>📦 Archive · ${seasons.length} earlier season${seasons.length === 1 ? '' : 's'}</span>
+                <span class="arch-chev">▶</span>
+            </button>
+            <div class="archive-body" id="archBody">`;
+        seasons.forEach(s => {
+            const ds = bySeason[s].sort().reverse();
+            const n  = ds.reduce((sum, d) => sum + byDate[d].length, 0);
+            html += `<div class="arch-season"><span>${seasonChip(byDate[ds[0]][0])}</span>
+                     <span class="arch-count">${n} game${n === 1 ? '' : 's'} · ${ds.length} day${ds.length === 1 ? '' : 's'}</span></div>`
+                  + ds.map(block).join('');
+        });
+        html += `</div></div>`;
+    }
+
     host.innerHTML = html;
+
+    const t = document.getElementById('archToggle');
+    if (t) t.addEventListener('click', () => {
+        document.querySelector('.archive').classList.toggle('open');
+    });
 }
 
 // ── Calendar view ────────────────────────────────────────────────────────────
@@ -799,9 +869,19 @@ function fail(title, detail) {
         const venues   = new Set(GAMES.map(venueName));
         const upcoming = GAMES.filter(g => g.date >= TODAY).length;
 
+        // Header describes the season the club is IN, not the whole year. "May 2
+        // – Aug 5" spans two seasons and tells a parent nothing useful in August.
+        const PRIMARY  = primarySeason(GAMES);
+        const inSeason = GAMES.filter(g => seasonOf(g) === PRIMARY);
+        const sDates   = inSeason.map(g => g.date).filter(Boolean).sort();
+        const sLeft    = inSeason.filter(g => g.date >= TODAY).length;
+        const icon     = /spring/i.test(PRIMARY) ? '🌱' : /summer/i.test(PRIMARY) ? '☀️'
+                       : /fall/i.test(PRIMARY) ? '🍂' : '❄️';
+
         document.getElementById('subhead').textContent =
-            fmtShort(dates[0]) + ' – ' + fmtShort(dates[dates.length - 1]) +
-            (upcoming ? ` · ${upcoming} game${upcoming === 1 ? '' : 's'} still to play` : ' · season complete');
+            `${icon} ${PRIMARY} · ` +
+            (sDates.length ? fmtShort(sDates[0]) + ' – ' + fmtShort(sDates[sDates.length - 1]) : '') +
+            (sLeft ? ` · ${sLeft} game${sLeft === 1 ? '' : 's'} still to play` : ' · season complete');
 
         const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
         document.getElementById('infoBar').innerHTML =
