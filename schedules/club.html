@@ -204,7 +204,19 @@
     font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 12px;
   }
   .night-header .sit-out {
-    font-size: 0.68rem; color: rgba(255,255,255,0.55); font-weight: 400; white-space: nowrap;
+    font-size: 0.68rem; color: rgba(255,255,255,0.55); font-weight: 400;
+  }
+  .venue-link {
+    color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+    border-bottom: 1px dashed rgba(255,255,255,0.3); padding-bottom: 1px;
+  }
+  .venue-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .venue-link .chev { opacity: 0.6; font-size: 0.9rem; }
+
+  .season-chip {
+    background: rgba(0,0,0,0.05); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 7px; font-size: 0.6rem; letter-spacing: 1.2px;
+    color: var(--muted); font-weight: 800; white-space: nowrap;
   }
 
   .time-slot { padding: 9px 14px; border-top: 1px solid #f0ebe4; }
@@ -410,6 +422,40 @@ function fmtTime(t) {
 const venueOf   = g => VENUES[String(g['Venue ID'])] || null;
 const venueName = g => (venueOf(g) || {})['Venue Name'] || 'Location TBD';
 const venueTown = g => (venueOf(g) || {}).city || '';
+const venueAddr = g => {
+    const v = venueOf(g); if (!v) return '';
+    return [v.address, v.city, v.state].filter(Boolean).join(', ');
+};
+// Tap the field name, get driving directions. A parent's real question about a
+// venue is "how do I get there", and 71 of 78 venues carry a street address.
+// Where one is missing we still hand Maps the name and town, which is what a
+// person would type anyway.
+function venueMapsHref(g) {
+    const v = venueOf(g); if (!v) return '';
+    const q = [v['Venue Name'], v.address, v.city, v.state].filter(Boolean).join(', ');
+    return 'https://maps.google.com/?q=' + encodeURIComponent(q);
+}
+
+// Season boundaries match getCurrentSeason() in club-game-submit.html — Mar-Jun
+// Spring, Jul-Aug Summer, Sep-Nov Fall. Parsed LOCAL, not UTC, so a Jul 1 game
+// doesn't slide back into Spring. Stored season wins; the date only fills in
+// where the column is blank (2 East Haddam games). Checked across all three
+// clubs: stored and derived agree on every row, so this can't contradict itself.
+function seasonOf(g) {
+    if (g.season) return g.season;
+    const p = String(g.date || '').slice(0, 10).split('-').map(Number);
+    if (p.length !== 3 || p.some(isNaN)) return '';
+    const d = new Date(p[0], p[1] - 1, p[2]), m = d.getMonth() + 1, y = d.getFullYear();
+    if (m >= 3 && m <= 6)  return `Spring ${y}`;
+    if (m >= 7 && m <= 8)  return `Summer ${y}`;
+    if (m >= 9 && m <= 11) return `Fall ${y}`;
+    return `Winter ${y}`;
+}
+function seasonChip(g) {
+    const s = seasonOf(g); if (!s) return '';
+    const icon = /spring/i.test(s) ? '🌱' : /summer/i.test(s) ? '☀️' : /fall/i.test(s) ? '🍂' : '❄️';
+    return `<span class="season-chip">${icon} ${esc(s)}</span>`;
+}
 function fieldClass(f) {
     const s = String(f || '');
     if (/2/.test(s)) return 'field-chip f2';
@@ -447,10 +493,13 @@ function dayBlocksHTML(games) {
     let html = '';
     Object.keys(byVenue).sort().forEach(vName => {
         const list = byVenue[vName], town = venueTown(list[0]);
+        const href = venueMapsHref(list[0]), addr = venueAddr(list[0]);
         html += `<div class="night">
             <div class="night-header">
-                <span>${esc(vName)}</span>
-                <span class="sit-out">${town ? esc(town) + ' · ' : ''}${list.length} game${list.length === 1 ? '' : 's'}</span>
+                ${href
+                    ? `<a class="venue-link" href="${href}" target="_blank" rel="noopener">📍 ${esc(vName)} <span class="chev">›</span></a>`
+                    : `<span>${esc(vName)}</span>`}
+                <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.length} game${list.length === 1 ? '' : 's'}</span>
             </div>`;
         const byTime = {};
         list.forEach(g => { (byTime[g.time || ''] = byTime[g.time || ''] || []).push(g); });
@@ -493,7 +542,7 @@ function renderList() {
     const block = date => {
         const isToday = date === TODAY;
         return `<div class="week-block${date < TODAY ? ' past-block' : ''}" id="d-${date}">
-            <div class="week-label">${esc(fmtDateHeading(date))}${isToday ? '<span class="today-pill">Today</span>' : ''}</div>`
+            <div class="week-label">${esc(fmtDateHeading(date))}${isToday ? '<span class="today-pill">Today</span>' : ''}${seasonChip(byDate[date][0])}</div>`
             + dayBlocksHTML(byDate[date]) + `</div>`;
     };
 
