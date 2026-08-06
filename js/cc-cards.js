@@ -208,6 +208,11 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
     const submitUrl = c._submit_url || `https://referee-tool.com/club-game-submit.html?club=${slug}`;
     const payUrl    = c.payment_portal_enabled ? `${submitUrl}&pay=portal` : '';
     const presUrl   = `https://referee-tool.com/presidents-portal.html?club=${slug}`;
+    // Opt-in per club. Publishing a club's schedule to families is a decision we
+    // make deliberately, not something that happens the moment they have games.
+    const schedUrl  = c.schedule_page_enabled
+        ? `https://referee-tool.com/schedules/club.html?club=${encodeURIComponent(clubName)}`
+        : '';
 
     // Comp is identified by age-band label (system convention — see manage-clubs COMP_AGE_GROUPS),
     // with game_type === 'comp' still honored as a fallback. Sort numerically so U8 / bands order right.
@@ -313,6 +318,7 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
             ${ccPortalRow('Club Portal', submitUrl)}
             ${ccPortalRow('Pay Portal', payUrl)}
             ${ccPortalRow('President Portal', presUrl)}
+            ${ccPortalRow('📅 Schedule Page (public)', schedUrl)}
             ${lastUploadStr ? `<div style="font-size:0.78rem; margin-top:3px;">
                 <span style="color:#555; font-weight:600;">Last game upload: </span>
                 <span style="color:#09142a; font-weight:700;">${lastUploadStr}</span>${lastUpload.uploader ? `<span style="color:#555;"> by <strong>${lastUpload.uploader}</strong></span>` : ''}

@@ -570,6 +570,24 @@
                         </div>
                     </div>
 
+                    <!-- Public schedule page — opt-in per club. Publishing a club's
+                         schedule to families is a decision, not a default. -->
+                    <div style="margin-bottom:20px; padding:14px 18px; background:#eff6ff; border:1.5px solid #3b82f6; border-radius:10px;">
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <input type="checkbox" id="schedulePageEnabled" style="width:18px;height:18px;cursor:pointer;accent-color:#2563eb;">
+                            <div>
+                                <div style="font-family:'DM Sans',sans-serif; font-weight:700; font-size:0.92rem; color:#1e3a8a;">📅 Public Schedule Page</div>
+                                <div style="font-family:'DM Sans',sans-serif; font-size:0.8rem; color:#1d4ed8;">Publishes this club's schedule for families to view. Read-only — no logins, no referee names, no pay. Updates automatically as games change.</div>
+                            </div>
+                        </div>
+                        <div id="schedulePageLink" style="margin-top:10px; display:none;">
+                            <a id="schedulePageLinkAnchor" href="#" target="_blank"
+                               style="font-family:'DM Sans',sans-serif; font-size:0.85rem; font-weight:700; color:#fff; text-decoration:none; display:inline-flex; align-items:center; gap:6px; padding:5px 14px; background:#2563eb; border:1.5px solid #1d4ed8; border-radius:7px;">
+                                🔗 Open Schedule Page ↗
+                            </a>
+                        </div>
+                    </div>
+
                     <!-- Pay Types -->
                     <div id="payMethodsSection" style="margin-bottom:20px;">
                         <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; margin-bottom:8px;">Payment Methods Accepted</div>
@@ -1249,7 +1267,7 @@
             } else {
                 const [clubRes, ratesRes] = await Promise.all([
                     supabaseClient.client.from('clubs')
-                        .select('id, name, "Club Name", "Source Club", president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, payment_coordinator_phone, assignor, "Assignor Email", "Assignor Phone", payment_portal_enabled')
+                        .select('id, name, "Club Name", "Source Club", president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, payment_coordinator_phone, assignor, "Assignor Email", "Assignor Phone", payment_portal_enabled, schedule_page_enabled')
                         .eq('id', parseInt(entityId)).single(),
                     supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(entityId)).order('age_group'),
                 ]);
@@ -3796,7 +3814,7 @@
             document.getElementById('payRatesBodyComp').innerHTML = loading;
             const [ratesRes, clubRes] = await Promise.all([
                 supabaseClient.client.from('pay_rates').select('*').eq('club_id', parseInt(entityId)),
-                supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day, payment_portal_enabled, payment_portal_start_date, payment_portal_pin').eq('id', parseInt(entityId)).single()
+                supabaseClient.client.from('clubs').select('payment_methods, cancellation_cutoff_day, payment_portal_enabled, payment_portal_start_date, payment_portal_pin, schedule_page_enabled').eq('id', parseInt(entityId)).single()
             ]);
             if (ratesRes.error) throw new Error(ratesRes.error.message);
             const existing = {};
@@ -3826,6 +3844,21 @@
             }
             const pinInline = document.getElementById('payPortalPinInline');
             if (pinInline) pinInline.value = clubRes.data?.payment_portal_pin || '';
+
+            // Public schedule page. The URL takes the club NAME, not the slug —
+            // schedules/club.html resolves against the clubs table and normalises,
+            // so "East Haddam" and "east-haddam" both land, but the readable form
+            // is what gets handed to a club.
+            const schedCb  = document.getElementById('schedulePageEnabled');
+            const schedOn  = !!clubRes.data?.schedule_page_enabled;
+            if (schedCb) schedCb.checked = schedOn;
+            const schedDiv = document.getElementById('schedulePageLink');
+            const schedA   = document.getElementById('schedulePageLinkAnchor');
+            if (schedDiv && schedA) {
+                schedA.href        = `https://referee-tool.com/schedules/club.html?club=${encodeURIComponent(clubName)}`;
+                schedA.textContent = `🔗 Open ${clubName} Schedule Page ↗`;
+                schedDiv.style.display = schedOn ? 'block' : 'none';
+            }
         } catch(e) {
             const err = `<tr><td colspan="4" style="padding:12px;color:#e74c3c;font-family:'DM Sans',sans-serif;">Could not load: ${e.message}</td></tr>`;
             if (isTournament) {
@@ -3908,7 +3941,8 @@
             const portalEnabled   = document.getElementById('payPortalEnabled')?.checked || false;
             const portalStartDate = document.getElementById('payPortalStartDate')?.value || null;
             const portalPin       = document.getElementById('payPortalPinInline')?.value.trim() || null;
-            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null, cancellation_cutoff_day: cutoffDay, payment_portal_enabled: portalEnabled, payment_portal_start_date: portalStartDate, payment_portal_pin: portalPin }).eq('id', parseInt(entityId));
+            const schedEnabled = !!document.getElementById('schedulePageEnabled')?.checked;
+            await supabaseClient.client.from('clubs').update({ payment_methods: methods || null, cancellation_cutoff_day: cutoffDay, payment_portal_enabled: portalEnabled, payment_portal_start_date: portalStartDate, payment_portal_pin: portalPin, schedule_page_enabled: schedEnabled }).eq('id', parseInt(entityId));
             msg.textContent = `✅ Saved — ${rows.length} age group${rows.length !== 1 ? 's' : ''} configured.`;
             msg.style.color = '#15803d'; msg.style.display = 'block';
         } catch(e) {

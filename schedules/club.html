@@ -636,6 +636,11 @@ function renderList() {
               + played.map(block).join('');
     }
 
+    // Counts follow what's displayed: this season, plus the archive when it's open.
+    updateInfoBar(older.length && ARCH_OPEN
+        ? rows
+        : rows.filter(g => current.includes(g.date)));
+
     // Archive — one collapsed group per prior season, newest first.
     if (older.length) {
         const bySeason = {};
@@ -645,7 +650,7 @@ function renderList() {
         const seasons = Object.keys(bySeason).sort((a, b) =>
             bySeason[b].slice().sort().pop().localeCompare(bySeason[a].slice().sort().pop()));
 
-        html += `<div class="archive">
+        html += `<div class="archive${ARCH_OPEN ? ' open' : ''}">
             <button class="archive-head" id="archToggle">
                 <span>📦 Archive · ${seasons.length} earlier season${seasons.length === 1 ? '' : 's'}</span>
                 <span class="arch-chev">▶</span>
@@ -665,13 +670,32 @@ function renderList() {
 
     const t = document.getElementById('archToggle');
     if (t) t.addEventListener('click', () => {
-        document.querySelector('.archive').classList.toggle('open');
+        ARCH_OPEN = !ARCH_OPEN;
+        renderList();          // redraw so the counts at the top follow the archive
     });
 }
 
 // ── Calendar view ────────────────────────────────────────────────────────────
 let CAL_Y = 0, CAL_M = 0;          // month currently on screen
 let CAL_SEL = null;                // the date whose day panel is open, if any
+let ARCH_OPEN = false;             // archive expanded — survives re-renders
+
+// The info bar describes WHAT IS ON SCREEN, not the club's lifetime totals.
+// Star Ems caught this: the header said "Summer 2026 · Jul 1 – Aug 5" while the
+// bar six inches below counted every game since May. Two numbers describing
+// different things, side by side, reads as broken. So: current season by
+// default, grows when the archive is opened, narrows when a filter is applied.
+function updateInfoBar(rows) {
+    const bar = document.getElementById('infoBar');
+    if (!bar) return;
+    const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    const teams  = new Set(rows.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean));
+    const days   = new Set(rows.map(g => g.date).filter(Boolean));
+    const venues = new Set(rows.map(venueName));
+    bar.innerHTML =
+        `<span>${plural(teams.size, 'Team')}</span><span>${plural(rows.length, 'Game')}</span>` +
+        `<span>${plural(days.size, 'Game Day')}</span><span>${plural(venues.size, 'Location')}</span>`;
+}
 
 // Never open on an empty grid. Prefer the month holding the next game still to
 // be played; if the season is done, the last month that actually had one.
@@ -883,11 +907,7 @@ function fail(title, detail) {
             (sDates.length ? fmtShort(sDates[0]) + ' – ' + fmtShort(sDates[sDates.length - 1]) : '') +
             (sLeft ? ` · ${sLeft} game${sLeft === 1 ? '' : 's'} still to play` : ' · season complete');
 
-        const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-        document.getElementById('infoBar').innerHTML =
-            `<span>${plural(teams.size, 'Team')}</span><span>${plural(GAMES.length, 'Game')}</span>` +
-            `<span>${plural(new Set(dates).size, 'Game Day')}</span><span>${plural(venues.size, 'Location')}</span>`;
-
+        // Info bar is filled by renderList() — it follows what's on screen.
         document.getElementById('stamp').textContent =
             ' · Updated ' + new Date().toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
         document.getElementById('notesBox').style.display = '';
