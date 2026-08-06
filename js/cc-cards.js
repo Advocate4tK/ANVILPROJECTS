@@ -284,12 +284,12 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
                 </div>
             </div>
         </div>`
-        : (typeof openWizardForEdit === 'function' && c.id
-            ? `<div style="border-top:1px solid #edf0f7; padding:10px 18px; display:flex; align-items:center; justify-content:space-between;">
+        // The card REPORTS state; it does not set it up. Billing is configured in
+        // the management area, so this branch states the fact and stops there —
+        // no wizard button. (Tod, 2026-08-06.)
+        : `<div style="border-top:1px solid #edf0f7; padding:10px 18px;">
                 <span style="font-size:0.82rem; color:#aaa; font-style:italic;">No billing terms set</span>
-                <button onclick="openWizardForEdit(${c.id})" style="font-size:0.74rem; background:#09142a; color:#fff; border:none; padding:4px 12px; border-radius:6px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">Set Up Billing →</button>
-            </div>`
-            : '');
+            </div>`;
 
     const lastUploadStr = lastUpload ? (() => {
         const d = new Date(lastUpload.time);
@@ -318,7 +318,7 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
             ${ccPortalRow('Club Portal', submitUrl)}
             ${ccPortalRow('Pay Portal', payUrl)}
             ${ccPortalRow('President Portal', presUrl)}
-            ${ccPortalRow('Schedule Page (public)', schedUrl)}
+            ${ccPortalRow('Schedule Page', schedUrl)}
             ${lastUploadStr ? `<div style="font-size:0.78rem; margin-top:3px;">
                 <span style="color:#555; font-weight:600;">Last game upload: </span>
                 <span style="color:#09142a; font-weight:700;">${lastUploadStr}</span>${lastUpload.uploader ? `<span style="color:#555;"> by <strong>${lastUpload.uploader}</strong></span>` : ''}
