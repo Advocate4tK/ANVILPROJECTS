@@ -291,6 +291,12 @@
   /* Archive — prior seasons, collapsed. Same idea as the club and president
      portals: the current season lives up top, everything else folds away. */
   .archive { margin-top: 34px; }
+  /* The finished CURRENT season sits at the top of the content, not the bottom
+     like the archive — it is the season the page is about, just already played. */
+  .archive.season-done { margin-top: 0; }
+  .archive.season-done .archive-head { border-color: #86efac; color: #14532d; background: #f0fdf4; }
+  .archive.season-done .archive-head:hover { border-color: var(--accent); }
+  .archive.season-done .arch-chev { color: #16a34a; }
   .archive-head {
     width: 100%; display: flex; align-items: center; justify-content: space-between;
     gap: 12px; padding: 11px 15px; cursor: pointer;
@@ -641,9 +647,25 @@ function renderList() {
     const played   = current.filter(d => d <  TODAY).sort().reverse();
 
     let html = upcoming.map(block).join('');
+
     if (played.length) {
-        html += `<div class="section-rule"><span>${upcoming.length ? 'Already Played' : 'Season Complete'}</span></div>`
-              + played.map(block).join('');
+        if (upcoming.length) {
+            // Mid-season: what's left is above, what's done sits under a rule.
+            html += `<div class="section-rule"><span>Already Played</span></div>`
+                  + played.map(block).join('');
+        } else {
+            // Season over, nothing left to play. Dumping every finished game on a
+            // parent is the same complaint Star Ems raised about the counters —
+            // the page leading with information nobody came for. Collapse it and
+            // let them open the record if they want it.
+            html += `<div class="archive season-done${DONE_OPEN ? ' open' : ''}">
+                <button class="archive-head" id="doneToggle">
+                    <span>✅ Season Complete · ${played.reduce((n, d) => n + byDate[d].length, 0)} games played</span>
+                    <span class="arch-chev">▶</span>
+                </button>
+                <div class="archive-body">${played.map(block).join('')}</div>
+            </div>`;
+        }
     }
 
     // Counts follow what's displayed: this season, plus the archive when it's open.
@@ -683,12 +705,18 @@ function renderList() {
         ARCH_OPEN = !ARCH_OPEN;
         renderList();          // redraw so the counts at the top follow the archive
     });
+    const d = document.getElementById('doneToggle');
+    if (d) d.addEventListener('click', () => {
+        DONE_OPEN = !DONE_OPEN;
+        document.querySelector('.season-done').classList.toggle('open', DONE_OPEN);
+    });
 }
 
 // ── Calendar view ────────────────────────────────────────────────────────────
 let CAL_Y = 0, CAL_M = 0;          // month currently on screen
 let CAL_SEL = null;                // the date whose day panel is open, if any
 let ARCH_OPEN = false;             // archive expanded — survives re-renders
+let DONE_OPEN = false;             // finished-season list expanded — same
 
 // The info bar describes WHAT IS ON SCREEN, not the club's lifetime totals.
 // Star Ems caught this: the header said "Summer 2026 · Jul 1 – Aug 5" while the
