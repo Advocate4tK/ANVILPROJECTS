@@ -371,7 +371,7 @@
     <script src="js/supabase-client.js?v=13"></script>
     <script>var airtableClient = supabaseClient;</script>
     <script src="js/admin-auth.js?v=10"></script>
-    <script src="js/cc-cards.js?v=2"></script>
+    <script src="js/cc-cards.js?v=3"></script>
     <script>
         // ── Super Admin PIN ───────────────────────────────────────────────────
         const SUPER_ADMIN_PIN = '8625';
@@ -1710,7 +1710,11 @@
                         stat.innerHTML = '<em style="color:#aaa; font-size:0.85rem;">Loading…</em>';
                         const { data: clubRow } = await supabaseClient.client
                             .from('clubs')
-                            .select('id, name, "Club Name", president, "President Email", "President Phone", "Club Admin", "Club Admin Email", "Club Admin Phone", payment_coordinator, payment_coordinator_email, payment_coordinator_phone, payment_portal_pin, assignor, "Assignor Email", "Assignor Phone", "Club Game Upload"')
+                            // select * on purpose. Naming columns here means every new
+                            // field the club card learns to show has to be hand-copied
+                            // into TWO files or it silently never appears on this one.
+                            // That is exactly how schedule_page_enabled went missing.
+                            .select('*')
                             .eq('id', clubId).single();
                         if (!clubRow) { stat.innerHTML = '<em style="color:#e74c3c; font-size:0.85rem;">Club not found.</em>'; return; }
 
@@ -1726,20 +1730,17 @@
                         const unassigned = unassignedByClub[clubName] || 0;
                         const lastUpload = lastUploadByClubId['name:' + clubName] || null;
 
+                        // Spread the whole row FIRST, then override only what this page
+                        // computes differently. Previously this object listed every field
+                        // by hand, so the club card and the Admin Portal drifted apart
+                        // every single time the card learned a new field — the card would
+                        // render it in the Command Center and silently omit it here.
+                        // With the spread, anything added to `clubs` reaches the card on
+                        // both pages with no second edit. Do NOT go back to listing fields.
                         const cNorm = {
+                            ...clubRow,
                             'Club Name': clubName, name: clubName, id: clubId,
-                            president:              clubRow.president || '',
-                            'President Phone':      clubRow['President Phone'] || '',
-                            'President Email':      clubRow['President Email'] || '',
-                            'Club Admin':           clubRow['Club Admin'] || '',
-                            'Club Admin Phone':     clubRow['Club Admin Phone'] || '',
-                            'Club Admin Email':     clubRow['Club Admin Email'] || '',
-                            payment_coordinator:       payCoord,
-                            payment_coordinator_phone: clubRow.payment_coordinator_phone || '',
-                            payment_coordinator_email: clubRow.payment_coordinator_email || '',
-                            assignor:           clubRow.assignor || '',
-                            'Assignor Phone':   clubRow['Assignor Phone'] || '',
-                            'Assignor Email':   clubRow['Assignor Email'] || '',
+                            payment_coordinator: payCoord,
                             _submit_url: submitUrl, payment_portal_enabled: !!payUrl,
                         };
                         const gs = { total: totalGames, thisWeek, unassigned, venueCount: 0, fieldCount: 0, lastUpload };
