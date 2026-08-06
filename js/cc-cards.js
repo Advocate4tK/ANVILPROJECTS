@@ -8,7 +8,7 @@
 function ccPortalRow(label, url) {
     if (!url) return '';
     return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <span style="font-size:0.78rem; font-weight:600; color:#333; min-width:130px; flex-shrink:0;">${label}</span>
+        <span style="font-size:0.78rem; font-weight:600; color:#333; min-width:158px; flex-shrink:0;">${label}</span>
         <button onclick="navigator.clipboard.writeText('${url}').then(()=>{this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy Link',1500)})"
             style="font-size:0.74rem; background:#e8f4fd; border:1px solid #3498db; color:#2980b9; border-radius:6px; padding:3px 10px; cursor:pointer; font-family:inherit; font-weight:700;">📋 Copy Link</button>
         <a href="${url}" target="_blank"
@@ -318,7 +318,7 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
             ${ccPortalRow('Club Portal', submitUrl)}
             ${ccPortalRow('Pay Portal', payUrl)}
             ${ccPortalRow('President Portal', presUrl)}
-            ${ccPortalRow('📅 Schedule Page (public)', schedUrl)}
+            ${ccPortalRow('Schedule Page (public)', schedUrl)}
             ${lastUploadStr ? `<div style="font-size:0.78rem; margin-top:3px;">
                 <span style="color:#555; font-weight:600;">Last game upload: </span>
                 <span style="color:#09142a; font-weight:700;">${lastUploadStr}</span>${lastUpload.uploader ? `<span style="color:#555;"> by <strong>${lastUpload.uploader}</strong></span>` : ''}
