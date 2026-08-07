@@ -142,6 +142,44 @@ class SupabaseClientWrapper {
     }
 
     /**
+     * Did we actually get everything? Compares what we fetched against the row
+     * count the server reports. Runs after every getRecords, costs one HEAD
+     * request, and never blocks or throws into the caller.
+     *
+     * Only complains when the CEILING BIT — i.e. we returned exactly as many rows
+     * as we were allowed and more exist. A caller that deliberately asks for
+     * maxRecords: 50 is not a bug and must stay quiet.
+     */
+    async _checkComplete(tbl, got, want, options) {
+        // A filtered read counts different rows than the table total; skip those
+        // rather than raise a false alarm we would learn to ignore.
+        if (options && (options.filterByFormula || options.filter || options.eq)) return;
+
+        const { count, error } = await this.client
+            .from(tbl).select('*', { count: 'exact', head: true });
+        if (error || count == null) return;
+
+        if (got >= want && count > got) {
+            const msg = `Only ${got} of ${count} ${tbl} rows loaded — the page is showing an incomplete list.`;
+            console.error('[TRUNCATED] ' + msg,
+                `\nRaise maxRecords for this call, or switch it to a server-side query.`);
+            SupabaseClient._banner(msg);
+        }
+    }
+
+    /** One red bar, once per page. Silent truncation should never be silent. */
+    static _banner(msg) {
+        if (typeof document === 'undefined' || document.getElementById('__truncBanner')) return;
+        const d = document.createElement('div');
+        d.id = '__truncBanner';
+        d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;'
+            + 'color:#fff;font:700 13px/1.5 system-ui,sans-serif;padding:9px 16px;text-align:center;'
+            + 'box-shadow:0 2px 10px rgba(0,0,0,.35);';
+        d.textContent = '⚠ ' + msg + '  —  tell Tod, this list is not complete.';
+        (document.body || document.documentElement).appendChild(d);
+    }
+
+    /**
      * Get records from a table
      * Supports: filterByFormula (basic =email match), maxRecords
      */
@@ -271,6 +309,20 @@ class SupabaseClientWrapper {
                 if (data.length < size) break;   // table exhausted
                 from += size;
             }
+
+            // ── TRUNCATION GUARD ────────────────────────────────────────────
+            // Everything above is correct today and will be wrong the day a table
+            // outgrows whatever number a caller passed. Raising limits is not a
+            // fix — every number in this codebase is a future version of this bug.
+            //
+            // So ask the server how many rows actually match, and shout if we came
+            // back with fewer. This turns silent truncation — the failure mode that
+            // hid Jonathan Fauxbel for weeks and Jack Nelan again on 2026-08-07 —
+            // into something impossible to miss on page load.
+            //
+            // head:true fetches NO rows, just the count. Cheap enough to always run.
+            this._checkComplete(tbl, rows.length, want, options).catch(() => {});
+
             return this._wrapAll(rows);
         } catch (error) {
             console.error('SupabaseClient getRecords error:', error);
