@@ -3,6 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Without these the browser keeps an old copy of this page. Jack Nelan
+         "disappeared" here on 2026-08-07 purely because a cached build still had
+         maxRecords: 1000 — and he sits at row 1,225 of the roster. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Referee Management</title>
     <link rel="stylesheet" href="css/styles.css">
     <style>
@@ -390,7 +396,11 @@
                 // Status filter. Defaults to ACTIVE so an archived referee really
                 // does disappear — without this, archiving changed a database value
                 // and nothing else, which is worse than having no feature at all.
-                const archived = String(f['status'] || '').toLowerCase() === 'archived';
+                // 'Status' capitalised — the client's _colReverse() renames the
+                // lowercase `status` column on the way out. Reading f['status']
+                // here was always undefined, so archiving a referee hid nobody.
+                // No one has been archived yet, so this never showed up.
+                const archived = String(f['Status'] || f['status'] || '').toLowerCase() === 'archived';
                 const ry = f['registration_year'];
                 const expired = ry != null && ry !== '' && Number(ry) < new Date().getFullYear();
                 if (statusVal === 'active'   && archived) return false;
