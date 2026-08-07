@@ -38,6 +38,40 @@
         .row-chevron { color:#00c853; font-size:0.55rem; transition:transform 0.2s; display:inline-block; flex-shrink:0; }
         .ref-card-inline { margin:0 0 8px; border-left:3px solid #00c853; border-radius:0 10px 10px 0; }
         .result-name { font-weight:700; color:#0f3460; }
+
+        /* ── Row layout ────────────────────────────────────────────────────
+           The collapsed row was a name and a join date. Everything that decides
+           whether you even need to open the card now lives here instead. */
+        .row-main { display:flex; align-items:center; gap:9px; min-width:0; flex:1; }
+        .row-meta { display:flex; align-items:center; gap:14px; flex-shrink:0; }
+        .row-town { font-size:0.8rem; color:#555; font-weight:600; white-space:nowrap; }
+
+        /* Registration status — Tod: "way bigger, because it's very important."
+           Deliberately oversized so a screen of these reads at a glance without
+           anyone actually reading. Three states: current, expired, unknown. */
+        .reg {
+            flex-shrink:0; width:26px; height:26px; border-radius:50%;
+            display:inline-flex; align-items:center; justify-content:center;
+            font-size:1.02rem; font-weight:900; line-height:1; border:2px solid;
+        }
+        .reg-ok   { background:#dcfce7; color:#15803d; border-color:#22c55e; }
+        .reg-exp  { background:#fee2e2; color:#b91c1c; border-color:#ef4444; }
+        .reg-none { background:#f1f5f9; color:#94a3b8; border-color:#cbd5e1; }
+
+        .pill {
+            font-size:0.66rem; font-weight:800; border-radius:4px;
+            padding:1px 6px; white-space:nowrap; flex-shrink:0;
+        }
+        .pill-minor { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; }
+        /* Duplicate names are a data problem the page should surface, not something
+           Tod finds by scrolling. Nine of the twelve pairs are the same person. */
+        .pill-dup   { background:#ede9fe; color:#5b21b6; border:1px solid #c4b5fd; }
+        .pill-cert  { background:#dbeafe; color:#1e40af; border:1px solid #93c5fd; letter-spacing:0.4px; }
+
+        @media (max-width: 620px) {
+            .result-row { flex-wrap:wrap; row-gap:6px; }
+            .row-meta { width:100%; padding-left:35px; }
+        }
         .result-sub { font-size:0.82rem; color:#888; margin-top:2px; }
         .ref-card { background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.08); border-top:4px solid #e94560; }
         .card-section { margin-bottom:22px; }
@@ -84,7 +118,9 @@
                     </select>
                     <select class="filter-club" id="statusFilter" onchange="applyFilters()">
                         <option value="active">Active referees</option>
-                        <option value="expired">⚠ Registration expired</option>
+                        <option value="expired">✕ Registration expired</option>
+                        <option value="noreg">? No registration year</option>
+                        <option value="dupes">2× Duplicate names</option>
                         <option value="archived">📥 Archived</option>
                         <option value="all">Active + Archived</option>
                     </select>
@@ -390,6 +426,14 @@
 
             const statusVal = (document.getElementById('statusFilter')?.value || 'active');
 
+            // Name counts over the WHOLE roster, needed before filtering so the
+            // "duplicate names" view can find both halves of every pair.
+            const _dupCount = {};
+            allRefs.forEach(x => {
+                const k = String(x.fields['Name'] || '').trim().toLowerCase();
+                if (k) _dupCount[k] = (_dupCount[k] || 0) + 1;
+            });
+
             let matches = allRefs.filter(r => {
                 const f = r.fields;
 
@@ -409,6 +453,13 @@
                 // lapsed. Archived people are excluded — no point chasing someone
                 // who already left.
                 if (statusVal === 'expired'  && (!expired || archived)) return false;
+                // 26% of the roster has no registration year at all. That is not
+                // "expired" and it is not "fine" — it is a gap worth being able
+                // to pull up as its own list.
+                if (statusVal === 'noreg' && (ry != null && String(ry).trim() !== '')) return false;
+                // Both halves of every duplicated name, so they can be compared
+                // side by side and merged.
+                if (statusVal === 'dupes' && _dupCount[String(f['Name'] || '').trim().toLowerCase()] < 2) return false;
 
                 // Date filter
                 if (!passesDateFilter(r)) return false;
@@ -443,10 +494,27 @@
                 });
             }
 
+            // Duplicates only make sense side by side, so force alpha there.
+            if (statusVal === 'dupes') {
+                matches.sort((a, b) => String(a.fields['Name'] || '')
+                    .localeCompare(String(b.fields['Name'] || '')));
+            }
+
             const shown = matches;
-            document.getElementById('countNote').textContent =
+
+            // The count used to say "1450 referees" and nothing else. What an
+            // assignor needs to know at a glance is how much of that list is
+            // actually usable — so say what's expired and what has no year.
+            const _yr = new Date().getFullYear();
+            const nExp = matches.filter(r => { const v = r.fields['registration_year'];
+                return v != null && String(v).trim() !== '' && Number(v) < _yr; }).length;
+            const nNo  = matches.filter(r => { const v = r.fields['registration_year'];
+                return v == null || String(v).trim() === ''; }).length;
+            document.getElementById('countNote').innerHTML =
                 matches.length === 0 ? 'No matches' :
-                `${matches.length} referee${matches.length !== 1 ? 's' : ''}`;
+                `<strong>${matches.length}</strong> referee${matches.length !== 1 ? 's' : ''}`
+                + (nExp ? ` &nbsp;·&nbsp; <span style="color:#b91c1c;font-weight:700;">${nExp} expired</span>` : '')
+                + (nNo  ? ` &nbsp;·&nbsp; <span style="color:#94a3b8;font-weight:700;">${nNo} no reg year</span>` : '');
 
             const list = document.getElementById('resultList');
             if (!shown.length) {
@@ -454,20 +522,61 @@
                 return;
             }
 
+            // Duplicate detection, computed once across the WHOLE roster rather
+            // than the filtered view — a name is still a duplicate even when the
+            // other copy is filtered out. Tod keeps finding these by eye
+            // (Aaron Cherian, Alaina Pescatello); the page should just say so.
+            const nameCount = {};
+            allRefs.forEach(x => {
+                const k = String(x.fields['Name'] || '').trim().toLowerCase();
+                if (k) nameCount[k] = (nameCount[k] || 0) + 1;
+            });
+
             list.innerHTML = shown.map(r => {
                 const f = r.fields;
                 const joined = formatJoined(r);
                 const isMinor = isUnder18(f['Date of Birth']);
                 const nameColor = isMinor ? '#1a7a3c' : '#0f3460';
-                const badge = isMinor ? '<span style="font-size:0.68rem; font-weight:800; background:#fef3c7; color:#92400e; border-radius:4px; padding:1px 6px; margin-left:6px; border:1px solid #fcd34d;">Minor</span>' : '';
+                const badge = isMinor ? '<span class="pill pill-minor">Minor</span>' : '';
+
+                const isDup = nameCount[String(f['Name'] || '').trim().toLowerCase()] > 1;
+                const dupBadge = isDup ? '<span class="pill pill-dup" title="Another referee has this exact name">2×</span>' : '';
+
+                // Cert only when it is worth reading. 1,365 of 1,450 are Grassroots,
+                // so printing that on every row is noise; Regional and National are
+                // the ones an assignor actually wants to spot.
+                const cert = f['Certification Level'] || '';
+                const certChip = (cert && !/grassroots/i.test(cert))
+                    ? `<span class="pill pill-cert">${cert}</span>` : '';
+
+                const town = f['City'] || '';
+
                 return `<div class="result-row" onclick="openCard('${r.id}', this)" data-refid="${r.id}">
-                    <div style="display:flex; align-items:center; gap:8px;">
+                    <div class="row-main">
                         <span class="row-chevron">▶</span>
-                        <span class="result-name" style="color:${nameColor};">${f['Name'] || '—'}${badge}</span>
+                        ${regBadge(f)}
+                        <span class="result-name" style="color:${nameColor};">${f['Name'] || '—'}</span>
+                        ${badge}${dupBadge}${certChip}
                     </div>
-                    ${joined ? `<div class="result-joined">Joined ${joined}</div>` : ''}
+                    <div class="row-meta">
+                        ${town ? `<span class="row-town">📍 ${town}</span>` : ''}
+                        ${joined ? `<span class="result-joined">Joined ${joined}</span>` : ''}
+                    </div>
                 </div>`;
             }).join('');
+        }
+
+        // Registration status. THREE states, not two — 377 referees have no year
+        // on file at all, and calling that "expired" would be a lie. Unknown is
+        // its own answer and the row has to say which one it is.
+        function regBadge(f) {
+            const ry = f['registration_year'];
+            const yr = new Date().getFullYear();
+            if (ry == null || String(ry).trim() === '')
+                return `<span class="reg reg-none" title="No registration year on file">?</span>`;
+            if (Number(ry) < yr)
+                return `<span class="reg reg-exp" title="Registration expired — ${ry}">✕</span>`;
+            return `<span class="reg reg-ok" title="Registration current — ${ry}">✓</span>`;
         }
 
         // ── Open card ─────────────────────────────────────────────────────────
