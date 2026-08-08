@@ -624,13 +624,19 @@ function fieldClass(f) {
 
 // The filters own the data; the two views are just different drawings of the
 // same filtered set. Narrowing to one team narrows the calendar too.
+//
+// SEASON IS DELIBERATELY NOT IN HERE. Division, team and venue subtract games.
+// Season doesn't — it decides which games sit on top and which drop to the
+// archive below, and both halves are still on the page. Treating it as an
+// ordinary filter is what made picking "Summer 2026" on a club with no summer
+// games return an empty set and take the finished spring season down with it:
+// a dead end reading "No games match that filter" with 63 games unreachable.
+// renderList() and calRows() each apply the season themselves.
 function filtered() {
-    const sn = document.getElementById('seasonFilter').value;
     const dv = document.getElementById('divFilter').value;
     const tm = document.getElementById('teamFilter').value;
     const vn = document.getElementById('venueFilter').value;
     return GAMES.filter(g =>
-        (!sn || seasonOf(g) === sn) &&
         (!dv || divisionLabel(g) === dv) &&
         (!tm || g['Home Team'] === tm || g['Away Team'] === tm) &&
         (!vn || venueName(g) === vn));
@@ -702,7 +708,14 @@ function dayBlocksHTML(games) {
 function renderList() {
     const rows = filtered();
     const host = document.getElementById('sched');
-    if (!rows.length) { host.innerHTML = `<div class="state-msg">No games match that filter.</div>`; return; }
+    if (!rows.length) {
+        // Update the bar BEFORE bailing out. Returning here without touching it
+        // left the last render's numbers frozen on screen — the green bar read
+        // "14 GAMES" six inches under a header saying "no games posted".
+        updateInfoBar([], GAMES);
+        host.innerHTML = `<div class="state-msg">No games match that filter.</div>`;
+        return;
+    }
 
     // date → venue → time. A family travels to a place on a day, so that's the shape.
     const byDate = {};
