@@ -41,8 +41,16 @@
   .logo-line2 { color:#00c853; text-shadow: 0 2px 12px rgba(0,0,0,0.95), 0 0 28px rgba(0,200,83,0.5); font-size: calc(var(--sz)*0.32); margin-top: calc(var(--sz)*-0.01); transform: skewX(-14deg); display: block; }
   .logo-underline { display:block; height:calc(var(--sz)*0.022); width:calc(var(--sz)*0.58); margin-top:calc(var(--sz)*0.025); background:#ef4444; border-radius:calc(var(--sz)*0.01); box-shadow: 0 0 calc(var(--sz)*0.012) #ef4444, 0 0 calc(var(--sz)*0.04) rgba(239,68,68,0.85), 0 0 calc(var(--sz)*0.08) rgba(239,68,68,0.5); transform:skewX(-14deg); }
 
+  /* Stops iOS inflating body text when a phone is turned sideways, which
+     otherwise breaks the calendar grid mid-rotation. */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  .shell { padding: 24px 16px; }
+
+  /* 860px squeezed the green bar and gave the calendar ~110px cells. Most of the
+     traffic here is a parent on a phone, where max-width does nothing at all —
+     but on the desktop the club is presenting from, the extra room is free. */
   .page {
-    max-width: 860px; margin: 0 auto; background: var(--bg);
+    max-width: 1080px; margin: 0 auto; background: var(--bg);
     border-radius: 16px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.35);
   }
   header {
@@ -53,16 +61,20 @@
     content: ''; display: block; height: 4px; background: var(--accent);
     position: absolute; bottom: 0; left: 0; right: 0;
   }
+  /* Display Name can run long — "Canterbury Athletic Association" is 30
+     characters and would break out of a 360px phone at a fixed 2.2rem. */
   header h1 {
-    font-family: 'Barlow Condensed', sans-serif; font-size: 2.2rem; font-weight: 800;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(1.5rem, 6vw, 2.4rem); font-weight: 800;
     letter-spacing: 2px; text-transform: uppercase; color: white; margin: 0;
+    overflow-wrap: break-word;
   }
   header p { font-size: 0.9rem; color: rgba(255,255,255,0.65); margin-top: 6px; }
 
   .info-bar {
     background: var(--accent); color: #060e20;
-    display: flex; justify-content: center; gap: 28px;
-    padding: 9px 20px; font-size: 0.78rem; font-weight: 700;
+    display: flex; justify-content: center; gap: 40px;
+    padding: 11px 24px; font-size: 0.82rem; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.5px; flex-wrap: wrap;
   }
 
@@ -324,21 +336,60 @@
     color: var(--muted); border-top: 1px solid var(--border); margin-top: 20px;
   }
 
+  /* ── Phones and tablets ──────────────────────────────────────────────────
+     This is the main way the page gets read. A parent checking where Saturday's
+     game is does it standing in a kitchen holding a phone, not sitting at a
+     desk — so the small screen is the real target and the desktop is the
+     courtesy. Everything below is sized for a thumb. */
+
+  @media (max-width: 900px) {
+    .shell { padding: 14px 10px; }
+    .page  { border-radius: 12px; }
+  }
+
   @media (max-width: 600px) {
-    .content { padding: 18px 16px 24px; }
-    header { padding: 20px 16px 16px; }
+    .shell { padding: 8px 6px; }
+    .content { padding: 18px 14px 24px; }
+    header { padding: 20px 14px 16px; }
     .night-header { flex-direction: column; align-items: flex-start; gap: 2px; }
-    .info-bar { gap: 14px; font-size: 0.7rem; }
     .game-row { flex-wrap: wrap; row-gap: 5px; }
     .team, .team-b { flex: 1 0 40%; }
 
+    /* Four counts wrapping raggedly across a phone looked broken. A fixed 2×2
+       keeps them square however long the words get. */
+    .info-bar {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6px 10px; padding: 10px 14px; font-size: 0.72rem; text-align: center;
+    }
+
+    /* Full-width controls — a 120px select is a hard target for a thumb. */
+    .filter-bar { padding: 10px 14px; gap: 8px; }
+    .filter-bar label { flex-basis: 100%; }
+    .filter-bar select { flex: 1 1 45%; max-width: none; min-width: 0; padding: 10px 30px 10px 12px; }
+
     /* A 7-column grid on a phone is ~45px per cell — text is hopeless there.
-       Each game becomes a dot; tapping the day jumps to it in the list. */
+       Each game becomes a dot; tapping the day opens it below the grid. */
     .cal-grid  { gap: 3px; }
     .cal-cell  { min-height: 46px; padding: 3px; }
     .cal-ev, .cal-more { display: none; }
     .cal-dots  { display: flex; }
-    .cal-nav span { font-size: 1rem; min-width: 140px; }
+    .cal-nav span { font-size: 1rem; min-width: 120px; }
+    .cal-nav button, .cal-close { width: 40px; height: 40px; }
+    .cal-detail-head { flex-wrap: wrap; row-gap: 6px; }
+
+    /* Tap targets. A venue link is the single most-tapped thing on the page —
+       it's the one that opens Google Maps on the way out the door. */
+    .venue-link { padding: 9px 14px; }
+    .archive-head { padding: 14px 15px; }
+  }
+
+  @media (max-width: 400px) {
+    .shell { padding: 6px 4px; }
+    .content { padding: 14px 10px 20px; }
+    .info-bar { font-size: 0.66rem; gap: 5px 6px; padding: 9px 8px; }
+    .filter-bar select { flex: 1 1 100%; }
+    .cal-cell { min-height: 40px; }
+    .cal-dow  { font-size: 0.55rem; }
   }
   @media print {
     body { background: white; }
@@ -350,7 +401,7 @@
 </style>
 </head>
 <body>
-<div style="padding: 24px 16px;">
+<div class="shell">
 <div class="page">
 
   <header>
@@ -538,6 +589,28 @@ function primarySeason(rows) {
 const seasonIcon = s => /spring/i.test(s) ? '🌱' : /summer/i.test(s) ? '☀️'
                       : /fall/i.test(s) ? '🍂' : /winter/i.test(s) ? '❄️' : '';
 
+// The month span of a season label, zero-indexed, mirroring seasonOf(). Fall
+// starts in September, so the last spring games in June leave July and August
+// as summer — which is why a club flipped to Summer belongs on an August grid
+// even with nothing on it, rather than falling back to June.
+// Winter returns null on purpose: seasonOf() files Dec, Jan and Feb of the same
+// year under one label, so it has no contiguous span. No club here plays it.
+function seasonMonths(label) {
+    const y = Number((String(label).match(/\d{4}/) || [])[0]);
+    if (!y) return null;
+    if (/spring/i.test(label)) return [y, 2, 5];    // Mar – Jun
+    if (/summer/i.test(label)) return [y, 6, 7];    // Jul – Aug
+    if (/fall/i.test(label))   return [y, 8, 10];   // Sep – Nov
+    return null;
+}
+
+// Newest season first: year, then position within the year.
+const seasonRank = s => {
+    const y = Number((String(s).match(/\d{4}/) || [])[0]) || 0;
+    const i = /winter/i.test(s) ? 0 : /spring/i.test(s) ? 1 : /summer/i.test(s) ? 2 : 3;
+    return y * 10 + i;
+};
+
 function seasonChip(g) {
     const s = seasonOf(g); if (!s) return '';
     return `<span class="season-chip">${seasonIcon(s) || '❄️'} ${esc(s)}</span>`;
@@ -557,7 +630,7 @@ function filtered() {
     const tm = document.getElementById('teamFilter').value;
     const vn = document.getElementById('venueFilter').value;
     return GAMES.filter(g =>
-        (!sn || g.season === sn) &&
+        (!sn || seasonOf(g) === sn) &&
         (!dv || divisionLabel(g) === dv) &&
         (!tm || g['Home Team'] === tm || g['Away Team'] === tm) &&
         (!vn || venueName(g) === vn));
@@ -754,31 +827,74 @@ function updateInfoBar(rows, allRows) {
         `<span>${plural(days.size, 'Game Day')}</span><span>${plural(venues.size, 'Location')}</span>`;
 }
 
-// Never open on an empty grid. Prefer the month holding the next game still to
-// be played; if the season is done, the last month that actually had one.
-function defaultCalMonth(rows) {
-    const dates = rows.map(g => g.date).filter(Boolean).sort();
-    if (!dates.length) { const n = new Date(); return [n.getFullYear(), n.getMonth()]; }
-    const next = dates.find(d => d >= TODAY) || dates[dates.length - 1];
-    const dt = new Date(next + 'T12:00:00');
-    return [dt.getFullYear(), dt.getMonth()];
+// The season the calendar is showing: an explicit pick from the filter, else the
+// one the club is in. The grid obeys the same trump card the list does — before
+// this, a club flipped to Summer still opened on June and laid out spring games
+// underneath a header that read "no games posted".
+const calSeason = () => document.getElementById('seasonFilter').value || primarySeason(GAMES);
+
+// Only that season's games reach the grid.
+const calRows = () => { const s = calSeason(); return filtered().filter(g => seasonOf(g) === s); };
+
+// Open inside the season, on a month that has something to show if one exists.
+//
+// Order matters. Games win first: the next one still to be played, else the last
+// month that had one. Landing on today's month ahead of that would hide a real
+// schedule — a club whose summer games all fell in July, read on August 20th,
+// would open on a blank grid with three games sitting one click away.
+//
+// Only when the season is genuinely empty does the calendar sit on today, and
+// then an empty August on a club flipped to Summer is the honest answer rather
+// than falling back to June and contradicting the header.
+function defaultCalMonth(season) {
+    const now   = new Date();
+    const span  = seasonMonths(season);
+    const inS   = GAMES.filter(g => seasonOf(g) === season).map(g => g.date).filter(Boolean).sort();
+    const monthOf = iso => { const d = new Date(iso + 'T12:00:00'); return [d.getFullYear(), d.getMonth()]; };
+
+    if (inS.length) return monthOf(inS.find(d => d >= TODAY) || inS[inS.length - 1]);
+
+    if (span) {
+        const [y, m0, m1] = span;
+        return (now.getFullYear() === y && now.getMonth() >= m0 && now.getMonth() <= m1)
+            ? [y, now.getMonth()]
+            : [y, m0];
+    }
+    return [now.getFullYear(), now.getMonth()];
 }
 
 function renderCal() {
-    const rows = filtered();
+    const season = calSeason();
+    const span   = seasonMonths(season);
+    const key    = (y, m) => y * 12 + m;
+
+    // Changing the season picker leaves the grid parked in a month that season
+    // doesn't contain. Snap back inside before drawing anything.
+    if (span && (key(CAL_Y, CAL_M) < key(span[0], span[1]) || key(CAL_Y, CAL_M) > key(span[0], span[2])))
+        [CAL_Y, CAL_M] = defaultCalMonth(season);
+
+    const rows = calRows();
     const byDate = {};
     rows.forEach(g => { (byDate[g.date] = byDate[g.date] || []).push(g); });
 
     const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     document.getElementById('calTitle').textContent = `${MONTHS[CAL_M]} ${CAL_Y}`;
 
-    // Disable navigation past the ends of the season — there is nothing out there.
-    const all = rows.map(g => g.date).filter(Boolean).sort();
-    const key = (y, m) => y * 12 + m;
-    if (all.length) {
-        const f = new Date(all[0] + 'T12:00:00'), l = new Date(all[all.length-1] + 'T12:00:00');
-        document.getElementById('calPrev').disabled = key(CAL_Y, CAL_M) <= key(f.getFullYear(), f.getMonth());
-        document.getElementById('calNext').disabled = key(CAL_Y, CAL_M) >= key(l.getFullYear(), l.getMonth());
+    // Navigation is fenced to the season on the grid. Paging out of a summer page
+    // into an empty June is not useful now that the grid is season-scoped — the
+    // season picker is the way to look at a finished season, and choosing one
+    // re-fences the arrows around it.
+    const prev = document.getElementById('calPrev'), next = document.getElementById('calNext');
+    if (span) {
+        prev.disabled = key(CAL_Y, CAL_M) <= key(span[0], span[1]);
+        next.disabled = key(CAL_Y, CAL_M) >= key(span[0], span[2]);
+    } else {
+        const all = rows.map(g => g.date).filter(Boolean).sort();
+        if (all.length) {
+            const f = new Date(all[0] + 'T12:00:00'), l = new Date(all[all.length-1] + 'T12:00:00');
+            prev.disabled = key(CAL_Y, CAL_M) <= key(f.getFullYear(), f.getMonth());
+            next.disabled = key(CAL_Y, CAL_M) >= key(l.getFullYear(), l.getMonth());
+        } else { prev.disabled = next.disabled = true; }
     }
 
     const first = new Date(CAL_Y, CAL_M, 1);
@@ -815,13 +931,19 @@ function renderCal() {
         cell.addEventListener('click', () => openDay(cell.dataset.date));
     });
 
+    // "Tap any highlighted day" is an instruction you can't follow on an empty
+    // grid. Say what's actually true instead.
+    document.getElementById('calLegend').textContent = rows.length
+        ? 'Tap any highlighted day to see its games'
+        : `No ${season} games posted.`;
+
     // Keep the open day open across a re-render (month nav, filter change), but
     // drop it if the current filters no longer leave anything on that date.
     if (CAL_SEL && byDate[CAL_SEL]) openDay(CAL_SEL, true); else closeDay();
 }
 
 function openDay(iso, keepScroll) {
-    const rows = filtered().filter(g => g.date === iso);
+    const rows = calRows().filter(g => g.date === iso);
     if (!rows.length) return closeDay();
     CAL_SEL = iso;
 
@@ -863,7 +985,7 @@ function setView(v) {
 }
 
 function wireViews(rows) {
-    [CAL_Y, CAL_M] = defaultCalMonth(rows);
+    [CAL_Y, CAL_M] = defaultCalMonth(primarySeason(rows));
     document.querySelectorAll('.view-tab').forEach(b =>
         b.addEventListener('click', () => setView(b.dataset.view)));
     document.getElementById('calPrev').addEventListener('click', () => {
@@ -876,7 +998,14 @@ function wireViews(rows) {
 }
 
 function fillFilters() {
-    const seasons = [...new Set(GAMES.map(g => g.season).filter(Boolean))].sort();
+    // seasonOf(), not g.season — two East Haddam rows have the column blank and
+    // fall back to their date, and they'd be missing from the picker otherwise.
+    // The club's active season is folded in even when it holds no games yet: now
+    // that the calendar is fenced to one season, this picker is the only way back
+    // to a finished one, and a freshly flipped club would otherwise offer nothing.
+    const seasons = [...new Set(GAMES.map(seasonOf).filter(Boolean)
+                        .concat(ACTIVE_SEASON ? [ACTIVE_SEASON] : []))]
+                    .sort((a, b) => seasonRank(b) - seasonRank(a));
     const put = (id, arr) => {
         const el = document.getElementById(id);
         arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); });
