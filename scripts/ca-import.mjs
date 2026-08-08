@@ -249,10 +249,37 @@ if (!WRITE) {
   process.exit(0);
 }
 
+// ── Backup ────────────────────────────────────────────────────────────────────
+// `ours` is the roster loaded for MATCHING, and it deliberately selects only the
+// handful of columns this importer compares on. Writing THAT to disk produced 35
+// "backups" holding 11 of 45 columns — no venmo, no payment_method, no notes, no
+// Club Preference, no guardian details. None of them could have restored the
+// roster, and we only found out because Tod asked whether a venmo had been lost
+// and the backups could not answer.
+//
+// A backup snapshots EVERYTHING or it is not a backup. Separate read, select('*'),
+// paginated like every other read in this file.
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const backup = path.join(import.meta.dirname, `backup-referees-${stamp}.json`);
-fs.writeFileSync(backup, JSON.stringify(ours, null, 2));
-console.log(`\nbackup written: ${path.basename(backup)} (${ours.length} rows)`);
+
+let snapshot = [], _bfrom = 0;
+for (;;) {
+  const { data, error } = await db.from('referees').select('*').range(_bfrom, _bfrom + 999);
+  if (error) { console.log(`\n❌ BACKUP FAILED: ${error.message}\n   Refusing to write. Nothing has been changed.`); process.exit(1); }
+  if (!data || !data.length) break;
+  snapshot = snapshot.concat(data);
+  if (data.length < 1000) break;
+  _bfrom += 1000;
+}
+// If the snapshot is short, something truncated — do NOT proceed to write.
+if (snapshot.length < ours.length) {
+  console.log(`\n❌ BACKUP INCOMPLETE: captured ${snapshot.length} rows but the roster has ${ours.length}.`);
+  console.log(`   Refusing to write. Nothing has been changed.`);
+  process.exit(1);
+}
+fs.writeFileSync(backup, JSON.stringify(snapshot, null, 2));
+const cols = snapshot.length ? Object.keys(snapshot[0]).length : 0;
+console.log(`\nbackup written: ${path.basename(backup)} (${snapshot.length} rows × ${cols} columns — full snapshot)`);
 
 let ins = 0, upd = 0;
 for (const { match, changes } of toUpdate) {
