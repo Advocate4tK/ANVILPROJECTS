@@ -905,18 +905,27 @@ function fail(title, detail) {
 
         // Resolve the club against the clubs table so a typo'd slug gives a clean
         // message instead of a convincing-looking empty schedule.
-        const { data: clubs } = await sb.from('clubs').select('id,name,"Club Name",active_season');
+        const { data: clubs } = await sb.from('clubs')
+            .select('id,name,"Club Name","Display Name",active_season');
         const match = (clubs || []).find(c =>
             norm(c.name) === norm(slug) || norm(c['Club Name']) === norm(slug));
-        const clubLabel = match ? (match['Club Name'] || match.name) : slug;
+
+        // TWO different names, and they are not interchangeable. `clubLabel` is the
+        // KEY — games store their club as a name string, so this has to stay byte-
+        // identical to what's in games."Source Club" or the schedule comes back
+        // empty. `clubDisplay` is what the public reads. NECONN keys as "NECONN"
+        // but is called "NECONN Soccer Club", and the Display Name column already
+        // carries that, so no club needs hardcoding here.
+        const clubLabel   = match ? (match['Club Name'] || match.name) : slug;
+        const clubDisplay = match ? (match['Display Name'] || clubLabel) : slug;
 
         // The season flip in superadmin is what moves this page. Whatever the club
         // is set to is the season on top; everything else drops to the archive.
         ACTIVE_SEASON = match ? String(match.active_season || '').trim() : '';
 
-        document.getElementById('clubName').textContent = clubLabel;
-        document.getElementById('footClub').textContent = clubLabel + ' · ';
-        document.title = clubLabel + ' — Schedule';
+        document.getElementById('clubName').textContent = clubDisplay;
+        document.getElementById('footClub').textContent = clubDisplay + ' · ';
+        document.title = clubDisplay + ' — Schedule';
 
         if (!match) return fail('That club was not found.', `Nothing in the system matches "${slug}".`);
 
