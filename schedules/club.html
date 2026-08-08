@@ -317,6 +317,7 @@
 
   .state-msg { text-align: center; padding: 50px 20px; color: var(--muted); font-size: 0.92rem; line-height: 1.7; }
   .state-msg strong { color: var(--deep); }
+  .state-sub { font-size: 0.82rem; opacity: 0.75; margin-top: 4px; }
 
   footer {
     text-align: center; padding: 16px; font-size: 0.72rem;
@@ -515,10 +516,18 @@ function seasonOf(g) {
     if (m >= 9 && m <= 11) return `Fall ${y}`;
     return `Winter ${y}`;
 }
-// The season a club is actually IN. Today's season if it has games, otherwise
-// the most recent one that does — Griswold finished in June and would otherwise
-// get a header describing a season with nothing in it.
+let ACTIVE_SEASON = '';    // clubs.active_season — what the club says it is in
+
+// The season the club is IN. `active_season` is set deliberately in superadmin,
+// and flipping it there has to carry this page with it — that flip IS the
+// season change, and a public schedule that ignored it would contradict the
+// system of record. (Tod: "anytime we flip the season, that schedule probably
+// needs to be flipped too, as part of the process.")
+//
+// Only when no season has been declared do we fall back to reading the dates:
+// today's season if the club has games in it, else the most recent one that does.
 function primarySeason(rows) {
+    if (ACTIVE_SEASON) return ACTIVE_SEASON;
     const now = seasonOf({ date: TODAY });
     const seasons = [...new Set(rows.map(seasonOf).filter(Boolean))];
     if (seasons.includes(now)) return now;
@@ -526,10 +535,12 @@ function primarySeason(rows) {
     return latest ? seasonOf({ date: latest }) : now;
 }
 
+const seasonIcon = s => /spring/i.test(s) ? '🌱' : /summer/i.test(s) ? '☀️'
+                      : /fall/i.test(s) ? '🍂' : /winter/i.test(s) ? '❄️' : '';
+
 function seasonChip(g) {
     const s = seasonOf(g); if (!s) return '';
-    const icon = /spring/i.test(s) ? '🌱' : /summer/i.test(s) ? '☀️' : /fall/i.test(s) ? '🍂' : '❄️';
-    return `<span class="season-chip">${icon} ${esc(s)}</span>`;
+    return `<span class="season-chip">${seasonIcon(s) || '❄️'} ${esc(s)}</span>`;
 }
 function fieldClass(f) {
     const s = String(f || '');
@@ -646,7 +657,33 @@ function renderList() {
     const upcoming = current.filter(d => d >= TODAY).sort();
     const played   = current.filter(d => d <  TODAY).sort().reverse();
 
+    // A finished season, collapsed, labelled by name. Dumping every played game on
+    // a parent is the complaint Star Ems raised about the counters — the page
+    // leading with information nobody came for. Collapse it and let them open the
+    // record if they want it. The label names the season rather than saying a bare
+    // "Season Complete", because once the club is flipped forward there can be
+    // more than one of these stacked up and they have to be told apart.
+    const seasonBar = (season, ds, open) => {
+        const n = ds.reduce((sum, d) => sum + byDate[d].length, 0);
+        return `<div class="archive season-done${open ? ' open' : ''}">
+            <button class="archive-head" data-season="${esc(season)}">
+                <span>${seasonIcon(season)} ${esc(season)} Season Complete · ${n} game${n === 1 ? '' : 's'} played</span>
+                <span class="arch-chev">▶</span>
+            </button>
+            <div class="archive-body">${ds.map(block).join('')}</div>
+        </div>`;
+    };
+
     let html = upcoming.map(block).join('');
+
+    // The club has been flipped to a season it has no games in yet. Rendering
+    // nothing above the archive would read as a broken page, and the old season
+    // must not quietly take its place at the top — the current season is the one
+    // the club is in, empty or not.
+    if (!current.length) {
+        html += `<div class="state-msg">No ${esc(PRIMARY)} games posted yet.
+                 <div class="state-sub">The schedule appears here as soon as it's released.</div></div>`;
+    }
 
     if (played.length) {
         if (upcoming.length) {
@@ -654,82 +691,64 @@ function renderList() {
             html += `<div class="section-rule"><span>Already Played</span></div>`
                   + played.map(block).join('');
         } else {
-            // Season over, nothing left to play. Dumping every finished game on a
-            // parent is the same complaint Star Ems raised about the counters —
-            // the page leading with information nobody came for. Collapse it and
-            // let them open the record if they want it.
-            html += `<div class="archive season-done${DONE_OPEN ? ' open' : ''}">
-                <button class="archive-head" id="doneToggle">
-                    <span>✅ Season Complete · ${played.reduce((n, d) => n + byDate[d].length, 0)} games played</span>
-                    <span class="arch-chev">▶</span>
-                </button>
-                <div class="archive-body">${played.map(block).join('')}</div>
-            </div>`;
+            html += seasonBar(PRIMARY, played, DONE_OPEN);
         }
     }
 
-    // Counts follow what's displayed: this season, plus the archive when it's open.
-    updateInfoBar(older.length && ARCH_OPEN
-        ? rows
-        : rows.filter(g => current.includes(g.date)));
+    // Earlier seasons — one collapsed bar each, newest first. Ordered by their
+    // latest game date, not by name: "Spring 2026" sorts before "Summer 2026"
+    // only by accident, and that accident breaks at the turn of the year.
+    const bySeason = {};
+    older.forEach(d => { (bySeason[seasonOfDate(d)] = bySeason[seasonOfDate(d)] || []).push(d); });
+    const archSeasons = Object.keys(bySeason).sort((a, b) =>
+        bySeason[b].slice().sort().pop().localeCompare(bySeason[a].slice().sort().pop()));
+    archSeasons.forEach(s => {
+        html += seasonBar(s, bySeason[s].sort().reverse(), OPEN_SEASONS.has(s));
+    });
 
-    // Archive — one collapsed group per prior season, newest first.
-    if (older.length) {
-        const bySeason = {};
-        older.forEach(d => { (bySeason[seasonOfDate(d)] = bySeason[seasonOfDate(d)] || []).push(d); });
-        // Newest season first, ordered by its latest game date — not by name,
-        // since "Spring 2026" sorts before "Summer 2026" only by accident.
-        const seasons = Object.keys(bySeason).sort((a, b) =>
-            bySeason[b].slice().sort().pop().localeCompare(bySeason[a].slice().sort().pop()));
-
-        html += `<div class="archive${ARCH_OPEN ? ' open' : ''}">
-            <button class="archive-head" id="archToggle">
-                <span>📦 Archive · ${seasons.length} earlier season${seasons.length === 1 ? '' : 's'}</span>
-                <span class="arch-chev">▶</span>
-            </button>
-            <div class="archive-body" id="archBody">`;
-        seasons.forEach(s => {
-            const ds = bySeason[s].sort().reverse();
-            const n  = ds.reduce((sum, d) => sum + byDate[d].length, 0);
-            html += `<div class="arch-season"><span>${seasonChip(byDate[ds[0]][0])}</span>
-                     <span class="arch-count">${n} game${n === 1 ? '' : 's'} · ${ds.length} day${ds.length === 1 ? '' : 's'}</span></div>`
-                  + ds.map(block).join('');
-        });
-        html += `</div></div>`;
-    }
+    // Counts follow what's on screen: the current season, plus any archived season
+    // the reader has opened. Locations are the exception — where a club plays is a
+    // fact about the club, not about a season, so that number stays whole even
+    // when the club is between seasons and every other count is zero.
+    const shownDates = current.concat(archSeasons.filter(s => OPEN_SEASONS.has(s)).flatMap(s => bySeason[s]));
+    updateInfoBar(rows.filter(g => shownDates.includes(g.date)), GAMES);
 
     host.innerHTML = html;
 
-    const t = document.getElementById('archToggle');
-    if (t) t.addEventListener('click', () => {
-        ARCH_OPEN = !ARCH_OPEN;
-        renderList();          // redraw so the counts at the top follow the archive
-    });
-    const d = document.getElementById('doneToggle');
-    if (d) d.addEventListener('click', () => {
-        DONE_OPEN = !DONE_OPEN;
-        document.querySelector('.season-done').classList.toggle('open', DONE_OPEN);
+    host.querySelectorAll('.archive-head').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const s = btn.dataset.season;
+            if (s === PRIMARY) DONE_OPEN = !DONE_OPEN;
+            else if (OPEN_SEASONS.has(s)) OPEN_SEASONS.delete(s);
+            else OPEN_SEASONS.add(s);
+            renderList();      // redraw so the counts at the top follow the panels
+        });
     });
 }
 
 // ── Calendar view ────────────────────────────────────────────────────────────
 let CAL_Y = 0, CAL_M = 0;          // month currently on screen
 let CAL_SEL = null;                // the date whose day panel is open, if any
-let ARCH_OPEN = false;             // archive expanded — survives re-renders
-let DONE_OPEN = false;             // finished-season list expanded — same
+let OPEN_SEASONS = new Set();      // archived seasons expanded — survives re-renders
+let DONE_OPEN = false;             // the current season's played list expanded
 
 // The info bar describes WHAT IS ON SCREEN, not the club's lifetime totals.
 // Star Ems caught this: the header said "Summer 2026 · Jul 1 – Aug 5" while the
 // bar six inches below counted every game since May. Two numbers describing
 // different things, side by side, reads as broken. So: current season by
 // default, grows when the archive is opened, narrows when a filter is applied.
-function updateInfoBar(rows) {
+// `rows` is what's rendered; `allRows` is every game the club has. Teams, games
+// and game days are facts about a SEASON and count only what's on screen — a club
+// freshly flipped to Fall genuinely has none of them yet. Locations are a fact
+// about the CLUB and keep counting the whole roster of fields, because where a
+// club plays doesn't stop being true between seasons.
+function updateInfoBar(rows, allRows) {
     const bar = document.getElementById('infoBar');
     if (!bar) return;
     const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
     const teams  = new Set(rows.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean));
     const days   = new Set(rows.map(g => g.date).filter(Boolean));
-    const venues = new Set(rows.map(venueName));
+    const venues = new Set((allRows || rows).map(venueName));
     bar.innerHTML =
         `<span>${plural(teams.size, 'Team')}</span><span>${plural(rows.length, 'Game')}</span>` +
         `<span>${plural(days.size, 'Game Day')}</span><span>${plural(venues.size, 'Location')}</span>`;
@@ -886,10 +905,14 @@ function fail(title, detail) {
 
         // Resolve the club against the clubs table so a typo'd slug gives a clean
         // message instead of a convincing-looking empty schedule.
-        const { data: clubs } = await sb.from('clubs').select('id,name,"Club Name"');
+        const { data: clubs } = await sb.from('clubs').select('id,name,"Club Name",active_season');
         const match = (clubs || []).find(c =>
             norm(c.name) === norm(slug) || norm(c['Club Name']) === norm(slug));
         const clubLabel = match ? (match['Club Name'] || match.name) : slug;
+
+        // The season flip in superadmin is what moves this page. Whatever the club
+        // is set to is the season on top; everything else drops to the archive.
+        ACTIVE_SEASON = match ? String(match.active_season || '').trim() : '';
 
         document.getElementById('clubName').textContent = clubLabel;
         document.getElementById('footClub').textContent = clubLabel + ' · ';
@@ -937,13 +960,16 @@ function fail(title, detail) {
         const inSeason = GAMES.filter(g => seasonOf(g) === PRIMARY);
         const sDates   = inSeason.map(g => g.date).filter(Boolean).sort();
         const sLeft    = inSeason.filter(g => g.date >= TODAY).length;
-        const icon     = /spring/i.test(PRIMARY) ? '🌱' : /summer/i.test(PRIMARY) ? '☀️'
-                       : /fall/i.test(PRIMARY) ? '🍂' : '❄️';
+        const icon     = seasonIcon(PRIMARY) || '❄️';
 
-        document.getElementById('subhead').textContent =
-            `${icon} ${PRIMARY} · ` +
-            (sDates.length ? fmtShort(sDates[0]) + ' – ' + fmtShort(sDates[sDates.length - 1]) : '') +
-            (sLeft ? ` · ${sLeft} game${sLeft === 1 ? '' : 's'} still to play` : ' · season complete');
+        // A club that has just been flipped to a new season has no games in it yet.
+        // Saying "season complete" there would be a lie, and printing an empty date
+        // range reads as a bug — say plainly that nothing is posted.
+        document.getElementById('subhead').textContent = !sDates.length
+            ? `${icon} ${PRIMARY} · schedule not posted yet`
+            : `${icon} ${PRIMARY} · ` +
+              fmtShort(sDates[0]) + ' – ' + fmtShort(sDates[sDates.length - 1]) +
+              (sLeft ? ` · ${sLeft} game${sLeft === 1 ? '' : 's'} still to play` : ' · season complete');
 
         // Info bar is filled by renderList() — it follows what's on screen.
         document.getElementById('stamp').textContent =
