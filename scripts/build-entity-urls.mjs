@@ -78,6 +78,11 @@ const RESERVED = new Set(
 // ⚠️ KOVA carries 12 games in the games table despite being a test club.
 const TEST_CLUBS = new Set(["kova"]);
 
+// ⛔ HANDS OFF. Girls Summer League has its own long-standing public page and
+// is not to be touched — not replaced, not redirected to, not namespaced.
+// Tod, twice: "we don't need to mess with girls summer league."
+const HANDS_OFF = new Set(['girls-summer-league']);
+
 // A real page: sets the club, loads the shared CSS and JS. Nothing else.
 const scheduleStub = (clubName, title) => `<!DOCTYPE html>
 <html lang="en">
@@ -218,6 +223,7 @@ let planned = 0, skipped = [];
 const plan = [];
 
 for (const ent of entities) {
+  if (HANDS_OFF.has(ent.slug))  { skipped.push(`${ent.name} → hands off, already has its own page`); continue; }
   if (TEST_CLUBS.has(ent.slug)) { skipped.push(`${ent.name} → test ${ent.kind}, no public URL`); continue; }
   if (RESERVED.has(ent.slug))   { skipped.push(`${ent.name} → /${ent.slug}/ collides with an existing page or folder`); continue; }
   if (!Object.keys(ent.pages).length) { skipped.push(`${ent.name} → nothing enabled yet`); continue; }
