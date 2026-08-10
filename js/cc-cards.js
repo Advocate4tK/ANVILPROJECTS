@@ -17,9 +17,10 @@ function ccPortalRow(label, url) {
 }
 
 function buildTournamentPortalRows(key) {
-    const portalUrl   = `https://referee-tool.com/club-game-submit.html?tournament=${key}`;
-    const scheduleUrl = `https://referee-tool.com/tournament-schedule.html?key=${key}`;
-    const payUrl      = `https://referee-tool.com/tournament-pay-portal.html?key=${key}`;
+    // A tournament's key IS its folder slug — /rhamboree/schedule.
+    const portalUrl   = rtUrl(key, 'portal',   `https://referee-tool.com/club-game-submit.html?tournament=${key}`);
+    const scheduleUrl = rtUrl(key, 'schedule', `https://referee-tool.com/tournament-schedule.html?key=${key}`);
+    const payUrl      = rtUrl(key, 'pay',      `https://referee-tool.com/tournament-pay-portal.html?key=${key}`);
     return ccPortalRow('Tournament Portal', portalUrl)
          + ccPortalRow('Ref Schedule',      scheduleUrl)
          + ccPortalRow('Ref Pay Portal',    payUrl);
@@ -129,9 +130,14 @@ function ccBuildEventCard(ev) {
     const statusLabel = ev.enabled ? 'ACTIVE' : 'DISABLED';
     const ageGroups = Array.isArray(ev.age_groups) ? ev.age_groups : [];
     const evVenues  = Array.isArray(ev.venues) ? ev.venues : [];
-    const portalUrl   = ev.slug ? `https://referee-tool.com/referee-availability-form.html?event=${ev.slug}` : '';
-    const submitUrl   = ev.slug ? `https://referee-tool.com/club-game-submit.html?club=${ev.slug}` : '';
-    const scheduleUrl = ev.schedule_url || '';
+    // Events carry their own stored slug — no deriving. Girls Summer League has
+    // no namespace on purpose, and rtUrl() hands back the legacy URL for it.
+    const portalUrl   = ev.slug && ev.avail_form_enabled
+        ? rtUrl(ev.slug, 'availability', `https://referee-tool.com/referee-availability-form.html?event=${ev.slug}`) : '';
+    const submitUrl   = ev.slug
+        ? rtUrl(ev.slug, 'portal', `https://referee-tool.com/club-game-submit.html?club=${ev.slug}`) : '';
+    const scheduleUrl = ev.schedule_url
+        ? rtUrl(ev.slug, 'schedule', ev.schedule_url) : '';
 
     const ageTable = ageGroups.length ? `
         <div style="border-top:1px solid #edf0f7;">
@@ -205,13 +211,23 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
 
     const clubName  = c['Club Name'] || c.name || '';
     const slug      = c._slug || clubName.toLowerCase().replace(/\s+/g, '-');
-    const submitUrl = c._submit_url || `https://referee-tool.com/club-game-submit.html?club=${slug}`;
-    const payUrl    = c.payment_portal_enabled ? `${submitUrl}&pay=portal` : '';
-    const presUrl   = `https://referee-tool.com/presidents-portal.html?club=${slug}`;
+    const url       = c._slug ? c._slug : rtSlug(clubName);   // folder slug
+
+    // Every row below shows the short public URL and falls back to the long
+    // legacy one for entities with no namespace (test clubs, hands-off pages).
+    // Each is gated on the SAME condition the generator uses to decide whether
+    // to create the folder — otherwise a card links to a 404.
+    const submitLegacy = c._submit_url || `https://referee-tool.com/club-game-submit.html?club=${slug}`;
+    const submitUrl = c['Club Game Upload'] || c._submit_url
+        ? rtUrl(url, 'portal', submitLegacy) : '';
+    const payUrl    = c.payment_portal_enabled
+        ? rtUrl(url, 'pay', `${submitLegacy}&pay=portal`) : '';
+    const presUrl   = (c.president || c['President Email'])
+        ? rtUrl(url, 'audit', `https://referee-tool.com/presidents-portal.html?club=${slug}`) : '';
     // Opt-in per club. Publishing a club's schedule to families is a decision we
     // make deliberately, not something that happens the moment they have games.
     const schedUrl  = c.schedule_page_enabled
-        ? `https://referee-tool.com/schedules/club.html?club=${encodeURIComponent(clubName)}`
+        ? rtUrl(url, 'schedule', `https://referee-tool.com/schedules/club.html?club=${encodeURIComponent(clubName)}`)
         : '';
 
     // Comp is identified by age-band label (system convention — see manage-clubs COMP_AGE_GROUPS),
