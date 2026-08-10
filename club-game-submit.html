@@ -995,10 +995,23 @@
         } catch(e) { /* banner is non-critical — fail silently */ }
     }
 
+    // Once you are through a door, the doors go away.
+    //
+    // Both entry paths used to hide their own siblings and nothing else, so
+    // neither hid the portal chooser. The visible result was a PIN-gated
+    // payment portal still offering a "Club Portal" card underneath it —
+    // handing someone who holds only the pay PIN a way into games and club
+    // management. That is the separation that must never blur: the president
+    // audits, the coordinator pays, and neither inherits the other's door.
+    //
+    // One helper, called by both, so a third entry path can't reopen the hole.
+    function closeDoorways() {
+        ['portalChoice', 'doorwayStep1', 'doorwayStep2', 'preDoorwayClubName']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    }
+
     function showMainForm() {
-        document.getElementById('doorwayStep1').style.display  = 'none';
-        document.getElementById('doorwayStep2').style.display  = 'none';
-        document.getElementById('preDoorwayClubName').style.display = 'none';
+        closeDoorways();
         document.getElementById('mainForm').style.display      = 'block';
         document.getElementById('submitterBadge').style.display = 'flex';
         if (!new URLSearchParams(window.location.search).has('assignor')) loadAssignorBanner();
@@ -1389,6 +1402,9 @@
             const fresh = new URL(window.location.href);
             fresh.searchParams.set('v', '4');
             window.location.replace(fresh.toString());
+            return;   // replace() does NOT halt the script — without this the PIN
+                      // logic below also ran on a page already navigating away,
+                      // building the overlay twice.
         }
         if (params.get('pay') === 'portal') {
             if (_clubPayPin) {
@@ -2988,14 +3004,12 @@
     }
 
     function initPaymentMode() {
+        closeDoorways();
         if (!currentClubRecord?.id) {
             document.getElementById('paymentSection').style.display = 'block';
             document.getElementById('paymentSection').innerHTML = '<p style="color:#e74c3c; padding:24px; font-weight:700;">Payment portal unavailable — club not recognised. Check your link.</p>';
             return;
         }
-        document.getElementById('preDoorwayClubName').style.display  = 'none';
-        document.getElementById('doorwayStep1').style.display        = 'none';
-        document.getElementById('doorwayStep2').style.display        = 'none';
         document.getElementById('mainForm').style.display            = 'none';
         document.getElementById('scheduledGamesSection').style.display = 'none';
         document.getElementById('paymentSection').style.display      = 'block';
