@@ -175,7 +175,7 @@ for (const c of (clubsRes.data || [])) {
     if (c.payment_portal_enabled) pages['pay'] = ['Pay Portal', `${submit}&pay=portal`];
   }
   if (c.president || c['President Email'])
-    pages['audit'] = ['Audit', `${B}/presidents-portal.html?club=${slug}`];
+    pages['audit'] = ['Audit Portal', `${B}/presidents-portal.html?club=${slug}`];
   entities.push({ kind: 'club', name, slug, title: c['Display Name'] || name, pages });
 }
 

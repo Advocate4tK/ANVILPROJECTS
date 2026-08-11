@@ -336,7 +336,7 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
             <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.8px; color:#09142a; font-weight:700; margin-bottom:4px;">Portals &amp; Links</div>
             ${ccPortalRow('Club Portal', submitUrl)}
             ${ccPortalRow('Pay Portal', payUrl)}
-            ${ccPortalRow('President Portal', presUrl)}
+            ${ccPortalRow('Audit Portal', presUrl)}
             ${ccPortalRow('Schedule Page', schedUrl)}
             ${lastUploadStr ? `<div style="font-size:0.78rem; margin-top:3px;">
                 <span style="color:#555; font-weight:600;">Last game upload: </span>
