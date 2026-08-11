@@ -211,7 +211,10 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
 
     const clubName  = c['Club Name'] || c.name || '';
     const slug      = c._slug || clubName.toLowerCase().replace(/\s+/g, '-');
-    const url       = c._slug ? c._slug : rtSlug(clubName);   // folder slug
+    // Folder slug ALWAYS via rtSlug — never c._slug. Nothing sets _slug today,
+    // and if something started, a raw slug like "kova-soccer-club" would point
+    // at a folder the generator never made. One rule, one source.
+    const url       = rtSlug(clubName);
 
     // Every row below shows the short public URL and falls back to the long
     // legacy one for entities with no namespace (test clubs, hands-off pages).
