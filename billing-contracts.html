@@ -419,8 +419,36 @@
 
     // ── State ────────────────────────────────────────────────────────────────
     let allClubs  = [];
-    let contracts = {};  // club_id → contract row
-    let invoiceMap = {}; // club_id → invoice row
+    let contracts = {};      // club_id → contract row for the SELECTED season
+    let invoiceMap = {};     // club_id → invoice row
+    let priorContracts = {}; // club_id → most recent contract from an EARLIER season
+
+    const esc = s => String(s == null ? '' : s)
+        .replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    // Roll a club's previous contract forward into the season on screen.
+    //
+    // Deliberately does NOT copy the signatures. A signature belongs to the season
+    // it was given for — inheriting one would silently claim a club agreed to terms
+    // for a season nobody showed them, and quietly falsify the audit trail. The copy
+    // lands as a draft and goes out for signing like any other.
+    async function copyPriorContract(clubId) {
+        const season = document.getElementById('seasonSelect').value;
+        const src = priorContracts[clubId];
+        if (!src) return;
+        if (contracts[clubId]) { alert('This club already has a contract for ' + season + '.'); return; }
+        if (!confirm(`Copy ${src.season}'s contract terms into ${season}?\n\nIt will be created UNSIGNED and still needs to go to the club for signature.`)) return;
+
+        const { id, created_at, contract_signed_at, assignor_signed_at, ...terms } = src;
+        const { error } = await supabaseClient.client.from('club_contracts').insert({
+            ...terms,
+            season,
+            contract_signed_at: null,
+            assignor_signed_at: null,
+        });
+        if (error) { alert('Copy failed: ' + error.message); return; }
+        await loadPage();
+    }
 
     // ── Init ─────────────────────────────────────────────────────────────────
     // Open on the season we're actually in, not a hardcoded one. The <select> had
@@ -458,12 +486,32 @@
             contracts  = {};
             invoiceMap = {};
             try {
-                const [contractRes, invoiceRes] = await Promise.all([
+                // Also pull EVERY season's contracts, not just the selected one, so a
+                // club with no contract this season can offer "copy last season's".
+                // Renewal is the common case — a returning club isn't renegotiating,
+                // the terms just roll — and retyping them is both slow and a chance to
+                // fat-finger a rate.
+                const [contractRes, invoiceRes, allContractRes] = await Promise.all([
                     supabaseClient.client.from('club_contracts').select('*').eq('season', season),
-                    supabaseClient.client.from('invoices').select('*').eq('season', season)
+                    supabaseClient.client.from('invoices').select('*').eq('season', season),
+                    supabaseClient.client.from('club_contracts').select('*')
                 ]);
                 (contractRes.data || []).forEach(c => { contracts[c.club_id] = c; });
                 (invoiceRes.data || []).forEach(i => { invoiceMap[i.club_id] = i; });
+
+                // Most recent PRIOR season per club. Seasons are half-years, so rank
+                // them year-then-half rather than alphabetically — "Fall 2026" sorts
+                // before "Spring 2026" as a string, which would pick the wrong one.
+                priorContracts = {};
+                const rank = s => {
+                    const y = Number((String(s).match(/\d{4}/) || [])[0]) || 0;
+                    return y * 10 + (/spring/i.test(s) ? 1 : 2);
+                };
+                (allContractRes.data || []).forEach(c => {
+                    if (!c.season || rank(c.season) >= rank(season)) return;   // this season or later — not a prior
+                    const best = priorContracts[c.club_id];
+                    if (!best || rank(c.season) > rank(best.season)) priorContracts[c.club_id] = c;
+                });
             } catch(e) {
                 console.warn('Billing tables not ready yet:', e.message);
             }
@@ -510,6 +558,16 @@
             // ── Expanded detail panel ──────────────────────────────────────────
             const modelLabel = c ? (c.billing_model === 'per_team' ? 'Per Team / Season' : c.billing_model === 'per_game' ? 'Per Game / Season' : 'Flat Rate') : '';
             const tiers = (c && Array.isArray(c.rate_tiers)) ? c.rate_tiers : [];
+
+            // Last season's contract, offered for one-click renewal when this season
+            // has none. Summarised on the button so it's clear what you're copying.
+            const prior = !c ? (priorContracts[club.id] || null) : null;
+            const priorSummary = prior
+                ? [prior.billing_model === 'per_team' ? 'Per Team' : prior.billing_model === 'per_game' ? 'Per Game' : 'Flat',
+                   (Array.isArray(prior.rate_tiers) ? prior.rate_tiers : [])
+                       .map(t => `${t.age_group === 'default' ? 'Default' : t.age_group} $${t.rate}`).join(' · ')
+                  ].filter(Boolean).join(' — ')
+                : '';
 
             const signedBadge = !c ? '' :
                 (!c.assignor_signed_at
@@ -585,7 +643,13 @@
                                 </div>
                             ` : `
                                 <div style="color:#aaa;font-size:0.82rem;font-style:italic;margin-bottom:10px;">No contract set up yet.</div>
-                                <button class="btn-action blue" onclick="openContractModal(${club.id})">+ Set Up Contract</button>
+                                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                    <button class="btn-action blue" onclick="openContractModal(${club.id})">+ Set Up Contract</button>
+                                    ${prior ? `
+                                    <button class="btn-action" onclick="event.stopPropagation();copyPriorContract(${club.id})"
+                                            title="${esc(priorSummary)}">📋 Copy from ${esc(prior.season)} →</button>
+                                    <span style="font-size:0.76rem;color:#777;">${esc(priorSummary)}</span>` : ''}
+                                </div>
                             `}
                         </div>
                     </td>
