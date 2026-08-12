@@ -1376,7 +1376,17 @@
             const checkClub = c => {
                 const missing = [];
                 if (!c.president && !c.assignor) missing.push('Contacts');
-                if (!Array.isArray(c.age_groups) || c.age_groups.length === 0) missing.push('Age Groups');
+                // A club with pay rates on file demonstrably HAS age groups —
+                // pay_rates stores age_group and game_type, which is exactly what
+                // clubs.age_groups duplicates. Nothing else in the tool reads
+                // clubs.age_groups for a club; every other reader is pulling it
+                // off events or tournaments. So requiring it separately made the
+                // wizard demand data that was already entered, and NECONN,
+                // Glastonbury and RHAMYS all sat flagged with full rate tables.
+                // (The "Pull from Pay Rates" button below is the same admission,
+                // patched at the wrong end.)
+                if ((!Array.isArray(c.age_groups) || c.age_groups.length === 0) && !payClubIds.has(c.id))
+                    missing.push('Age Groups');
                 if (!venueNames.has(c.name.toLowerCase()) && !venueNames.has(c.rawName.toLowerCase())) missing.push('Venues');
                 if (!payClubIds.has(c.id))     missing.push('Referee Pay');
                 if (!crewClubIds.has(c.id))    missing.push('Crew Rules');
