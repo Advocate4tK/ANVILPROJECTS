@@ -81,6 +81,16 @@
                             <option value="">— All —</option>
                         </select>
                     </div>
+                    <div class="filter-group">
+                        <div class="filter-group-label">Sort</div>
+                        <select class="filter-club" id="sortBy" onchange="applyFilters()">
+                            <option value="name">Venue Name (A–Z)</option>
+                            <option value="name_desc">Venue Name (Z–A)</option>
+                            <option value="club">Entity, then Venue</option>
+                            <option value="city">City, then Venue</option>
+                            <option value="added">Date Added</option>
+                        </select>
+                    </div>
                     <div class="search-input-wrap">
                         <div class="filter-group-label">Search</div>
                         <input type="text" id="searchInput" placeholder="Name, city, or address…" oninput="applyFilters()">
@@ -267,6 +277,26 @@
                 const matchC  = !club || (v.club_name || '').toUpperCase() === club.toUpperCase();
                 return matchQ && matchC;
             });
+
+            // The list came back in id order, which LOOKED alphabetical for the first
+            // stretch — the early venues happened to be entered that way — and then fell
+            // apart entirely at the bottom where newer ones were appended. That's worse
+            // than obviously unsorted: the top lulls you into trusting it. (Blackwell was
+            // sitting above Blackledge.)
+            //
+            // numeric:true so "Field 2" sorts before "Field 10" rather than after it.
+            const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+            const vname = v => String(v['Venue Name'] || '');
+            const byName = (a, b) => coll.compare(vname(a), vname(b));
+            const sorters = {
+                name:      byName,
+                name_desc: (a, b) => byName(b, a),
+                club:      (a, b) => coll.compare(a.club_name || '￿', b.club_name || '￿') || byName(a, b),
+                city:      (a, b) => coll.compare(a.city || '￿', b.city || '￿') || byName(a, b),
+                added:     (a, b) => (a.id || 0) - (b.id || 0),
+            };
+            const mode = document.getElementById('sortBy')?.value || 'name';
+            filtered = filtered.slice().sort(sorters[mode] || byName);
 
             document.getElementById('countNote').textContent = `${filtered.length} venue${filtered.length !== 1 ? 's' : ''}`;
             renderList(filtered);
