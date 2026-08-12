@@ -235,6 +235,14 @@
             <button class="modal-close" onclick="closeContractModal()">×</button>
         </div>
 
+        <!-- Shown only when the form was pre-filled from a previous season, so it is
+             obvious these are last year's numbers and still need reading. -->
+        <div id="copiedBanner" style="display:none;background:#fff8e1;border:1px solid #f0c36d;border-left:4px solid #f0a500;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.82rem;color:#6b4e00;">
+            <strong>Copied from <span id="copiedFrom"></span>.</strong>
+            Check the rates and contact before saving — nothing is written until you hit Save,
+            and the signature is <em>not</em> carried over.
+        </div>
+
         <div class="fg-row">
             <div class="fg">
                 <label>Club</label>
@@ -403,6 +411,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script src="js/entity-urls.js?v=1"></script>
 <script src="js/supabase-client.js?v=14"></script>
 <script src="js/admin-auth.js"></script>
 <script>
@@ -432,22 +441,18 @@
     // it was given for — inheriting one would silently claim a club agreed to terms
     // for a season nobody showed them, and quietly falsify the audit trail. The copy
     // lands as a draft and goes out for signing like any other.
-    async function copyPriorContract(clubId) {
+    // Opens the contract form pre-filled from last season. It does NOT save.
+    //
+    // The first version inserted the row straight away, which is wrong: you'd have a
+    // contract you had never read, and would then have to go find it and click Edit
+    // to see what you'd agreed to. Rates change between seasons and a club's billing
+    // contact moves on. Copying gives you a starting point, not a decision.
+    function copyPriorContract(clubId) {
         const season = document.getElementById('seasonSelect').value;
         const src = priorContracts[clubId];
         if (!src) return;
         if (contracts[clubId]) { alert('This club already has a contract for ' + season + '.'); return; }
-        if (!confirm(`Copy ${src.season}'s contract terms into ${season}?\n\nIt will be created UNSIGNED and still needs to go to the club for signature.`)) return;
-
-        const { id, created_at, contract_signed_at, assignor_signed_at, ...terms } = src;
-        const { error } = await supabaseClient.client.from('club_contracts').insert({
-            ...terms,
-            season,
-            contract_signed_at: null,
-            assignor_signed_at: null,
-        });
-        if (error) { alert('Copy failed: ' + error.message); return; }
-        await loadPage();
+        openContractModal(clubId, src);
     }
 
     // ── Init ─────────────────────────────────────────────────────────────────
@@ -559,6 +564,13 @@
             const modelLabel = c ? (c.billing_model === 'per_team' ? 'Per Team / Season' : c.billing_model === 'per_game' ? 'Per Game / Season' : 'Flat Rate') : '';
             const tiers = (c && Array.isArray(c.rate_tiers)) ? c.rate_tiers : [];
 
+            // The club president reviews and signs in the Audit Portal, so that URL is
+            // literally what gets sent. Showing it here means Tod can see and open
+            // exactly what they receive, rather than guessing what landed in an inbox.
+            const auditUrl = (typeof rtUrl === 'function')
+                ? rtUrl(rtSlug(clubName), 'audit', `https://referee-tool.com/presidents-portal.html?club=${encodeURIComponent(clubName)}`)
+                : `https://referee-tool.com/presidents-portal.html?club=${encodeURIComponent(clubName)}`;
+
             // Last season's contract, offered for one-click renewal when this season
             // has none. Summarised on the button so it's clear what you're copying.
             const prior = !c ? (priorContracts[club.id] || null) : null;
@@ -635,6 +647,19 @@
                                         ? `<span style="font-size:0.72rem;color:#aaa;font-style:italic;">Locked</span>`
                                         : `<button class="btn-action" onclick="openContractModal(${club.id})">Edit Contract</button>`
                                     }
+                                </div>
+                                <div style="border-top:1px solid #e2d9ce;padding-top:12px;margin-bottom:12px;">
+                                    <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:6px;">What the club president sees</div>
+                                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                        <code style="background:#f4f6fa;border:1px solid #dde3f0;border-radius:6px;padding:4px 9px;font-size:0.78rem;color:#09142a;">${esc(auditUrl)}</code>
+                                        <button class="btn-action" onclick="event.stopPropagation();navigator.clipboard.writeText('${esc(auditUrl)}').then(()=>{this.textContent='✅ Copied';setTimeout(()=>this.textContent='📋 Copy Link',1500)})">📋 Copy Link</button>
+                                        <a class="btn-action" href="${esc(auditUrl)}" target="_blank" onclick="event.stopPropagation();">↗ Open as they see it</a>
+                                    </div>
+                                    <div style="font-size:0.74rem;color:#777;margin-top:6px;">
+                                        ${c.contract_signed_at
+                                            ? `Signed ${new Date(c.contract_signed_at).toLocaleDateString()}${c.signed_by_name ? ' by ' + esc(c.signed_by_name) : ''}.`
+                                            : 'Not signed yet — this is the link to send for signature.'}
+                                    </div>
                                 </div>
                                 <div style="border-top:1px solid #e2d9ce;padding-top:12px;">
                                     <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#09142a;margin-bottom:4px;">Invoice — ${season}</div>
@@ -931,10 +956,21 @@
     // CONTRACT MODAL
     // ════════════════════════════════════════════════════════════════════════
 
-    function openContractModal(clubId) {
+    // `prefillFrom` is a previous season's contract, passed by the Copy button. It
+    // fills the form but leaves cContractId EMPTY, so Save creates a NEW row for the
+    // season on screen rather than editing last season's. Nothing is written until
+    // Tod reads it and saves — copying a contract shouldn't commit one on his behalf.
+    function openContractModal(clubId, prefillFrom) {
         const club     = allClubs.find(c => c.id === clubId);
         const season   = document.getElementById('seasonSelect').value;
         const existing = contracts[clubId];
+        const src      = existing || prefillFrom || null;
+
+        const banner = document.getElementById('copiedBanner');
+        if (prefillFrom && !existing) {
+            document.getElementById('copiedFrom').textContent = prefillFrom.season || 'a previous season';
+            banner.style.display = '';
+        } else { banner.style.display = 'none'; }
 
         const clubDisplayName = club['Club Name'] || club.name || '';
         document.getElementById('contractModalTitle').textContent = clubDisplayName + ' — ' + season;
@@ -943,15 +979,15 @@
         document.getElementById('cClubId').value    = clubId;
         document.getElementById('cContractId').value = existing ? existing.id : '';
 
-        document.getElementById('cBillingModel').value  = existing ? existing.billing_model  : 'per_team';
-        document.getElementById('cContactName').value   = existing ? (existing.billing_contact_name  || '') : (club.president || '');
-        document.getElementById('cContactEmail').value  = existing ? (existing.billing_contact_email || '') : (club['President Email'] || '');
-        document.getElementById('cBillingAddress').value = existing ? (existing.billing_address || '') : '';
-        document.getElementById('cContractType').value  = existing ? existing.contract_type : 'standard';
-        document.getElementById('cNotes').value         = existing ? (existing.notes || '') : '';
+        document.getElementById('cBillingModel').value  = src ? src.billing_model  : 'per_team';
+        document.getElementById('cContactName').value   = src ? (src.billing_contact_name  || '') : (club.president || '');
+        document.getElementById('cContactEmail').value  = src ? (src.billing_contact_email || '') : (club['President Email'] || '');
+        document.getElementById('cBillingAddress').value = src ? (src.billing_address || '') : '';
+        document.getElementById('cContractType').value  = src ? src.contract_type : 'standard';
+        document.getElementById('cNotes').value         = src ? (src.notes || '') : '';
 
         const defaultTiers = [{ age_group: 'U8', rate: 50 }, { age_group: 'default', rate: 80 }];
-        renderRateTiers(existing ? (existing.rate_tiers || defaultTiers) : defaultTiers);
+        renderRateTiers(src ? (src.rate_tiers || defaultTiers) : defaultTiers);
 
         document.getElementById('contractModal').classList.add('open');
     }
