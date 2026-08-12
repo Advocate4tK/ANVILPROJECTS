@@ -1544,7 +1544,37 @@
         goToStep(6);
     }
 
+    // Billing seasons are HALF-YEARS, not the four game seasons. billing-contracts.html
+    // only offers Spring and Fall, so a contract stamped "Summer 2026" would be invisible
+    // there forever — there is no Summer option to select. Jan–Jun = Spring, Jul–Dec = Fall.
+    function billingSeason(d) {
+        d = d || new Date();
+        return `${(d.getMonth() + 1) <= 6 ? 'Spring' : 'Fall'} ${d.getFullYear()}`;
+    }
+
+    // Step 6 could complete having saved nothing. The billing model select has no blank
+    // option so it is always truthy, and the real gate downstream is
+    // `rateTiers.length || billing_contact_name` — so a per-team club with no tier rows
+    // and no contact silently wrote no row at all, and the wizard went cheerfully on to
+    // Review. NECONN and Glastonbury both finished setup that way with no contract.
+    // Say so out loud instead, and let it be a deliberate skip rather than a surprise.
+    function billingWillSave() {
+        const model = document.getElementById('wizBillingModel')?.value;
+        if (!model) return false;
+        if (model === 'flat') return (parseFloat(document.getElementById('wizFlatAmount')?.value) || 0) > 0;
+        const tiers = (typeof collectWizRateTiers === 'function' ? collectWizRateTiers() : [])
+            .filter(t => t.age_group && t.rate > 0);
+        return tiers.length > 0 || !!document.getElementById('wizContactName')?.value.trim();
+    }
+
     function goToStep7review() {
+        if (!billingWillSave()) {
+            const model = document.getElementById('wizBillingModel')?.value;
+            const need  = model === 'flat'
+                ? 'a flat season amount'
+                : 'at least one rate tier with an amount, or a billing contact name';
+            if (!confirm(`Billing won't be saved — it needs ${need}.\n\nThis club will show "Billing" as missing in Entity Status.\n\nContinue without billing?`)) return;
+        }
         buildReview();
         goToStep(7);
     }
@@ -2721,7 +2751,11 @@
                 } else {
                     const rateTiers = collectWizRateTiers();
                     if (rateTiers.length || billingPayload.billing_contact_name) {
-                        const { error: bErr } = await supabaseClient.client.from('club_contracts').insert({ ...billingPayload, season: 'Spring 2026' });
+                        // Was hardcoded 'Spring 2026' — correct the day it was written, wrong
+                        // every day since. billing-contracts.html filters by season, so a
+                        // contract created in August under Spring 2026 disappears the moment
+                        // Tod bills for Fall. WAM and Lebanon were both stamped that way.
+                        const { error: bErr } = await supabaseClient.client.from('club_contracts').insert({ ...billingPayload, season: billingSeason() });
                         if (bErr) log(`⚠ Billing terms: ${bErr.message}`, 'err');
                         else log('💰 Billing terms saved.', 'ok');
                     }

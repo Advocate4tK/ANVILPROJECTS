@@ -423,7 +423,23 @@
     let invoiceMap = {}; // club_id → invoice row
 
     // ── Init ─────────────────────────────────────────────────────────────────
-    window.addEventListener('DOMContentLoaded', loadPage);
+    // Open on the season we're actually in, not a hardcoded one. The <select> had
+    // "Spring 2026" marked selected — true when it was written, stale ever since.
+    // Pair it with the wizard fix: the wizard now stamps new contracts with the
+    // current billing season, so this page has to LOOK there by default or they'd
+    // be written somewhere the page never opens.
+    // Billing seasons are half-years — Jan–Jun Spring, Jul–Dec Fall — which is why
+    // this list has no Summer or Winter.
+    function currentBillingSeason() {
+        const d = new Date();
+        return `${(d.getMonth() + 1) <= 6 ? 'Spring' : 'Fall'} ${d.getFullYear()}`;
+    }
+    window.addEventListener('DOMContentLoaded', () => {
+        const sel = document.getElementById('seasonSelect');
+        const now = currentBillingSeason();
+        if (sel && [...sel.options].some(o => o.value === now)) sel.value = now;
+        loadPage();
+    });
 
     async function loadPage() {
         const season = document.getElementById('seasonSelect').value;
