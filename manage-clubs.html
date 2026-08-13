@@ -2562,6 +2562,26 @@
         });
     }
 
+    // Show the club as it ACTUALLY IS. Opening the wizard on an existing club used to
+    // render an empty Venues step — East Haddam has Nathan Hale-Ray Middle and High on
+    // file and both were invisible, so you could only add more and had no way to see or
+    // remove what was there. Blank forms on a club that already exists are how you end
+    // up entering a duplicate.
+    async function preloadWizardVenues(clubName) {
+        await loadWizardVenues();
+        const mine = _wizardVenues.filter(v => (v.clubName || '').toLowerCase() === String(clubName || '').toLowerCase());
+        const list = document.getElementById('venueList');
+        if (list) { list.innerHTML = ''; venueCount = 0; fieldCounts = {}; }
+        if (!mine.length) { addVenue(); return 0; }
+        mine.forEach(v => {
+            const idx = venueCount;
+            addVenue();
+            const sel = document.querySelector(`#venue-${idx} .venue-select`);
+            if (sel) { sel.value = String(v.id); onWizardVenueChange(idx); }
+        });
+        return mine.length;
+    }
+
     async function openWizardForEdit(clubId, missSteps) {
         _editClubId = clubId;
         _completeSteps = (Array.isArray(missSteps) && missSteps.length) ? missSteps.slice().sort((a, b) => a - b) : null;
@@ -2570,6 +2590,13 @@
         const toggleBtn = document.querySelector('.section-toggle-btn');
         if (toggleBtn) toggleBtn.textContent = 'Hide Wizard ▴';
         await loadClubIntoWizard(clubId);
+        try {
+            const nm = document.getElementById('clubName')?.value.trim();
+            if (nm) {
+                const n = await preloadWizardVenues(nm);
+                console.log(`[wizard] preloaded ${n} existing venue(s) for ${nm}`);
+            }
+        } catch (e) { console.error('venue preload failed:', e); }
         content.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
@@ -2617,7 +2644,22 @@
         renderWizAssignors(existingAssignors);
         loadWizScopeAssignors(club['Club Name'] || club.name || '');   // pre-check assignors already scoped to this club
 
-        const ageGroups = Array.isArray(club.age_groups) ? club.age_groups : [];
+        // clubs.age_groups duplicates what pay_rates already holds, and it is EMPTY on
+        // clubs that plainly have age groups — NECONN, Glastonbury and RHAMYS all have
+        // full pay tables and a blank column. Steps 4 and 5 build their rows from
+        // whatever step 3 holds, so trusting the column alone left THREE steps blank on
+        // data that exists. Fall back to pay_rates, same as the Entity Status check.
+        let ageGroups = Array.isArray(club.age_groups) ? club.age_groups : [];
+        if (!ageGroups.length && (payRes.data || []).length) {
+            const seen = new Set();
+            ageGroups = (payRes.data || [])
+                .filter(r => { if (seen.has(r.age_group)) return false; seen.add(r.age_group); return true; })
+                .sort((a, b) => (parseInt((a.age_group.match(/\d+/) || [999])[0], 10)) - (parseInt((b.age_group.match(/\d+/) || [999])[0], 10)))
+                .map(r => ({
+                    age_group: r.age_group,
+                    game_type: (r.game_type === 'comp' || (r.age_group || '').includes('-')) ? 'Comp' : 'Rec'
+                }));
+        }
         document.getElementById('ageGroupList').innerHTML = '';
         ageGroups.forEach(ag => addAgeGroupRow(ag.age_group, ag.game_type));
 
