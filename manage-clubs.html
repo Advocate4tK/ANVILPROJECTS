@@ -2256,6 +2256,8 @@
                 preview.textContent    = [v.address, v.city, v.state, v.zip].filter(Boolean).join(', ') || 'No address on file';
                 _setVenueHidden(idx, v.name, v.address, v.city, v.state, v.zip);
                 _populateVenueFields(idx, v.venueCAId);
+                const caEl = document.querySelector(`#venue-${idx} .venue-caid-input`);
+                if (caEl) caEl.value = v.venueCAId || '';
             }
         } else {
             newBlock.style.display = 'none';
@@ -2271,11 +2273,13 @@
         vb.querySelector('.venue-city-input').value  = city;
         vb.querySelector('.venue-state-input').value = state || 'CT';
         vb.querySelector('.venue-zip-input').value   = zip;
+        const ca = vb.querySelector('.venue-caid-input');
+        if (ca) ca.value = '';
     }
 
     function syncVenueField(idx, field, value) {
         const vb = document.getElementById('venue-' + idx);
-        const map = { name: '.venue-name-input', addr: '.venue-addr-input', city: '.venue-city-input', state: '.venue-state-input', zip: '.venue-zip-input' };
+        const map = { name: '.venue-name-input', addr: '.venue-addr-input', city: '.venue-city-input', state: '.venue-state-input', zip: '.venue-zip-input', caid: '.venue-caid-input' };
         const el = vb.querySelector(map[field]);
         if (el) el.value = value;
     }
@@ -2342,6 +2346,7 @@
             <input type="hidden" class="venue-city-input">
             <input type="hidden" class="venue-state-input" value="CT">
             <input type="hidden" class="venue-zip-input">
+            <input type="hidden" class="venue-caid-input">
 
             <!-- Dropdown: existing venues + new -->
             <div class="fg">
@@ -2357,9 +2362,16 @@
 
             <!-- Text inputs shown only when 'new venue' is selected -->
             <div id="venue-new-${idx}" style="display:none;">
-                <div class="fg">
-                    <label>Venue Name <span style="color:#e74c3c">*</span></label>
-                    <input type="text" placeholder="e.g. Blackledge" oninput="syncVenueField(${idx},'name',this.value)">
+                <div class="form-row">
+                    <div class="fg" style="margin-bottom:0;">
+                        <label>Venue Name <span style="color:#e74c3c">*</span></label>
+                        <input type="text" placeholder="e.g. Blackledge" oninput="syncVenueField(${idx},'name',this.value)">
+                    </div>
+                    <div class="fg" style="margin-bottom:0; max-width:190px;">
+                        <label>Central Assign Venue ID</label>
+                        <input type="number" placeholder="e.g. 648" oninput="syncVenueField(${idx},'caid',this.value)">
+                        <div style="font-size:0.7rem;color:#b45309;margin-top:3px;">Without this the venue cannot upload to Central Assign.</div>
+                    </div>
                 </div>
                 <div class="form-row">
                     <div class="fg" style="margin-bottom:0;">
@@ -2903,28 +2915,74 @@
                 }
             }
 
-            // ── Save venues (new clubs only — existing clubs use Venue Assignment) ──
-            if (!_editClubId) {
+            // ── Save venues ──────────────────────────────────────────────────────
+            // This used to be wrapped in `if (!_editClubId)`, so it ONLY ran when a club
+            // was created from scratch. Every other route — including the "Complete in
+            // Wizard" button, whose entire job is filling in missing steps — set
+            // _editClubId and silently skipped the whole block. You could type venues,
+            // hit save, get no error, and still be told Venues were missing. That's
+            // exactly what KOVA hit: everything else completed, Venues alone would not.
+            //
+            // Two paths now, because the dropdown offers both:
+            //   picked an EXISTING venue → attach it (set club_name), don't duplicate
+            //   entered a NEW venue      → insert it, with its CA id if given
+            {
                 const venueBlocks = document.querySelectorAll('.venue-block');
-                let savedVenueCount = 0;
+                let attached = 0, created = 0, noCa = [];
                 for (const vb of venueBlocks) {
                     const vName = vb.querySelector('.venue-name-input').value.trim();
                     if (!vName) continue;
-                    const addr = [
-                        vb.querySelector('.venue-addr-input').value.trim(),
-                        vb.querySelector('.venue-city-input').value.trim(),
-                        vb.querySelector('.venue-state-input').value.trim(),
-                        vb.querySelector('.venue-zip-input').value.trim()
-                    ].filter(Boolean).join(', ');
-                    const { error: vErr } = await supabaseClient.client.from('venues').insert({
+                    const caRaw = (vb.querySelector('.venue-caid-input')?.value || '').trim();
+                    const caId  = caRaw ? parseInt(caRaw, 10) : null;
+                    const picked = vb.querySelector('.venue-select')?.value || '';
+
+                    // Existing venue chosen from the dropdown — attach, never insert.
+                    if (picked && picked !== '__new__') {
+                        const { error: aErr } = await supabaseClient.client.from('venues')
+                            .update({ club_name: clubName }).eq('id', parseInt(picked, 10));
+                        if (aErr) log(`⚠ Venue "${vName}": ${aErr.message}`, 'err');
+                        else { log(`  ✓ Venue attached: ${vName}`, 'ok'); attached++; }
+                        continue;
+                    }
+
+                    // New venue. Don't create a second row for one that already exists —
+                    // match on CA id first (authoritative), then on name.
+                    let dupe = null;
+                    if (caId) {
+                        const { data } = await supabaseClient.client.from('venues')
+                            .select('id,"Venue Name"').eq('"Venue ID"', caId).maybeSingle();
+                        dupe = data || null;
+                    }
+                    if (!dupe) {
+                        const { data } = await supabaseClient.client.from('venues')
+                            .select('id,"Venue Name"').ilike('"Venue Name"', vName).maybeSingle();
+                        dupe = data || null;
+                    }
+                    if (dupe) {
+                        const { error: aErr } = await supabaseClient.client.from('venues')
+                            .update({ club_name: clubName }).eq('id', dupe.id);
+                        if (aErr) log(`⚠ Venue "${vName}": ${aErr.message}`, 'err');
+                        else { log(`  ✓ Venue already existed, attached: ${vName}`, 'ok'); attached++; }
+                        continue;
+                    }
+
+                    const row = {
                         'Venue Name': vName,
                         club_name:    clubName,
-                        address:      addr || null,
-                    });
+                        address:      vb.querySelector('.venue-addr-input').value.trim() || null,
+                        city:         vb.querySelector('.venue-city-input').value.trim()  || null,
+                        state:        vb.querySelector('.venue-state-input').value.trim() || 'CT',
+                        zip:          vb.querySelector('.venue-zip-input').value.trim()   || null,
+                    };
+                    if (caId) row['Venue ID'] = caId; else noCa.push(vName);
+                    const { error: vErr } = await supabaseClient.client.from('venues').insert(row);
                     if (vErr) log(`⚠ Venue "${vName}": ${vErr.message}`, 'err');
-                    else { log(`  ✓ Venue: ${vName}`, 'ok'); savedVenueCount++; }
+                    else { log(`  ✓ Venue created: ${vName}${caId ? ' (CA ' + caId + ')' : ''}`, 'ok'); created++; }
                 }
-                if (savedVenueCount) log(`📍 ${savedVenueCount} venue(s) saved.`, 'ok');
+                if (attached || created) log(`📍 ${created} venue(s) created, ${attached} attached.`, 'ok');
+                // A venue with no Central Assign number cannot upload. Say so rather than
+                // quietly minting another one — Plainfield already has three of these.
+                if (noCa.length) log(`⚠ No Central Assign ID on: ${noCa.join(', ')} — these cannot upload to CA until one is set.`, 'err');
             }
 
             // ── Workstation Access: scope this club to the checked assignor accounts ──
