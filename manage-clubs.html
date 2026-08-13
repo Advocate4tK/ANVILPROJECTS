@@ -1346,11 +1346,107 @@
         if (body) body.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // ── Club ↔ assignor allocation ────────────────────────────────────────────
+    // Who assigns a club currently lives in FOUR places with nothing keeping them in
+    // step: clubs.assignor (the card label), clubs.assignors_json, assignors.clubs
+    // (what the workstation actually enforces) and assignor_profiles.clubs. As of
+    // 2026-08-12 the card and the enforced list disagreed on 11 of 16 clubs.
+    //
+    // assignors.clubs is treated as the truth here because it's the one with teeth,
+    // and clubs.assignor is written alongside it so the card can't drift again.
+    let _assignors = [];
+    let _clubHolders = {};   // club name → [assignor names]
+
+    function assignorRow(c) {
+        const holders = _clubHolders[c.name] || [];
+        const label = holders.length ? holders.join(' + ') : '— unassigned —';
+        return `<div style="margin-top:8px; padding-top:8px; border-top:1px dashed #e2d9ce; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span style="font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#09142a;">Assignor</span>
+            <span style="font-size:0.84rem; font-weight:${holders.length ? '700' : '400'}; color:${holders.length ? '#1f2328' : '#b45309'};">${label}</span>
+            <button onclick="toggleAssignorPicker(${c.id})" style="background:#fff; border:1px solid #09142a; color:#09142a; padding:3px 10px; border-radius:6px; font-size:0.72rem; font-weight:700; cursor:pointer; font-family:inherit;">${holders.length ? 'Change' : 'Assign'}</button>
+            <div id="apick-${c.id}" style="display:none; width:100%; margin-top:8px; padding:10px 12px; background:#fff; border:1px solid #dde3f0; border-radius:8px;">
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    ${_assignors.map(a => {
+                        const has = (Array.isArray(a.clubs) && a.clubs.includes(c.name));
+                        const seesAll = a.clubs === null;
+                        return `<label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; cursor:pointer;">
+                            <input type="checkbox" data-apick="${c.id}" value="${String(a.name).replace(/"/g,'&quot;')}" ${has ? 'checked' : ''} style="width:16px;height:16px;accent-color:#00c853;cursor:pointer;">
+                            <span>${a.name}</span>
+                            ${seesAll ? `<span style="font-size:0.7rem;color:#b45309;font-weight:700;">⚠ currently sees ALL clubs</span>` : ''}
+                        </label>`;
+                    }).join('')}
+                </div>
+                <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
+                    <button onclick="saveAssignorPick(${c.id}, ${JSON.stringify(c.name).replace(/"/g,'&quot;')})" style="background:#09142a;color:#fff;border:none;padding:5px 14px;border-radius:6px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:inherit;">Save</button>
+                    <button onclick="toggleAssignorPicker(${c.id})" style="background:none;border:1px solid #ccc;color:#666;padding:5px 12px;border-radius:6px;font-size:0.76rem;cursor:pointer;font-family:inherit;">Cancel</button>
+                    <span style="font-size:0.72rem;color:#777;">Tick more than one for shared ownership.</span>
+                </div>
+                <span id="amsg-${c.id}" style="display:block;margin-top:6px;font-size:0.76rem;"></span>
+            </div>
+        </div>`;
+    }
+
+    function toggleAssignorPicker(clubId) {
+        const el = document.getElementById('apick-' + clubId);
+        if (el) el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+    }
+
+    async function saveAssignorPick(clubId, clubName) {
+        const msg = document.getElementById('amsg-' + clubId);
+        const picked = [...document.querySelectorAll(`input[data-apick="${clubId}"]:checked`)].map(i => i.value);
+
+        // assignors.clubs === null means "sees ALL clubs", not "holds none". Writing a
+        // list to someone who is null RESTRICTS them for the first time — every other
+        // club they were working silently vanishes from their board. Say so first.
+        const newlyRestricted = _assignors.filter(a => a.clubs === null && picked.includes(a.name));
+        if (newlyRestricted.length) {
+            const who = newlyRestricted.map(a => a.name).join(', ');
+            if (!confirm(`${who} currently sees ALL clubs because no list is set.\n\nSaving this will restrict ${who} to ONLY ${clubName} — every other club disappears from their workstation.\n\nContinue?`)) return;
+        }
+
+        // ⚠️ An EMPTY array does not mean "sees nothing" — the workstation restricts
+        // only when `clubs.length > 0`, so [] falls through exactly like NULL and the
+        // assignor sees EVERY club. Removing someone's last club therefore GRANTS
+        // access rather than removing it. The schema can't express "sees nothing", so
+        // the least we can do is refuse to do it silently.
+        const wouldEmpty = _assignors.filter(a =>
+            Array.isArray(a.clubs) && a.clubs.includes(clubName) && !picked.includes(a.name) && a.clubs.length === 1);
+        if (wouldEmpty.length) {
+            const who = wouldEmpty.map(a => a.name).join(', ');
+            if (!confirm(`${clubName} is the ONLY club ${who} has.\n\nAn empty list means "sees ALL clubs" — so removing it would give ${who} access to every club instead of none.\n\nAssign ${who} to a different club instead, or suspend the account in users.html.\n\nRemove anyway?`)) return;
+        }
+
+        msg.textContent = 'Saving…'; msg.style.color = '#555';
+        try {
+            for (const a of _assignors) {
+                const had = Array.isArray(a.clubs) && a.clubs.includes(clubName);
+                const want = picked.includes(a.name);
+                if (had === want) continue;                       // nothing to do
+                const base = Array.isArray(a.clubs) ? a.clubs.slice() : [];
+                const next = want ? [...new Set([...base, clubName])] : base.filter(x => x !== clubName);
+                const { error } = await supabaseClient.client.from('assignors').update({ clubs: next }).eq('id', a.id);
+                if (error) throw new Error(a.name + ': ' + error.message);
+                a.clubs = next;
+            }
+            // Keep the card label in step — this is what stopped it drifting before.
+            const { error: cErr } = await supabaseClient.client.from('clubs')
+                .update({ assignor: picked.join(' + ') || null }).eq('id', clubId);
+            if (cErr) throw new Error('club card: ' + cErr.message);
+
+            msg.textContent = '✅ Saved — workstation and club card updated.';
+            msg.style.color = '#15803d';
+            setTimeout(loadClubStatus, 900);
+        } catch (e) {
+            msg.textContent = '❌ ' + e.message;
+            msg.style.color = '#dc2626';
+        }
+    }
+
     async function loadClubStatus() {
         const wrap = document.getElementById('clubStatusList');
         wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">Checking completeness…</p>';
         try {
-            const [clubsRes, tournsRes, eventsRes, payRes, crewRes, venueRes, billingRes] = await Promise.all([
+            const [clubsRes, tournsRes, eventsRes, payRes, crewRes, venueRes, billingRes, assignorRes] = await Promise.all([
                 supabaseClient.client.from('clubs').select('id, name, "Club Name", enabled, president, "Club Admin", assignor, age_groups').order('name'),
                 supabaseClient.client.from('tournaments').select('id, name, status').order('name'),
                 supabaseClient.client.from('events').select('id, name, "Club Name", enabled, assignor, start_date, end_date').order('name'),
@@ -1358,9 +1454,20 @@
                 supabaseClient.client.from('crew_rules').select('club_id'),
                 supabaseClient.client.from('venues').select('club_name'),
                 supabaseClient.client.from('club_contracts').select('club_id, rate_tiers, contract_signed_at'),
+                supabaseClient.client.from('assignors').select('id, name, clubs, auth_user_id').order('name'),
             ]);
             if (clubsRes.error) throw clubsRes.error;
             const eventsData = eventsRes?.data || [];
+
+            // Who currently has each club. `assignors.clubs` is what the workstation
+            // ENFORCES, so it's the truth here — clubs.assignor is only a label on the
+            // card and the two disagree on most clubs today.
+            _assignors = (assignorRes?.data || []);
+            _clubHolders = {};
+            _assignors.forEach(a => {
+                if (!Array.isArray(a.clubs)) return;          // null = sees ALL, not "holds all"
+                a.clubs.forEach(cl => { (_clubHolders[cl] = _clubHolders[cl] || []).push(a.name); });
+            });
 
             const payClubIds     = new Set((payRes.data     || []).map(r => r.club_id));
             const crewClubIds    = new Set((crewRes.data    || []).map(r => r.club_id));
@@ -1425,6 +1532,7 @@
                             }
                         </div>
                     </div>
+                    ${assignorRow(c)}
                     ${!isReady ? `<div style="margin-top:6px; font-size:0.75rem; color:#b45309; font-family:'DM Sans',sans-serif;">Missing: ${missing.join(' · ')}</div>` : ''}
                 </div>`;
             }).join('');
