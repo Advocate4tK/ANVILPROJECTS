@@ -1526,6 +1526,7 @@
                         <div style="display:flex; align-items:center; gap:10px;">
                             ${isReady
                                 ? `<span style="font-size:0.72rem; font-weight:800; font-family:'Barlow Condensed',sans-serif; letter-spacing:1px; text-transform:uppercase; color:#1d4ed8;">◎ READY</span>
+                                   <button onclick="openWizardForEdit(${c.id}, [])" title="Open the full wizard to change contacts, venues, rates, crew, billing or ownership" style="background:#fff; border:1px solid #09142a; color:#09142a; padding:5px 12px; border-radius:6px; font-size:0.74rem; font-weight:700; cursor:pointer; font-family:inherit;">Edit</button>
                                    <input type="checkbox" data-club-id="${c.id}" style="width:18px;height:18px;cursor:pointer;accent-color:#00c853;">`
                                 : `<button onclick="openWizardForEdit(${c.id}, ${JSON.stringify(missSteps)})" style="background:#09142a; color:#fff; border:none; padding:5px 14px; border-radius:6px; font-weight:700; font-size:0.78rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Complete in Wizard →</button>
                                    <input type="checkbox" data-club-id="${c.id}" disabled style="width:18px;height:18px;cursor:not-allowed;opacity:0.35;">`
@@ -2916,6 +2917,20 @@
                         if (sErr) log(`⚠ Unscope ← ${a.name}: ${sErr.message}`, 'err');
                         else { a.clubs = next; log(`🔑 Removed ${clubName} from ${a.name}.`, 'ok'); }
                     }
+                }
+                // Keep the club CARD in step with who actually has access. Without this
+                // the wizard writes the enforced list and leaves clubs.assignor stale —
+                // which is how the card and the access list ended up disagreeing on 11
+                // of 16 clubs. Ticking two people gives shared ownership and the card
+                // says so: "Tod Smith + Eric Baughman".
+                const scopedNames = _wizScopeAssignorList
+                    .filter(a => checkedUids.has(a.auth_user_id))
+                    .map(a => a.name);
+                if (scopedNames.length) {
+                    const { error: lErr } = await supabaseClient.client.from('clubs')
+                        .update({ assignor: scopedNames.join(' + ') }).eq('id', savedClubId);
+                    if (lErr) log(`⚠ Club card assignor: ${lErr.message}`, 'err');
+                    else log(`🏷 Club card assignor set to ${scopedNames.join(' + ')}.`, 'ok');
                 }
             } catch (scopeErr) { log(`⚠ Workstation Access: ${scopeErr.message}`, 'err'); }
 
