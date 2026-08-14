@@ -5429,6 +5429,36 @@
         let allVenues     = []; // { id, name } sorted by name
         let allFields     = []; // { fieldId, name, venueId }
         let clubLookup    = {}; // airtable record ID → club name
+
+        // ── Venue ownership ───────────────────────────────────────────────────────
+        // A game belongs to whoever owns the FIELD it is played on, not to whoever
+        // uploaded it. NECONN holds the fixtures for the whole northeast corner, but
+        // a Plainfield home game at a Plainfield field is Plainfield's assignor's work,
+        // and a Canterbury home game is Canterbury's. Tod: "plainfield games that are
+        // played at NECONN are assigned by Tod and Eric, but games at Plainfield are
+        // assigned by them."
+        //
+        // Derived, never typed — venues already carry club_name, so nothing has to be
+        // tagged by hand at upload.
+        let _venueOwner = {};   // CA Venue ID → owning club name
+
+        async function loadVenueOwners() {
+            try {
+                const { data, error } = await supabaseClient.client
+                    .from('venues').select('"Venue ID", club_name');
+                if (error) { console.error('venue owners failed:', error.message); return; }
+                _venueOwner = {};
+                (data || []).forEach(v => {
+                    if (v['Venue ID'] != null && v.club_name) _venueOwner[String(v['Venue ID'])] = v.club_name;
+                });
+            } catch (e) { console.error('venue owners failed:', e); }
+        }
+
+        // The club that OWNS this game's field, if we know it.
+        function resolveGameVenueClub(f) {
+            const id = f['Venue ID'];
+            return (id == null) ? '' : (_venueOwner[String(id)] || '');
+        }
         let refLookup     = {}; // airtable record ID → ref object
         let refLookupByName        = {}; // lowercase name → ref object (for Supabase string refs)
         let refLookupByEmail       = {}; // lowercase email → ref object (for email-based ghost resolution)
@@ -6348,6 +6378,7 @@
 
         // ── Load all data ─────────────────────────────────────────────────────
         async function loadAll() {
+            await loadVenueOwners();   // cheap, and every game filter below depends on it
             sheet3StagingLoaded = false; // force re-fetch staging on next sheet3 render
             const dateFrom = document.getElementById('dateFrom').value;
             const dateTo   = document.getElementById('dateTo').value;
@@ -6976,8 +7007,10 @@
                         ? true
                         : (selectedClubs.size > 0 && selectedClubs.size < clubsList.length);
                     if (clubFilterActive) {
-                        const club = resolveGameClub(g.fields);
-                        if (!club || !selectedClubs.has(club)) return false;
+                        const club  = resolveGameClub(g.fields);
+                        const vClub = resolveGameVenueClub(g.fields);
+                        if (!club && !vClub) return false;
+                        if (!selectedClubs.has(club) && !selectedClubs.has(vClub)) return false;
                     }
                     return true;
                 }
@@ -7000,10 +7033,15 @@
                     ? true
                     : (selectedClubs.size > 0 && selectedClubs.size < clubsList.length);
                 if (clubFilterActive) {
-                    const club = resolveGameClub(g.fields);
-                    // Games with no Source Club show only in All Clubs view, not when filtering
-                    if (!club) return false;
-                    if (!selectedClubs.has(club)) return false;
+                    const club  = resolveGameClub(g.fields);
+                    // A game also belongs to whoever owns the field it is played on, so a
+                    // Plainfield home game inside NECONN's upload reaches Plainfield's
+                    // assignor. Additive on purpose: this can only ever SHOW a game to
+                    // someone, never hide one that was visible before.
+                    const vClub = resolveGameVenueClub(g.fields);
+                    // Games with no club at all show only in All Clubs view, not when filtering
+                    if (!club && !vClub) return false;
+                    if (!selectedClubs.has(club) && !selectedClubs.has(vClub)) return false;
                 }
                 // Games with no Source Club always show when All Clubs selected
                 return true;
