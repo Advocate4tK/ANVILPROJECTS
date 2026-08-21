@@ -31,6 +31,10 @@ const SHELL = `
     <p id="subhead">Loading…</p>
   </header>
 
+  <!-- League tabs. Only drawn when window.LEAGUE_TABS is set; a normal
+       single-club page never sees this. -->
+  <div class="club-tabs" id="clubTabs" style="display:none;"></div>
+
   <div class="info-bar" id="infoBar"></div>
 
   <div class="filter-bar" id="filterBar" style="display:none;">
@@ -650,12 +654,180 @@ function fail(title, detail) {
     document.getElementById('subhead').textContent = '';
 }
 
+/* ── League mode ──────────────────────────────────────────────────────────────
+   One page showing several clubs, with a tab per club and a Master tab holding
+   all of them. Purely additive: a page that does not set window.LEAGUE_TABS
+   never touches any of this and behaves exactly as it always has.
+
+   NOTHING about how games are managed changes. Each club still owns and uploads
+   its own games under its own "Source Club"; this is only a second window onto
+   the same rows. All clubs are fetched ONCE and tabs filter in memory, so
+   switching is instant and costs no round-trip.
+   ───────────────────────────────────────────────────────────────────────────── */
+let ALL_GAMES = [];        // every club's games, unfiltered
+let LEAGUE_ON = false;
+
+// fillFilters() APPENDS options and attaches a change listener each time it is
+// called. Calling it a second time without this would double every dropdown and
+// fire render() twice per change.
+function resetFilterBar() {
+    ['seasonFilter', 'divFilter', 'teamFilter', 'venueFilter'].forEach(id => {
+        const old = document.getElementById(id);
+        if (!old) return;
+        const fresh = old.cloneNode(false);              // drops options AND listeners
+        fresh.appendChild(old.options[0].cloneNode(true)); // keep the "All …" row
+        fresh.style.display = old.style.display;
+        old.parentNode.replaceChild(fresh, old);
+    });
+}
+
+function leagueSelect(tab) {
+    const wanted = tab.clubs.map(norm);
+    GAMES = ALL_GAMES.filter(g =>
+        wanted.includes(norm(g['Source Club'])) || wanted.includes(norm(g.club)));
+    GAMES.sort((a, b) => (a.date || '').localeCompare(b.date || '')
+                      || String(a.time || '').localeCompare(String(b.time || '')));
+
+    document.getElementById('clubName').textContent = tab.title || tab.label;
+    document.getElementById('footClub').textContent = (tab.title || tab.label) + ' · ';
+
+    // Season state follows the tab. On Master, take the highest-ranked season any
+    // of the clubs is in — otherwise a single club still on an old season would
+    // drag the whole league page backwards.
+    ACTIVE_SEASON = tab.season || '';
+
+    const sub = document.getElementById('subhead');
+    if (!GAMES.length) {
+        sub.textContent = ACTIVE_SEASON
+            ? `${seasonIcon(ACTIVE_SEASON) || '❄️'} ${ACTIVE_SEASON} · no games posted`
+            : 'No games posted yet';
+        resetFilterBar();
+        document.getElementById('filterBar').style.display = 'none';
+        document.getElementById('viewTabs').style.display  = 'none';
+        document.getElementById('sched').innerHTML =
+            '<div class="state-msg"><strong>No games posted yet.</strong><br>' +
+            'Check back once the season schedule is released.</div>';
+        document.getElementById('calWrap').style.display = 'none';
+        document.getElementById('infoBar').innerHTML = '';
+        return;
+    }
+
+    const PRIMARY  = primarySeason(GAMES);
+    const inSeason = GAMES.filter(g => seasonOf(g) === PRIMARY);
+    const sDates   = inSeason.map(g => g.date).filter(Boolean).sort();
+    const sLeft    = inSeason.filter(g => g.date >= TODAY).length;
+    const icon     = seasonIcon(PRIMARY) || '❄️';
+    sub.textContent = !sDates.length
+        ? `${icon} ${PRIMARY} · no games posted`
+        : `${icon} ${PRIMARY} · ` + fmtShort(sDates[0]) + ' – ' + fmtShort(sDates[sDates.length - 1]) +
+          (sLeft ? ` · ${sLeft} game${sLeft === 1 ? '' : 's'} still to play` : ' · season complete');
+
+    resetFilterBar();
+    fillFilters();
+    [CAL_Y, CAL_M] = defaultCalMonth(primarySeason(GAMES));
+    document.getElementById('viewTabs').style.display = '';
+    render();
+}
+
+function drawLeagueTabs(tabs) {
+    const bar = document.getElementById('clubTabs');
+    bar.innerHTML = tabs.map((t, i) =>
+        `<button class="club-tab${i === 0 ? ' is-on' : ''}" data-i="${i}">${esc(t.label)}</button>`).join('');
+    bar.style.display = '';
+    bar.querySelectorAll('.club-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            bar.querySelectorAll('.club-tab').forEach(b => b.classList.remove('is-on'));
+            btn.classList.add('is-on');
+            CAL_SEL = null; OPEN_SEASONS = new Set(); DONE_OPEN = false;
+            leagueSelect(tabs[+btn.dataset.i]);
+        });
+    });
+}
+
 (async function init() {
     // A generated /<club>/schedule/ stub bakes the club in; the legacy
     // /schedules/club.html entry passes it on the query string. Both supported —
     // every ?club= link already handed to a club has to keep working.
     const slug = (window.CLUB_SLUG || '').trim()
               || new URLSearchParams(window.location.search).get('club') || '';
+
+    // ── League mode branches off here and returns; single-club is untouched. ──
+    if (Array.isArray(window.LEAGUE_TABS) && window.LEAGUE_TABS.length) {
+        LEAGUE_ON = true;
+        try {
+            const sb = supabaseClient.client;
+            const wantClubs = [...new Set(window.LEAGUE_TABS.flatMap(t => t.clubs))];
+
+            const { data: clubRows } = await sb.from('clubs')
+                .select('id,name,"Club Name","Display Name",active_season');
+            const findClub = s => (clubRows || []).find(c =>
+                norm(c.name) === norm(s) || norm(c['Club Name']) === norm(s));
+
+            // Resolve each configured club to the exact string games are keyed by.
+            // A club named here that isn't in the clubs table is a typo, and an
+            // unresolved name would silently render an empty, convincing tab.
+            const missing = [], labels = {};
+            wantClubs.forEach(s => {
+                const m = findClub(s);
+                if (!m) { missing.push(s); return; }
+                labels[s] = m['Club Name'] || m.name;
+            });
+            if (missing.length) return fail('Club not found.',
+                `Nothing in the system matches: ${missing.join(', ')}`);
+
+            const keys = [...new Set(Object.values(labels))];
+            let games = [], from = 0;
+            for (;;) {
+                const { data, error } = await sb.from('games').select(SAFE_COLUMNS)
+                    .or(keys.map(k => `"Source Club".eq.${k},club.eq.${k}`).join(','))
+                    .range(from, from + 999);
+                if (error) throw error;
+                if (!data || !data.length) break;
+                games = games.concat(data);
+                if (data.length < 1000) break;
+                from += 1000;
+            }
+
+            const { data: vens } = await sb.from('venues')
+                .select('"Venue ID","Venue Name",address,city,state,zip');
+            (vens || []).forEach(v => { VENUES[String(v['Venue ID'])] = v; });
+
+            ALL_GAMES = games.filter(g =>
+                !/cancel/i.test(String(g.status || '') + String(g['Game Status'] || '')));
+
+            // Highest-ranked season across the tab's clubs — so one club left on an
+            // old season can't drag the Master tab backwards.
+            const tabs = window.LEAGUE_TABS.map(t => {
+                const seasons = t.clubs.map(s => (findClub(s) || {}).active_season)
+                                       .filter(Boolean);
+                const season = seasons.sort((a, b) => seasonRank(b) - seasonRank(a))[0] || '';
+                return { ...t, clubs: t.clubs.map(s => labels[s] || s), season };
+            });
+
+            document.title = (window.LEAGUE_TITLE || 'League') + ' — Schedule';
+            document.getElementById('notesBox').style.display = '';
+            document.getElementById('stamp').textContent =
+                ' · Updated ' + new Date().toLocaleString('en-US',
+                    { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+            document.querySelectorAll('.view-tab').forEach(b =>
+                b.addEventListener('click', () => setView(b.dataset.view)));
+            document.getElementById('calPrev').addEventListener('click', () => {
+                if (--CAL_M < 0) { CAL_M = 11; CAL_Y--; } renderCal();
+            });
+            document.getElementById('calNext').addEventListener('click', () => {
+                if (++CAL_M > 11) { CAL_M = 0; CAL_Y++; } renderCal();
+            });
+
+            drawLeagueTabs(tabs);
+            leagueSelect(tabs[0]);
+        } catch (e) {
+            console.error(e);
+            fail('The schedule could not be loaded right now.', 'Please refresh in a moment.');
+        }
+        return;
+    }
+
     if (!slug) { document.getElementById('clubName').textContent = 'Club Schedule';
         return fail('No club specified.', 'Add ?club= to the address, for example ?club=East Haddam'); }
 
