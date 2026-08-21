@@ -247,6 +247,24 @@
                 <div style="margin-bottom:40px;">
                     <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #00c853; border-radius:10px; padding:14px 18px;">
                         <div style="font-size:0.85rem; color:#555; margin-bottom:12px;">Advance each club to its current season independently — some finish before others. Icons show which portals a club actually runs (🗓 scheduling · 👤 president · 💳 pay); the flip only touches those. Games are already tagged by season; this sets which season shows <strong>live</strong> vs slides into that club's archive.</div>
+
+                        <!-- ── Flip All ──────────────────────────────────────────────
+                             Season cutover is every club at once, and doing it one
+                             dropdown at a time is hunt-and-peck. Skips clubs with no
+                             season set by default: a NULL club is one that isn't
+                             running, and sweeping it into Fall would quietly stand up
+                             portals for a club that has no games. -->
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 13px;border:1px solid #e2d9ce;border-left:4px solid #09142a;border-radius:8px;background:#fdfcfa;margin-bottom:14px;">
+                            <span style="font-family:'Barlow Condensed',sans-serif;font-size:1.05rem;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#09142a;">Flip All Clubs To</span>
+                            <select id="flipAllSeason" style="font-family:'DM Sans',sans-serif;font-size:0.85rem;padding:6px 8px;border:2px solid #e2d9ce;border-radius:8px;width:140px;"></select>
+                            <button id="flipAllBtn" onclick="flipAllCommit()" style="font-family:'DM Sans',sans-serif;font-size:0.8rem;font-weight:700;padding:7px 14px;border:none;border-radius:8px;cursor:pointer;background:#00c853;color:#fff;">Flip All</button>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:#555;cursor:pointer;">
+                                <input type="checkbox" id="flipAllIncludeUnset" onchange="flipAllPreview()" style="cursor:pointer;">
+                                also flip clubs with no season set
+                            </label>
+                            <span id="flipAllPreview" style="font-size:0.8rem;color:#888;flex-basis:100%;"></span>
+                        </div>
+
                         <div id="perClubSeasonList"></div>
                     </div>
                 </div>
@@ -295,6 +313,10 @@
         }
 
         // ── Per-Club Season Flip ──────────────────────────────────────────────
+        // Kept so Flip All can name the clubs it is about to change without a
+        // second round-trip. Refreshed on every load.
+        let pcsClubs = [];
+
         async function loadPerClubSeasons() {
             const wrap = document.getElementById('perClubSeasonList');
             if (!wrap) return;
@@ -306,9 +328,11 @@
                     .order('name');
                 if (error) throw error;
                 const clubs = (data || []).filter(c => (c['Club Name'] || c.name));
+                pcsClubs = clubs;
                 const yr = new Date().getFullYear();
                 const seasons = [];
                 [yr, yr + 1].forEach(y => ['Spring', 'Summer', 'Fall', 'Winter'].forEach(s => seasons.push(`${s} ${y}`)));
+                flipAllInit(seasons);
                 const badge = (on, icon, label) => `<span title="${label}" style="opacity:${on ? 1 : 0.22};font-size:1rem;">${icon}</span>`;
                 wrap.innerHTML = clubs.map(c => {
                     const name = c['Club Name'] || c.name;
@@ -361,6 +385,83 @@
                 btn.disabled = false; btn.textContent = 'Retry'; btn.style.background = '#e74c3c'; btn.style.color = '#fff';
                 alert('Could not flip season: ' + err.message);
             }
+        }
+
+        // ── Flip All ──────────────────────────────────────────────────────────
+        // Which clubs a Flip All would actually touch. Two exclusions, both on
+        // purpose: a club already on the target season is a no-op, and a club with
+        // NO season set is one that isn't running — sweeping it into Fall would
+        // quietly stand up portals for a club with no games.
+        function flipAllTargets() {
+            const season = document.getElementById('flipAllSeason').value;
+            const includeUnset = document.getElementById('flipAllIncludeUnset').checked;
+            return pcsClubs.filter(c => {
+                const cur = c.active_season || '';
+                if (cur === season) return false;
+                if (!cur && !includeUnset) return false;
+                return true;
+            });
+        }
+
+        function flipAllInit(seasons) {
+            const sel = document.getElementById('flipAllSeason');
+            if (!sel) return;
+            // Default to the NEXT season, not getAutoSeason(). The cutover is done
+            // BEFORE the season starts — in August the auto season still reads
+            // "Summer", which is precisely the value nobody is flipping to.
+            const now = new Date(), m = now.getMonth() + 1, y = now.getFullYear();
+            let want;
+            if (m >= 1 && m <= 2)  want = `Spring ${y}`;
+            else if (m <= 5)       want = `Summer ${y}`;
+            else if (m <= 8)       want = `Fall ${y}`;
+            else                   want = `Spring ${y + 1}`;
+            sel.innerHTML = seasons.map(s =>
+                `<option value="${s}" ${s === want ? 'selected' : ''}>${s}</option>`).join('');
+            sel.onchange = flipAllPreview;
+            flipAllPreview();
+        }
+
+        function flipAllPreview() {
+            const el = document.getElementById('flipAllPreview');
+            if (!el || !pcsClubs.length) return;
+            const season = document.getElementById('flipAllSeason').value;
+            const targets = flipAllTargets();
+            const unset = pcsClubs.filter(c => !c.active_season).length;
+            const skipped = pcsClubs.length - targets.length;
+            el.textContent = targets.length
+                ? `Will change ${targets.length} club${targets.length === 1 ? '' : 's'} to ${season}. ` +
+                  `${skipped} unchanged${!document.getElementById('flipAllIncludeUnset').checked && unset ? ` (${unset} have no season set)` : ''}.`
+                : `Nothing to change — every club is already on ${season} or excluded.`;
+        }
+
+        async function flipAllCommit() {
+            const btn = document.getElementById('flipAllBtn');
+            const season = document.getElementById('flipAllSeason').value;
+            const targets = flipAllTargets();
+            if (!targets.length) { alert('Nothing to flip — every club is already on ' + season + ' or excluded.'); return; }
+
+            const names = targets.map(c => '  • ' + (c['Club Name'] || c.name) +
+                '   ' + (c.active_season || '(not set)') + ' → ' + season).join('\n');
+            if (!confirm(`Flip ${targets.length} club${targets.length === 1 ? '' : 's'} to ${season}?\n\n${names}\n\nThis writes clubs.active_season for each.`)) return;
+
+            btn.disabled = true; btn.textContent = 'Flipping…'; btn.style.background = '#f0a500';
+            const failed = [];
+            for (const c of targets) {
+                try {
+                    const { error } = await supabaseClient.client
+                        .from('clubs').update({ active_season: season }).eq('id', c.id);
+                    if (error) throw error;
+                } catch (err) {
+                    // One club failing must not abort the rest — a half-flipped
+                    // season is worse when you can't tell WHICH half.
+                    failed.push((c['Club Name'] || c.name) + ': ' + err.message);
+                }
+            }
+            btn.disabled = false; btn.style.background = '#00c853';
+            btn.textContent = failed.length ? 'Flip All' : '✓ Flipped';
+            setTimeout(() => { btn.textContent = 'Flip All'; }, 1800);
+            if (failed.length) alert(`${targets.length - failed.length} flipped, ${failed.length} failed:\n\n${failed.join('\n')}`);
+            loadPerClubSeasons();
         }
 
         // ── Orphan Game Scanner ───────────────────────────────────────────────
