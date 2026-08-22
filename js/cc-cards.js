@@ -232,6 +232,13 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
     const schedUrl  = c.schedule_page_enabled
         ? rtUrl(url, 'schedule', `https://referee-tool.com/schedules/club.html?club=${encodeURIComponent(clubName)}`)
         : '';
+    // Northeast Corner United — the combined NECONN / Plainfield / Canterbury
+    // schedule. Deliberately gated to NECONN alone: they own the coalition and
+    // the URL sits in their namespace, so showing this row on Plainfield's or
+    // Canterbury's card would imply a page of theirs that does not exist.
+    // Not a stored flag — one page, one owner, so a column would be dead weight.
+    const masterUrl = url === 'neconn'
+        ? rtUrl(url, 'master_schedule', 'https://referee-tool.com/neconn/master_schedule/') : '';
 
     // Comp is identified by age-band label (system convention — see manage-clubs COMP_AGE_GROUPS),
     // with game_type === 'comp' still honored as a fallback. Sort numerically so U8 / bands order right.
@@ -338,6 +345,7 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
             ${ccPortalRow('Pay Portal', payUrl)}
             ${ccPortalRow('Audit Portal', presUrl)}
             ${ccPortalRow('Schedule Page', schedUrl)}
+            ${masterUrl ? ccPortalRow('Master Schedule', masterUrl) : ''}
             ${lastUploadStr ? `<div style="font-size:0.78rem; margin-top:3px;">
                 <span style="color:#555; font-weight:600;">Last game upload: </span>
                 <span style="color:#09142a; font-weight:700;">${lastUploadStr}</span>${lastUpload.uploader ? `<span style="color:#555;"> by <strong>${lastUpload.uploader}</strong></span>` : ''}
