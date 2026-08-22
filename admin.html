@@ -1722,7 +1722,6 @@
                         const clubName   = clubRow['Club Name'] || clubRow.name || '';
                         const submitUrl  = clubRow['Club Game Upload'] || '';
                         const payCoord   = clubRow.payment_coordinator || '';
-                        const payUrl     = (payCoord && submitUrl) ? submitUrl + '&pay=portal' : '';
                         const slug       = clubRow.slug || clubName.toLowerCase().replace(/\s+/g, '-');
                         const presUrl    = rtUrl(rtSlug(clubName), 'audit', `https://referee-tool.com/presidents-portal.html?club=${slug}`);
 
@@ -1742,7 +1741,14 @@
                             ...clubRow,
                             'Club Name': clubName, name: clubName, id: clubId,
                             payment_coordinator: payCoord,
-                            _submit_url: submitUrl, payment_portal_enabled: !!payUrl,
+                            // payment_portal_enabled deliberately NOT overridden — the
+                            // spread above already carries the real value. It used to be
+                            // recomputed here from whether a payment COORDINATOR was
+                            // filled in, which is a different thing entirely, and that
+                            // hid NECONN's live portal (enabled, PIN 9839, /neconn/pay
+                            // serving) purely because one contact field was blank.
+                            // cc-cards.js gates the link on this flag; let it see the truth.
+                            _submit_url: submitUrl,
                         };
                         const gs = { total: totalGames, thisWeek, unassigned, venueCount: 0, fieldCount: 0, lastUpload };
                         stat.innerHTML = ccBuildClubCard(cNorm, payRatesByClubId[clubId] || [], gs);
