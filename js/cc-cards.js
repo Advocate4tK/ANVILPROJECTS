@@ -232,13 +232,19 @@ function ccBuildClubCard(c, rates, gameStats, billing) {
     const schedUrl  = c.schedule_page_enabled
         ? rtUrl(url, 'schedule', `https://referee-tool.com/schedules/club.html?club=${encodeURIComponent(clubName)}`)
         : '';
-    // Northeast Corner United — the combined NECONN / Plainfield / Canterbury
-    // schedule. Deliberately gated to NECONN alone: they own the coalition and
-    // the URL sits in their namespace, so showing this row on Plainfield's or
-    // Canterbury's card would imply a page of theirs that does not exist.
-    // Not a stored flag — one page, one owner, so a column would be dead weight.
-    const masterUrl = url === 'neconn'
-        ? rtUrl(url, 'master_schedule', 'https://referee-tool.com/neconn/master_schedule/') : '';
+    // Northeast Corner United — the combined public schedule. Shown on ALL THREE
+    // member clubs' cards, not just NECONN's: Plainfield and Canterbury families
+    // need the same link, and it sits alongside each club's own schedule page
+    // rather than replacing it.
+    //
+    // The URL lives in NECONN's namespace because NECONN owns the coalition —
+    // that is a hosting fact, not a claim that the schedule is theirs alone.
+    //
+    // Not a stored flag. One page with three known members is a shorter, more
+    // honest thing to read here than a column that would be false for 13 clubs.
+    const NCU_MEMBERS = ['neconn', 'plainfield', 'canterbury'];
+    const masterUrl = NCU_MEMBERS.includes(url)
+        ? rtUrl('neconn', 'master_schedule', 'https://referee-tool.com/neconn/master_schedule/') : '';
 
     // Comp is identified by age-band label (system convention — see manage-clubs COMP_AGE_GROUPS),
     // with game_type === 'comp' still honored as a fallback. Sort numerically so U8 / bands order right.
