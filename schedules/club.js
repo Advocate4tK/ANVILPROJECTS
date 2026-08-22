@@ -451,7 +451,11 @@ function updateInfoBar(rows, allRows) {
     const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
     const teams  = new Set(rows.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean));
     const days   = new Set(rows.map(g => g.date).filter(Boolean));
-    const venues = new Set((allRows || rows).map(venueName));
+    // Venues came from allRows so the bar could still say how many grounds a club
+    // plays on while a filter narrowed the list. But with NOTHING on screen that
+    // reads "0 Teams · 0 Games · 0 Game Days · 6 Locations", which looks broken.
+    // Nothing showing means nothing to count.
+    const venues = new Set((rows.length ? (allRows || rows) : rows).map(venueName));
     bar.innerHTML =
         `<span>${plural(teams.size, 'Team')}</span><span>${plural(rows.length, 'Game')}</span>` +
         `<span>${plural(days.size, 'Game Day')}</span><span>${plural(venues.size, 'Location')}</span>`;
@@ -636,17 +640,52 @@ function fillFilters() {
     const seasons = [...new Set(GAMES.map(seasonOf).filter(Boolean)
                         .concat(ACTIVE_SEASON ? [ACTIVE_SEASON] : []))]
                     .sort((a, b) => seasonRank(b) - seasonRank(a));
-    const put = (id, arr) => {
+    const put = (id, arr, onChange) => {
         const el = document.getElementById(id);
         arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); });
-        el.addEventListener('change', render);
+        el.addEventListener('change', onChange || render);
     };
     // Only offer a season picker when there is more than one to pick from.
-    if (seasons.length > 1) { document.getElementById('seasonFilter').style.display = ''; put('seasonFilter', seasons); }
-    put('divFilter',   [...new Set(GAMES.map(divisionLabel).filter(Boolean))].sort());
-    put('teamFilter',  [...new Set(GAMES.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean))].sort());
-    put('venueFilter', [...new Set(GAMES.map(venueName).filter(Boolean))].sort());
+    // Its handler must REFILL BEFORE RENDERING — the other three dropdowns are
+    // scoped to the season, so rendering first would draw against filter values
+    // that are about to be cleared.
+    if (seasons.length > 1) {
+        document.getElementById('seasonFilter').style.display = '';
+        put('seasonFilter', seasons, () => { refillSeasonFilters(); render(); });
+    }
+
+    // Team / division / venue follow the SEASON, not the whole archive. A club
+    // freshly flipped to Fall was offering every team and division from Spring —
+    // teams that no longer exist, next to a header saying "no games posted".
+    // Picking one produced "No games match that filter", which reads as a bug.
+    refillSeasonFilters();
+    ['divFilter', 'teamFilter', 'venueFilter'].forEach(id =>
+        document.getElementById(id).addEventListener('change', render));
     document.getElementById('filterBar').style.display = '';
+}
+
+// Rows in the season currently being shown — an explicit pick if there is one,
+// otherwise whatever the club is in.
+function seasonRows() {
+    const s = document.getElementById('seasonFilter').value || primarySeason(GAMES);
+    return GAMES.filter(g => seasonOf(g) === s);
+}
+
+function refillSeasonFilters() {
+    const rows = seasonRows();
+    [['divFilter',   [...new Set(rows.map(divisionLabel).filter(Boolean))].sort()],
+     ['teamFilter',  [...new Set(rows.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean))].sort()],
+     ['venueFilter', [...new Set(rows.map(venueName).filter(Boolean))].sort()]
+    ].forEach(([id, vals]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const keep = el.value;
+        // Rebuild from the "All …" row down, preserving the selection when it is
+        // still valid — changing season should not silently widen a filter.
+        while (el.options.length > 1) el.remove(1);
+        vals.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); });
+        el.value = vals.includes(keep) ? keep : '';
+    });
 }
 
 function fail(title, detail) {
