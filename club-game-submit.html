@@ -1203,6 +1203,10 @@
                         if (currentClubRecord.fields) currentClubRecord.fields.active_season = _pcRow?.active_season || null;
                     } catch(e) { /* non-critical */ }
                 }
+                // Real per-club season is in now — overwrite the placeholder the
+                // header badges booted with. _refreshSeasonBadges is declared
+                // later in this same script but hoisted, so it already exists.
+                if (typeof _refreshSeasonBadges === 'function') _refreshSeasonBadges();
 
                 // Display name: tournament label or club name
                 const displayName = tConf ? tConf.label : (match.displayName || match.name);
@@ -3758,12 +3762,33 @@
 
     // ── End Griswold Payment Dashboard ────────────────────────────────────────
 
-    // Populate season badges in static headers
-    const _season = getCurrentSeason();
-    ['scheduledSeasonBadge','historySeasonBadge'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = _season;
-    });
+    // Populate season badges in static headers.
+    //
+    // Two bugs, not one. First: hardcoded to getCurrentSeason() — the raw
+    // calendar-date season, no per-club override — so once a club is manually
+    // flipped to Fall (every club already is), these badges kept reading
+    // August as "Summer 2026" regardless. Confirmed live: console showed
+    // active_season: "Fall 2026" while historySeasonBadge showed "Summer
+    // 2026" on the exact same page load.
+    //
+    // Second, and this is why fixing the first one alone does nothing: this
+    // code sits at the top level of the script and runs the instant the page
+    // is parsed. currentClubRecord isn't set until well after that, inside
+    // the window 'load' listener's async club-matching lookup. Reading it
+    // here always saw null and always fell through to the date guess — the
+    // per-club value literally could not have reached this line.
+    //
+    // Fixed by calling this again once the real club record is in, right
+    // after loadPaymentSection() below wires up. This first call stays as a
+    // harmless placeholder so the badge isn't blank while that load runs.
+    function _refreshSeasonBadges() {
+        const season = (currentClubRecord?.fields?.active_season) || getCurrentSeason();
+        ['scheduledSeasonBadge','historySeasonBadge'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = season;
+        });
+    }
+    _refreshSeasonBadges();
     </script>
 </body>
 </html>
