@@ -2229,12 +2229,41 @@
         }
     }
 
+    // This dropdown used to be one flat list of EVERY venue in the system, name
+    // only, no city — which is how "Route 101 Field" (East Killingly) ended up
+    // attached to Glastonbury. In a long unlabeled list a wrong-region pick is
+    // invisible; nothing about the option told you it wasn't even close by.
+    //
+    // Fix is two-part: label every option with its city, and put the venues
+    // already belonging to the club you're actually editing in their own group
+    // at the top. Everything else stays reachable below — a club legitimately
+    // sharing another club's field (Lebanon at RHAMYS's Long Hill Field) is a
+    // real workflow, not something to hide, just something to label honestly.
+    // No shared HTML-escape helper exists in this file — confirmed by search,
+    // not assumed. A bare esc() call here would compile fine and throw
+    // ReferenceError the first time the wizard actually tried to open this
+    // dropdown, which is a worse way to discover it than right now.
+    const _escHtml = s => String(s ?? '').replace(/[&<>"]/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
     function _populateVenueSelect(sel) {
-        const current = sel.value;
-        const opts = ['<option value="">— Select existing venue —</option>']
-            .concat(_wizardVenues.map(v => `<option value="${v.id}">${v.name}</option>`))
-            .concat(['<option value="__new__">＋ Enter new venue...</option>']);
-        sel.innerHTML = opts.join('');
+        const current  = sel.value;
+        const clubName = (document.getElementById('clubName')?.value || '').trim();
+        const label    = v => v.city ? `${v.name} — ${v.city}` : v.name;
+        const norm     = s => String(s || '').toLowerCase().trim();
+        const esc      = _escHtml;
+
+        const mine  = clubName ? _wizardVenues.filter(v => norm(v.clubName) === norm(clubName)) : [];
+        const rest  = clubName ? _wizardVenues.filter(v => norm(v.clubName) !== norm(clubName)) : _wizardVenues;
+
+        const optionsFor = list => list.map(v => `<option value="${v.id}">${esc(label(v))}</option>`).join('');
+        const groups = [];
+        if (mine.length) groups.push(`<optgroup label="${esc(clubName)}'s venues">${optionsFor(mine)}</optgroup>`);
+        groups.push(`<optgroup label="${mine.length ? 'All other venues' : 'All venues'}">${optionsFor(rest)}</optgroup>`);
+
+        sel.innerHTML = '<option value="">— Select existing venue —</option>'
+            + groups.join('')
+            + '<option value="__new__">＋ Enter new venue...</option>';
         if (current) sel.value = current;
     }
 
