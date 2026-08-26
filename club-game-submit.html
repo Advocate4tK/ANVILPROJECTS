@@ -2133,8 +2133,15 @@
                         : ((r.fields['Source Club'] || '').toLowerCase().includes(clubName)))
                 .sort((a, b) => (a.fields['Date'] || '').localeCompare(b.fields['Date'] || '') || (a.fields['Time'] || '').localeCompare(b.fields['Time'] || ''));
 
+            // Live season = the per-club flip set in super-admin (clubs.active_season); falls back to
+            // the date-derived guess for leagues/events (no per-club season) or clubs not yet flipped.
+            // Computed BEFORE the zero-games check so a brand-new club still sees the badge — a club
+            // with no games yet is exactly the one that most needs to know what season it's even in.
+            const liveSeason = (currentClubRecord?.fields?.active_season) || getCurrentSeason();
+
             if (clubGames.length === 0) {
-                content.innerHTML = '<p style="color:#888; font-size:0.85rem;">No games on file yet.</p>';
+                content.innerHTML = seasonBadge(liveSeason)
+                    + '<p style="color:#888; font-size:0.85rem; text-align:center;">No games on file yet.</p>';
                 return;
             }
 
@@ -2160,9 +2167,6 @@
             // ── Season split: keep the current season live, tuck prior seasons into archives ──
             // (club portals only — tournament/event views are self-contained, no archiving)
             const archivedSeasons = {}; // { "Spring 2026": { regular: [], cancelled: [] } }
-            // Live season = the per-club flip set in super-admin (clubs.active_season); falls back to
-            // the date-derived guess for leagues/events (no per-club season) or clubs not yet flipped.
-            const liveSeason = (currentClubRecord?.fields?.active_season) || getCurrentSeason();
             // Split for clubs AND leagues/events (recurring, span seasons). Only true one-shot tournaments skip.
             if (!currentTournament) {
                 const seasonOf = r => getCurrentSeason(r.fields['Date'] || r.fields['date'] || '');
