@@ -37,6 +37,16 @@ Park); 816 should be 916 (Woodstock Middle School). Both confirmed against CA.
 So if a venue is missing from the active pool, check whether its number **plus
 100** is a real CA venue before assuming it is retired.
 
+> **Confirmed again 2026-08-28 — NECONN's venue list.** The club pointed at five
+> venue IDs with no matching row. Two were this exact bug: `816`→**916 Woodstock
+> Middle School** and `812`→**912 Pomfret Rec Park**. Both replacement venues were
+> already tagged `club_name = NECONN`, which is what confirmed it. Corrected in
+> `clubs.venues` for club 52.
+>
+> **Still dangling on NECONN, and NOT explained by +100** — nothing exists at
+> `1010`, `1004`, or `713` either. Needs Eric or CA to identify:
+> **`910`, `904`, `613`**.
+
 Still unverified on that pattern, as of 2026-08-12 — do not change without
 checking Central Assign:
 
