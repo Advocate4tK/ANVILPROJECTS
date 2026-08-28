@@ -5708,6 +5708,65 @@
             return { fri, sat, sun };
         }
 
+        /**
+         * First and last day of the season a date falls in.
+         *
+         * Boundaries are copied from getCurrentSeason() in club-game-submit.html so the
+         * workstation and the club portal never disagree about when Fall starts:
+         *   Spring Mar–Jun · Summer Jul–Aug · Fall Sep–Nov · Winter Dec–Feb
+         *
+         * Winter is the awkward one — it crosses the year end, so Dec belongs to the
+         * winter that finishes the FOLLOWING February, and Jan/Feb belong to the one
+         * that started the PREVIOUS December. Getting that wrong yields a backwards
+         * range and an empty board.
+         */
+        function seasonRange(seasonOrDate) {
+            const mk = (yy, mm, dd) => new Date(yy, mm - 1, dd, 12, 0, 0);
+            const spanOf = (nm, y) => ({
+                Spring: { from: mk(y, 3, 1),  to: mk(y, 6, 30) },
+                Summer: { from: mk(y, 7, 1),  to: mk(y, 8, 31) },
+                Fall:   { from: mk(y, 9, 1),  to: mk(y, 11, 30) },
+                // Winter is labelled by the year it STARTS; day 0 of March = last of Feb, leap-safe
+                Winter: { from: mk(y, 12, 1), to: mk(y + 1, 3, 0) }
+            })[nm];
+
+            // A season LABEL ("Fall 2026") wins outright. clubs.active_season is the
+            // authority on what season we are in — Tod flips clubs to Fall in late August,
+            // weeks before the calendar agrees. Trusting the calendar here would have shown
+            // a fall board Jul 1–Aug 31 on the day this shipped.
+            if (typeof seasonOrDate === 'string') {
+                const m = seasonOrDate.trim().match(/^(Spring|Summer|Fall|Winter)\s+(\d{4})$/i);
+                if (m) {
+                    const nm = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
+                    const span = spanOf(nm, parseInt(m[2], 10));
+                    if (span) return { ...span, label: `${nm} ${m[2]}` };
+                }
+            }
+
+            // Fallback: derive from a date. Only reached when no club has a season set.
+            const d = (seasonOrDate instanceof Date) ? seasonOrDate : new Date();
+            const mo = d.getMonth() + 1, y = d.getFullYear();
+            const nm = (mo >= 3 && mo <= 6) ? 'Spring'
+                     : (mo >= 7 && mo <= 8) ? 'Summer'
+                     : (mo >= 9 && mo <= 11) ? 'Fall' : 'Winter';
+            const yr = (nm === 'Winter' && mo !== 12) ? y - 1 : y;   // Jan/Feb belong to the winter that began last December
+            return { ...spanOf(nm, yr), label: `${nm} ${yr}` };
+        }
+
+        // The season the TOOL considers current — clubs.active_season, not the calendar.
+        // Returns null on any failure so callers fall back to the date-derived guess.
+        let _activeSeasonLabel = null;
+        async function fetchActiveSeasonLabel() {
+            try {
+                const { data } = await supabaseClient.client
+                    .from('clubs').select('active_season').eq('enabled', true);
+                const tally = {};
+                (data || []).forEach(c => { if (c.active_season) tally[c.active_season] = (tally[c.active_season] || 0) + 1; });
+                const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+                return top ? top[0] : null;      // clubs can disagree; the majority is the house season
+            } catch (e) { return null; }
+        }
+
         function setDateRange(preset, evt) {
             let from, to;
 
@@ -5742,10 +5801,13 @@
                 const { fri, sun } = getWeekendDates(1);
                 from = fri; to = sun;
             } else if (preset === 'all') {
-                // Escape hatch — open the whole window so far-out games (and error
-                // games needing deletion) are visible, not just this/next week.
-                from = new Date('2020-01-01T12:00:00');
-                to   = new Date('2035-12-31T12:00:00');
+                // "All Games" = every game THIS SEASON, not every game ever. It used to
+                // open 2020–2035, which quietly dragged last spring's beta games and their
+                // referees onto a fall board — the page reached back years without being
+                // asked to. Dates now say WHEN WITHIN a season; the Season dropdown says
+                // WHICH season. Two controls, one job each, instead of two that overlap.
+                const s = seasonRange(_activeSeasonLabel);   // null → date-derived fallback
+                from = s.from; to = s.to;
             }
 
             if (!from) return;
@@ -5856,14 +5918,34 @@
                 setDateRange('this-week', null);
                 loadAll();
             } else {
-                // Default to this week on load
-                setDateRange('this-week', null);
+                // Default to the CURRENT SEASON, not this week. The date picker should sit
+                // on the season you are actually in — today that means Sep 1–Nov 30 — so
+                // seeing spring takes a deliberate act instead of being the resting state.
+                // Painted twice on purpose: once immediately from the calendar so the boxes
+                // are never blank, then again once clubs.active_season comes back. They
+                // disagree every year in the weeks after Tod flips the clubs and before the
+                // calendar catches up, and the flip is the one that's right.
+                setDateRange('all', null);
+                fetchActiveSeasonLabel().then(lbl => {
+                    if (!lbl) return;
+                    _activeSeasonLabel = lbl;
+                    const df = document.getElementById('dateFrom');
+                    const dt = document.getElementById('dateTo');
+                    // Only re-paint if the user hasn't touched the dates in the meantime.
+                    const stale = seasonRange();
+                    if (df && dt && df.value === fmt(stale.from) && dt.value === fmt(stale.to)) {
+                        setDateRange('all', null);
+                    }
+                });
             }
 
-            // Highlight the "This Week" button manually since no click event
-            const weekendBtn = [...document.querySelectorAll('.date-quick-btn')]
-                .find(b => b.textContent.trim() === 'This Week');
-            if (weekendBtn) weekendBtn.classList.add('active');
+            // Highlight the matching quick-pick manually since no click event fired.
+            // "All Games" is now season-bounded, so it IS the default.
+            const _defaultBtnLabel = (new URLSearchParams(window.location.search).get('filter') === 'unassigned')
+                ? 'This Week' : '📅 All Games';
+            const defaultBtn = [...document.querySelectorAll('.date-quick-btn')]
+                .find(b => b.textContent.trim() === _defaultBtnLabel);
+            if (defaultBtn) defaultBtn.classList.add('active');
 
             buildClubPills();
 
