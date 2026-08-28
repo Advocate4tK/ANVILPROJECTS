@@ -735,7 +735,7 @@ exportBtn.addEventListener('click', () => {
     const rows = selected.map(rec => {
         const f = rec.fields;
         const src = f['Source Club'] || '';
-        const { name: venueName, fieldName } = resolveVenue(f);
+        const { name: venueName, fieldCaId, fieldName } = resolveVenue(f);
 
         // Gender — CA wants the full word, not M/F
         const gRaw = (f['Gender'] || '').trim();
@@ -788,7 +788,10 @@ exportBtn.addEventListener('click', () => {
             f['Home Team'] || '',
             f['Away Team'] || '',
             venueName,
-            fieldName,
+            // CA # wins over CA name on upload — the number maps unambiguously,
+            // the name has to match CA's spelling exactly. Name is the fallback
+            // for fields CA hasn't issued a number for yet.
+            fieldCaId ? String(fieldCaId) : fieldName,
             '',                      // Division — we don't carry one
             DEFAULTS.type,
             '',                      // Home Club — left blank; CA fills from the team
@@ -871,18 +874,27 @@ function resolveRefCA(val) {
     return refIdLookup[val] || refIdLookup[(val + '').toLowerCase()] || null;
 }
 
+// Field IDs at or above this are invented placeholders, not numbers CA ever issued.
+// Sequential-from-9000 is what someone types when they need a number and don't have
+// one — see `Central Assign/Venues/README.md`. Uploading one would send CA a field it
+// has never heard of, so they are treated as "no CA number" and fall back to the name.
+const INVENTED_FIELD_ID_FLOOR = 9000;
+
 // Resolve venue info from a game's fields object.
 // Primary path: use numeric Venue ID / Field ID (set by assignor workstation).
 // Fallback: old Airtable linked-record approach.
-// Returns { name, caId, fieldName } — caId is the CA venue number.
+// Returns { name, caId, fieldCaId, fieldName } — caId is the CA venue number,
+// fieldCaId is the CA field number (null unless it's a real one).
 function resolveVenue(f) {
     const numVenueId = f['Venue ID'] ? (parseInt(f['Venue ID']) || null) : null;
     const numFieldId = f['Field ID'] ? (parseInt(f['Field ID']) || null) : null;
+    const realFieldId = (numFieldId && numFieldId < INVENTED_FIELD_ID_FLOOR) ? numFieldId : null;
 
     if (numVenueId) {
         return {
             name:      numericVenueToName[numVenueId] || String(numVenueId),
             caId:      numVenueId,   // Venue ID IS the CA venue ID
+            fieldCaId: realFieldId,
             fieldName: numFieldId ? (numericFieldToName[numFieldId] || '') : ''
         };
     }
@@ -892,12 +904,13 @@ function resolveVenue(f) {
     if (typeof fieldValue === 'string' && fieldValue.startsWith('[')) {
         try { fieldValue = JSON.parse(fieldValue); } catch(e) {}
     }
-    if (!fieldValue) return { name: '', caId: null, fieldName: '' };
+    if (!fieldValue) return { name: '', caId: null, fieldCaId: null, fieldName: '' };
     // Normalize: unwrap array or use raw integer/string ID directly
     const rid = Array.isArray(fieldValue) ? fieldValue[0] : fieldValue;
     return {
         name:      venueNameMap[rid] || String(rid),
         caId:      venueCAId[rid]    || null,
+        fieldCaId: realFieldId,
         fieldName: fieldNameMap[rid] || ''
     };
 }
