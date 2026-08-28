@@ -730,7 +730,14 @@
                 supabaseClient.client.from('settings').select('value').eq('key','openings_form_config').maybeSingle(),
                 supabaseClient.client.from('clubs').select('name, payment_methods').eq('enabled', true).eq('avail_form_enabled', true),
                 (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks, avail_mode').eq('avail_enabled', true); if (tParam) q = q.eq('key', tParam); return q; })(),
-                (()=>{ let q = supabaseClient.client.from('events').select('id, name, "Club Name", slug, min_age, session_blocks, avail_mode, start_date, end_date, age_groups').eq('avail_form_enabled', true).order('start_date'); return q; })()
+                // .eq('enabled', true) matters as much as the avail flag — without it,
+                // unchecking an event in manage-clubs did nothing here and a finished
+                // season kept its "Sign Up" button. Girls Summer League was still on
+                // this form two weeks after it ended, and there was no way to pull it:
+                // avail-form-settings lists enabled events only, so a disabled one
+                // vanished from the page that owns its checkbox. Clubs (above) always
+                // checked both flags; events just never got the second one.
+                (()=>{ let q = supabaseClient.client.from('events').select('id, name, "Club Name", slug, min_age, session_blocks, avail_mode, start_date, end_date, age_groups').eq('enabled', true).eq('avail_form_enabled', true).order('start_date'); return q; })()
             ]).then(([formRes, clubsRes, tournRes, eventsRes]) => {
                 const allClubs = (clubsRes.data || []).sort((a, b) => a.name.localeCompare(b.name));
                 const PAY_CLUBS = allClubs

@@ -236,7 +236,11 @@
             supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
             supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
             supabaseClient.client.from('tournaments').select('key, name, status').order('name'),
-            supabaseClient.client.from('events').select('id, name, "Club Name", enabled, avail_form_enabled, start_date, end_date').eq('enabled', true).order('name')
+            // No .eq('enabled', true) — this page OWNS the avail/openings checkbox, so
+            // filtering disabled events out stranded them: off in manage-clubs, still
+            // live on the public form, and no checkbox left anywhere to turn them off.
+            // Show them all; the row marks which are disabled.
+            supabaseClient.client.from('events').select('id, name, "Club Name", enabled, avail_form_enabled, start_date, end_date').order('name')
         ]);
         OPENINGS_ALL_CLUBS = (clubsRes.data || []).map(c => c.name);
         _openingsTournaments = tournRes.data || [];
@@ -297,6 +301,7 @@
                 <label class="club-main-row">
                     <input type="checkbox" class="event-openings-cb" data-id="${e.id}" ${e.avail_form_enabled ? 'checked' : ''}>
                     ${e['Club Name'] || e.name}
+                    ${e.enabled ? '' : `<span style="font-size:0.65rem; font-weight:700; color:#9a3412; background:#ffedd5; border-radius:4px; padding:1px 6px; margin-left:8px;">EVENT OFF</span>`}
                     ${e.start_date || e.end_date ? `<span style="font-size:0.7rem; color:#888; margin-left:8px;">${[e.start_date, e.end_date].filter(Boolean).join(' – ')}</span>` : ''}
                 </label>
             </div>`).join('')}` : '';
@@ -831,8 +836,10 @@
         const wrap = document.getElementById('eventListWrap');
         const { data: events, error } = await supabaseClient.client
             .from('events')
-            .select('id, name, "Club Name", slug, start_date, end_date, avail_form_enabled, session_blocks')
-            .eq('enabled', true)
+            .select('id, name, "Club Name", slug, start_date, end_date, enabled, avail_form_enabled, session_blocks')
+            // Disabled events stay listed on purpose — see the openings query above.
+            // Hiding them here is what made a finished season impossible to pull off
+            // the public form.
             .order('start_date');
 
         if (error || !events || !events.length) {
@@ -886,6 +893,7 @@
                             onchange="toggleEvGameEditor('${slug}', this.checked)"
                             style="width:18px;height:18px;cursor:pointer;accent-color:#00c853;flex-shrink:0;">
                         <strong>${label}</strong>${payBadge(ev.payment_methods || EVENT_PAY[slug])}
+                        ${ev.enabled ? '' : `<span title="Event is switched off in Club Management — it will not appear on the availability form regardless of this checkbox." style="font-size:0.65rem; font-weight:700; color:#9a3412; background:#ffedd5; border:1px solid #fdba74; border-radius:4px; padding:1px 7px; margin-left:4px;">EVENT OFF</span>`}
                         ${dateRange ? `<span style="color:#888; font-size:0.82rem; margin-left:6px;">${dateRange}</span>` : ''}
                         <span id="evbadge_${slug}" style="font-size:0.7rem; font-weight:700; background:#ccfbf1; color:#0f766e; border:1px solid #5eead4; border-radius:4px; padding:1px 7px; margin-left:4px; display:${enabled ? 'inline' : 'none'};">${gameCount} game${gameCount !== 1 ? 's' : ''}</span>
                     </label>
