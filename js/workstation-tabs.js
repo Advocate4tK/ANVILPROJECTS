@@ -143,16 +143,28 @@
             // Which of the names in an assignor's scope are EVENTS rather than clubs?
             // The `clubs` array holds both, mixed — Tod's reads
             // ["East Haddam","Griswold","NECONN","Ellis Tech Summer League","Girls Summer League"].
-            let eventNames = [];
+            //
+            // TWO sets, and the split is the whole point. Identity ("is this name an event?")
+            // must see EVERY event; liveness ("is it running?") sees only enabled ones. Filter
+            // the identity set and a switched-off event stops being recognised as an event —
+            // it then falls into `myClubs` and inflates the Clubs badge with dead seasons.
+            // Exactly how Girls Summer League ended up rendering as a club pill in the club
+            // workstation, from the same one-list-two-jobs mistake.
+            let allEventNames = [], liveEventNames = [];
             try {
                 const { data } = await supabaseClient.client
-                    .from('events').select('"Club Name"');
-                eventNames = (data || []).map(e => e['Club Name']).filter(Boolean);
+                    .from('events').select('"Club Name", enabled');
+                allEventNames  = (data || []).map(e => e['Club Name']).filter(Boolean);
+                liveEventNames = (data || []).filter(e => e.enabled).map(e => e['Club Name']).filter(Boolean);
             } catch (e) { /* fail open below */ }
 
-            const evSet     = new Set(eventNames);
-            const myEvents  = scope.filter(n => evSet.has(n));
+            const evSet     = new Set(allEventNames);    // identity
+            const liveEvSet = new Set(liveEventNames);   // liveness
+            const myEvents  = scope.filter(n => liveEvSet.has(n));
             const myClubs   = scope.filter(n => !evSet.has(n));
+            // "Ever had one of these", per the availability rule above — an assignor who ran a
+            // season keeps the tab, it just reads 0. The strip never changes shape underneath them.
+            const everHadEvents = scope.some(n => evSet.has(n));
 
             // Tournaments carry their own assignor (name + email); there is no
             // per-assignor tournament scoping in the clubs array.
@@ -182,7 +194,7 @@
             };
             const available = {
                 clubs:       isAdmin || myClubs.length  > 0,
-                events:      isAdmin || myEvents.length > 0,
+                events:      isAdmin || everHadEvents,   // ever, not now — see the rule at the top
                 tournaments: isAdmin || myTourns === null || myTourns > 0
             };
 

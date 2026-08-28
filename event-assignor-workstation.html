@@ -5546,7 +5546,8 @@
         let selectedClubs = new Set(clubsList); // default: all selected
         let userHasFilteredClubs = false; // true once user manually picks specific clubs
         let assignorClubRestriction = null; // set when a non-Admin assignor logs in — limits visible clubs
-        let knownEventsList = []; // event "Club Name" values — kept separate so events survive loadAll rebuild
+        let knownEventsList = []; // ALL event "Club Name" values — identity ("is this an event?"), never filtered by enabled
+        let liveEventsList  = []; // enabled events only — drives what actually renders
         let selectedGame        = null; // currently focused game record
         let requestedChangeDate = null; // parsed from Notes when change request game is open
         let requestedChangeTime = null; // parsed from Notes when change request game is open
@@ -5818,12 +5819,19 @@
                 try {
                     const [clubsRes, eventsRes] = await Promise.all([
                         supabaseClient.client.from('clubs').select('"Club Name"').eq('enabled', true).order('"Club Name"'),
-                        supabaseClient.client.from('events').select('"Club Name"').eq('enabled', true).order('"Club Name"')
+                        // NOT filtered by enabled — on purpose. See knownEventsList below.
+                        supabaseClient.client.from('events').select('"Club Name", enabled').order('"Club Name"')
                     ]);
                     if (clubsRes.error) throw clubsRes.error;
                     const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || '').filter(Boolean);
-                    const dbEvents = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
-                    knownEventsList = dbEvents.slice();
+                    const allEvents = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
+                    const dbEvents  = (eventsRes.data || []).filter(e => e.enabled).map(e => e['Club Name'] || '').filter(Boolean);
+                    // IDENTITY, not liveness — every event, switched on or off. The game filter below
+                    // reads `knownEventsList.length && !includes(...)`, so an empty list makes it fail
+                    // OPEN: disable every event and this workstation stops filtering and shows CLUB
+                    // games. Holding all events keeps the filter honest. Liveness = liveEventsList.
+                    knownEventsList = allEvents.slice();
+                    liveEventsList  = dbEvents.slice();
                     let merged = [...new Set([...KNOWN_CLUBS, ...dbClubs, ...dbEvents])].sort();
                     if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
                     clubsList = merged;
@@ -6318,7 +6326,10 @@
             // Short pill display labels — value/filtering stays the full name
             const PILL_LABELS = { 'Girls Summer League': 'GSL' };
             clubsList.forEach(club => {
-                if (!knownEventsList.includes(club)) return; // EVENT WORKSTATION: render ONLY event pills (no clubs)
+                // Rendering is a LIVENESS question — a finished event should not offer a pill.
+                // (knownEventsList is identity and holds dead events too; using it here would
+                //  keep last season's pill on screen forever.)
+                if (!liveEventsList.includes(club)) return; // EVENT WORKSTATION: render ONLY live event pills
                 const pill = document.createElement('span');
                 const isEvent = knownEventsList.includes(club);
                 const baseClass = isEvent ? 'club-pill event-pill' : 'club-pill';

@@ -5601,7 +5601,7 @@
         let selectedClubs = new Set(clubsList); // default: all selected
         let userHasFilteredClubs = false; // true once user manually picks specific clubs
         let assignorClubRestriction = null; // set when a non-Admin assignor logs in — limits visible clubs
-        let knownEventsList = []; // event "Club Name" values — kept separate so events survive loadAll rebuild
+        let knownEventsList = []; // ALL event "Club Name" values — identity ("is this an event?"), never filtered by enabled
         let selectedGame        = null; // currently focused game record
         let requestedChangeDate = null; // parsed from Notes when change request game is open
         let requestedChangeTime = null; // parsed from Notes when change request game is open
@@ -5880,12 +5880,22 @@
                         // Griswold (2 of the 4 enabled clubs) showed "10 games" in the banner
                         // and "0 games" in the panel because of exactly this.
                         supabaseClient.client.from('clubs').select('name, "Club Name"').eq('enabled', true),
-                        supabaseClient.client.from('events').select('"Club Name"').eq('enabled', true).order('"Club Name"')
+                        // NOT filtered by enabled — on purpose. See knownEventsList below.
+                        supabaseClient.client.from('events').select('"Club Name", enabled').order('"Club Name"')
                     ]);
                     if (clubsRes.error) throw clubsRes.error;
                     const dbClubs  = (clubsRes.data  || []).map(c => c['Club Name'] || c['name'] || '').filter(Boolean).sort();
-                    const dbEvents = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
-                    knownEventsList = dbEvents.slice();
+                    const allEvents  = (eventsRes.data || []).map(e => e['Club Name'] || '').filter(Boolean);
+                    const dbEvents   = (eventsRes.data || []).filter(e => e.enabled).map(e => e['Club Name'] || '').filter(Boolean);
+                    // knownEventsList answers "is this name an EVENT?" — an identity question, so it
+                    // must hold EVERY event, live or not. It used to be the enabled-only list, which
+                    // was harmless while it only picked a pill colour (added 6/17) but broke the
+                    // moment it started driving exclusion (added 6/29): switching an event off
+                    // dropped it out of the list, the guard in buildClubPills stopped recognising it
+                    // as an event, and it rendered as a CLUB pill. Girls Summer League and Ellis Tech
+                    // both appeared under Clubs the week their season ended.
+                    // Liveness lives in _liveClubNames / dbEvents. Never merge the two again.
+                    knownEventsList = allEvents.slice();
                     _liveClubNames = new Set([...dbClubs, ...dbEvents]);   // authoritative live set (enabled clubs + events only)
                     let merged = [...new Set([...dbClubs, ...dbEvents])].sort();   // live only — dropped hardcoded KNOWN_CLUBS so unbuilt clubs (RHAMYS etc.) no longer show
                     if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
