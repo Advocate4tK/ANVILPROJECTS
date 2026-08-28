@@ -24,6 +24,14 @@ someone types when they need a number and doesn't have one. The fake "Old KHS"
 venue carried 9001/9002/9003 while the real Old Killingly HS (1023) has
 1614/1615/1616. Any venue holding 9000-series fields deserves a look.
 
+> **Resolved 2026-08-28 — Old Killingly HS.** 9001/9002/9003 never existed as
+> `fields` rows, so those 24 games resolved to an empty field name and were
+> uploading to CA with **no field at all** — silently, for months. Remapped
+> `9001→1614, 9002→1615, 9003→1616` on the game rows; venue 1023 is now clean
+> (12/8/7 across Field #1/#2/#3, one game still fieldless).
+> The exporter also now refuses to send any 9000-series number to CA
+> (`INVENTED_FIELD_ID_FLOOR` in `js/central-assign-export.js`).
+
 **Some venue IDs came in exactly 100 low.** 812 should be 912 (Pomfret Rec
 Park); 816 should be 916 (Woodstock Middle School). Both confirmed against CA.
 So if a venue is missing from the active pool, check whether its number **plus
@@ -38,8 +46,19 @@ checking Central Assign:
 
 ## Other open questions
 
-- **Rawson Field (914)** and **Riverside Park Field (1072)** — venue numbers are
-  correct, but their field IDs are 9000-series and need CA's real ones.
+- **Six venues still hold 9000-series field IDs** — venue numbers are correct,
+  but the field numbers are invented and need CA's real ones. Unlike Old KHS
+  these *do* have `fields` rows, so they fall back to the field NAME on upload
+  and still import as long as CA's spelling matches — worth fixing, not urgent.
+  As of 2026-08-28, 33 games ride on these:
+
+  | venue | CA venue # | invented field IDs | games |
+  |---|---|---|---|
+  | Riverside Park Field | 1072 | 9006 | 9 |
+  | Prince Hill Field | 887 | 9004, 9005 | 9 |
+  | Pomfret Rec Park | 912 | 9007 | 6 |
+  | Rawson Field | 914 | 9008 | 5 |
+  | Woodstock Elementary | 915 | 9009 | 4 |
 - **Shepherd Hill**, **Sterling Town Hall**, **Sterling Community School** — no CA
   number at all, so they cannot upload.
 - Two Bentley complexes in Woodstock, **795** and **770**, same road, different
