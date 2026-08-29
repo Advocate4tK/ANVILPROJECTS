@@ -5667,6 +5667,12 @@
          *
          * ⚠️ Twin of the same function in assignor-workstation.html — change both.
          */
+        // Preseason slack on the front of a season window — a season is a competition,
+        // not a calendar range. Fall games get played in late August, and a Sep 1 start
+        // hid games entered the same day they were typed in.
+        // ⚠️ Twin of assignor-workstation.html — change both.
+        const SEASON_PRESEASON_DAYS = 30;
+
         function seasonRange(seasonOrDate) {
             const mk = (yy, mm, dd) => new Date(yy, mm - 1, dd, 12, 0, 0);
             const spanOf = (nm, y) => ({
@@ -5748,7 +5754,8 @@
                 // being asked. Dates say WHEN WITHIN a season; the Season dropdown says
                 // WHICH season.
                 const s = seasonRange(_activeSeasonLabel);   // null → date-derived fallback
-                from = s.from; to = s.to;
+                from = new Date(s.from); from.setDate(from.getDate() - SEASON_PRESEASON_DAYS);
+                to = s.to;
             }
 
             if (!from) return;
@@ -5870,8 +5877,12 @@
                     _activeSeasonLabel = lbl;
                     const df = document.getElementById('dateFrom');
                     const dt = document.getElementById('dateTo');
+                    // Same preseason slack as setDateRange('all'), or this never matches
+                    // and the club-season repaint silently stops firing.
                     const stale = seasonRange();
-                    if (df && dt && df.value === fmt(stale.from) && dt.value === fmt(stale.to)) {
+                    const staleFrom = new Date(stale.from);
+                    staleFrom.setDate(staleFrom.getDate() - SEASON_PRESEASON_DAYS);
+                    if (df && dt && df.value === fmt(staleFrom) && dt.value === fmt(stale.to)) {
                         setDateRange('all', null);   // only if the user hasn't touched them
                     }
                 });

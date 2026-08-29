@@ -5720,6 +5720,18 @@
          * that started the PREVIOUS December. Getting that wrong yields a backwards
          * range and an empty board.
          */
+        // Days of PRESEASON slack on the front of a season window.
+        //
+        // A season is a competition, not a calendar range. Fall 2026 games were being
+        // played on Aug 29-30 — before the calendar's Sep 1 — and the first version of
+        // this shipped a window of Sep 1..Nov 30, so three Glastonbury games Eric entered
+        // on 2026-08-29 simply did not appear on his board. He had already been driven
+        // out of the tool once; a board that hides games you just typed in does it again.
+        //
+        // The back end needs no equivalent slack: a season's last games fall inside its
+        // own months, and stretching the end would drag the next season in.
+        const SEASON_PRESEASON_DAYS = 30;
+
         function seasonRange(seasonOrDate) {
             const mk = (yy, mm, dd) => new Date(yy, mm - 1, dd, 12, 0, 0);
             const spanOf = (nm, y) => ({
@@ -5807,7 +5819,8 @@
                 // asked to. Dates now say WHEN WITHIN a season; the Season dropdown says
                 // WHICH season. Two controls, one job each, instead of two that overlap.
                 const s = seasonRange(_activeSeasonLabel);   // null → date-derived fallback
-                from = s.from; to = s.to;
+                from = new Date(s.from); from.setDate(from.getDate() - SEASON_PRESEASON_DAYS);
+                to = s.to;
             }
 
             if (!from) return;
@@ -5932,8 +5945,12 @@
                     const df = document.getElementById('dateFrom');
                     const dt = document.getElementById('dateTo');
                     // Only re-paint if the user hasn't touched the dates in the meantime.
+                    // Must apply the SAME preseason slack setDateRange('all') does, or this
+                    // comparison never matches and the repaint silently stops happening.
                     const stale = seasonRange();
-                    if (df && dt && df.value === fmt(stale.from) && dt.value === fmt(stale.to)) {
+                    const staleFrom = new Date(stale.from);
+                    staleFrom.setDate(staleFrom.getDate() - SEASON_PRESEASON_DAYS);
+                    if (df && dt && df.value === fmt(staleFrom) && dt.value === fmt(stale.to)) {
                         setDateRange('all', null);
                     }
                 });
