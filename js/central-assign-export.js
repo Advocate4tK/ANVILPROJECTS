@@ -75,6 +75,19 @@ const CA_LEAGUES = [
 // picks one from its club's list (or General Non-League Games).
 // Per Eric's signature, the EDP clubs are: NEU, CT-Rush East, Vale.
 
+// clubs.ca_league is TEXT holding a JSON array, written by Entity Status in
+// manage-clubs.html. Tolerates a bare string from before that existed, and an empty
+// value — a club with no league set exports a BLANK League column, which is what
+// every game did until 2026-08-29.
+// ⚠️ Mirror of parseClubLeagues() in manage-clubs.html.
+function parseClubLeagues(v) {
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    const s = String(v).trim();
+    if (s.startsWith('[')) { try { return JSON.parse(s); } catch (e) { return []; } }
+    return [s];
+}
+
 // ── Period lengths by age group (REC) ─────────────────────────────────────────
 // durationTime = (2 × period) + halftime  (U8–U12 = 5 min HT, U13+ = 10 min HT)
 // Comp game durations TBD — handle separately when built
@@ -412,7 +425,13 @@ loadBtn.addEventListener('click', async () => {
         clubRecs.forEach(c => {
             const clubName = c.fields['name'] || c.fields['Club Name'] || c.fields['Name'] || '';
             const leagueId = c.fields['ca_league_id'];
-            const leagueNm = (c.fields['ca_league'] || '').trim();
+            // ca_league is a TEXT column holding a JSON ARRAY — a club can play in more
+            // than one league, so Entity Status stores e.g. ["CT Northeast District
+            // Travel League","General Non-League Games"]. Reading it raw would have put
+            // the brackets and quotes into CA's League column verbatim.
+            // The FIRST entry is the club's default; a per-game override (General
+            // Non-League Games) is still to be built.
+            const leagueNm = parseClubLeagues(c.fields['ca_league'])[0] || '';
             if (clubName && leagueId) clubLeagueMap[clubName] = parseInt(leagueId);
             if (clubName && leagueNm) clubLeagueNameMap[clubName] = leagueNm;
             if (clubName) clubIdMap[clubName] = parseInt(c.id);
