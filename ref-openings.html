@@ -1324,11 +1324,37 @@
                 return set.has(`${g.date}|${g.time}|${g['Field ID']}`) || set.has(`${g.date}|${(g.time || '').slice(0, 5)}`);
             });
             const allGames    = [...clubGames, ...recGames, ...tournGames, ...eventGamesPosted];
+
+            // ── Drop games that have already kicked off ───────────────────────────
+            // The queries filter .gte('date', today) — whole-day granularity — so a
+            // 9:00 AM game stayed listed as "2 Open" all afternoon. On 2026-08-29 the
+            // board showed three Glastonbury games at 3:37 PM that had been played that
+            // morning. A referee cannot take a game that has started, so offering it is
+            // noise on the one page that is supposed to say what is actually available.
+            //
+            // FILLED is a different case and deliberately stays: a covered game that has
+            // not happened yet remains visible so referees who submitted availability do
+            // not come back, find it gone, and conclude their form failed.
+            //
+            // Cutoff is kickoff, not kickoff+duration — once it starts, it cannot be
+            // taken. Games with no time fall back to end-of-day so a timeless fixture is
+            // never hidden early.
+            const _nowMs = Date.now();
+            const _hasStarted = (g) => {
+                const d = g.date || '';
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;      // undated → never hide
+                const t = (g.time || g.Time || g['Time'] || '').slice(0, 5);
+                const [Y, M, D] = d.split('-').map(Number);
+                const [h, m] = t && /^\d{2}:\d{2}$/.test(t) ? t.split(':').map(Number) : [23, 59];
+                return new Date(Y, M - 1, D, h, m, 0).getTime() <= _nowMs;
+            };
+
             // Covered games are KEPT and flagged, not dropped. Referees were
             // submitting availability, coming back, finding the game gone, and
             // concluding their form had failed. Cancelled still disappears —
             // that game genuinely isn't being played.
             _allOpenGames = allGames
+                .filter(g => !_hasStarted(g))
                 .filter(g => (g['Game Status'] || '') !== 'Cancelled')
                 .map(g => {
                     g._covered = (g['Game Status'] || '') === 'Filled' || !hasOpenSlot(g);
