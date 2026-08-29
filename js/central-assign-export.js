@@ -50,16 +50,30 @@ const CA_LEAGUE_NAMES = {
     19: 'CT Northeast District Travel League'
 };
 
-// The 9 leagues Central Assign accepts, for reference and for the wizard:
-//   CJSA Connecticut Cup
-//   CJSA State Cup
-//   CJSA State League
-//   CT Central/North Central District Travel League
-//   CT Northeast District Travel League
-//   CT Northwest District Travel League
-//   CT Southcentral District Travel League
-//   CT Southeast District Travel League
-//   General Non-League Games
+// The leagues Central Assign accepts — read off CA's own League dropdown and sent by
+// Eric 2026-08-29. This list was previously recorded as 9 and was short by five: the
+// three EDP leagues, Stonington Tournament and USL Youth were all missing.
+// Use CA_LEAGUES below rather than retyping these anywhere.
+const CA_LEAGUES = [
+    'CJSA Connecticut Cup',
+    'CJSA State Cup',
+    'CJSA State League',
+    'CT Central/North Central District Travel League',
+    'CT Northeast District Travel League',
+    'CT Northwest District Travel League',
+    'CT Southcentral District Travel League',
+    'CT Southeast District Travel League',
+    'EDP Academy Zone I',
+    'EDP Championship League',
+    'EDP Futures',
+    'General Non-League Games',   // the per-game escape hatch — any club can use it
+    'Stonington Tournament',
+    'USL Youth'
+];
+// ⚠️ A club can belong to MORE THAN ONE of these (Tod, 2026-08-29), so a single
+// clubs.ca_league cannot represent reality — the club needs a LIST, and each game
+// picks one from its club's list (or General Non-League Games).
+// Per Eric's signature, the EDP clubs are: NEU, CT-Rush East, Vale.
 
 // ── Period lengths by age group (REC) ─────────────────────────────────────────
 // durationTime = (2 × period) + halftime  (U8–U12 = 5 min HT, U13+ = 10 min HT)
