@@ -1265,11 +1265,22 @@
 
                 // Build Airtable Venue ID → Supabase club record ID
                 // (clubs.venues stores Airtable autonumbers, not Supabase IDs)
+                // Split on commas OUTSIDE quotes, then strip — the quotes are the only
+                // thing telling a thousands separator ("1,082.0") from a delimiter.
+                // The old /[\d,]+/ ate digits AND commas, so consecutive bare integers
+                // merged into one bogus id and their venues disappeared. Twin of the
+                // parser in club-game-submit.html and manage-clubs.html — fix all three.
                 function parseAirtableIds(str) {
                     if (!str) return [];
-                    return (str.match(/[\d,]+(?:\.\d+)?/g) || [])
-                        .map(s => parseInt(s.replace(/,/g, ''), 10))
-                        .filter(n => !isNaN(n));
+                    const out = [];
+                    const tokens = String(str).match(/"[^"]*"|[^,]+/g) || [];
+                    for (let t of tokens) {
+                        t = t.replace(/"/g, '').replace(/,/g, '').trim();
+                        if (!t) continue;
+                        const n = parseInt(t, 10);
+                        if (!isNaN(n) && n > 0) out.push(n);
+                    }
+                    return out;
                 }
                 const venueAirtableIdToClubId = {};
                 allClubs.forEach(c => {

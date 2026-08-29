@@ -3516,16 +3516,22 @@
     let _pendingVenues   = [];
 
     // Mirrors club-game-submit.html — parses clubs.venues CA-ID string ("1,128.0",867.0 → [1128,867])
+    // Split on commas OUTSIDE quotes, then strip — the quotes are the only thing telling
+    // a thousands separator ("1,082.0") from a delimiter. Stripping first destroyed that,
+    // and /[\d,]+/ then ate digits AND commas, merging consecutive bare integers into one
+    // bogus id. Cost Glastonbury three venues in the club portal while games were live.
+    // Twin of the parser in club-game-submit.html and admin.html — fix all three.
     function parseAirtableIds(str) {
         if (!str) return [];
-        const cleaned = str.replace(/"/g, '').trim();
-        if (!cleaned) return [];
-        if (cleaned.includes('.')) {
-            return (cleaned.match(/[\d,]+(?:\.\d+)?/g) || [])
-                .map(s => parseInt(s.replace(/,/g, ''), 10))
-                .filter(n => !isNaN(n));
+        const out = [];
+        const tokens = String(str).match(/"[^"]*"|[^,]+/g) || [];
+        for (let t of tokens) {
+            t = t.replace(/"/g, '').replace(/,/g, '').trim();
+            if (!t) continue;
+            const n = parseInt(t, 10);
+            if (!isNaN(n) && n > 0) out.push(n);
         }
-        return cleaned.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+        return out;
     }
 
     function _loadSystemVenues(venueRows, fieldRows) {

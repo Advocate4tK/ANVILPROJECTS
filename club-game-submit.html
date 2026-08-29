@@ -1447,19 +1447,31 @@
         }
     });
 
-    // Parse CA venue ID list — handles plain CSV (1072,795), decimal (9001.0,9002.0), thousands-comma (1,128.0)
+    // Parse CA venue ID list — handles plain CSV (1072,795), decimal (9001.0,9002.0),
+    // thousands-comma ("1,128.0") and any mix of those in one string.
+    //
+    // ⚠️ Split on commas OUTSIDE quotes FIRST, then strip. The quotes are the only thing
+    // distinguishing a thousands separator from a delimiter, so stripping them up front
+    // throws that away — which is exactly what the old version did. It then ran
+    // /[\d,]+(?:\.\d+)?/ over the result, and `[\d,]+` greedily ate digits AND commas:
+    // Glastonbury's trailing `1017,923,1149` collapsed into the single id 10179231149 and
+    // Buckingham Park, Magnet School and Rotary Glastonbury silently vanished from the
+    // club portal's venue dropdown while games were being entered against it.
+    //
+    // It only bites with two or more consecutive bare integers — East Haddam's lone
+    // trailing `711` survived because the decimal before it terminated the match, which
+    // is why this hid for so long.
     function parseAirtableIds(str) {
         if (!str) return [];
-        const cleaned = str.replace(/"/g, '').trim();
-        if (!cleaned) return [];
-        if (cleaned.includes('.')) {
-            // Decimal format — original regex handles thousands-comma Airtable IDs correctly
-            return (cleaned.match(/[\d,]+(?:\.\d+)?/g) || [])
-                .map(s => parseInt(s.replace(/,/g, ''), 10))
-                .filter(n => !isNaN(n));
+        const out = [];
+        const tokens = String(str).match(/"[^"]*"|[^,]+/g) || [];   // quoted group = ONE id
+        for (let t of tokens) {
+            t = t.replace(/"/g, '').replace(/,/g, '').trim();
+            if (!t) continue;
+            const n = parseInt(t, 10);
+            if (!isNaN(n) && n > 0) out.push(n);
         }
-        // Plain comma-separated integers: "1072,795,958"
-        return cleaned.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+        return out;
     }
 
     // ── Load reference data ───────────────────────────────────────────────────
