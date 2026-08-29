@@ -2192,7 +2192,15 @@
             const archivedSeasons = {}; // { "Spring 2026": { regular: [], cancelled: [] } }
             // Split for clubs AND leagues/events (recurring, span seasons). Only true one-shot tournaments skip.
             if (!currentTournament) {
-                const seasonOf = r => getCurrentSeason(r.fields['Date'] || r.fields['date'] || '');
+                // The STAMPED season wins; the date is only a fallback for games that
+                // predate stamping. A season is a competition, not a range of dates —
+                // fall games get played in late August, and deriving from the date filed
+                // them under Summer and archived them out of sight the moment they were
+                // entered. Eric submitted a U14 fall game dated Aug 30 and it vanished
+                // into "Summer 2026 · Archived" before he ever saw it on the board.
+                const seasonOf = r =>
+                    (r.fields['season'] || r.fields['Season'] || '').trim()
+                    || getCurrentSeason(r.fields['Date'] || r.fields['date'] || '');
                 const _stashArchive = (r, kind) => {
                     const s = seasonOf(r);
                     (archivedSeasons[s] || (archivedSeasons[s] = { regular: [], cancelled: [] }))[kind].push(r);
