@@ -1357,6 +1357,83 @@
     let _assignors = [];
     let _clubHolders = {};   // club name → [assignor names]
 
+    // The leagues Central Assign accepts — read off CA's own dropdown, sent by Eric
+    // 2026-08-29. Fourteen, not the nine previously recorded.
+    // ⚠️ Mirror of CA_LEAGUES in js/central-assign-export.js — keep them identical.
+    const CA_LEAGUES = [
+        'CJSA Connecticut Cup',
+        'CJSA State Cup',
+        'CJSA State League',
+        'CT Central/North Central District Travel League',
+        'CT Northeast District Travel League',
+        'CT Northwest District Travel League',
+        'CT Southcentral District Travel League',
+        'CT Southeast District Travel League',
+        'EDP Academy Zone I',
+        'EDP Championship League',
+        'EDP Futures',
+        'General Non-League Games',
+        'Stonington Tournament',
+        'USL Youth'
+    ];
+
+    // clubs.ca_league is TEXT and holds a JSON array — a club can play in more than one
+    // league (Tod, 2026-08-29), so a single value cannot represent it. Tolerates a bare
+    // string from before this existed.
+    function parseClubLeagues(v) {
+        if (!v) return [];
+        if (Array.isArray(v)) return v;
+        const s = String(v).trim();
+        if (s.startsWith('[')) { try { return JSON.parse(s); } catch(e) { return []; } }
+        return [s];
+    }
+
+    // District / league row. Every game exported to Central Assign carries a League
+    // column; with ca_league unset it goes out BLANK, which was true of all 219 games
+    // as of 2026-08-29. Nothing in the tool surfaced that, so nowhere on this page said
+    // which district a club belongs to. This is that place.
+    function leagueRow(c) {
+        const sel = parseClubLeagues(c.ca_league);
+        const label = sel.length ? sel.join(' · ') : '— none set —';
+        return `<div style="margin-top:8px; padding-top:8px; border-top:1px dashed #e2d9ce; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span style="font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#09142a;">District / League</span>
+            <span style="font-size:0.84rem; font-weight:${sel.length ? '700' : '400'}; color:${sel.length ? '#1f2328' : '#b45309'};">${label}</span>
+            ${sel.length ? '' : `<span title="Games from this club upload to Central Assign with an empty League column." style="font-size:0.68rem; font-weight:800; color:#9a3412; background:#ffedd5; border:1px solid #fdba74; border-radius:4px; padding:1px 6px;">CA UPLOAD INCOMPLETE</span>`}
+            <button onclick="toggleLeaguePicker(${c.id})" style="background:#fff; border:1px solid #09142a; color:#09142a; padding:3px 10px; border-radius:6px; font-size:0.72rem; font-weight:700; cursor:pointer; font-family:inherit;">${sel.length ? 'Change' : 'Set'}</button>
+            <div id="lpick-${c.id}" style="display:none; width:100%; margin-top:8px; padding:10px 12px; background:#fff; border:1px solid #dde3f0; border-radius:8px;">
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    ${CA_LEAGUES.map(lg => `
+                        <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; cursor:pointer;">
+                            <input type="checkbox" data-lpick="${c.id}" value="${lg.replace(/"/g,'&quot;')}" ${sel.includes(lg) ? 'checked' : ''} style="width:16px;height:16px;accent-color:#00c853;cursor:pointer;">
+                            <span>${lg}</span>
+                        </label>`).join('')}
+                </div>
+                <button onclick="saveClubLeagues(${c.id})" style="margin-top:10px; background:#00c853; color:#09142a; border:none; padding:6px 16px; border-radius:6px; font-weight:800; font-size:0.78rem; cursor:pointer; font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:0.5px;">Save Leagues</button>
+                <span id="lmsg-${c.id}" style="display:none; margin-left:10px; font-size:0.78rem; color:#1a6b3a; font-weight:700;">✓ Saved</span>
+            </div>
+        </div>`;
+    }
+
+    function toggleLeaguePicker(clubId) {
+        const el = document.getElementById(`lpick-${clubId}`);
+        if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function saveClubLeagues(clubId) {
+        const picked = [...document.querySelectorAll(`input[data-lpick="${clubId}"]:checked`)].map(i => i.value);
+        try {
+            const { error } = await supabaseClient.client.from('clubs')
+                .update({ ca_league: picked.length ? JSON.stringify(picked) : null })
+                .eq('id', clubId);
+            if (error) throw error;
+            const msg = document.getElementById(`lmsg-${clubId}`);
+            if (msg) { msg.style.display = 'inline'; setTimeout(() => { msg.style.display = 'none'; }, 1800); }
+            loadClubStatus();   // re-render so the summary line reflects the save
+        } catch (e) {
+            alert('Could not save leagues: ' + e.message);
+        }
+    }
+
     function assignorRow(c) {
         const holders = _clubHolders[c.name] || [];
         const label = holders.length ? holders.join(' + ') : '— unassigned —';
@@ -1464,7 +1541,7 @@
         wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">Checking completeness…</p>';
         try {
             const [clubsRes, tournsRes, eventsRes, payRes, crewRes, venueRes, billingRes, assignorRes] = await Promise.all([
-                supabaseClient.client.from('clubs').select('id, name, "Club Name", enabled, president, "Club Admin", assignor, age_groups').order('name'),
+                supabaseClient.client.from('clubs').select('id, name, "Club Name", enabled, president, "Club Admin", assignor, age_groups, ca_league').order('name'),
                 supabaseClient.client.from('tournaments').select('id, name, status').order('name'),
                 supabaseClient.client.from('events').select('id, name, "Club Name", enabled, assignor, start_date, end_date').order('name'),
                 supabaseClient.client.from('pay_rates').select('club_id'),
@@ -1494,7 +1571,7 @@
             const clubs = (clubsRes.data || [])
                 .map(r => ({ id: r.id, name: r['Club Name'] || r.name || '(unnamed)', rawName: r.name || '', enabled: !!r.enabled,
                     president: r.president, admin: r['Club Admin'], assignor: r.assignor,
-                    age_groups: r.age_groups }))
+                    age_groups: r.age_groups, ca_league: r.ca_league }))
                 .sort((a, b) => a.name.localeCompare(b.name));
 
             const checkClub = c => {
@@ -1543,6 +1620,7 @@
                             </div>
                         </div>
                         ${assignorRow(c)}
+                        ${leagueRow(c)}
                     </div>`;
                 }
                 const missing = checkClub(c);
@@ -1562,6 +1640,7 @@
                         </div>
                     </div>
                     ${assignorRow(c)}
+                        ${leagueRow(c)}
                     ${!isReady ? `<div style="margin-top:6px; font-size:0.75rem; color:#b45309; font-family:'DM Sans',sans-serif;">Missing: ${missing.join(' · ')}</div>` : ''}
                 </div>`;
             }).join('');
