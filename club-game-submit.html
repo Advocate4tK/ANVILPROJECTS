@@ -572,7 +572,7 @@
                             </select>
                         </div>
                         <div class="field-group">
-                            <label>Field <span style="color:#e74c3c">*</span></label>
+                            <label>Field <span id="gFieldRequired" style="color:#e74c3c">*</span></label>
                             <select id="gField" disabled>
                                 <option value="">— Select venue first —</option>
                             </select>
@@ -1618,15 +1618,38 @@
         const fields = allFields
             .filter(f => String(f.venueId) === String(venueId))
             .sort((a, b) => natCmp(a.name, b.name));
-        fieldEl.innerHTML = '<option value="">— Select field —</option>'
-            + fields.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+        // Say WHY it's empty. A venue with no fields is normal — Central Assign lists
+        // plenty that way — but a silently greyed-out dropdown next to a dead Create
+        // Game button reads as a broken page, not as "this venue has no fields."
+        fieldEl.innerHTML = fields.length
+            ? '<option value="">— Select field —</option>'
+              + fields.map(f => `<option value="${f.id}">${f.name}</option>`).join('')
+            : '<option value="">— No fields at this venue —</option>';
         fieldEl.disabled = fields.length === 0;
+        // The asterisk lies when the venue has none; drop it so the form matches reality.
+        const _fieldStar = document.getElementById('gFieldRequired');
+        if (_fieldStar) _fieldStar.style.display = fields.length ? '' : 'none';
+        updateCreateBtn();
     }
 
     document.getElementById('gVenue').addEventListener('change', populateFields);
 
     // ── Required field check → enable Create Game button ─────────────────────
     function updateCreateBtn() {
+        // Field is required ONLY when the chosen venue actually has fields.
+        //
+        // Plenty of venues genuinely have none — Central Assign itself lists just the
+        // venue with no fields under it (confirmed against CA 2026-08-29 for Lebanon
+        // Middle School and most of NECONN's list). Demanding one made those venues
+        // selectable but unbookable: the dropdown came up empty, Create Game stayed
+        // grey, and there was nothing on screen explaining why. That is what pushed
+        // Eric out of the tool to assign a weekend of games by hand.
+        //
+        // populateFields() already disables the dropdown when a venue has no fields,
+        // so `disabled` is the honest signal for "this venue has none" — and the save
+        // path never required a field anyway (only Venue is validated on submit).
+        const fieldEl   = document.getElementById('gField');
+        const venueHasFields = !fieldEl.disabled;
         const ok = document.getElementById('clubSelect').value
             && document.getElementById('gDate').value
             && document.getElementById('gTime').value
@@ -1636,7 +1659,7 @@
             && document.getElementById('gGender').value
             && document.getElementById('gGameType').value
             && document.getElementById('gVenue').value
-            && document.getElementById('gField').value;
+            && (!venueHasFields || fieldEl.value);
         document.getElementById('createGameBtn').disabled = !ok;
     }
 
