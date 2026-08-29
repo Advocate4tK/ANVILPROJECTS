@@ -24,6 +24,25 @@ someone types when they need a number and doesn't have one. The fake "Old KHS"
 venue carried 9001/9002/9003 while the real Old Killingly HS (1023) has
 1614/1615/1616. Any venue holding 9000-series fields deserves a look.
 
+> ⚠️ **DISPUTED — settle this before trusting either answer.** On 2026-08-28 Tod
+> said the opposite: that 9004 and 9005 *are* Central Assign's real field numbers
+> for Prince Hill's Field 1 and Field 2. `FIELD-IDS.csv` agrees with him — its
+> header calls every row "Field IDs as issued by Central Assign."
+>
+> **It matters.** `js/central-assign-export.js` has `INVENTED_FIELD_ID_FLOOR = 9000`,
+> which refuses to send any 9000-series number to CA and falls back to the field
+> NAME. If they are genuine, that guard is suppressing valid numbers on 33 games
+> across Prince Hill, Rawson, Riverside Park, Pomfret Rec and Woodstock Elementary
+> — sending the weaker key on purpose.
+>
+> Argument for "invented": 9001–9009 run perfectly sequential across five
+> unrelated venues in different towns, while every confirmed CA field number is
+> scattered (68–72, 1184–1195, 1614–1616, 1641/1642).
+>
+> **To settle it:** CA → Manage Games → filter by Venue → open the Field dropdown
+> shows CA's field names; if a number can be surfaced anywhere in that UI, compare
+> it against 9004/9005 for Prince Hill. Until then, do not remove the guard.
+
 > **Resolved 2026-08-28 — Old Killingly HS.** 9001/9002/9003 never existed as
 > `fields` rows, so those 24 games resolved to an empty field name and were
 > uploading to CA with **no field at all** — silently, for months. Remapped
