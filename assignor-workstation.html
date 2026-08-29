@@ -1744,7 +1744,7 @@
                     <td style="${cell}">${f['Home Team'] || '—'}</td>
                     <td style="${cell}">${f['Away Team'] || '—'}</td>
                     <td style="${cell}">${venueObj ? venueObj.name : (f['Venue ID'] || '—')}</td>
-                    <td style="${cell}">${fieldObj ? fieldObj.name : (f['Field ID'] || '—')}</td>
+                    <td style="${cell}">${(f['Field'] || f['field'] || '').trim() || (fieldObj ? fieldObj.name : (f['Field ID'] || '—'))}</td>
                     <td style="${cell}">${cRef}</td>
                     <td style="${cell}">${ar1}</td>
                     <td style="${cell}">${ar2}</td>
@@ -2022,7 +2022,7 @@
                     homeTeam: () => `<td style="${cell}">${f['Home Team'] || '—'}</td>`,
                     awayTeam: () => `<td style="${cell}">${f['Away Team'] || '—'}</td>`,
                     venue:    () => `<td style="${cell}">${venueObj ? venueObj.name : (f['Venue ID'] || '—')}</td>`,
-                    field:    () => `<td style="${cell}">${fieldObj ? fieldObj.name : (f['Field ID'] || '—')}</td>`,
+                    field:    () => `<td style="${cell}">${(f['Field'] || f['field'] || '').trim() || (fieldObj ? fieldObj.name : (f['Field ID'] || '—'))}</td>`,
                     center:   () => assignedTd('center', cRefRaw),
                     ar1:      () => assignedTd('ar1', ar1Raw),
                     ar2:      () => assignedTd('ar2', ar2Raw),
@@ -3378,9 +3378,12 @@
                                 </select>
                             </td>`;
                         }
-                        let name = fieldObj ? fieldObj.name
+                        // The game's own Field text first — it is the only record of an
+                        // unnumbered field, and the lookup below can only find numbered ones.
+                        let name = (f['Field'] || f['field'] || '').trim()
+                                 || (fieldObj ? fieldObj.name
                                  : (window.tournamentMode && !f['Field ID'] && venueObj) ? 'Field 1'
-                                 : (f['Field ID'] || '—');
+                                 : (f['Field ID'] || '—'));
                         // Normalize "Field #N" → "Field N" for consistent display in tournament mode
                         if (window.tournamentMode) name = String(name || '').replace(/^Field\s*#\s*(\d+)$/i, 'Field $1');
                         return `<td style="${cancelCell}">${name}</td>`;
@@ -6795,10 +6798,28 @@
                     })
                     .filter(v => v.id && v.name)
                     .sort((a, b) => a.name.localeCompare(b.name));
+                // ⚠️ Keyed on the field's ROW id, not its CA number, and NOT filtered on
+                // having one. This used to be .filter(f => f.fieldId && f.name), which threw
+                // away every field Central Assign has not issued a number for — 69 of our 130.
+                // Thirteen venues showed a completely empty Field dropdown, including every
+                // Glastonbury venue Eric tried to use.
+                //
+                // It stayed invisible for two years because East Haddam and Griswold, the only
+                // live clubs, have a CA number on every single field. The rule was never
+                // violated until we onboarded clubs whose numbers Ron never sent.
+                //
+                // caId may be null. The NAME is the carrier — CA's import matches "Venue Field"
+                // by name anyway — and the number rides along when we happen to have it.
                 allFields = fields
-                    .map(f => ({ fieldId: f.fields['Field ID'], name: f.fields['Field Name'], venueId: f.fields['Venue ID'] }))
-                    .filter(f => f.fieldId && f.name)
-                    .sort((a, b) => a.fieldId - b.fieldId);
+                    .map(f => ({
+                        rowId:   f.id,                         // stable, always present
+                        caId:    f.fields['Field ID'] || null, // CA's number, often absent
+                        fieldId: f.fields['Field ID'] || null, // legacy alias — older lookups still read .fieldId
+                        name:    f.fields['Field Name'],
+                        venueId: f.fields['Venue ID']
+                    }))
+                    .filter(f => f.name)
+                    .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
 
                 // Known venues — full CA venue list patched into allVenues
                 // Safe to include even if already in Airtable; check below prevents duplicates
@@ -6918,7 +6939,7 @@
                     };
                     Object.entries(tournamentFieldMap).forEach(([id, name]) => {
                         if (!allFields.some(f => String(f.fieldId) === String(id))) {
-                            allFields.push({ fieldId: Number(id), name, venueId: null });
+                            allFields.push({ rowId: 'tm-' + id, caId: Number(id), fieldId: Number(id), name, venueId: null });
                         }
                     });
 
@@ -7311,18 +7332,28 @@
             const venueOpts = venuesFiltered.map(v =>
                 `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
             ).join('');
+            const curFieldName = (f['Field'] || f['field'] || '').trim();
             const fieldOpts = (() => {
                 if (!curVenueId) return '';
-                const takenFieldIds = new Set(
+                // Conflict detection keys on venue + field NAME, not the CA number. Most
+                // fields have no number, and two games on the same unnumbered field would
+                // otherwise never be seen as clashing.
+                const takenKeys = new Set(
                     allGames
-                        .filter(og => og.id !== gid && og.fields['Field ID'] && gamesOverlap(g, og))
-                        .map(og => String(og.fields['Field ID']))
+                        .filter(og => og.id !== gid && gamesOverlap(g, og))
+                        .map(og => `${og.fields['Venue ID']}|${((og.fields['Field'] || og.fields['field'] || '')).trim().toLowerCase()}`)
+                        .filter(k => !k.endsWith('|'))
                 );
                 return allFields
                     .filter(fi => fi.venueId == curVenueId)
                     .map(fi => {
-                        const taken = takenFieldIds.has(String(fi.fieldId));
-                        return `<option value="${fi.fieldId}" ${fi.fieldId == curFieldId ? 'selected' : ''} ${taken ? 'disabled style="color:#bbb;"' : ''}>${fi.name}${taken ? ' — in use' : ''}</option>`;
+                        const taken = takenKeys.has(`${curVenueId}|${String(fi.name).trim().toLowerCase()}`);
+                        // Match on the CA number when the game has one, otherwise on the name —
+                        // that is the only handle an unnumbered field has.
+                        const sel = fi.caId
+                            ? (fi.caId == curFieldId)
+                            : (curFieldName && String(fi.name).trim().toLowerCase() === curFieldName.toLowerCase());
+                        return `<option value="${fi.rowId}" ${sel ? 'selected' : ''} ${taken ? 'disabled style="color:#bbb;"' : ''}>${fi.name}${taken ? ' — in use' : ''}</option>`;
                     }).join('');
             })();
 
@@ -7802,10 +7833,15 @@
                         <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;" ${!f['Venue ID'] ? 'disabled' : ''}>
                             <option value="">Field…</option>${(() => {
                                 if (!f['Venue ID']) return '';
-                                const takenFieldIds = new Set(allGames.filter(og=>og.id!==g.id&&og.fields['Field ID']&&gamesOverlap(g,og)).map(og=>String(og.fields['Field ID'])));
+                                // Key on rowId — an unnumbered field has no CA number to be keyed by.
+                                const _curNm = (f['Field'] || f['field'] || '').trim().toLowerCase();
+                                const takenKeys = new Set(allGames.filter(og=>og.id!==g.id&&gamesOverlap(g,og))
+                                    .map(og=>`${og.fields['Venue ID']}|${((og.fields['Field']||og.fields['field']||'')).trim().toLowerCase()}`)
+                                    .filter(k=>!k.endsWith('|')));
                                 return allFields.filter(fi=>fi.venueId==f['Venue ID']).map(fi=>{
-                                    const taken=takenFieldIds.has(String(fi.fieldId));
-                                    return `<option value="${fi.fieldId}" ${fi.fieldId==f['Field ID']?'selected':''} ${taken?'disabled style="color:#bbb;"':''}>${fi.name}${taken?' — in use':''}</option>`;
+                                    const taken=takenKeys.has(`${f['Venue ID']}|${String(fi.name).trim().toLowerCase()}`);
+                                    const sel = fi.caId ? (fi.caId==f['Field ID']) : (_curNm && String(fi.name).trim().toLowerCase()===_curNm);
+                                    return `<option value="${fi.rowId}" ${sel?'selected':''} ${taken?'disabled style="color:#bbb;"':''}>${fi.name}${taken?' — in use':''}</option>`;
                                 }).join('');
                             })()}
                         </select>
@@ -8687,21 +8723,22 @@
                 if (venueId) {
                     const fieldsForVenue = allFields.filter(f => f.venueId == venueId);
                     fieldSel.innerHTML = `<option value="">Field…</option>` +
-                        fieldsForVenue.map(f => `<option value="${f.fieldId}">${f.name}</option>`).join('');
+                        fieldsForVenue.map(f => `<option value="${f.rowId}">${f.name}</option>`).join('');
                     fieldSel.disabled = fieldsForVenue.length === 0;
                 } else {
                     fieldSel.innerHTML = `<option value="">Field…</option>`;
                     fieldSel.disabled = true;
                 }
             }
-            saveVenueField(gameId, venueId, 0);
+            saveVenueField(gameId, venueId, 0, '');   // venue changed → old field no longer applies
         }
 
         function tmOnFieldChange(gameId, fieldSelect) {
-            const fieldId = parseInt(fieldSelect.value) || 0;
+            // Option value is the field's ROW id now — resolve to get name + CA number.
+            const rec     = allFields.find(fi => String(fi.rowId) === String(fieldSelect.value));
             const game    = allGames.find(g => String(g.id) === String(gameId));
             const venueId = parseInt(game?.fields['Venue ID']) || 0;
-            saveVenueField(gameId, venueId, fieldId);
+            saveVenueField(gameId, venueId, rec ? (rec.caId || 0) : 0, rec ? rec.name : '');
         }
 
         function onVenueChange(gameId, venueSelect) {
@@ -8721,37 +8758,47 @@
                 const fieldsForVenue = allFields.filter(f => f.venueId == venueId);
                 fieldSel.innerHTML = `<option value="">Field…</option>` +
                     fieldsForVenue.map(f => {
-                        const taken = takenFieldIds.has(String(f.fieldId));
-                        return `<option value="${f.fieldId}" ${taken ? 'disabled style="color:#bbb;"' : ''}>${f.name}${taken ? ' — in use' : ''}</option>`;
+                        const taken = takenFieldIds.has(String(f.caId));
+                        return `<option value="${f.rowId}" ${taken ? 'disabled style="color:#bbb;"' : ''}>${f.name}${taken ? ' — in use' : ''}</option>`;
                     }).join('');
                 fieldSel.disabled = false;
             } else {
                 fieldSel.innerHTML = `<option value="">Field…</option>`;
                 fieldSel.disabled = true;
             }
-            saveVenueField(gameId, venueId, 0);
+            saveVenueField(gameId, venueId, 0, '');   // venue changed → old field no longer applies
         }
 
         function onFieldChange(gameId, fieldSelect) {
-            const fieldId  = parseInt(fieldSelect.value) || 0;
+            // The option value is now the field's ROW id, not its CA number — a field
+            // without a CA number has no number to be keyed by. Resolve the row to get
+            // both the name (always) and the CA number (when it exists).
+            const rowId = fieldSelect.value;
+            const rec   = allFields.find(fi => String(fi.rowId) === String(rowId));
             const venueSelect = fieldSelect.closest('.venue-field-row')?.querySelector('.vf-select');
             const venueId  = parseInt(venueSelect?.value) || 0;
-            saveVenueField(gameId, venueId, fieldId);
+            saveVenueField(gameId, venueId, rec ? (rec.caId || 0) : 0, rec ? rec.name : '');
         }
 
-        async function saveVenueField(gameId, venueId, fieldId) {
+        async function saveVenueField(gameId, venueId, fieldId, fieldName) {
             const game = allGames.find(g => String(g.id) === String(gameId));
             const prevVenueId = game?.fields['Venue ID'] ?? null;
             const prevFieldId = game?.fields['Field ID'] ?? null;
+            const prevFieldNm = game?.fields['Field'] ?? null;
             // Optimistic update so field conflict detection is current
             if (game) {
                 game.fields['Venue ID'] = venueId || null;
                 game.fields['Field ID'] = fieldId || null;
+                game.fields['Field']    = fieldName || null;
             }
             try {
                 const updates = {};
                 updates['Venue ID'] = venueId || null;
                 updates['Field ID'] = fieldId || null;
+                // Save the NAME too. It is what Central Assign's import actually matches on
+                // ("Venue Field" is a name column), and for the 69 fields with no CA number
+                // it is the only thing identifying which field was picked.
+                updates['Field']    = fieldName || null;
                 if (window.tournamentMode) {
                     await supabaseClient.updateRecord('tournament_games', gameId, updates);
                     renderSheet3View(sheet3LastFiltered);
@@ -8763,6 +8810,7 @@
                 if (game) {
                     game.fields['Venue ID'] = prevVenueId;
                     game.fields['Field ID'] = prevFieldId;
+                    game.fields['Field']    = prevFieldNm;
                 }
                 alert('Could not save venue/field — please try again.\n' + e.message);
                 renderGames();

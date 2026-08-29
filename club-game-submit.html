@@ -1851,7 +1851,16 @@
                 if (_seasonStamp) fields['season'] = _seasonStamp;
                 if (g.fieldId) {
                     const fieldRec = allFields.find(f => String(f.id) === String(g.fieldId));
-                    if (fieldRec?.fields?.['Field Name']) fields['Field'] = fieldRec.fields['Field Name'];
+                    // ⚠️ allFields entries are FLAT — { id, numId, name, venueId }. This used
+                    // to read fieldRec.fields['Field Name'], which does not exist on them, so
+                    // optional chaining swallowed it and the field NAME never saved on ANY
+                    // game, ever. Silently: no error, no warning, just a blank column.
+                    //
+                    // The CA number is written only when CA has actually issued one. Most of
+                    // our fields have none — Ron never sent them — so the NAME is the carrier
+                    // and CA's import matches on it anyway ("Venue Field" is a name column).
+                    // Requiring a number here is what made Eric's picks vanish.
+                    if (fieldRec?.name)  fields['Field']    = fieldRec.name;
                     if (fieldRec?.numId) fields['Field ID'] = fieldRec.numId;
                 }
                 if (g.venueId) {
