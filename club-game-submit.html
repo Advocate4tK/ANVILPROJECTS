@@ -1536,13 +1536,22 @@
     }
 
     // ── Venue / Field dropdowns ───────────────────────────────────────────────
+    // Natural sort. Both dropdowns previously rendered in raw DB row order, which is
+    // arbitrary and shifts whenever a row is updated — Glastonbury High listed its
+    // fields 13, 14, 12, 11, 1, 6, 5, 4, 3.
+    // `numeric: true` is what makes 11 sort after 3 instead of before it, and T10 after
+    // T2. Field names are wildly varied across venues — 1 / 1A / #1 / A / Lower 2 /
+    // "Ballato Field 7v7" — so this has to handle text and digits in the same list.
+    const natCmp = (a, b) =>
+        String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+
     function populateVenues() {
         const clubId   = document.getElementById('clubSelect').value;
         const venueEl  = document.getElementById('gVenue');
         const club     = allClubs.find(c => String(c.id) === String(clubId));
-        const filtered = (club?.venueIds?.length > 0)
+        const filtered = ((club?.venueIds?.length > 0)
             ? allVenues.filter(v => club.venueIds.includes(v.id))
-            : allVenues;
+            : allVenues.slice()).sort((a, b) => natCmp(a.name, b.name));
 
         venueEl.innerHTML = '<option value="">— Select venue —</option>'
             + filtered.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
@@ -1606,7 +1615,9 @@
             fieldEl.disabled = true;
             return;
         }
-        const fields = allFields.filter(f => String(f.venueId) === String(venueId));
+        const fields = allFields
+            .filter(f => String(f.venueId) === String(venueId))
+            .sort((a, b) => natCmp(a.name, b.name));
         fieldEl.innerHTML = '<option value="">— Select field —</option>'
             + fields.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
         fieldEl.disabled = fields.length === 0;
