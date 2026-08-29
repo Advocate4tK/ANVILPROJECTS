@@ -572,7 +572,8 @@
                             </select>
                         </div>
                         <div class="field-group">
-                            <label>Field <span id="gFieldRequired" style="color:#e74c3c">*</span></label>
+                            <!-- No asterisk: Field is optional. See updateCreateBtn(). -->
+                            <label>Field <span id="gFieldRequired" style="color:#6b7280; font-weight:400; font-size:0.85em;">(optional)</span></label>
                             <select id="gField" disabled>
                                 <option value="">— Select venue first —</option>
                             </select>
@@ -1626,9 +1627,6 @@
               + fields.map(f => `<option value="${f.id}">${f.name}</option>`).join('')
             : '<option value="">— No fields at this venue —</option>';
         fieldEl.disabled = fields.length === 0;
-        // The asterisk lies when the venue has none; drop it so the form matches reality.
-        const _fieldStar = document.getElementById('gFieldRequired');
-        if (_fieldStar) _fieldStar.style.display = fields.length ? '' : 'none';
         updateCreateBtn();
     }
 
@@ -1636,20 +1634,21 @@
 
     // ── Required field check → enable Create Game button ─────────────────────
     function updateCreateBtn() {
-        // Field is required ONLY when the chosen venue actually has fields.
+        // ⚠️ Field is NOT required. Do not add it back to this list.
         //
-        // Plenty of venues genuinely have none — Central Assign itself lists just the
-        // venue with no fields under it (confirmed against CA 2026-08-29 for Lebanon
-        // Middle School and most of NECONN's list). Demanding one made those venues
-        // selectable but unbookable: the dropdown came up empty, Create Game stayed
-        // grey, and there was nothing on screen explaining why. That is what pushed
-        // Eric out of the tool to assign a weekend of games by hand.
+        // Plenty of venues genuinely have no fields — Central Assign itself lists just
+        // the venue with nothing under it (confirmed against CA 2026-08-29 across most
+        // of NECONN and Lebanon Middle School). Requiring one blocked Eric from
+        // submitting real games, and a blocked assignor stops using the tool: that is
+        // exactly what sent him off to hand-assign a weekend by hand.
         //
-        // populateFields() already disables the dropdown when a venue has no fields,
-        // so `disabled` is the honest signal for "this venue has none" — and the save
-        // path never required a field anyway (only Venue is validated on submit).
-        const fieldEl   = document.getElementById('gField');
-        const venueHasFields = !fieldEl.disabled;
+        // This was first written as a conditional — required only when the venue HAS
+        // fields — but a conditional still leaves a path where a referee-facing form
+        // refuses to submit a game that Central Assign itself would accept. The venue
+        // is the thing that must be right; the field is detail we carry when we have it.
+        //
+        // The save path never required a field either — only Venue is validated on
+        // submit — so this list was the only thing enforcing it.
         const ok = document.getElementById('clubSelect').value
             && document.getElementById('gDate').value
             && document.getElementById('gTime').value
@@ -1658,8 +1657,7 @@
             && document.getElementById('gAge').value
             && document.getElementById('gGender').value
             && document.getElementById('gGameType').value
-            && document.getElementById('gVenue').value
-            && (!venueHasFields || fieldEl.value);
+            && document.getElementById('gVenue').value;
         document.getElementById('createGameBtn').disabled = !ok;
     }
 
