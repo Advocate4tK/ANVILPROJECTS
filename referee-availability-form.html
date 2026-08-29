@@ -772,7 +772,11 @@
                 // Pre-fill club checkbox from ?club= param — must run after checkboxes are rendered
                 const _urlClub = new URLSearchParams(window.location.search).get('club');
                 if (_urlClub) {
-                    const cb = document.querySelector(`input[name="locations"][value="${decodeURIComponent(_urlClub)}"]`);
+                    // Case-insensitive, same as the second preselect further down — the link
+                    // carries the game's Source Club and the checkbox comes from "Club Name".
+                    const _want = decodeURIComponent(_urlClub).trim().toLowerCase();
+                    const cb = [...document.querySelectorAll('input[name="locations"]')]
+                        .find(el => (el.value || '').trim().toLowerCase() === _want);
                     if (cb && !cb.disabled) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
                 }
 
@@ -1198,13 +1202,38 @@
                     if (cb) cb.addEventListener('change', updateClubPaySection);
                 });
 
-                // Pre-fill club + note from ?club= and ?note= URL params (set by ref-openings.html)
+                // Pre-fill club + age + note from URL params (set by ref-openings.html).
+                // A referee who clicked a specific game should not have to re-enter what that
+                // game already knows.
                 const params  = new URLSearchParams(window.location.search);
                 const urlClub = params.get('club');
                 const urlNote = params.get('note');
+                const urlAge  = params.get('age');
                 if (urlClub) {
-                    const cb = document.querySelector(`input[name="locations"][value="${urlClub}"]`);
+                    // Case-insensitive: the link carries the game's Source Club ('RHAMYS') while
+                    // the checkbox is built from clubs."Club Name". Those agree today, but an
+                    // exact match failed silently the last time they drifted — a referee landed
+                    // here from the openings board with their own club unchecked and no error.
+                    const want = decodeURIComponent(urlClub).trim().toLowerCase();
+                    const cb = [...document.querySelectorAll('input[name="locations"]')]
+                        .find(el => (el.value || '').trim().toLowerCase() === want);
                     if (cb && !cb.disabled) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+                }
+                if (urlAge) {
+                    // Games store the age with a gender suffix — U10G, U13B — as well as plain
+                    // U14, so pull the number out and band it. Banding lives HERE, not in
+                    // ref-openings, so only one page has an opinion about where U14 belongs.
+                    const n = parseInt(String(decodeURIComponent(urlAge)).replace(/\D/g, ''), 10);
+                    const band = isNaN(n) ? null
+                               : n <= 8  ? 'U8'
+                               : n <= 10 ? 'U9-U10'
+                               : n <= 12 ? 'U11-U12'
+                               : n <= 15 ? 'U13-U15'
+                               : 'U16+';
+                    if (band) {
+                        const ab = document.querySelector(`input[name="ageGroups"][value="${band}"]`);
+                        if (ab && !ab.disabled) { ab.checked = true; ab.dispatchEvent(new Event('change')); }
+                    }
                 }
                 if (urlNote) {
                     const notesEl = document.getElementById('notes');
