@@ -7068,7 +7068,14 @@
         }
         function _seasonAllows(g) {
             if (seasonView === 'all') return true;
-            const gs = seasonForDate(g.fields['Date'] || g.fields['date']);
+            // The STAMPED season wins; the date is only a fallback for rows that predate
+            // stamping. A season is a competition, not a range of dates — Glastonbury's
+            // Aug 29/30 fall games date-derive as "Summer 2026", never matched the club's
+            // "Fall 2026", and vanished from Eric's board the day he entered them. The
+            // games carried the right answer in games.season the whole time; this was not
+            // reading it. Same fix already applied to the club portal's archive split.
+            const gs = (g.fields['season'] || g.fields['Season'] || '').trim()
+                     || seasonForDate(g.fields['Date'] || g.fields['date']);
             if (!gs) return true;                                    // undated → never hide
             if (seasonView !== 'active') return gs === seasonView;   // a specific archived season chosen
             const club = resolveGameClub(g.fields) || g.fields['Source Club'] || '';
@@ -7083,7 +7090,13 @@
         function refreshSeasonOptions() {
             const sel = document.getElementById('seasonScope');
             if (!sel) return;
-            const seasons = [...new Set(allGames.map(g => seasonForDate(g.fields['Date'] || g.fields['date'])).filter(Boolean))].sort().reverse();
+            // Same precedence as _seasonAllows — stamped season first, date as fallback.
+            // If these two disagreed, the dropdown would offer a season that the filter
+            // could never match, and picking it would empty the board.
+            const seasons = [...new Set(allGames.map(g =>
+                (g.fields['season'] || g.fields['Season'] || '').trim()
+                || seasonForDate(g.fields['Date'] || g.fields['date'])
+            ).filter(Boolean))].sort().reverse();
             const cur = sel.value || 'active';
             sel.innerHTML = `<option value="active">Current (per club)</option>`
                 + seasons.map(s => `<option value="${s}">${s}</option>`).join('')
