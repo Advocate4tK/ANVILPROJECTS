@@ -68,7 +68,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!row.querySelector('input[name="availableDate[]"]')?.value) missing.push(`Day ${n}: Date`);
                     if (!row.querySelector('[name="startTime[]"]')?.value)          missing.push(`Day ${n}: Start Time`);
                     if (!row.querySelector('[name="endTime[]"]')?.value)            missing.push(`Day ${n}: End Time`);
-                    if (!row.querySelector('input[name="maxGames[]"]')?.value)      missing.push(`Day ${n}: Max Games`);
+                    // Max Games is OPTIONAL. It is write-only data — form-handler validates it,
+                    // requires it and stores it, and nothing in the tool ever reads it back: no
+                    // workstation, no openings board, no export. The event and tournament paths
+                    // below already hardcode '1' without asking. 207 of 322 submissions said "1",
+                    // and the field happily accepted 0, -1 and 100, so it was not even a reliable
+                    // signal. Blocking submission on it was worst coming from the openings board:
+                    // the referee clicked ONE specific game and got stopped to say how many games
+                    // they wanted. Left on the form for anyone who wants to signal "I can do 3
+                    // today" — it just no longer gates the button. Defaults to '1' on save.
                 });
             }
         }
