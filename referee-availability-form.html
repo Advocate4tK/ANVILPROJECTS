@@ -529,7 +529,12 @@
                 <div style="margin-top:12px; background:#fff3cd; border:1.5px solid #f59e0b; border-radius:8px; padding:12px 16px;">
                     <strong style="color:#92400e;">⚠️ Not sure which form to use?</strong>
                     <p style="margin:6px 0 0; font-size:0.9rem; color:#78350f;">
-                        <strong>WAM, Glastonbury, Lebanon, RHAMYS, Stonington, New London, Portland, Valley, Haddam-Killingworth, and NECONN</strong> referees
+                        <!-- WAM, Glastonbury, Lebanon, RHAMYS and NECONN came OFF this list on
+                             2026-08-28 — they are now live on this form and appear in Preferred
+                             Locations above. Leaving them here told a referee to go to JotForm
+                             while their own club sat checkable a few inches higher up.
+                             ⚠️ Hardcoded: strike a club from this line the day it goes live. -->
+                        <strong>Stonington, New London, Portland, Valley, and Haddam-Killingworth</strong> referees
                         should use the <a href="https://www.jotform.com/form/251825994555168" target="_blank" style="color:#ef4444; font-weight:700; text-decoration:underline;">JotForm Availability Form</a> instead of this form.
                     </p>
                 </div>
@@ -728,7 +733,7 @@
             // Load referee-tool clubs + PAY_CLUBS + enabled tournaments + enabled events
             Promise.all([
                 supabaseClient.client.from('settings').select('value').eq('key','openings_form_config').maybeSingle(),
-                supabaseClient.client.from('clubs').select('name, payment_methods').eq('enabled', true).eq('avail_form_enabled', true),
+                supabaseClient.client.from('clubs').select('name, "Club Name", payment_methods').eq('enabled', true).eq('avail_form_enabled', true),
                 (()=>{ const tParam = new URLSearchParams(window.location.search).get('tournament'); let q = supabaseClient.client.from('tournaments').select('key, name, from_date, to_date, session_blocks, avail_mode').eq('avail_enabled', true); if (tParam) q = q.eq('key', tParam); return q; })(),
                 // .eq('enabled', true) matters as much as the avail flag — without it,
                 // unchecking an event in manage-clubs did nothing here and a finished
@@ -739,11 +744,25 @@
                 // checked both flags; events just never got the second one.
                 (()=>{ let q = supabaseClient.client.from('events').select('id, name, "Club Name", slug, min_age, session_blocks, avail_mode, start_date, end_date, age_groups').eq('enabled', true).eq('avail_form_enabled', true).order('start_date'); return q; })()
             ]).then(([formRes, clubsRes, tournRes, eventsRes]) => {
-                const allClubs = (clubsRes.data || []).sort((a, b) => a.name.localeCompare(b.name));
+                // Display from "Club Name", never from `name`. `name` is a KEY and is stored
+                // lowercase for every club added after the first two, so this page was showing
+                // referees "neconn", "rhamys", "wam" — NECONN and RHAMYS are acronyms.
+                //
+                // It is not only cosmetic. The checkbox VALUE is what gets saved into
+                // Preferred Locations and what the ?club= deep link matches on, and both of
+                // those already speak display case: all 184 stored values read 'Griswold',
+                // 'East Haddam', 'Lebanon', 'NECONN' — not one lowercase. Ref-openings links
+                // arrive as ?club=RHAMYS and the exact-match preselect silently missed
+                // 'rhamys', so clicking a game from the openings board landed here with the
+                // referee's own club unchecked.
+                // East Haddam and Griswold have a null Club Name and fall back to `name`,
+                // which is already display-cased — they are unaffected.
+                const _disp = c => (c['Club Name'] || c.name || '').trim();
+                const allClubs = (clubsRes.data || []).sort((a, b) => _disp(a).localeCompare(_disp(b)));
                 const PAY_CLUBS = allClubs
                     .filter(c => c.payment_methods && /venmo|check/i.test(c.payment_methods))
-                    .map(c => c.name);
-                const rtClubs = allClubs.map(c => c.name);
+                    .map(_disp);
+                const rtClubs = allClubs.map(_disp);
                 const box = document.getElementById('locationCheckboxes');
                 box.innerHTML = rtClubs.length
                     ? rtClubs.map(club => `<label><input type="checkbox" name="locations" value="${club}"> ${club}</label>`).join('')
