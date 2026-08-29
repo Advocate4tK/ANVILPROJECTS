@@ -1192,16 +1192,36 @@
             const today = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0') + '-' + String(_now.getDate()).padStart(2,'0');
 
             // Fetch active clubs + tournaments + events + form routing + rec orgs
-            const [settingRes, formConfigRes, recOrgsRes, tournRes, eventsRes] = await Promise.all([
+            const [settingRes, formConfigRes, recOrgsRes, tournRes, eventsRes, clubRowsRes] = await Promise.all([
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_clubs').maybeSingle(),
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_form_config').maybeSingle(),
                 supabaseClient.client.from('settings').select('value').eq('key', 'openings_recreation_orgs').maybeSingle(),
                 supabaseClient.client.from('tournaments').select('key, name').eq('avail_enabled', true).eq('status', 'active').order('name'),
-                supabaseClient.client.from('events').select('id, name, "Club Name", slug, session_blocks').eq('avail_form_enabled', true).order('name')
+                supabaseClient.client.from('events').select('id, name, "Club Name", slug, session_blocks').eq('avail_form_enabled', true).order('name'),
+                supabaseClient.client.from('clubs').select('name, "Club Name"')
             ]);
             if (settingRes.data?.value) {
                 try { CLUBS = JSON.parse(settingRes.data.value).filter(c => c !== 'on'); } catch(e) {}
             }
+
+            // ── name → "Club Name" ────────────────────────────────────────────────
+            // The setting stores clubs.name, which is a KEY and is lowercase for every
+            // club added after the first two: neconn, rhamys, lebanon, wam, glastonbury.
+            // Games store the DISPLAY form in Source Club — 'NECONN', 'RHAMYS', 'Lebanon'.
+            // The query below is .eq('Source Club', club), an exact case-sensitive match,
+            // so 'rhamys' never matched 'RHAMYS' and those clubs' games simply never
+            // appeared on the board. Only East Haddam and Griswold worked, because they
+            // predate the lowercase convention and their name is already display-cased.
+            //
+            // clubs."Club Name" already holds exactly the right string and matches
+            // Source Club character for character, so translating here fixes the lookup
+            // AND the label in one move. NECONN and RHAMYS are acronyms — they should
+            // read as acronyms. Falls back to the raw name when Club Name is null.
+            const _clubDisplay = {};
+            (clubRowsRes.data || []).forEach(c => {
+                if (c.name) _clubDisplay[c.name] = c['Club Name'] || c.name;
+            });
+            CLUBS = CLUBS.map(c => _clubDisplay[c] || c);
             try { _formConfig = JSON.parse(formConfigRes.data?.value || '{}'); } catch(e) { _formConfig = {}; }
             try { _recOrgs    = JSON.parse(recOrgsRes.data?.value    || '[]'); } catch(e) { _recOrgs = []; }
             TOURNAMENTS = tournRes.data || [];
