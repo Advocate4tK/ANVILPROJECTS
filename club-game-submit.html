@@ -1811,6 +1811,23 @@
                     'Gender':     g.gender,
                     'game_type':  g.gameType || 'Rec'
                 };
+
+                // ── Stamp the season AT SUBMISSION ────────────────────────────────
+                // Games used to arrive with season = null, which forced everything
+                // downstream to infer it from the date. A season is a competition, not a
+                // range of dates: fall games get played in late August, so the calendar
+                // called them Summer, the club's flip called it Fall, the two disagreed,
+                // and the portal archived a live game the moment it was entered. That is
+                // exactly what happened to RHAM's Aug 30 U14 on 2026-08-28 — Eric never
+                // saw it on his board.
+                //
+                // clubs.active_season is the authority (it is what the season badge shows
+                // and what the "Flip All" control sets); getCurrentSeason() is only the
+                // guess, kept for leagues and tournaments which carry no flip of their own.
+                // Recording it here means nothing downstream has to guess again.
+                const _seasonStamp = (currentClubRecord?.fields?.active_season || '').trim()
+                                   || getCurrentSeason(g.date);
+                if (_seasonStamp) fields['season'] = _seasonStamp;
                 if (g.fieldId) {
                     const fieldRec = allFields.find(f => String(f.id) === String(g.fieldId));
                     if (fieldRec?.fields?.['Field Name']) fields['Field'] = fieldRec.fields['Field Name'];

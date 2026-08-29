@@ -7,6 +7,7 @@ let parsedRows = [];
 let clubLeagueMap  = {}; // club name (lowercase) → league number
 let clubEmailMap   = {}; // club name (lowercase) → president email
 let clubNameMap    = {}; // club name (lowercase) → display name
+let clubSeasonMap  = {}; // club name (lowercase) → clubs.active_season, for stamping games
 let fieldLookup    = {}; // "venuename|fieldname" (lowercase) → Airtable Field record ID
 let uploadedByClub = {}; // club display name → array of game summary strings
 let uploaderName   = ''; // set from the doorway before upload
@@ -172,6 +173,7 @@ uploadBtn.addEventListener('click', async () => {
                 clubLeagueMap[name] = league;
                 clubEmailMap[name]  = email;
                 clubNameMap[name]   = display;
+                clubSeasonMap[name] = (c.fields['active_season'] || '').trim();
             }
         });
 
@@ -285,6 +287,18 @@ uploadBtn.addEventListener('click', async () => {
 });
 
 // ── Build Airtable fields from a CSV row ──────────────────────────────────────
+// Season boundaries, matching getCurrentSeason() in club-game-submit.html.
+// Only a FALLBACK — clubs.active_season wins whenever we can resolve the club.
+function _seasonFromDate(dateStr) {
+    const p = String(dateStr || '').slice(0, 10).split('-').map(Number);
+    const d = (p.length === 3 && p.every(n => !isNaN(n))) ? new Date(p[0], p[1] - 1, p[2]) : new Date();
+    const m = d.getMonth() + 1, y = d.getFullYear();
+    if (m >= 3 && m <= 6)  return `Spring ${y}`;
+    if (m >= 7 && m <= 8)  return `Summer ${y}`;
+    if (m >= 9 && m <= 11) return `Fall ${y}`;
+    return `Winter ${y}`;
+}
+
 function buildFields(row) {
     const fields = {};
     Object.entries(FIELD_MAP).forEach(([csvCol, airtableField]) => {
@@ -297,6 +311,18 @@ function buildFields(row) {
     // Write field name text directly to games.field column
     const fieldCol = (row['Field'] || '').trim();
     if (fieldCol) fields['Field'] = fieldCol;
+
+    // Stamp the season so nothing downstream has to infer it from the date. A season
+    // is a competition, not a range of dates — fall games played in late August read
+    // as "Summer" by the calendar and got archived on arrival. The club's flip is the
+    // authority; the date is the fallback for rows whose club we cannot resolve.
+    const clubKey = (row['Club'] || row['Home Team'] || '').trim().toLowerCase();
+    let season = clubSeasonMap[clubKey] || '';
+    if (!season && clubKey) {
+        const hit = Object.keys(clubSeasonMap).find(k => clubKey.includes(k) || k.includes(clubKey));
+        if (hit) season = clubSeasonMap[hit];
+    }
+    fields['season'] = season || _seasonFromDate(row['Date']);
 
     return fields;
 }
