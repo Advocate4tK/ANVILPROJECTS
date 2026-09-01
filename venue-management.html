@@ -74,6 +74,38 @@
         .ca-locked span { font-size:0.88rem; color:#09142a; font-weight:700; flex:1; background:#f0fdf4; padding:8px 10px; border-radius:6px; border:1.5px dashed #86efac; }
         .unlock-btn { background:none; border:1.5px solid #ccc; border-radius:6px; padding:5px 10px; font-size:0.75rem; color:#888; cursor:pointer; white-space:nowrap; font-family:'DM Sans',sans-serif; }
         .unlock-btn:hover { border-color:#e94560; color:#e94560; }
+
+        /* ── Tabs ── */
+        .vm-tabs { display:flex; gap:6px; margin-bottom:18px; border-bottom:2px solid #ddd3c6; }
+        .vm-tab {
+            background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px;
+            padding:10px 20px; cursor:pointer; font-family:'Barlow Condensed',sans-serif;
+            font-size:1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#8a7f72;
+        }
+        .vm-tab:hover { color:#09142a; }
+        .vm-tab.active { color:#09142a; border-bottom-color:#00c853; }
+
+        /* ── Map ── */
+        /* Same SVG town dataset the blast map uses (js/ct-towns.js), so the two
+           pages agree on the shape of Connecticut. Every length here is in SVG
+           USER UNITS — the whole map is ~1.47 wide, so a "3px" stroke would be
+           twice the width of the state. */
+        .map-wrap { background:#060e20; border:1px solid #e2d9ce; border-radius:12px; padding:14px; position:relative; }
+        .vtwn      { fill:#16233d; stroke:#0b1424; stroke-width:0.0018px; transition:fill 0.15s; }
+        .vtwn.has  { fill:#33405c; cursor:pointer; }
+        .vtwn.has:hover { fill:#46567a; }
+        .vdot      { fill:#ffc93c; stroke:#4a3600; stroke-width:0.0015px; pointer-events:none; }
+        .vdot-lbl  { font-family:'JetBrains Mono',monospace; font-weight:600; fill:#4a3600;
+                     text-anchor:middle; dominant-baseline:central; pointer-events:none; user-select:none; }
+        .map-tip {
+            position:fixed; z-index:60; pointer-events:none; display:none;
+            background:rgba(4,12,26,0.96); border:1px solid #ffc93c; border-radius:9px;
+            padding:9px 12px; color:#fff; font-family:'DM Sans',sans-serif; font-size:0.82rem; max-width:280px;
+        }
+        .map-tip b { font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; letter-spacing:0.5px;
+                     text-transform:uppercase; color:#ffc93c; display:block; margin-bottom:4px; }
+        .map-legend { display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin-top:12px;
+                      font-family:'DM Sans',sans-serif; font-size:0.8rem; color:#8a7f72; }
     </style>
 </head>
 <body>
@@ -88,8 +120,27 @@
                 <a href="admin.html" class="btn-back">← Admin Portal</a>
             </div>
 
+            <div class="vm-tabs">
+                <button class="vm-tab active" id="tabBtnList" onclick="showVMTab('list')">Venue List</button>
+                <button class="vm-tab"        id="tabBtnMap"  onclick="showVMTab('map')">Map</button>
+            </div>
+
+            <!-- Map -->
+            <div id="vmMap" style="display:none;">
+                <div class="map-wrap">
+                    <svg id="venueMapSvg" style="width:100%; height:auto; display:block;"></svg>
+                </div>
+                <div class="map-legend">
+                    <span><span style="display:inline-block; width:11px; height:11px; border-radius:50%; background:#ffc93c; vertical-align:-1px;"></span> venues here — number in the dot</span>
+                    <span><span style="display:inline-block; width:11px; height:11px; border-radius:2px; background:#33405c; vertical-align:-1px;"></span> town with venues</span>
+                    <span><span style="display:inline-block; width:11px; height:11px; border-radius:2px; background:#16233d; vertical-align:-1px;"></span> no venues</span>
+                    <span id="mapCoverage" style="margin-left:auto;"></span>
+                </div>
+            </div>
+            <div class="map-tip" id="mapTip"></div>
+
             <!-- Search & Filter -->
-            <div class="search-panel">
+            <div class="search-panel" id="vmList">
                 <div class="search-panel-top">
                     <div class="filter-group">
                         <div class="filter-group-label">Associated Entity</div>
@@ -218,6 +269,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="js/supabase-client.js?v=14"></script>
     <script src="js/admin-auth.js"></script>
+    <!-- CT town shapes + centroids, same dataset the blast map uses -->
+    <script src="js/ct-towns.js?v=1"></script>
     <script>
         // Admin-only page — redirect non-authenticated and non-Admin users
         (async function() {
@@ -234,6 +287,148 @@
         const db = new SupabaseClientWrapper(CONFIG);
         let allVenues = [];
         let fieldCountByCaVenue = {};
+
+        // Villages that are not towns. CT files plenty of venues under a village
+        // name, and js/ct-towns.js only knows the 169 actual towns — so without
+        // this, 16 of our 95 venues fall off the map entirely. Every one of these
+        // was confirmed during the referee harvest.
+        const VILLAGE_TO_TOWN = {
+            'moodus':              'East Haddam',
+            'quaker hill':         'Waterford',
+            'danielson':           'Killingly',
+            'dayville':            'Killingly',
+            'east killingly':      'Killingly',
+            'north grosvenordale': 'Thompson',
+            'greeneville':         'Norwich',
+            'mystic':              'Stonington',
+            'uncasville':          'Montville',
+            'willimantic':         'Windham',
+            'oneco':               'Sterling',
+            'higganum':            'Haddam',
+            'ivoryton':            'Essex',
+            'centerbrook':         'Essex',
+            'gales ferry':         'Ledyard',
+            'pawcatuck':           'Stonington',
+            'oakdale':             'Montville',
+            'broad brook':         'East Windsor',
+            'unionville':          'Farmington',
+            'weatogue':            'Simsbury',
+            'west simsbury':       'Simsbury',
+            'tariffville':         'Simsbury',
+            'collinsville':        'Canton',
+            'plantsville':         'Southington',
+            'terryville':          'Plymouth',
+            'oakville':            'Watertown',
+            'sandy hook':          'Newtown',
+            'bantam':              'Litchfield',
+            'falls village':       'Canaan',
+            'winsted':             'Winchester',
+            'old greenwich':       'Greenwich',
+            'cos cob':             'Greenwich',
+            'riverside':           'Greenwich',
+            'southport':           'Fairfield',
+            'greens farms':        'Westport',
+            'rockfall':            'Middlefield',
+            'mansfield center':    'Mansfield',
+            'storrs':              'Mansfield',
+            'storrs mansfield':    'Mansfield',
+            'north windham':       'Windham',
+            'jewett city':         'Griswold',
+            'central village':     'Plainfield',
+            'pleasant valley':     'Barkhamsted',
+            'new preston':         'Washington',
+            'northfield':          'Litchfield',
+            'east berlin':         'Berlin',
+            'kensington':          'Berlin',
+            'niantic':             'East Lyme',
+            'south glastonbury':   'Glastonbury',
+            'south windsor':       'South Windsor',
+            'stafford springs':    'Stafford',
+            'vernon rockville':    'Vernon',
+            'beacon falls':        'Beacon Falls'
+        };
+
+        function townForVenue(v) {
+            const raw = (v.city || '').trim();
+            if (!raw) return null;
+            const key = raw.toLowerCase();
+            if (CT_TOWN_SET.has(key)) return CT_TOWN_BY_KEY[key];
+            const alias = VILLAGE_TO_TOWN[key];
+            if (alias && CT_TOWN_SET.has(alias.toLowerCase())) return CT_TOWN_BY_KEY[alias.toLowerCase()];
+            return null;
+        }
+
+        let CT_TOWN_SET = new Set();
+        let CT_TOWN_BY_KEY = {};
+
+        function showVMTab(which) {
+            const isMap = which === 'map';
+            document.getElementById('vmList').style.display = isMap ? 'none' : 'block';
+            document.getElementById('vmMap').style.display  = isMap ? 'block' : 'none';
+            document.getElementById('tabBtnList').classList.toggle('active', !isMap);
+            document.getElementById('tabBtnMap').classList.toggle('active', isMap);
+            // The card lives inside the list; hide it with the list so it does
+            // not orphan itself over the map.
+            if (isMap) {
+                const card = document.getElementById('venueCard');
+                if (card) card.style.display = 'none';
+                currentVenueId = null;
+                renderVenueMap();
+            }
+        }
+
+        function renderVenueMap() {
+            const svg = document.getElementById('venueMapSvg');
+            if (!svg || typeof CT_TOWNS === 'undefined') return;
+
+            const byTown = {};
+            let unmapped = 0;
+            allVenues.forEach(v => {
+                const t = townForVenue(v);
+                if (!t) { unmapped++; return; }
+                (byTown[t] = byTown[t] || []).push(v);
+            });
+
+            svg.setAttribute('viewBox', CT_TOWNS.viewBox);
+            const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+            const paths = CT_TOWNS.towns.map(t => {
+                const list = byTown[t.n] || [];
+                return `<path class="vtwn ${list.length ? 'has' : ''}" d="${t.d}"
+                    ${list.length ? `data-town="${esc(t.n)}"` : ''}></path>`;
+            }).join('');
+
+            // Dot scales with count but stays legible — a town with one venue
+            // still needs to be findable.
+            const dots = CT_TOWNS.towns.filter(t => byTown[t.n]).map(t => {
+                const n = byTown[t.n].length;
+                const r = 0.016 + Math.min(n, 8) * 0.0035;
+                return `<g data-town="${esc(t.n)}">
+                    <circle class="vdot" cx="${t.cx}" cy="${t.cy}" r="${r}"></circle>
+                    <text class="vdot-lbl" x="${t.cx}" y="${t.cy}" style="font-size:${r * 1.15}px">${n}</text>
+                </g>`;
+            }).join('');
+
+            svg.innerHTML = paths + dots;
+
+            const townCount = Object.keys(byTown).length;
+            document.getElementById('mapCoverage').textContent =
+                `${allVenues.length - unmapped} of ${allVenues.length} venues across ${townCount} towns`
+                + (unmapped ? ` · ${unmapped} unmapped` : '');
+
+            const tip = document.getElementById('mapTip');
+            svg.querySelectorAll('[data-town]').forEach(el => {
+                el.addEventListener('mousemove', e => {
+                    const list = byTown[el.getAttribute('data-town')] || [];
+                    tip.innerHTML = `<b>${esc(el.getAttribute('data-town'))}</b>`
+                        + list.map(v => `${esc(v['Venue Name'])}<span style="color:#8a7f72;">${v.club_name ? ' · ' + esc(v.club_name) : ''}</span>`).join('<br>');
+                    tip.style.display = 'block';
+                    tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 300) + 'px';
+                    tip.style.top  = (e.clientY + 14) + 'px';
+                });
+                el.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+            });
+        }
 
         // "three fields" reads faster than "3" when you are scanning a list for
         // the venues that still need work. No fields is called out in red —
@@ -656,6 +851,15 @@
             await loadFields(venue['Venue ID']);
             // Focus the new field's name input
             setTimeout(() => document.getElementById(`ff_name_${data.id}`)?.focus(), 100);
+        }
+
+        // Town name lookup, built once. Keyed lowercase so "east haddam" and
+        // "East Haddam" both resolve.
+        if (typeof CT_TOWNS !== 'undefined') {
+            CT_TOWNS.towns.forEach(t => {
+                CT_TOWN_SET.add(t.n.toLowerCase());
+                CT_TOWN_BY_KEY[t.n.toLowerCase()] = t.n;
+            });
         }
 
         loadVenues();
