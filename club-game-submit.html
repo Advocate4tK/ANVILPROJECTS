@@ -611,7 +611,7 @@
                     <div id="venueRefLegend" style="display:none; margin-bottom:18px; border:1.5px solid #e2d9ce; border-radius:10px; overflow:hidden;">
                         <div onclick="toggleVenueRef()" style="background:#152d55; color:#fff; padding:8px 14px; font-family:'Barlow Condensed',sans-serif; font-size:0.82rem; font-weight:800; letter-spacing:0.8px; text-transform:uppercase; cursor:pointer; display:flex; align-items:center; gap:8px;">
                             <span id="venueRefArrow" style="display:inline-block; color:#00c853; font-size:1rem; transition:transform 0.2s; transform:rotate(0deg); flex-shrink:0;">▶</span>
-                            <span>Venue Reference — CA IDs</span>
+                            <span>Venue &amp; Field Codes</span>
                         </div>
                         <div id="venueRefBody" style="display:none; padding:10px 14px; font-family:'DM Sans',sans-serif; font-size:0.83rem;"></div>
                     </div>
@@ -1507,14 +1507,16 @@
             allClubs.forEach(c => { clubLeagueMap[c.id] = c.league; });
 
             allVenues = venues.map(v => ({
-                id:    v.id,
-                numId: v.fields['Venue ID'] || null,
-                name:  v.fields['Venue Name'] || '',
+                id:     v.id,
+                numId:  v.fields['Venue ID'] || null,
+                rtCode: v.fields['rt_code'] || null,
+                name:   v.fields['Venue Name'] || '',
             })).filter(v => v.name);
 
             allFields = fieldRecs.map(f => ({
                 id:      f.id,
                 numId:   f.fields['Field ID'] || null,
+                rtCode:  f.fields['rt_code'] || null,
                 name:    f.fields['Field Name'] || '',
                 venueId: f.fields['Venue ID']
                              ? venueByAirtableId[parseInt(f.fields['Venue ID'])] : null
@@ -1557,6 +1559,9 @@
         venueEl.innerHTML = '<option value="">— Select venue —</option>'
             + filtered.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
         populateFields();
+        // Legend follows the same list the dropdown shows, so a club sees its own
+        // venues. Previously this only ever ran for tournaments.
+        buildVenueLegend(filtered);
     }
 
     function toggleVenueRef() {
@@ -1567,45 +1572,51 @@
         arrow.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
     }
 
-    async function buildVenueLegend() {
+    // Venue/field reference legend.
+    // Two things were wrong with the original: it was only ever called from the
+    // TOURNAMENT branch, so clubs and events never saw it at all — and it bailed
+    // outright on `filter(v => v.numId)`, meaning a club whose venues had no CA
+    // number yet got nothing instead of a list. A venue's identity does not
+    // depend on whether Central Assign has numbered it.
+    // Now takes the same filtered list the venue dropdown uses, so a club sees
+    // ITS venues, not all 95. Fields come from allFields, already in memory —
+    // no second round trip.
+    function buildVenueLegend(venueList) {
         const legendEl = document.getElementById('venueRefLegend');
         const bodyEl   = document.getElementById('venueRefBody');
         if (!legendEl || !bodyEl) return;
-        const venues = allVenues.filter(v => v.numId);
-        if (!venues.length) return;
+
+        const venues = (Array.isArray(venueList) && venueList.length ? venueList : allVenues)
+            .slice().sort((a, b) => natCmp(a.name, b.name));
+
+        if (!venues.length) { legendEl.style.display = 'none'; return; }
         legendEl.style.display = 'block';
-        bodyEl.innerHTML = '<span style="color:#aaa;">Loading…</span>';
-        try {
-            const caVenueIds = venues.map(v => v.numId);
-            const { data: fieldRows } = await supabaseClient.client
-                .from('fields').select('"Field Name", "Field ID", "Venue ID"')
-                .in('"Venue ID"', caVenueIds);
-            const fieldsByVenue = {};
-            (fieldRows || []).forEach(f => {
-                const key = f['Venue ID'];
-                if (!fieldsByVenue[key]) fieldsByVenue[key] = [];
-                if (!fieldsByVenue[key].find(x => x.id === f['Field ID']))
-                    fieldsByVenue[key].push({ name: f['Field Name'], id: f['Field ID'] });
-            });
-            bodyEl.innerHTML = venues.map(v => {
-                const fields = (fieldsByVenue[v.numId] || []).sort((a,b) => String(a.name).localeCompare(String(b.name)));
-                const fieldRows = fields.length
-                    ? fields.map(f => `<div style="padding:2px 0 2px 16px; color:#444;">
-                        ${f.name}
-                        ${f.id ? `<span style="font-family:monospace; background:#f3eaff; border:1px solid #c8a0e8; border-radius:4px; padding:1px 6px; font-size:0.8rem; color:#6c3483; margin-left:6px; user-select:all;">${Math.round(f.id)}</span>` : '<span style="color:#aaa; font-size:0.78rem; margin-left:6px;">CA ID pending</span>'}
-                      </div>`).join('')
-                    : '<div style="padding:2px 0 2px 16px; color:#aaa; font-size:0.78rem;">No fields on file</div>';
-                return `<div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #f0ebe4;">
-                    <div style="font-weight:700; color:#09142a; margin-bottom:4px;">
-                        ${v.name}
-                        <span style="font-family:monospace; background:#e8f5e9; border:1px solid #a5d6a7; border-radius:4px; padding:1px 8px; font-size:0.82rem; color:#1b5e20; margin-left:8px; user-select:all;">${Math.round(v.numId)}</span>
-                    </div>
-                    ${fieldRows}
-                </div>`;
-            }).join('');
-        } catch(e) {
-            bodyEl.innerHTML = `<span style="color:#e74c3c;">Could not load: ${e.message}</span>`;
-        }
+
+        const chip = (txt, bg, bd, fg) =>
+            `<span style="font-family:monospace; background:${bg}; border:1px solid ${bd}; border-radius:4px;`
+          + ` padding:1px 8px; font-size:0.8rem; color:${fg}; margin-left:6px; user-select:all;">${txt}</span>`;
+
+        const rtChip = c => chip(c, '#e8f5e9', '#a5d6a7', '#1b5e20');   // Referee Tool code
+        const caChip = n => chip('CA ' + Math.round(n), '#f3eaff', '#c8a0e8', '#6c3483');
+
+        bodyEl.innerHTML = venues.map(v => {
+            const fields = allFields
+                .filter(f => String(f.venueId) === String(v.id))
+                .sort((a, b) => natCmp(a.name, b.name));
+
+            const fieldRows = fields.length
+                ? fields.map(f => `<div style="padding:2px 0 2px 16px; color:#444;">${f.name}`
+                    + (f.rtCode ? rtChip(f.rtCode) : '')
+                    + (f.numId  ? caChip(f.numId)  : '')
+                    + `</div>`).join('')
+                : '<div style="padding:2px 0 2px 16px; color:#aaa; font-size:0.78rem;">No fields on file</div>';
+
+            return `<div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #f0ebe4;">
+                <div style="font-weight:700; color:#09142a; margin-bottom:4px;">${v.name}`
+                + (v.rtCode ? rtChip(v.rtCode) : '')
+                + (v.numId  ? caChip(v.numId)  : '')
+                + `</div>${fieldRows}</div>`;
+        }).join('');
     }
 
     function populateFields() {
