@@ -2,10 +2,12 @@
 -- Run in DBeaver
 -- Created: 2026-06-03
 
+SET search_path = public;
+
 -- Club contracts: one per club per season
-CREATE TABLE IF NOT EXISTS club_contracts (
+CREATE TABLE IF NOT EXISTS public.club_contracts (
     id                    serial PRIMARY KEY,
-    club_id               integer REFERENCES clubs(id) ON DELETE CASCADE,
+    club_id               integer REFERENCES public.clubs(id) ON DELETE CASCADE,
     season                text NOT NULL,
     billing_model         text NOT NULL DEFAULT 'per_team',  -- per_team | per_game | flat
     rate_tiers            jsonb NOT NULL DEFAULT '[]',       -- [{age_group, rate}]
@@ -22,10 +24,10 @@ CREATE TABLE IF NOT EXISTS club_contracts (
 );
 
 -- Invoices: one per club per season
-CREATE TABLE IF NOT EXISTS invoices (
+CREATE TABLE IF NOT EXISTS public.invoices (
     id             serial PRIMARY KEY,
-    club_id        integer REFERENCES clubs(id) ON DELETE CASCADE,
-    contract_id    integer REFERENCES club_contracts(id) ON DELETE SET NULL,
+    club_id        integer REFERENCES public.clubs(id) ON DELETE CASCADE,
+    contract_id    integer REFERENCES public.club_contracts(id) ON DELETE SET NULL,
     season         text NOT NULL,
     invoice_number text,
     line_items     jsonb NOT NULL DEFAULT '[]',  -- [{qty, description, unit_price, total}]

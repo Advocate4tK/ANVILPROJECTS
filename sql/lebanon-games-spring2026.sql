@@ -1,0 +1,36 @@
+-- Lebanon Spring 2026 — Future Games Import (31 rows)
+-- Run in DBeaver
+-- 4 games have Away Team = 'TBD' (opponent not listed in source calendar)
+
+INSERT INTO games (date, time, "Age Group", "Home Team", "Away Team", field, "Venue ID", "Source Club", game_type) VALUES
+('2026-05-09', '10:30:00', 'U8B', 'Lebanon', 'CWSA B', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-05-09', '11:30:00', 'U8G', 'Lebanon', 'CWSA A', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-05-09', '13:30:00', 'U10G', 'Lebanon', 'COVENTRY', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-05-09', '15:00:00', 'U10B', 'Lebanon', 'COVENTRY A', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-05-10', '11:00:00', 'U10B', 'Lebanon', 'CWSA C', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-05-10', '16:00:00', 'U12B', 'Lebanon', 'TBD', 'Lions Field', 369, 'Lebanon', 'Comp'),
+('2026-05-11', '18:00:00', 'U12G', 'Lebanon', 'CWSA', 'Lions Field', 369, 'Lebanon', 'Rec'),
+('2026-05-13', '18:00:00', 'U8G', 'Lebanon', 'TBD', 'Lions Field', 369, 'Lebanon', 'Rec'),
+('2026-05-16', '09:00:00', 'U10B', 'Lebanon', 'NECONN', 'Middle School Field', 367, 'Lebanon', 'Comp'),
+('2026-05-16', '10:30:00', 'U10B', 'Lebanon', 'ELLINGTON A', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-05-16', '12:00:00', 'U8G', 'Lebanon', 'RHAM', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-05-16', '13:00:00', 'U8G', 'Lebanon', 'COVENTRY C', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-05-16', '13:00:00', 'U12G', 'Lebanon', 'RHAM', 'Lions Field', 369, 'Lebanon', 'Rec'),
+('2026-05-16', '15:30:00', 'U10G', 'Lebanon', 'CWSA B', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-05-17', '12:00:00', 'U10B', 'Lebanon', 'CWSA', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-05-17', '13:30:00', 'U10B', 'Lebanon', 'BOLTON', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-05-18', '18:00:00', 'U12G', 'Lebanon', 'TBD', 'Lions Field', 369, 'Lebanon', 'Rec'),
+('2026-05-30', '09:30:00', 'U12B', 'Lebanon', 'CWSA A', 'Lions Field', 369, 'Lebanon', 'Rec'),
+('2026-05-30', '10:30:00', 'U8B', 'Lebanon', 'BOLTON B', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-05-30', '11:00:00', 'U12G', 'Lebanon', 'CWSA', 'Lions Field', 369, 'Lebanon', 'Rec'),
+('2026-05-30', '13:00:00', 'U8G', 'Lebanon', 'COVENTRY B', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-05-30', '14:00:00', 'U8G', 'Lebanon', 'WAM A', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-05-30', '15:00:00', 'U10G', 'Lebanon', 'CWSA C', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-06-06', '09:00:00', 'U8B', 'Lebanon', 'COVENTRY A', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-06-06', '10:00:00', 'U8B', 'Lebanon', 'WAM E', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-06-06', '10:00:00', 'U10B', 'Lebanon', 'RHAMA', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-06-06', '10:00:00', 'U12B', 'Lebanon', 'COVENTRY B', 'Lions Field', 369, 'Lebanon', 'Rec'),
+('2026-06-07', '09:00:00', 'U12B', 'Lebanon', 'TBD', 'Lions Field', 369, 'Lebanon', 'Comp'),
+('2026-06-07', '10:00:00', 'U8B', 'Lebanon', 'WAM B', 'Elementary School Field', 366, 'Lebanon', 'Rec'),
+('2026-06-20', '10:00:00', 'U10B', 'Lebanon', 'STAFFORD B', 'Middle School Field', 367, 'Lebanon', 'Rec'),
+('2026-06-20', '12:00:00', 'U10B', 'Lebanon', 'CWSA', 'Middle School Field', 367, 'Lebanon', 'Rec');
