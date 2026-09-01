@@ -216,6 +216,19 @@
     <script>
         const db = new SupabaseClientWrapper(CONFIG);
         let allVenues = [];
+        let fieldCountByCaVenue = {};
+
+        // "three fields" reads faster than "3" when you are scanning a list for
+        // the venues that still need work. No fields is called out in red —
+        // that is usually a gap, not a fact, and Central Assign frequently has
+        // fields we never loaded.
+        const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six',
+                             'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+        function fieldCountLabel(v) {
+            const n = v['Venue ID'] != null ? (fieldCountByCaVenue[v['Venue ID']] || 0) : 0;
+            const word = n < COUNT_WORDS.length ? COUNT_WORDS[n] : String(n);
+            return word + ' field' + (n === 1 ? '' : 's');
+        }
         let currentVenueId = null;
         let caLocked = true;
         let isNewVenue = false;
@@ -254,6 +267,15 @@
             if (res.error) { console.error(res.error); return; }
 
             allVenues = res.data || [];
+
+            // Field counts for the collapsed rows. Fields link to venues by CA
+            // "Venue ID", not by row id, so count against that.
+            const fRes = await db.client.from('fields').select('"Venue ID"');
+            fieldCountByCaVenue = {};
+            (fRes.data || []).forEach(f => {
+                const k = f['Venue ID'];
+                if (k != null) fieldCountByCaVenue[k] = (fieldCountByCaVenue[k] || 0) + 1;
+            });
 
             // Populate club filter — dedupe case-insensitively, display uppercase
             const clubMap = {};
@@ -318,7 +340,7 @@
                 <div class="result-row ${v.id === currentVenueId ? 'active' : ''}" onclick="openVenue(${v.id})">
                     <div>
                         <div class="result-name">${v['Venue Name'] || '—'}</div>
-                        <div class="result-sub">${v.rt_code ? `<span style="font-family:monospace; font-weight:700; color:#14532d;">${v.rt_code}</span> &nbsp;·&nbsp; ` : ''}${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; ${v.club_name || 'No club'}</div>
+                        <div class="result-sub">${v.rt_code ? `<span style="font-family:monospace; font-weight:700; color:#14532d;">${v.rt_code}</span> &nbsp;·&nbsp; ` : ''}${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; ${v.club_name || 'No club'} &nbsp;·&nbsp; <span style="color:${fieldCountLabel(v) === 'no fields' ? '#c0392b' : '#555'}; font-weight:600;">${fieldCountLabel(v)}</span></div>
                     </div>
                     <div class="result-ca">${v['Venue ID'] ? 'CA ' + Math.round(v['Venue ID']) : 'No CA ID'}</div>
                 </div>
