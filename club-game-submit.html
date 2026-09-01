@@ -603,7 +603,7 @@
                             <option value="glast-travel">Glastonbury — Travel (Comp)</option>
                         </select>
                         <span id="csvTemplateLink" style="font-size:0.85rem; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                            <a id="csvTemplateLinkAnchor" href="referee-tool-games-upload-template.csv" download style="color:var(--accent-dark); font-weight:700;">⬇ CSV Template</a>
+                            <a id="csvTemplateLinkAnchor" href="referee-tool-games-upload-template.csv" download onclick="downloadCSVTemplate(event)" style="color:var(--accent-dark); font-weight:700;">⬇ CSV Template</a>
                             <a id="xlsxTemplateLinkAnchor" href="#" onclick="downloadXLSXTemplate(event)" style="color:var(--accent-dark); font-weight:700;">⬇ Excel Template</a>
                         </span>
                     </div>
@@ -1592,12 +1592,19 @@
         if (!venues.length) { legendEl.style.display = 'none'; return; }
         legendEl.style.display = 'block';
 
-        const chip = (txt, bg, bd, fg) =>
-            `<span style="font-family:monospace; background:${bg}; border:1px solid ${bd}; border-radius:4px;`
-          + ` padding:1px 8px; font-size:0.8rem; color:${fg}; margin-left:6px; user-select:all;">${txt}</span>`;
+        // Code on the left, name on the right — read like a map legend. You see
+        // RTVCT007 sitting in a spreadsheet cell and need to know what it is,
+        // so the code leads. CA numbers ride along dimmed on the right; they
+        // matter at export time, not to the person filling the file.
+        const code = (txt, bg, bd, fg) =>
+            `<span style="display:inline-block; min-width:88px; font-family:monospace; background:${bg};`
+          + ` border:1px solid ${bd}; border-radius:4px; padding:1px 8px; font-size:0.8rem; color:${fg};`
+          + ` text-align:center; user-select:all;">${txt}</span>`;
 
-        const rtChip = c => chip(c, '#e8f5e9', '#a5d6a7', '#1b5e20');   // Referee Tool code
-        const caChip = n => chip('CA ' + Math.round(n), '#f3eaff', '#c8a0e8', '#6c3483');
+        const rtCode  = c => code(c, '#e8f5e9', '#a5d6a7', '#1b5e20');
+        const pending = () => `<span style="display:inline-block; min-width:88px; text-align:center;`
+                            + ` color:#bbb; font-size:0.74rem; font-family:monospace;">— pending —</span>`;
+        const caNote  = n => `<span style="color:#b9a9cc; font-size:0.72rem; font-family:monospace; margin-left:10px;">CA ${Math.round(n)}</span>`;
 
         bodyEl.innerHTML = venues.map(v => {
             const fields = allFields
@@ -1605,16 +1612,18 @@
                 .sort((a, b) => natCmp(a.name, b.name));
 
             const fieldRows = fields.length
-                ? fields.map(f => `<div style="padding:2px 0 2px 16px; color:#444;">${f.name}`
-                    + (f.rtCode ? rtChip(f.rtCode) : '')
-                    + (f.numId  ? caChip(f.numId)  : '')
+                ? fields.map(f => `<div style="padding:3px 0 3px 22px; color:#444; display:flex; align-items:center; gap:8px;">`
+                    + (f.rtCode ? rtCode(f.rtCode) : pending())
+                    + `<span>${f.name}</span>`
+                    + (f.numId ? caNote(f.numId) : '')
                     + `</div>`).join('')
-                : '<div style="padding:2px 0 2px 16px; color:#aaa; font-size:0.78rem;">No fields on file</div>';
+                : `<div style="padding:3px 0 3px 22px; color:#aaa; font-size:0.78rem;">— no fields on file —</div>`;
 
             return `<div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #f0ebe4;">
-                <div style="font-weight:700; color:#09142a; margin-bottom:4px;">${v.name}`
-                + (v.rtCode ? rtChip(v.rtCode) : '')
-                + (v.numId  ? caChip(v.numId)  : '')
+                <div style="font-weight:700; color:#09142a; margin-bottom:2px; display:flex; align-items:center; gap:8px;">`
+                + (v.rtCode ? rtCode(v.rtCode) : pending())
+                + `<span>${v.name}</span>`
+                + (v.numId ? caNote(v.numId) : '')
                 + `</div>${fieldRows}</div>`;
         }).join('');
     }
@@ -2926,9 +2935,45 @@
 
     const CSV_TEMPLATE_HEADERS = ['Date','Time','Home Team','Away Team','Age Group','Gender','Game Type','Venue','Field','Notes'];
 
+    // ── Venue & Field code legend ─────────────────────────────────────────────
+    // The people who FILL the file are not the people on this page. A club
+    // president downloads the template and emails it to whoever builds the
+    // schedule; they never see the on-page legend. So the same key ships inside
+    // the download — tab 2 of the Excel file, and appended under the CSV rows.
+    // Reads code-first, like a map legend: you see RTVCT007 in a cell and need
+    // to know what it is.
+
+    // Venues for whichever club/tournament/event is currently loaded.
+    function legendVenues() {
+        const clubId = document.getElementById('clubSelect')?.value;
+        const club   = allClubs.find(c => String(c.id) === String(clubId));
+        return ((club?.venueIds?.length > 0)
+            ? allVenues.filter(v => club.venueIds.includes(v.id))
+            : allVenues.slice()).sort((a, b) => natCmp(a.name, b.name));
+    }
+
+    // [[code, name], ...] — venue rows then their fields, indented.
+    function legendRows() {
+        const rows = [];
+        legendVenues().forEach(v => {
+            rows.push([v.rtCode || '(code pending)', v.name]);
+            const fields = allFields
+                .filter(f => String(f.venueId) === String(v.id))
+                .sort((a, b) => natCmp(a.name, b.name));
+            if (fields.length) {
+                fields.forEach(f => rows.push(['  ' + (f.rtCode || '(code pending)'), '  ' + f.name]));
+            } else {
+                rows.push(['', '  — no fields on file —']);
+            }
+            rows.push(['', '']);
+        });
+        return rows;
+    }
+
     function downloadXLSXTemplate(e) {
         e.preventDefault();
         const wb = XLSX.utils.book_new();
+
         const ws = XLSX.utils.aoa_to_sheet([
             CSV_TEMPLATE_HEADERS,
             ['2026-04-05','10:00 AM','Griswold FC Girls','Stonington SC Girls','U12','Female','Rec','Griswold Middle School','Field 1',''],
@@ -2936,7 +2981,63 @@
         ]);
         ws['!cols'] = CSV_TEMPLATE_HEADERS.map(() => ({ wch: 20 }));
         XLSX.utils.book_append_sheet(wb, ws, 'Games');
+
+        const rows = legendRows();
+        if (rows.length) {
+            const legend = XLSX.utils.aoa_to_sheet([
+                ['Venue & Field Codes'],
+                ['Put the code in the Venue or Field column — the name also works.'],
+                [''],
+                ['Code', 'Name'],
+                ...rows
+            ]);
+            legend['!cols'] = [{ wch: 16 }, { wch: 42 }];
+            XLSX.utils.book_append_sheet(wb, legend, 'Venue & Field Codes');
+        }
+
         XLSX.writeFile(wb, 'referee-tool-games-upload-template.xlsx');
+    }
+
+    // CSV can't hold a second sheet, so the key goes under the sample rows after
+    // a blank line. Parsers stop at the blank line; a human scrolling down finds
+    // the codes. Generated in-browser so it carries THIS club's venues rather
+    // than the static file's Griswold samples.
+    function downloadCSVTemplate(e) {
+        // The Glastonbury formats point this same anchor at their own sample
+        // files. Only intercept the standard template, or picking "Glastonbury
+        // Rec" would silently hand back the standard one instead.
+        const fmt = document.getElementById('csvFormatSelect')?.value;
+        if (fmt && fmt !== 'standard') return;
+
+        const rows = legendRows();
+        if (!rows.length) return;            // nothing club-specific to add — let the static file serve
+        e.preventDefault();
+
+        const esc = s => {
+            const t = String(s ?? '');
+            return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+        };
+        const lines = [
+            CSV_TEMPLATE_HEADERS.join(','),
+            '2026-04-05,10:00 AM,Griswold FC Girls,Stonington SC Girls,U12,Female,Rec,Griswold Middle School,Field 1,',
+            '2026-04-05,12:00 PM,Griswold FC Boys,Canterbury SC Boys,U10,Male,Comp,Griswold Middle School,Field 2,',
+            '',
+            'Venue & Field Codes',
+            'Put the code in the Venue or Field column — the name also works.',
+            '',
+            'Code,Name',
+            ...rows.map(r => r.map(esc).join(','))
+        ];
+
+        const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url;
+        a.download = 'referee-tool-games-upload-template.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     function handleCSVFile(file) {
