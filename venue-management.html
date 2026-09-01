@@ -34,6 +34,11 @@
         .new-venue-btn:hover { background:#00e65c; }
         /* ── Result list ── */
         .result-list { display:flex; flex-direction:column; gap:6px; }
+        /* The detail card gets physically moved into the list, directly beneath
+           whichever row was clicked, so a venue expands where it already is.
+           It used to live at the bottom of the document under 95 rows, which
+           meant every click threw you to the end of the page. */
+        #venueCard { margin:4px 0 10px; }
         .result-row { display:flex; justify-content:space-between; align-items:center; background:#f8f6f2; border:1px solid #e2d9ce; border-radius:8px; padding:11px 16px; cursor:pointer; transition:all 0.15s; }
         .result-row:hover { border-color:#00c853; background:#f0fdf4; }
         .result-row.active { border-color:#00c853; background:#f0fdf4; }
@@ -340,16 +345,29 @@
 
             document.getElementById('countNote').textContent = `${filtered.length} venue${filtered.length !== 1 ? 's' : ''}`;
             renderList(filtered);
+            // Re-seat the open card under its row after any filter or sort, but
+            // never scroll — the cursor is in the search box.
+            if (currentVenueId && document.getElementById('venueCard')?.style.display === 'block') {
+                placeCardUnderRow(currentVenueId, false);
+            }
         }
 
         function renderList(venues) {
             const list = document.getElementById('resultList');
+
+            // The open card lives INSIDE this list, and innerHTML below would
+            // destroy the node outright — typing in the search box with a venue
+            // open would make the card disappear for good. Park it outside the
+            // list first; openVenue/placeCardUnderRow puts it back.
+            const card = document.getElementById('venueCard');
+            if (card && list.contains(card)) list.insertAdjacentElement('beforebegin', card);
+
             if (!venues.length) {
                 list.innerHTML = '<div style="color:#aaa; font-size:0.9rem; padding:8px 0;">No venues found.</div>';
                 return;
             }
             list.innerHTML = venues.map(v => `
-                <div class="result-row ${v.id === currentVenueId ? 'active' : ''}" onclick="openVenue(${v.id})">
+                <div class="result-row ${v.id === currentVenueId ? 'active' : ''}" id="row-${v.id}" onclick="openVenue(${v.id})">
                     <div>
                         <div class="result-name">${v['Venue Name'] || '—'}</div>
                         <div class="result-sub">${v.rt_code ? `<span class="result-code">${v.rt_code}</span> &nbsp;·&nbsp; ` : ''}${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; <span style="color:${fieldCountLabel(v) === 'no fields' ? '#c0392b' : '#555'}; font-weight:700;">${fieldCountLabel(v)}</span></div>
@@ -410,8 +428,28 @@
             document.getElementById('fieldsCountBadge').style.display = 'none';
 
             loadFields(v['Venue ID']);
-            applyFilters();
-            document.getElementById('venueCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            applyFilters();          // re-renders the list, so move the card after
+            placeCardUnderRow(id);
+        }
+
+        // Move the detail card into the list, directly under the row that was
+        // clicked. The card is a single element reused for every venue, so it
+        // gets relocated rather than duplicated — and because applyFilters()
+        // re-renders the rows, this has to run after that call, not before.
+        function placeCardUnderRow(id, allowScroll = true) {
+            const card = document.getElementById('venueCard');
+            const row  = document.getElementById('row-' + id);
+            if (!card || !row || !row.parentNode) return;
+
+            row.insertAdjacentElement('afterend', card);
+            if (!allowScroll) return;
+
+            // Only scroll if the card is actually off-screen. Clicking a row
+            // already in view should expand it in place without the page moving.
+            const r = card.getBoundingClientRect();
+            if (r.top < 0 || r.top > window.innerHeight - 120) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         }
 
         function newVenue() {
@@ -438,7 +476,12 @@
             document.getElementById('fieldsToggleArrow').style.transform = '';
             document.getElementById('fieldsCountBadge').style.display = 'none';
             document.getElementById('fieldsList').innerHTML = '<div style="color:#aaa; font-size:0.88rem; padding:8px 0;">Save the venue first to add fields.</div>';
-            document.getElementById('venueCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // A brand new venue has no row to sit under, so put the card at the
+            // top of the list where it is immediately visible.
+            const list = document.getElementById('resultList');
+            const card = document.getElementById('venueCard');
+            if (list && card) list.insertAdjacentElement('beforebegin', card);
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
             document.getElementById('fVenueName').focus();
         }
 
