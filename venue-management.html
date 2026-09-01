@@ -38,7 +38,15 @@
         .result-row:hover { border-color:#00c853; background:#f0fdf4; }
         .result-row.active { border-color:#00c853; background:#f0fdf4; }
         .result-name { font-weight:700; color:#09142a; font-family:'DM Sans',sans-serif; font-size:0.92rem; }
-        .result-sub { font-size:0.78rem; color:#888; margin-top:2px; font-family:'DM Sans',sans-serif; }
+        .result-sub { font-size:0.85rem; color:#7a7168; margin-top:3px; font-family:'DM Sans',sans-serif; }
+        .result-code { font-family:'JetBrains Mono',monospace; font-weight:600; color:#14532d; font-size:0.86rem; letter-spacing:0.4px; }
+        /* Club ownership decides whose legend a venue shows up in and whose
+           upload accepts it. It was grey subtext; now it reads at a glance. */
+        .club-pill { display:inline-block; background:#00c853; color:#09142a; font-family:'Barlow Condensed',sans-serif;
+                     font-size:0.86rem; font-weight:800; text-transform:uppercase; letter-spacing:0.9px;
+                     padding:3px 13px; border-radius:999px; }
+        .club-pill-none { background:#f1ece4; color:#8a7f72; border:1px dashed #d6ccbe; }
+        .result-row { align-items:flex-start !important; }
         .result-ca { font-size:0.72rem; font-weight:800; color:#09142a; background:#00c853; border-radius:4px; padding:2px 9px; white-space:nowrap; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.3px; }
         /* ── Detail card ── */
         .venue-card { background:white; border-radius:12px; padding:28px; box-shadow:0 4px 20px rgba(0,0,0,0.18); border-top:4px solid #00c853; }
@@ -108,6 +116,7 @@
                         <div>
                             <div style="font-size:1.3rem; font-weight:900; color:#152d55;" id="cardTitle"></div>
                             <div style="font-size:0.82rem; color:#aaa; margin-top:4px;" id="cardSub"></div>
+                            <div id="cardClubPill" style="display:none; margin-top:9px;"></div>
                         </div>
                         <div style="text-align:right; display:flex; gap:22px; align-items:flex-start;">
                             <div>
@@ -340,7 +349,10 @@
                 <div class="result-row ${v.id === currentVenueId ? 'active' : ''}" onclick="openVenue(${v.id})">
                     <div>
                         <div class="result-name">${v['Venue Name'] || '—'}</div>
-                        <div class="result-sub">${v.rt_code ? `<span style="font-family:monospace; font-weight:700; color:#14532d;">${v.rt_code}</span> &nbsp;·&nbsp; ` : ''}${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; ${v.club_name || 'No club'} &nbsp;·&nbsp; <span style="color:${fieldCountLabel(v) === 'no fields' ? '#c0392b' : '#555'}; font-weight:600;">${fieldCountLabel(v)}</span></div>
+                        <div class="result-sub">${v.rt_code ? `<span class="result-code">${v.rt_code}</span> &nbsp;·&nbsp; ` : ''}${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; <span style="color:${fieldCountLabel(v) === 'no fields' ? '#c0392b' : '#555'}; font-weight:700;">${fieldCountLabel(v)}</span></div>
+                        <div style="margin-top:6px;">${v.club_name
+                            ? `<span class="club-pill">${v.club_name}</span>`
+                            : `<span class="club-pill club-pill-none">No club</span>`}</div>
                     </div>
                     <div class="result-ca">${v['Venue ID'] ? 'CA ' + Math.round(v['Venue ID']) : 'No CA ID'}</div>
                 </div>
@@ -355,6 +367,17 @@
             document.getElementById('cardTitle').textContent = v['Venue Name'] || 'Unnamed Venue';
             document.getElementById('cardSub').textContent   = [v.city, v.state].filter(Boolean).join(', ') || '';
             document.getElementById('cardCaId').textContent  = v['Venue ID'] ? Math.round(v['Venue ID']) : '—';
+            // Which club owns a venue drives everything downstream — whose legend
+            // it appears in, whose upload accepts it. It was buried in grey
+            // subtext at 0.82rem. It gets a pill.
+            const pill = document.getElementById('cardClubPill');
+            if (pill) {
+                pill.style.display = 'block';
+                pill.innerHTML = v.club_name
+                    ? `<span style="display:inline-block; background:#00c853; color:#09142a; font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; padding:5px 16px; border-radius:999px;">${v.club_name}</span>`
+                    : `<span style="display:inline-block; background:#f1ece4; color:#8a7f72; border:1px dashed #d6ccbe; font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; padding:5px 16px; border-radius:999px;">No club assigned</span>`;
+            }
+
             // RT code is minted by a DB trigger on insert — display only, never editable here.
             const rtEl = document.getElementById('cardRtCode');
             if (rtEl) {
@@ -499,8 +522,11 @@
 
         function renderFields(fields) {
             const list = document.getElementById('fieldsList');
-            const inp  = 'width:100%; padding:8px 10px; border:1.5px solid #ddd; border-radius:6px; font-size:0.88rem; font-family:inherit; box-sizing:border-box;';
-            const lbl  = 'display:block; font-size:0.72rem; font-weight:700; color:#555; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px;';
+            // Field rows are where the actual work happens on this page — typing
+            // names and CA numbers. They were set smaller than the venue form
+            // above them, which had it backwards.
+            const inp  = 'width:100%; padding:11px 13px; border:1.5px solid #d8d2c8; border-radius:7px; font-size:1rem; font-family:inherit; box-sizing:border-box; background:#fff; transition:border-color 0.15s;';
+            const lbl  = 'display:block; font-size:0.74rem; font-weight:800; color:#6b6155; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.6px;';
 
             if (!fields.length) {
                 list.innerHTML = '<div style="color:#aaa; font-size:0.88rem; padding:8px 0;">No fields linked to this venue yet. Hit + Add Field to create one.</div>';
@@ -508,13 +534,12 @@
             }
 
             list.innerHTML = fields.map(f => `
-                <div style="border:1px solid #e8e8e8; border-radius:10px; padding:18px; margin-bottom:14px; background:#fafafa;" id="field-row-${f.id}">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-                        <span style="font-size:0.68rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.6px;">Referee Tool code</span>
+                <div style="border:1px solid #e2d9ce; border-left:4px solid #00c853; border-radius:10px; padding:18px 20px; margin-bottom:16px; background:#fff; box-shadow:0 1px 3px rgba(9,20,42,0.05);" id="field-row-${f.id}">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #f0ebe4;">
                         ${f.rt_code
-                            ? `<span style="font-family:monospace; background:#e8f5e9; border:1px solid #a5d6a7; border-radius:4px; padding:2px 10px; font-size:0.82rem; font-weight:700; color:#14532d; user-select:all;">${f.rt_code}</span>`
-                            : `<span style="font-family:monospace; background:#f1ece4; border:1px solid #d6ccbe; border-radius:4px; padding:2px 10px; font-size:0.8rem; color:#6b6155;">— none —</span>`}
-                        <span style="font-size:0.72rem; color:#aaa;">assigned automatically &middot; not editable</span>
+                            ? `<span style="font-family:'JetBrains Mono',monospace; background:#e8f5e9; border:1px solid #a5d6a7; border-radius:5px; padding:4px 12px; font-size:0.95rem; font-weight:600; color:#14532d; letter-spacing:0.5px; user-select:all;">${f.rt_code}</span>`
+                            : `<span style="font-family:'JetBrains Mono',monospace; background:#f1ece4; border:1px solid #d6ccbe; border-radius:5px; padding:4px 12px; font-size:0.9rem; color:#6b6155;">— no code —</span>`}
+                        <span style="font-size:0.74rem; color:#a89e92; font-style:italic;">assigned automatically &middot; not editable</span>
                     </div>
                     <div style="display:grid; grid-template-columns:2fr 1fr 2fr 2fr; gap:14px; align-items:end; flex-wrap:wrap;">
                         <div>
@@ -535,7 +560,7 @@
                         </div>
                     </div>
                     <div style="display:flex; gap:10px; align-items:center; margin-top:12px;">
-                        <button onclick="saveField(${f.id})" style="background:#152d55; color:#fff; border:none; border-radius:7px; padding:7px 20px; font-size:0.85rem; font-weight:700; cursor:pointer; font-family:inherit;">Save</button>
+                        <button onclick="saveField(${f.id})" style="background:#152d55; color:#fff; border:none; border-radius:7px; padding:9px 26px; font-size:0.92rem; font-weight:700; cursor:pointer; font-family:inherit; letter-spacing:0.3px;">Save</button>
                         <span id="ff_status_${f.id}" style="font-size:0.82rem; font-weight:600; display:none;"></span>
                     </div>
                 </div>
