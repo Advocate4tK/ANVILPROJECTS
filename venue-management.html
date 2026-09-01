@@ -109,9 +109,15 @@
                             <div style="font-size:1.3rem; font-weight:900; color:#152d55;" id="cardTitle"></div>
                             <div style="font-size:0.82rem; color:#aaa; margin-top:4px;" id="cardSub"></div>
                         </div>
-                        <div style="text-align:right;">
-                            <div style="font-size:0.72rem; font-weight:700; color:#aaa; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">CA Venue ID</div>
-                            <div class="ca-id-display" id="cardCaId">—</div>
+                        <div style="text-align:right; display:flex; gap:22px; align-items:flex-start;">
+                            <div>
+                                <div style="font-size:0.72rem; font-weight:700; color:#aaa; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">Referee Tool</div>
+                                <div id="cardRtCode" style="font-family:monospace; font-size:1.05rem; font-weight:800; color:#14532d; background:#e8f5e9; border:1px solid #a5d6a7; border-radius:5px; padding:3px 12px; user-select:all;">—</div>
+                            </div>
+                            <div>
+                                <div style="font-size:0.72rem; font-weight:700; color:#aaa; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">CA Venue ID</div>
+                                <div class="ca-id-display" id="cardCaId">—</div>
+                            </div>
                         </div>
                     </div>
 
@@ -312,7 +318,7 @@
                 <div class="result-row ${v.id === currentVenueId ? 'active' : ''}" onclick="openVenue(${v.id})">
                     <div>
                         <div class="result-name">${v['Venue Name'] || '—'}</div>
-                        <div class="result-sub">${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; ${v.club_name || 'No club'}</div>
+                        <div class="result-sub">${v.rt_code ? `<span style="font-family:monospace; font-weight:700; color:#14532d;">${v.rt_code}</span> &nbsp;·&nbsp; ` : ''}${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; ${v.club_name || 'No club'}</div>
                     </div>
                     <div class="result-ca">${v['Venue ID'] ? 'CA ' + Math.round(v['Venue ID']) : 'No CA ID'}</div>
                 </div>
@@ -327,6 +333,15 @@
             document.getElementById('cardTitle').textContent = v['Venue Name'] || 'Unnamed Venue';
             document.getElementById('cardSub').textContent   = [v.city, v.state].filter(Boolean).join(', ') || '';
             document.getElementById('cardCaId').textContent  = v['Venue ID'] ? Math.round(v['Venue ID']) : '—';
+            // RT code is minted by a DB trigger on insert — display only, never editable here.
+            const rtEl = document.getElementById('cardRtCode');
+            if (rtEl) {
+                rtEl.textContent = v.rt_code || '—';
+                const unset = !v.rt_code;
+                rtEl.style.color      = unset ? '#6b6155' : '#14532d';
+                rtEl.style.background = unset ? '#f1ece4' : '#e8f5e9';
+                rtEl.style.borderColor= unset ? '#d6ccbe' : '#a5d6a7';
+            }
 
             document.getElementById('fVenueName').value = v['Venue Name'] || '';
             document.getElementById('fAddress').value   = v.address || '';
@@ -472,6 +487,13 @@
 
             list.innerHTML = fields.map(f => `
                 <div style="border:1px solid #e8e8e8; border-radius:10px; padding:18px; margin-bottom:14px; background:#fafafa;" id="field-row-${f.id}">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                        <span style="font-size:0.68rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.6px;">Referee Tool code</span>
+                        ${f.rt_code
+                            ? `<span style="font-family:monospace; background:#e8f5e9; border:1px solid #a5d6a7; border-radius:4px; padding:2px 10px; font-size:0.82rem; font-weight:700; color:#14532d; user-select:all;">${f.rt_code}</span>`
+                            : `<span style="font-family:monospace; background:#f1ece4; border:1px solid #d6ccbe; border-radius:4px; padding:2px 10px; font-size:0.8rem; color:#6b6155;">— none —</span>`}
+                        <span style="font-size:0.72rem; color:#aaa;">assigned automatically &middot; not editable</span>
+                    </div>
                     <div style="display:grid; grid-template-columns:2fr 1fr 2fr 2fr; gap:14px; align-items:end; flex-wrap:wrap;">
                         <div>
                             <label style="${lbl}">Field Name</label>

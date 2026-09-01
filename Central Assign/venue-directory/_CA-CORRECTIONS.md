@@ -36,9 +36,23 @@ does not exist in CA.
 Tod was right about the count, wrong about the numbers. CA lists Field 1–4 as
 **#1290–#1293**.
 
-Our four orphan field rows — ids 45, 46, 47, 48, named "Field 1/2/3/4" with
-U8-U10 and U15-U19 splits, no `venue_id` — are almost certainly this set,
-sitting detached while two wrong-numbered rows hold the venue.
+⚠️ **Correction.** An earlier draft of this file claimed the five orphan field
+rows were Prince Hill's missing set. That was wrong — Prince Hill already has
+all four attached:
+
+```
+id=56   RTFCT057  Field 1   CA=9004   -> should be 1290
+id=57   RTFCT058  Field 2   CA=9005   -> should be 1291
+id=176  RTFCT059  Field 3   CA=—      -> should be 1292
+id=177  RTFCT060  Field 4   CA=—      -> should be 1293
+```
+
+The orphans (`Field 1 U8-U10`, `Field 2 U8-U10`, `Field 3 U8-U10`,
+`Field 4 U15-U19`, and unnamed id 33) belong to some other venue and remain
+unexplained. Do not attach them anywhere on a guess.
+
+Prince Hill's four CA numbers can be typed straight into the CA FIELD ID boxes
+on `venue-management.html`.
 
 ## 3. Three NECONN venues have fields we never loaded
 
