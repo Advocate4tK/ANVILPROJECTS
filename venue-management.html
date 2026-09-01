@@ -130,7 +130,16 @@
             <!-- Map -->
             <div id="vmMap" style="display:none;">
                 <div class="map-wrap">
-                    <svg id="venueMapSvg" style="width:100%; height:auto; display:block;"></svg>
+                    <!-- Sits ON the map. The legend under it scrolls out of view
+                         when zoomed, which left no visible way back to the state. -->
+                    <button id="mapBackBtn" onclick="zoomOut()" style="display:none; position:absolute; top:22px; left:22px; z-index:5;
+                        background:#00c853; color:#09142a; border:none; border-radius:8px; padding:9px 18px; cursor:pointer;
+                        font-family:'Barlow Condensed',sans-serif; font-size:0.92rem; font-weight:800; letter-spacing:0.7px;
+                        text-transform:uppercase; box-shadow:0 2px 10px rgba(0,0,0,0.4);">← All of Connecticut</button>
+                    <div id="mapZoomTitle" style="display:none; position:absolute; top:26px; right:24px; z-index:5;
+                        font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800; letter-spacing:1.5px;
+                        text-transform:uppercase; color:rgba(255,255,255,0.85); pointer-events:none;"></div>
+                    <svg id="venueMapSvg" style="width:100%; height:auto; max-height:68vh; display:block;"></svg>
                 </div>
                 <div class="map-legend">
                     <span><span style="display:inline-block; width:11px; height:11px; border-radius:50%; background:#ffc93c; vertical-align:-1px;"></span> venues here — number in the dot</span>
@@ -428,13 +437,25 @@
                 const list = byTown[mapZoomTown] || [];
                 if (!town) { mapZoomTown = null; return renderVenueMap(); }
 
-                const b   = townBBox(town.d);
-                const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.18 + 0.01;
+                const b = townBBox(town.d);
+
+                // Geocoding does not respect town lines — Star Hill Athletic
+                // Center resolved to a point west of Tolland's border. Framing
+                // only the town outline left its pin off-screen with just the
+                // label bleeding in. Grow the box to hold every pin too.
+                list.forEach(v => {
+                    if (v.lat == null) return;
+                    const x = projX(v.lng), y = projY(v.lat);
+                    b.minX = Math.min(b.minX, x); b.maxX = Math.max(b.maxX, x);
+                    b.minY = Math.min(b.minY, y); b.maxY = Math.max(b.maxY, y);
+                });
+
+                const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.16 + 0.008;
                 svg.setAttribute('viewBox',
                     `${b.minX - pad} ${b.minY - pad} ${(b.maxX - b.minX) + pad*2} ${(b.maxY - b.minY) + pad*2}`);
 
                 const span = Math.max(b.maxX - b.minX, b.maxY - b.minY);
-                const R    = span * 0.045;
+                const R    = span * 0.020;
 
                 // Venues that geocoded to the same point — the town-level
                 // fallbacks — would sit exactly on top of each other. Fan them
@@ -454,14 +475,18 @@
                     }
                     return `<g class="vpin" data-venue="${v.id}" data-stacked="${total > 1 ? 1 : 0}">
                         <circle cx="${x}" cy="${y}" r="${R}" fill="#ffc93c" stroke="#4a3600" stroke-width="${span*0.004}"></circle>
-                        <text x="${x}" y="${y + R*2.6}" class="vpin-lbl" style="font-size:${R*1.5}px">${esc(v['Venue Name'])}</text>
+                        <text x="${x}" y="${y + R*2.4}" class="vpin-lbl" style="font-size:${R*0.95}px">${esc(v['Venue Name'])}</text>
                     </g>`;
                 }).join('');
 
                 svg.innerHTML = `<path class="vtwn has" d="${town.d}" style="cursor:default"></path>` + pins;
+                document.getElementById('mapBackBtn').style.display = 'block';
+                const zt = document.getElementById('mapZoomTitle');
+                zt.style.display = 'block';
+                zt.textContent = mapZoomTown;
                 document.getElementById('mapCoverage').innerHTML =
                     `<b style="color:#09142a;">${esc(mapZoomTown)}</b> — ${list.length} venue${list.length===1?'':'s'}`
-                    + ` &nbsp;·&nbsp; <a href="#" onclick="zoomOut();return false;" style="color:#00a844; font-weight:700;">← all of Connecticut</a>`;
+                    + ` &nbsp;·&nbsp; click a pin to open its record`;
 
                 const tipZ = document.getElementById('mapTip');
                 svg.querySelectorAll('.vpin').forEach(el => {
@@ -488,6 +513,8 @@
             }
 
             // ── Whole state: one dot per town ───────────────────────────────
+            document.getElementById('mapBackBtn').style.display = 'none';
+            document.getElementById('mapZoomTitle').style.display = 'none';
             svg.setAttribute('viewBox', CT_TOWNS.viewBox);
 
             const paths = CT_TOWNS.towns.map(t => {
