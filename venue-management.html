@@ -465,6 +465,51 @@
                     el.setAttribute('y', parseFloat(el.dataset.cy) + parseFloat(el.dataset.basedy) * k);
                 }
             });
+            layoutLabels(k);
+        }
+
+        // Set while a town is open, so labels can be re-placed on every zoom.
+        let mapSpots = null, mapR = 0, mapLBL = 0;
+
+        // Seven of Glastonbury's eleven venues geocoded into a one-mile blob
+        // downtown — at whole-town zoom there is physically no room for seven
+        // names, and no amount of label trickery invents it. So placement runs
+        // again on every zoom step. Pin positions are fixed in map units while
+        // the type holds a constant size on screen, which means zooming in
+        // shrinks the label boxes relative to the gaps between pins: names that
+        // could not fit start fitting, and appear on their own.
+        function layoutLabels(k) {
+            if (!mapSpots) return;
+            const svg = document.getElementById('venueMapSvg');
+            if (!svg) return;
+
+            const slots = [1.75, -1.55, 3.05, -2.85, 4.35, -4.15].map(m => m * mapR * k);
+            const hits  = (a, b) => Math.abs(a.x - b.x) * 2 < (a.w + b.w)
+                                 && Math.abs(a.y - b.y) * 2 < (a.h + b.h);
+            const boxes = [];
+            let hidden = 0;
+
+            // Top-down so the order a label wins its slot in is stable as you
+            // zoom, rather than the names reshuffling on every scroll notch.
+            mapSpots.slice().sort((a, b) => a.y - b.y).forEach(p => {
+                const el = svg.querySelector(`.vpin-lbl[data-venue="${p.v.id}"]`);
+                if (!el) return;
+                const name = String(p.v['Venue Name'] || '');
+                const w = name.length * mapLBL * k * 0.55;
+                const h = mapLBL * k * 1.35;
+                const dy = slots.find(d => !boxes.some(o => hits({ x: p.x, y: p.y + d, w, h }, o)));
+                if (dy === undefined) { el.style.display = 'none'; hidden++; return; }
+                el.style.display = '';
+                el.setAttribute('y', p.y + dy);
+                boxes.push({ x: p.x, y: p.y + dy, w, h });
+            });
+
+            const note = document.getElementById('mapHiddenNote');
+            if (note) {
+                note.innerHTML = hidden
+                    ? ` &nbsp;·&nbsp; <span style="color:#8a7f72;">${hidden} name${hidden===1?'':'s'} hidden — zoom in or hover the pin</span>`
+                    : '';
+            }
         }
 
         function screenToSVG(svg, clientX, clientY) {
@@ -645,26 +690,9 @@
                     });
                 });
 
-                // Every label used to hang directly under its pin, so two pins
-                // at the same latitude produced two labels in the same place.
-                // Try slots above and below until one is clear; a label that
-                // fits nowhere is dropped rather than drawn into the pile —
-                // its pin is still there and still names itself on hover.
-                const SLOTS = [R*1.75, -R*1.55, R*3.05, -R*2.85, R*4.35, -R*4.15];
-                const boxes = [];
-                const hits  = (a, b) => Math.abs(a.x - b.x) * 2 < (a.w + b.w)
-                                     && Math.abs(a.y - b.y) * 2 < (a.h + b.h);
-                let dropped = 0;
-                spots.slice().sort((a, b) => a.y - b.y).forEach(p => {
-                    const name = String(p.v['Venue Name'] || '');
-                    const box  = { w: name.length * LBL * 0.55, h: LBL * 1.35 };
-                    p.dy = SLOTS.find(dy => {
-                        const cand = { x: p.x, y: p.y + dy, w: box.w, h: box.h };
-                        return !boxes.some(o => hits(cand, o));
-                    });
-                    if (p.dy === undefined) { dropped++; return; }
-                    boxes.push({ x: p.x, y: p.y + p.dy, w: box.w, h: box.h });
-                });
+                // Labels are all rendered; layoutLabels() decides which of them
+                // fit at the current zoom and where each one sits.
+                mapSpots = spots; mapR = R; mapLBL = LBL;
 
                 // Two layers, not one group per venue: with a group per venue a
                 // later pin's circle painted over an earlier pin's label.
@@ -675,8 +703,8 @@
                         <text x="${p.x}" y="${p.y}" class="vdot-lbl" data-basefs="${R*1.1}" data-cy="${p.y}" data-basedy="0" style="font-size:${R*1.1}px">${fieldCountForVenue(p.v)}</text>
                     </g>`).join('');
 
-                const labels = spots.filter(p => p.dy !== undefined).map(p =>
-                    `<text x="${p.x}" y="${p.y + p.dy}" class="vpin-lbl" data-basefs="${LBL}" data-cy="${p.y}" data-basedy="${p.dy}" style="font-size:${LBL}px">${esc(p.v['Venue Name'])}</text>`
+                const labels = spots.map(p =>
+                    `<text x="${p.x}" y="${p.y}" class="vpin-lbl" data-venue="${p.v.id}" data-basefs="${LBL}" style="font-size:${LBL}px">${esc(p.v['Venue Name'])}</text>`
                 ).join('');
 
                 svg.innerHTML = `<path class="vtwn has" d="${town.d}" style="cursor:default"></path>` + pins + labels;
@@ -687,7 +715,8 @@
                 document.getElementById('mapCoverage').innerHTML =
                     `<b style="color:#09142a;">${esc(mapZoomTown)}</b> — ${list.length} venue${list.length===1?'':'s'}`
                     + ` &nbsp;·&nbsp; click a pin to open its record`
-                    + (dropped ? ` &nbsp;·&nbsp; <span style="color:#8a7f72;">${dropped} name${dropped===1?'':'s'} hidden to avoid overlap — hover the pin</span>` : '');
+                    + `<span id="mapHiddenNote"></span>`;
+                layoutLabels(1);   // after the note span exists, so it can report
 
                 const tipZ = document.getElementById('mapTip');
                 svg.querySelectorAll('.vpin').forEach(el => {
@@ -717,6 +746,7 @@
             }
 
             // ── Whole state: one dot per town ───────────────────────────────
+            mapSpots = null;         // no venue labels at state level
             document.getElementById('mapBackBtn').style.display = 'none';
             document.getElementById('mapZoomTitle').style.display = 'none';
             const vbn = CT_TOWNS.viewBox.split(/\s+/).map(Number);
