@@ -182,6 +182,16 @@
             <!-- Detail Card -->
             <div id="venueCard" style="display:none;">
                 <div class="venue-card">
+                    <!-- Clicking a pin drops you into the list, scrolled past the
+                         tab bar, with no visible way back to the map. Shown only
+                         when the card was opened from a pin. -->
+                    <div id="cardBackToMap" style="display:none; margin-bottom:16px;">
+                        <button type="button" onclick="backToMap()"
+                            style="background:#ffc93c; color:#4a3600; border:none; border-radius:6px; padding:7px 16px; cursor:pointer;
+                                   font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">
+                            &larr; Back to map
+                        </button>
+                    </div>
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:8px;">
                         <div>
                             <div style="font-size:1.3rem; font-weight:900; color:#152d55;" id="cardTitle"></div>
@@ -379,6 +389,18 @@
         let CT_TOWN_SET = new Set();
         let CT_TOWN_BY_KEY = {};
 
+        // Set when a map pin opened the card, so the card can offer a way back.
+        // The map keeps mapZoomTown, so returning lands on the same town.
+        let cameFromMap = false;
+
+        function backToMap() {
+            cameFromMap = false;
+            const bar = document.getElementById('cardBackToMap');
+            if (bar) bar.style.display = 'none';
+            showVMTab('map');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
         function showVMTab(which) {
             const isMap = which === 'map';
             document.getElementById('vmList').style.display = isMap ? 'none' : 'block';
@@ -415,7 +437,29 @@
             vb = box;
             if (remember) vbHome = { ...box };
             const svg = document.getElementById('venueMapSvg');
-            if (svg) svg.setAttribute('viewBox', `${box.x} ${box.y} ${box.w} ${box.h}`);
+            if (!svg) return;
+            svg.setAttribute('viewBox', `${box.x} ${box.y} ${box.w} ${box.h}`);
+            rescaleMapMarkers(svg);
+        }
+
+        // Text and pins are drawn in SVG user units, so zooming magnifies them
+        // along with the map — the labels in a crowded town stay exactly as
+        // overlapped no matter how far in you go. Rescaling them against the
+        // current viewBox keeps them a constant SIZE ON SCREEN, so zooming
+        // pushes the venues apart while the type stays put and the pile
+        // untangles itself.
+        function rescaleMapMarkers(svg) {
+            if (!vbHome || !vb) return;
+            const k = vb.w / vbHome.w;
+            svg.querySelectorAll('[data-baser]').forEach(el => {
+                el.setAttribute('r', parseFloat(el.dataset.baser) * k);
+            });
+            svg.querySelectorAll('[data-basefs]').forEach(el => {
+                el.style.fontSize = (parseFloat(el.dataset.basefs) * k) + 'px';
+                if (el.dataset.basedy) {
+                    el.setAttribute('y', parseFloat(el.dataset.cy) + parseFloat(el.dataset.basedy) * k);
+                }
+            });
         }
 
         function screenToSVG(svg, clientX, clientY) {
@@ -569,10 +613,12 @@
                         x += Math.cos(a) * R * 1.6;
                         y += Math.sin(a) * R * 1.6;
                     }
+                    // data-baser / data-basefs let rescaleMapMarkers() hold the
+                    // pins and type at a fixed size on screen while you zoom.
                     return `<g class="vpin" data-venue="${v.id}" data-stacked="${total > 1 ? 1 : 0}">
-                        <circle cx="${x}" cy="${y}" r="${R}" fill="#ffc93c" stroke="#4a3600" stroke-width="${span*0.004}"></circle>
-                        <text x="${x}" y="${y}" class="vdot-lbl" style="font-size:${R*1.1}px">${fieldCountForVenue(v)}</text>
-                        <text x="${x}" y="${y + R*2.4}" class="vpin-lbl" style="font-size:${R*0.95}px">${esc(v['Venue Name'])}</text>
+                        <circle cx="${x}" cy="${y}" r="${R}" data-baser="${R}" fill="#ffc93c" stroke="#4a3600" stroke-width="${span*0.004}" vector-effect="non-scaling-stroke"></circle>
+                        <text x="${x}" y="${y}" class="vdot-lbl" data-basefs="${R*1.1}" data-cy="${y}" data-basedy="0" style="font-size:${R*1.1}px">${fieldCountForVenue(v)}</text>
+                        <text x="${x}" y="${y + R*2.4}" class="vpin-lbl" data-basefs="${R*0.95}" data-cy="${y}" data-basedy="${R*2.4}" style="font-size:${R*0.95}px">${esc(v['Venue Name'])}</text>
                     </g>`;
                 }).join('');
 
@@ -603,6 +649,7 @@
                     el.addEventListener('mouseleave', () => { tipZ.style.display = 'none'; });
                     el.addEventListener('click', () => {
                         if (svg.dataset.dragged) return;   // that was a pan, not a click
+                        cameFromMap = true;
                         showVMTab('list');
                         openVenue(v.id);
                     });
@@ -793,7 +840,7 @@
                 return;
             }
             list.innerHTML = venues.map(v => `
-                <div class="result-row ${v.id === currentVenueId ? 'active' : ''}" id="row-${v.id}" onclick="openVenue(${v.id})">
+                <div class="result-row ${v.id === currentVenueId ? 'active' : ''}" id="row-${v.id}" onclick="cameFromMap=false; openVenue(${v.id})">
                     <div>
                         <div class="result-name">${v['Venue Name'] || '—'}</div>
                         <div class="result-sub">${v.rt_code ? `<span class="result-code">${v.rt_code}</span> &nbsp;·&nbsp; ` : ''}${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; <span style="color:${fieldCountLabel(v) === 'no fields' ? '#c0392b' : '#555'}; font-weight:700;">${fieldCountLabel(v)}</span></div>
@@ -855,6 +902,9 @@
             document.getElementById('fClub').value      = v.club_name || '';
             caLocked = true;
             renderCAField(v['Venue ID']);
+
+            const backBar = document.getElementById('cardBackToMap');
+            if (backBar) backBar.style.display = cameFromMap ? 'block' : 'none';
 
             document.getElementById('venueCard').style.display = 'block';
             document.getElementById('saveStatus').style.display = 'none';
