@@ -359,6 +359,13 @@
             'beacon falls':        'Beacon Falls'
         };
 
+        // Pins carry the FIELD count, not a venue count — a dot that says 4 means
+        // four playable fields there, which is the number that matters when you
+        // are deciding whether a venue can host a slate of games.
+        function fieldCountForVenue(v) {
+            return v['Venue ID'] != null ? (fieldCountByCaVenue[v['Venue ID']] || 0) : 0;
+        }
+
         function townForVenue(v) {
             const raw = (v.city || '').trim();
             if (!raw) return null;
@@ -395,6 +402,82 @@
         const projY = lat => -lat;
 
         let mapZoomTown = null;
+
+        // ── Pan and wheel-zoom ────────────────────────────────────────────────
+        // Straight viewBox manipulation — no map library. The SVG letterboxes
+        // (preserveAspectRatio defaults to xMidYMid meet), so screen->SVG has to
+        // account for the empty bars or the map slides away from the cursor.
+        let vb = null;                      // current viewBox {x,y,w,h}
+        let vbHome = null;                  // what zoomOut/reset returns to
+        let panning = null;
+
+        function setVB(box, remember) {
+            vb = box;
+            if (remember) vbHome = { ...box };
+            const svg = document.getElementById('venueMapSvg');
+            if (svg) svg.setAttribute('viewBox', `${box.x} ${box.y} ${box.w} ${box.h}`);
+        }
+
+        function screenToSVG(svg, clientX, clientY) {
+            const r = svg.getBoundingClientRect();
+            const scale = Math.min(r.width / vb.w, r.height / vb.h);   // "meet"
+            const drawnW = vb.w * scale, drawnH = vb.h * scale;
+            const offX = (r.width  - drawnW) / 2;
+            const offY = (r.height - drawnH) / 2;
+            return {
+                x: vb.x + (clientX - r.left - offX) / scale,
+                y: vb.y + (clientY - r.top  - offY) / scale
+            };
+        }
+
+        function attachMapControls() {
+            const svg = document.getElementById('venueMapSvg');
+            if (!svg || svg.dataset.panzoom) return;
+            svg.dataset.panzoom = '1';
+            svg.style.cursor = 'grab';
+
+            svg.addEventListener('wheel', e => {
+                if (!vb) return;
+                e.preventDefault();
+                const p = screenToSVG(svg, e.clientX, e.clientY);
+                const f = e.deltaY < 0 ? 0.82 : 1 / 0.82;
+                // Floor stops it zooming past a soccer field; ceiling keeps the
+                // state from shrinking to a dot you cannot grab.
+                const w = Math.min(Math.max(vb.w * f, 0.0025), vbHome ? vbHome.w * 3 : 6);
+                const k = w / vb.w;
+                // Anchor on the cursor so the point under the pointer stays put.
+                setVB({ x: p.x - (p.x - vb.x) * k, y: p.y - (p.y - vb.y) * k, w, h: vb.h * k });
+            }, { passive: false });
+
+            svg.addEventListener('pointerdown', e => {
+                if (!vb) return;
+                panning = { sx: e.clientX, sy: e.clientY, box: { ...vb }, moved: false };
+                svg.setPointerCapture(e.pointerId);
+                svg.style.cursor = 'grabbing';
+            });
+
+            svg.addEventListener('pointermove', e => {
+                if (!panning) return;
+                const r = svg.getBoundingClientRect();
+                const scale = Math.min(r.width / panning.box.w, r.height / panning.box.h);
+                const dx = (e.clientX - panning.sx) / scale;
+                const dy = (e.clientY - panning.sy) / scale;
+                if (Math.abs(e.clientX - panning.sx) > 3 || Math.abs(e.clientY - panning.sy) > 3) panning.moved = true;
+                setVB({ x: panning.box.x - dx, y: panning.box.y - dy, w: panning.box.w, h: panning.box.h });
+            });
+
+            const endPan = e => {
+                if (!panning) return;
+                // A drag must not register as a click on whatever is underneath.
+                svg.dataset.dragged = panning.moved ? '1' : '';
+                panning = null;
+                svg.style.cursor = 'grab';
+                setTimeout(() => { svg.dataset.dragged = ''; }, 0);
+            };
+            svg.addEventListener('pointerup', endPan);
+            svg.addEventListener('pointercancel', endPan);
+            svg.addEventListener('dblclick', () => { if (vbHome) setVB({ ...vbHome }); });
+        }
 
         // Bounding box straight off the town's own path data. Every command in
         // these paths is an absolute M/L, so the coordinates can just be read.
@@ -451,8 +534,8 @@
                 });
 
                 const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.16 + 0.008;
-                svg.setAttribute('viewBox',
-                    `${b.minX - pad} ${b.minY - pad} ${(b.maxX - b.minX) + pad*2} ${(b.maxY - b.minY) + pad*2}`);
+                setVB({ x: b.minX - pad, y: b.minY - pad,
+                        w: (b.maxX - b.minX) + pad*2, h: (b.maxY - b.minY) + pad*2 }, true);
 
                 const span = Math.max(b.maxX - b.minX, b.maxY - b.minY);
                 const R    = span * 0.020;
@@ -475,6 +558,7 @@
                     }
                     return `<g class="vpin" data-venue="${v.id}" data-stacked="${total > 1 ? 1 : 0}">
                         <circle cx="${x}" cy="${y}" r="${R}" fill="#ffc93c" stroke="#4a3600" stroke-width="${span*0.004}"></circle>
+                        <text x="${x}" y="${y}" class="vdot-lbl" style="font-size:${R*1.1}px">${fieldCountForVenue(v)}</text>
                         <text x="${x}" y="${y + R*2.4}" class="vpin-lbl" style="font-size:${R*0.95}px">${esc(v['Venue Name'])}</text>
                     </g>`;
                 }).join('');
@@ -505,17 +589,20 @@
                     });
                     el.addEventListener('mouseleave', () => { tipZ.style.display = 'none'; });
                     el.addEventListener('click', () => {
+                        if (svg.dataset.dragged) return;   // that was a pan, not a click
                         showVMTab('list');
                         openVenue(v.id);
                     });
                 });
+                attachMapControls();
                 return;
             }
 
             // ── Whole state: one dot per town ───────────────────────────────
             document.getElementById('mapBackBtn').style.display = 'none';
             document.getElementById('mapZoomTitle').style.display = 'none';
-            svg.setAttribute('viewBox', CT_TOWNS.viewBox);
+            const vbn = CT_TOWNS.viewBox.split(/\s+/).map(Number);
+            setVB({ x: vbn[0], y: vbn[1], w: vbn[2], h: vbn[3] }, true);
 
             const paths = CT_TOWNS.towns.map(t => {
                 const list = byTown[t.n] || [];
@@ -553,10 +640,12 @@
                 });
                 el.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
                 el.addEventListener('click', () => {
+                    if (svg.dataset.dragged) return;       // that was a pan, not a click
                     tip.style.display = 'none';
                     zoomToTown(el.getAttribute('data-town'));
                 });
             });
+            attachMapControls();
         }
 
         // "three fields" reads faster than "3" when you are scanning a list for
