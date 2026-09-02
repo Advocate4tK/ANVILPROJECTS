@@ -3064,21 +3064,61 @@
             : allVenues.slice()).sort((a, b) => natCmp(a.name, b.name));
     }
 
-    // [[code, name], ...] — venue rows then their fields, indented.
+    // [[type, code, name], ...] — venue rows then their fields.
+    //
+    // The type column is not decoration. On screen a venue code is green and a
+    // field code is blue; a spreadsheet has no colour, and indentation alone
+    // does not tell anyone which column a code belongs in.
     function legendRows() {
         const rows = [];
         legendVenues().forEach(v => {
-            rows.push([v.rtCode || '(code pending)', v.name]);
+            rows.push(['Venue', v.rtCode || '(code pending)', v.name]);
             const fields = allFields
                 .filter(f => String(f.venueId) === String(v.id))
                 .sort((a, b) => natCmp(a.name, b.name));
             if (fields.length) {
-                fields.forEach(f => rows.push(['  ' + (f.rtCode || '(code pending)'), '  ' + f.name]));
+                fields.forEach(f => rows.push(['Field', f.rtCode || '(code pending)', '  ' + f.name]));
             } else {
-                rows.push(['', '  — no fields —']);
+                rows.push(['', '', '  — no fields —']);
             }
-            rows.push(['', '']);
+            rows.push(['', '', '']);
         });
+        return rows;
+    }
+
+    // Sample rows for the downloaded template, built from THIS club's first
+    // real venue and field. The old rows were hardcoded Griswold names shown to
+    // every club — demonstrating names when the whole point is the codes.
+    // Two rows, deliberately different, because there are two valid shapes:
+    //   1. a venue that HAS fields  → RTV code + RTF code
+    //   2. a venue with no fields   → RTV code, Field left blank
+    // Picking whichever venue sorted first gave a blank Field cell whenever
+    // that venue had none — an example that never showed an RTF code at all.
+    function templateSampleRows() {
+        const vs = legendVenues().filter(v => v.rtCode);
+        const fieldsOf = v => allFields.filter(x => String(x.venueId) === String(v.id))
+                                       .sort((a, b) => natCmp(a.name, b.name));
+
+        let withField = null, itsField = null;
+        for (const v of vs) {
+            const f = fieldsOf(v).find(x => x.rtCode);
+            if (f) { withField = v; itsField = f; break; }
+        }
+        const noField = vs.find(v => fieldsOf(v).length === 0) || null;
+
+        const rows = [];
+        if (withField) {
+            rows.push(['2026-04-05', '10:00 AM', 'Your Club U12 Girls', 'Visiting Club U12 Girls',
+                       'U12', 'Female', 'Rec', withField.rtCode, itsField.rtCode, '']);
+        }
+        if (noField) {
+            rows.push(['2026-04-05', '12:00 PM', 'Your Club U10 Boys', 'Visiting Club U10 Boys',
+                       'U10', 'Male', 'Comp', noField.rtCode, '', 'venue has no fields — Field left blank']);
+        }
+        if (!rows.length) {
+            rows.push(['2026-04-05', '10:00 AM', 'Your Club U12 Girls', 'Visiting Club U12 Girls',
+                       'U12', 'Female', 'Rec', (vs[0]?.rtCode || 'Griswold Middle School'), '', '']);
+        }
         return rows;
     }
 
@@ -3088,8 +3128,7 @@
 
         const ws = XLSX.utils.aoa_to_sheet([
             CSV_TEMPLATE_HEADERS,
-            ['2026-04-05','10:00 AM','Griswold FC Girls','Stonington SC Girls','U12','Female','Rec','Griswold Middle School','Field 1',''],
-            ['2026-04-05','12:00 PM','Griswold FC Boys','Canterbury SC Boys','U10','Male','Comp','Griswold Middle School','Field 2',''],
+            ...templateSampleRows(),
         ]);
         ws['!cols'] = CSV_TEMPLATE_HEADERS.map(() => ({ wch: 20 }));
         XLSX.utils.book_append_sheet(wb, ws, 'Games');
@@ -3098,12 +3137,13 @@
         if (rows.length) {
             const legend = XLSX.utils.aoa_to_sheet([
                 ['Venue & Field Codes'],
-                ['Put the code in the Venue or Field column — the name also works.'],
+                ['Put the RTV code in the Venue column and the RTF code in the Field column.'],
+                ['Full names work too. Leave Field blank when a venue has no fields.'],
                 [''],
-                ['Code', 'Name'],
+                ['Type', 'Code', 'Name'],
                 ...rows
             ]);
-            legend['!cols'] = [{ wch: 16 }, { wch: 42 }];
+            legend['!cols'] = [{ wch: 8 }, { wch: 16 }, { wch: 42 }];
             XLSX.utils.book_append_sheet(wb, legend, 'Venue & Field Codes');
         }
 
@@ -3131,13 +3171,13 @@
         };
         const lines = [
             CSV_TEMPLATE_HEADERS.join(','),
-            '2026-04-05,10:00 AM,Griswold FC Girls,Stonington SC Girls,U12,Female,Rec,Griswold Middle School,Field 1,',
-            '2026-04-05,12:00 PM,Griswold FC Boys,Canterbury SC Boys,U10,Male,Comp,Griswold Middle School,Field 2,',
+            ...templateSampleRows().map(r => r.map(esc).join(',')),
             '',
             'Venue & Field Codes',
-            'Put the code in the Venue or Field column — the name also works.',
+            'Put the RTV code in the Venue column and the RTF code in the Field column.',
+            'Full names work too. Leave Field blank when a venue has no fields.',
             '',
-            'Code,Name',
+            'Type,Code,Name',
             ...rows.map(r => r.map(esc).join(','))
         ];
 
