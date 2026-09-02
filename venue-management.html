@@ -606,39 +606,88 @@
                 // and pushed the crowded towns back into overlap.
                 const LBL  = span * 0.013;
 
-                // Venues that geocoded to the same point — the town-level
-                // fallbacks — would sit exactly on top of each other. Fan them
-                // out just enough to be clickable, and say so in the tooltip
-                // rather than pretending the spread is real.
-                const seen = {};
-                const pins = list.map(v => {
-                    if (v.lat == null) return '';
-                    const k = v.lat.toFixed(4) + ',' + v.lng.toFixed(4);
-                    const i = (seen[k] = (seen[k] || 0) + 1) - 1;
-                    const total = list.filter(o => o.lat != null && o.lat.toFixed(4)+','+o.lng.toFixed(4) === k).length;
-                    let x = projX(v.lng), y = projY(v.lat);
-                    if (total > 1) {
-                        const a = (i / total) * Math.PI * 2;
-                        x += Math.cos(a) * R * 1.6;
-                        y += Math.sin(a) * R * 1.6;
-                    }
-                    // data-baser / data-basefs let rescaleMapMarkers() hold the
-                    // pins and type at a fixed size on screen while you zoom.
-                    return `<g class="vpin" data-venue="${v.id}" data-stacked="${total > 1 ? 1 : 0}">
-                        <circle cx="${x}" cy="${y}" r="${R}" data-baser="${R}" fill="#ffc93c" stroke="#4a3600" stroke-width="1.5" vector-effect="non-scaling-stroke"></circle>
-                        <text x="${x}" y="${y}" class="vdot-lbl" data-basefs="${R*1.1}" data-cy="${y}" data-basedy="0" style="font-size:${R*1.1}px">${fieldCountForVenue(v)}</text>
-                        <text x="${x}" y="${y + R*1.75}" class="vpin-lbl" data-basefs="${LBL}" data-cy="${y}" data-basedy="${R*1.75}" style="font-size:${LBL}px">${esc(v['Venue Name'])}</text>
-                    </g>`;
-                }).join('');
+                const spots = list.filter(v => v.lat != null)
+                                  .map(v => ({ v, x: projX(v.lng), y: projY(v.lat) }));
 
-                svg.innerHTML = `<path class="vtwn has" d="${town.d}" style="cursor:default"></path>` + pins;
+                // Venues that geocoded to the SAME point are the town-level
+                // fallbacks. That is a data-quality fact, so it stays tied to
+                // an exact match and gets said in the tooltip — the fan-out
+                // below must not be allowed to imply it.
+                const exact = {};
+                spots.forEach(p => {
+                    const k = p.v.lat.toFixed(4) + ',' + p.v.lng.toFixed(4);
+                    exact[k] = (exact[k] || 0) + 1;
+                });
+                spots.forEach(p => {
+                    p.stacked = exact[p.v.lat.toFixed(4) + ',' + p.v.lng.toFixed(4)] > 1 ? 1 : 0;
+                });
+
+                // Fanning only exact matches left the near-misses piled up —
+                // Knox Lane, Glastonbury High and Rotary sit a few hundred
+                // yards apart and covered each other. Cluster on drawn
+                // distance instead, so anything that visually collides is
+                // spread whether or not the coordinates match.
+                const SEP = R * 2.3;
+                const clusters = [];
+                spots.forEach(p => {
+                    const c = clusters.find(cl => cl.some(q => Math.hypot(q.x - p.x, q.y - p.y) < SEP));
+                    if (c) c.push(p); else clusters.push([p]);
+                });
+                clusters.forEach(cl => {
+                    if (cl.length < 2) return;
+                    const cx = cl.reduce((s, p) => s + p.x, 0) / cl.length;
+                    const cy = cl.reduce((s, p) => s + p.y, 0) / cl.length;
+                    const rad = SEP * (cl.length > 3 ? 1.15 : 0.9);
+                    cl.forEach((p, i) => {
+                        const a = (i / cl.length) * Math.PI * 2 - Math.PI / 2;
+                        p.x = cx + Math.cos(a) * rad;
+                        p.y = cy + Math.sin(a) * rad;
+                    });
+                });
+
+                // Every label used to hang directly under its pin, so two pins
+                // at the same latitude produced two labels in the same place.
+                // Try slots above and below until one is clear; a label that
+                // fits nowhere is dropped rather than drawn into the pile —
+                // its pin is still there and still names itself on hover.
+                const SLOTS = [R*1.75, -R*1.55, R*3.05, -R*2.85, R*4.35, -R*4.15];
+                const boxes = [];
+                const hits  = (a, b) => Math.abs(a.x - b.x) * 2 < (a.w + b.w)
+                                     && Math.abs(a.y - b.y) * 2 < (a.h + b.h);
+                let dropped = 0;
+                spots.slice().sort((a, b) => a.y - b.y).forEach(p => {
+                    const name = String(p.v['Venue Name'] || '');
+                    const box  = { w: name.length * LBL * 0.55, h: LBL * 1.35 };
+                    p.dy = SLOTS.find(dy => {
+                        const cand = { x: p.x, y: p.y + dy, w: box.w, h: box.h };
+                        return !boxes.some(o => hits(cand, o));
+                    });
+                    if (p.dy === undefined) { dropped++; return; }
+                    boxes.push({ x: p.x, y: p.y + p.dy, w: box.w, h: box.h });
+                });
+
+                // Two layers, not one group per venue: with a group per venue a
+                // later pin's circle painted over an earlier pin's label.
+                // data-baser / data-basefs let rescaleMapMarkers() hold the
+                // pins and type at a fixed size on screen while you zoom.
+                const pins = spots.map(p => `<g class="vpin" data-venue="${p.v.id}" data-stacked="${p.stacked}">
+                        <circle cx="${p.x}" cy="${p.y}" r="${R}" data-baser="${R}" fill="#ffc93c" stroke="#4a3600" stroke-width="1.5" vector-effect="non-scaling-stroke"></circle>
+                        <text x="${p.x}" y="${p.y}" class="vdot-lbl" data-basefs="${R*1.1}" data-cy="${p.y}" data-basedy="0" style="font-size:${R*1.1}px">${fieldCountForVenue(p.v)}</text>
+                    </g>`).join('');
+
+                const labels = spots.filter(p => p.dy !== undefined).map(p =>
+                    `<text x="${p.x}" y="${p.y + p.dy}" class="vpin-lbl" data-basefs="${LBL}" data-cy="${p.y}" data-basedy="${p.dy}" style="font-size:${LBL}px">${esc(p.v['Venue Name'])}</text>`
+                ).join('');
+
+                svg.innerHTML = `<path class="vtwn has" d="${town.d}" style="cursor:default"></path>` + pins + labels;
                 document.getElementById('mapBackBtn').style.display = 'block';
                 const zt = document.getElementById('mapZoomTitle');
                 zt.style.display = 'block';
                 zt.textContent = mapZoomTown;
                 document.getElementById('mapCoverage').innerHTML =
                     `<b style="color:#09142a;">${esc(mapZoomTown)}</b> — ${list.length} venue${list.length===1?'':'s'}`
-                    + ` &nbsp;·&nbsp; click a pin to open its record`;
+                    + ` &nbsp;·&nbsp; click a pin to open its record`
+                    + (dropped ? ` &nbsp;·&nbsp; <span style="color:#8a7f72;">${dropped} name${dropped===1?'':'s'} hidden to avoid overlap — hover the pin</span>` : '');
 
                 const tipZ = document.getElementById('mapTip');
                 svg.querySelectorAll('.vpin').forEach(el => {
