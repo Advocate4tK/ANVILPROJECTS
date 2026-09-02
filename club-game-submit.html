@@ -2792,9 +2792,54 @@
 
     // Normalize time → HH:MM (24hr)
     // Handles: "10:30 AM", "10:30am", "10am", "1030", "10:30:00", "14:30"
+    // ── Excel cells are not strings ───────────────────────────────────────────
+    // A date typed as a DATE arrives as an Excel serial number (or, with
+    // cellDates, a Date object) — never as text. normalizeDate/normalizeTime
+    // both opened with .trim(), so the parser threw "trim is not a function"
+    // on any properly formatted date cell and the whole upload failed. It only
+    // ever worked when the column happened to be text. Eric hit this.
+    //
+    // Serials are converted with exact UTC arithmetic rather than through the
+    // local timezone: building a Date and reading local components is what
+    // produces the classic off-by-one, where 9/12 uploads as 9/11.
+    const XL_EPOCH = 25569;            // Excel serial for 1970-01-01
+
+    function excelSerialToParts(n) {
+        const days = Math.floor(n);
+        const d = new Date(Math.round((days - XL_EPOCH) * 86400000));
+        if (isNaN(d)) return null;
+        const frac = n - days;
+        const mins = Math.round(frac * 1440);
+        return {
+            y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate(),
+            hh: Math.floor(mins / 60) % 24, mm: mins % 60
+        };
+    }
+
+    // Last-resort for a Date object, if some path still hands us one.
+    const dateParts = v => ({
+        y: v.getFullYear(), m: v.getMonth() + 1, d: v.getDate(),
+        hh: v.getHours(), mm: v.getMinutes()
+    });
+
     function normalizeTime(t) {
+        if (t === 0) return '00:00';                  // Excel midnight is 0, not blank
         if (!t) return '';
-        t = t.trim();
+        if (t instanceof Date) {
+            const p = dateParts(t);
+            return String(p.hh).padStart(2, '0') + ':' + String(p.mm).padStart(2, '0');
+        }
+        if (typeof t === 'number') {
+            // Any fraction of a day is a real Excel time — 0.375 for a
+            // time-only cell, 46277.375 when the cell carries date AND time.
+            // A WHOLE number is someone who typed 930 into a General cell.
+            if (!Number.isInteger(t)) {
+                const p = excelSerialToParts(t);
+                return p ? String(p.hh).padStart(2, '0') + ':' + String(p.mm).padStart(2, '0') : null;
+            }
+            t = String(t);
+        }
+        t = String(t).trim();
         // "1030" or "930" → insert colon
         const compact = t.match(/^(\d{1,2})(\d{2})$/);
         if (compact) t = compact[1] + ':' + compact[2];
@@ -2821,7 +2866,14 @@
     const MONTH_NAMES = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
     function normalizeDate(d) {
         if (!d) return null;
-        d = d.trim();
+        const iso = p => `${p.y}-${String(p.m).padStart(2,'0')}-${String(p.d).padStart(2,'0')}`;
+        if (d instanceof Date) return isNaN(d) ? null : iso(dateParts(d));
+        if (typeof d === 'number') {
+            if (d < 1) return null;                   // that is a time, not a date
+            const p = excelSerialToParts(d);
+            return p ? iso(p) : null;
+        }
+        d = String(d).trim();
         // Already YYYY-MM-DD
         if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
         // M/D/YYYY or M-D-YYYY (2 or 4 digit year)
@@ -3220,7 +3272,15 @@
         if (isExcel) {
             const reader = new FileReader();
             reader.onload = e => {
-                const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+                // cellDates was TRUE here, which handed back Date objects that
+                // normalizeDate/normalizeTime then called .trim() on. Raw
+                // serials are unambiguous and convert without a timezone —
+                // building a Date and reading local parts is what turns 9/12
+                // into 9/11. The normalizers still accept Date objects
+                // defensively in case another path produces one.
+                const wb = XLSX.read(e.target.result, { type: 'array' });
+                // Sheet 1 is Games; sheet 2 of our own template is the code
+                // legend and must never be parsed as rows.
                 const ws = wb.Sheets[wb.SheetNames[0]];
                 const rawRows = XLSX.utils.sheet_to_json(ws, { defval: '' });
                 applyFormat(rawRows);
