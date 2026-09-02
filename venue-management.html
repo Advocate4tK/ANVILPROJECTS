@@ -104,13 +104,34 @@
                      pointer-events:none; user-select:none; }
         .vdot-lbl  { font-family:'JetBrains Mono',monospace; font-weight:600; fill:#4a3600;
                      text-anchor:middle; dominant-baseline:central; pointer-events:none; user-select:none; }
-        /* Red marks the real geocoded point; the line ties it to the pin that
-           had to move to make room for its name. Both non-scaling so they stay
-           hairline-thin at every zoom. */
-        .vlead     { stroke:#ff5252; stroke-width:1.1px; stroke-dasharray:3 2;
-                     vector-effect:non-scaling-stroke; pointer-events:none; opacity:0.85; }
-        .vtrue     { fill:#ff5252; stroke:#4a0d0d; stroke-width:1px;
-                     vector-effect:non-scaling-stroke; pointer-events:none; }
+        .vpin-body { fill:#ffc93c; stroke:#4a3600; stroke-width:1.5px; vector-effect:non-scaling-stroke; }
+        .vpin.on .vpin-body { fill:#fff; stroke:#00c853; stroke-width:2.5px; }
+
+        /* Map and its name panel. The panel is what makes the map legible —
+           every venue is listed in text, so the map never has to win a fight
+           between a wide name and a point. */
+        .map-row   { display:flex; gap:14px; align-items:stretch; }
+        .map-side  { width:290px; flex:0 0 290px; background:#060e20; border:1px solid #e2d9ce;
+                     border-radius:12px; padding:0; overflow:hidden; display:flex; flex-direction:column; }
+        .map-side-hd { font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; font-weight:800;
+                     letter-spacing:1.2px; text-transform:uppercase; color:#ffc93c;
+                     padding:13px 16px; border-bottom:1px solid #1d2b47; }
+        .map-side-list { overflow-y:auto; max-height:64vh; }
+        .msv      { display:flex; gap:10px; align-items:center; padding:9px 14px; cursor:pointer;
+                    border-bottom:1px solid #131f36; }
+        .msv:hover, .msv.on { background:#152945; }
+        .msv-n    { width:23px; height:23px; flex:0 0 23px; border-radius:50%; background:#ffc93c; color:#4a3600;
+                    font-family:'JetBrains Mono',monospace; font-size:0.76rem; font-weight:600;
+                    display:flex; align-items:center; justify-content:center; }
+        .msv-n.zero { background:#3a2020; color:#ff8a80; }
+        .msv-t    { min-width:0; }
+        .msv-nm   { font-family:'DM Sans',sans-serif; font-size:0.84rem; font-weight:700; color:#fff;
+                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .msv-cd   { font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:#7f9ac4; }
+        @media (max-width: 900px) {
+            .map-row { flex-direction:column; }
+            .map-side { width:auto; flex:none; }
+        }
         .map-tip {
             position:fixed; z-index:60; pointer-events:none; display:none;
             background:rgba(4,12,26,0.96); border:1px solid #ffc93c; border-radius:9px;
@@ -141,7 +162,10 @@
 
             <!-- Map -->
             <div id="vmMap" style="display:none;">
-                <div class="map-wrap">
+              <!-- Map carries position and count; the panel carries the names.
+                   Asking the map to do both is what kept producing collisions. -->
+              <div class="map-row">
+                <div class="map-wrap" style="flex:1; min-width:0;">
                     <!-- Sits ON the map. The legend under it scrolls out of view
                          when zoomed, which left no visible way back to the state. -->
                     <button id="mapBackBtn" onclick="zoomOut()" style="display:none; position:absolute; top:22px; left:22px; z-index:5;
@@ -153,6 +177,11 @@
                         text-transform:uppercase; color:rgba(255,255,255,0.85); pointer-events:none;"></div>
                     <svg id="venueMapSvg" style="width:100%; height:auto; max-height:68vh; display:block;"></svg>
                 </div>
+                <div class="map-side" id="mapSide" style="display:none;">
+                    <div class="map-side-hd" id="mapSideHd"></div>
+                    <div class="map-side-list" id="mapSideList"></div>
+                </div>
+              </div>
                 <div class="map-legend">
                     <span><span style="display:inline-block; width:11px; height:11px; border-radius:50%; background:#ffc93c; vertical-align:-1px;"></span> venues here — number in the dot</span>
                     <span><span style="display:inline-block; width:11px; height:11px; border-radius:2px; background:#33405c; vertical-align:-1px;"></span> town with venues</span>
@@ -463,116 +492,117 @@
         function rescaleMapMarkers(svg) {
             if (!vbHome || !vb) return;
             const k = vb.w / vbHome.w;
-            svg.querySelectorAll('[data-baser]').forEach(el => {
-                el.setAttribute('r', parseFloat(el.dataset.baser) * k);
-            });
             svg.querySelectorAll('[data-basefs]').forEach(el => {
                 el.style.fontSize = (parseFloat(el.dataset.basefs) * k) + 'px';
             });
             layoutTownMarkers(k);
         }
 
-        // Set while a town is open. mapSpan is the town's drawn extent, used to
-        // cap how far a pin may be pushed from its real location.
+        // Set while a town is open.
         let mapSpots = null, mapR = 0, mapLBL = 0, mapSpan = 0;
 
-        // Seven of Glastonbury's eleven venues geocoded into a one-mile blob
-        // downtown — at whole-town zoom there is physically no room for seven
-        // names, and no label trick invents it. So crowded pins are pushed out
-        // to where they fit and a leader line runs back to a red dot on the
-        // real spot. Moving a pin without saying so would be a lie about where
-        // the venue is; the line is what makes the displacement honest.
-        //
-        // The whole layout re-runs on every zoom step. Marker and type sizes
-        // are constant on screen, so their extent in map units shrinks as you
-        // zoom in while the true gaps between venues do not — clusters stop
-        // forming on their own, pins settle back onto their real coordinates,
-        // and the lines and red dots disappear because nothing needs them.
+        // A pin drop: teardrop with the tip ON the venue's real coordinates and
+        // the field count in the head. Sized in map units for the current zoom
+        // so it holds a constant size on screen.
+        function pinPath(x, y, R) {
+            const hy = y - R * 2.0;                       // head centre
+            return `M ${x} ${y}`
+                 + ` C ${x - R*0.55} ${y - R*0.85} ${x - R} ${y - R*1.3} ${x - R} ${hy}`
+                 + ` A ${R} ${R} 0 1 1 ${x + R} ${hy}`
+                 + ` C ${x + R} ${y - R*1.3} ${x + R*0.55} ${y - R*0.85} ${x} ${y} Z`;
+        }
+
+        // Pins never move off their real coordinates any more. The side panel
+        // carries every name in text, so the map only has to answer "where" and
+        // "how many" — which is all a point is good at. Labels are a bonus: any
+        // that fit are drawn, the rest are simply left to the panel.
         function layoutTownMarkers(k) {
             if (!mapSpots) return;
             const svg = document.getElementById('venueMapSvg');
             if (!svg) return;
 
-            const R   = mapR * k;          // pin radius, in map units at this zoom
+            const R   = mapR * k;          // pin size, in map units at this zoom
             const LBL = mapLBL * k;
-            const SEP = R * 2.3;
             const labW = p => String(p.v['Venue Name'] || '').length * LBL * 0.55;
 
-            // Cluster on TRUE positions — single-link, anything within SEP.
-            const clusters = [];
-            mapSpots.forEach(p => {
-                const c = clusters.find(cl => cl.some(q => Math.hypot(q.ox - p.ox, q.oy - p.oy) < SEP));
-                if (c) c.push(p); else clusters.push([p]);
-            });
-
-            clusters.forEach(cl => {
-                if (cl.length < 2) { cl[0].x = cl[0].ox; cl[0].y = cl[0].oy; return; }
-                const cx = cl.reduce((s, p) => s + p.ox, 0) / cl.length;
-                const cy = cl.reduce((s, p) => s + p.oy, 0) / cl.length;
-                // Ring wide enough that the names clear each other around it,
-                // capped so a dense town does not fling pins across the map.
-                const wide = Math.max(...cl.map(labW));
-                const rad  = Math.min(Math.max(SEP, cl.length * wide / (2 * Math.PI) * 0.8),
-                                      mapSpan * 0.2);
-                cl.forEach((p, i) => {
-                    const a = (i / cl.length) * Math.PI * 2 - Math.PI / 2;
-                    p.x = cx + Math.cos(a) * rad;
-                    p.y = cy + Math.sin(a) * rad;
-                });
-            });
-
-            // Labels: first free slot above or below. Top-down so the order a
-            // label wins its slot in stays stable as you scroll-zoom.
-            const slots = [1.75, -1.55, 3.05, -2.85, 4.35, -4.15].map(m => m * R);
+            // Slots are measured from the tip: below it, or clear above the head.
+            const slots = [1.35, -3.5, 2.7, -4.85].map(m => m * R);
             const hits  = (a, b) => Math.abs(a.x - b.x) * 2 < (a.w + b.w)
                                  && Math.abs(a.y - b.y) * 2 < (a.h + b.h);
             const boxes = [];
             let hidden = 0;
 
-            mapSpots.slice().sort((a, b) => a.y - b.y).forEach(p => {
+            // The pin bodies claim their space first, so a name never lands on
+            // top of a neighbouring pin.
+            mapSpots.forEach(p => boxes.push({ x: p.ox, y: p.oy - R, w: R * 2, h: R * 3 }));
+
+            // Top-down so a label's slot stays stable as you scroll-zoom.
+            mapSpots.slice().sort((a, b) => a.oy - b.oy).forEach(p => {
                 const w = labW(p), h = LBL * 1.35;
-                const dy = slots.find(d => !boxes.some(o => hits({ x: p.x, y: p.y + d, w, h }, o)));
+                const dy = slots.find(d => !boxes.some(o => hits({ x: p.ox, y: p.oy + d, w, h }, o)));
                 p.dy = dy;
-                if (dy !== undefined) boxes.push({ x: p.x, y: p.y + dy, w, h });
+                if (dy !== undefined) boxes.push({ x: p.ox, y: p.oy + dy, w, h });
                 else hidden++;
             });
 
-            // Write it out.
             mapSpots.forEach(p => {
                 const e = p.el;
                 if (!e) return;
-                const moved = Math.hypot(p.x - p.ox, p.y - p.oy) > R * 0.4;
-
-                e.circle.setAttribute('cx', p.x);
-                e.circle.setAttribute('cy', p.y);
-                e.count.setAttribute('x', p.x);
-                e.count.setAttribute('y', p.y);
-
+                e.body.setAttribute('d', pinPath(p.ox, p.oy, R));
+                e.count.setAttribute('x', p.ox);
+                e.count.setAttribute('y', p.oy - R * 2.0);
                 if (p.dy === undefined) {
                     e.label.style.display = 'none';
                 } else {
                     e.label.style.display = '';
-                    e.label.setAttribute('x', p.x);
-                    e.label.setAttribute('y', p.y + p.dy);
-                }
-
-                // Red dot and line only while the pin is off its real spot.
-                e.lead.style.display = e.dot.style.display = moved ? '' : 'none';
-                if (moved) {
-                    e.lead.setAttribute('x1', p.ox); e.lead.setAttribute('y1', p.oy);
-                    e.lead.setAttribute('x2', p.x);  e.lead.setAttribute('y2', p.y);
-                    e.dot.setAttribute('cx', p.ox);  e.dot.setAttribute('cy', p.oy);
-                    e.dot.setAttribute('r', R * 0.3);
+                    e.label.setAttribute('x', p.ox);
+                    e.label.setAttribute('y', p.oy + p.dy);
                 }
             });
 
             const note = document.getElementById('mapHiddenNote');
             if (note) {
-                const led = mapSpots.filter(p => Math.hypot(p.x - p.ox, p.y - p.oy) > R * 0.4).length;
-                note.innerHTML =
-                    (led ? ` &nbsp;·&nbsp; <span style="color:#8a7f72;">${led} pin${led===1?'':'s'} moved clear of the pile — the red dot is the real spot</span>` : '')
-                  + (hidden ? ` &nbsp;·&nbsp; <span style="color:#8a7f72;">${hidden} name${hidden===1?'':'s'} hidden — zoom in or hover the pin</span>` : '');
+                note.innerHTML = hidden
+                    ? ` &nbsp;·&nbsp; <span style="color:#8a7f72;">${hidden} name${hidden===1?'':'s'} too tight to draw — they are all in the list</span>`
+                    : '';
             }
+        }
+
+        // ── Map side panel ────────────────────────────────────────────────────
+        // Hovering either side highlights the other, so a row and its pin are
+        // never ambiguous even when three venues sit on the same block.
+        function highlightVenue(id, on) {
+            const svg = document.getElementById('venueMapSvg');
+            const pin = svg && svg.querySelector(`.vpin[data-venue="${id}"]`);
+            const row = document.getElementById('msv-' + id);
+            if (pin) pin.classList.toggle('on', on);
+            if (row) row.classList.toggle('on', on);
+            if (pin && on) pin.parentNode.appendChild(pin);   // bring to front
+        }
+
+        function renderMapSide(town, list) {
+            const side = document.getElementById('mapSide');
+            if (!side) return;
+            if (!town) { side.style.display = 'none'; return; }
+            side.style.display = 'flex';
+            document.getElementById('mapSideHd').textContent =
+                `${town} — ${list.length} venue${list.length === 1 ? '' : 's'}`;
+
+            document.getElementById('mapSideList').innerHTML = list.slice()
+                .sort((a, b) => String(a['Venue Name']).localeCompare(String(b['Venue Name'])))
+                .map(v => {
+                    const n = fieldCountForVenue(v);
+                    return `<div class="msv" id="msv-${v.id}" data-venue="${v.id}"
+                                 onmouseenter="highlightVenue(${v.id}, true)"
+                                 onmouseleave="highlightVenue(${v.id}, false)"
+                                 onclick="cameFromMap=true; showVMTab('list'); openVenue(${v.id});">
+                        <div class="msv-n ${n === 0 ? 'zero' : ''}">${n}</div>
+                        <div class="msv-t">
+                            <div class="msv-nm">${esc(v['Venue Name'] || 'Unnamed')}</div>
+                            <div class="msv-cd">${esc(v.rt_code || '— no RT code —')}</div>
+                        </div>
+                    </div>`;
+                }).join('');
         }
 
         function screenToSVG(svg, clientX, clientY) {
@@ -736,39 +766,30 @@
 
                 mapSpots = spots; mapR = R; mapLBL = LBL; mapSpan = span;
 
-                // Leaders and red dots go down first so a line never crosses
-                // over a pin. Labels last, above everything, so a neighbouring
-                // pin cannot paint over a name.
-                const leads = spots.map(p =>
-                    `<line class="vlead" data-venue="${p.v.id}" style="display:none"></line>
-                     <circle class="vtrue" data-venue="${p.v.id}" style="display:none"></circle>`
-                ).join('');
-
                 const pins = spots.map(p => `<g class="vpin" data-venue="${p.v.id}" data-stacked="${p.stacked}">
-                        <circle cx="${p.x}" cy="${p.y}" r="${R}" data-baser="${R}" fill="#ffc93c" stroke="#4a3600" stroke-width="1.5" vector-effect="non-scaling-stroke"></circle>
-                        <text x="${p.x}" y="${p.y}" class="vdot-lbl" data-basefs="${R*1.1}" style="font-size:${R*1.1}px">${fieldCountForVenue(p.v)}</text>
+                        <path class="vpin-body"></path>
+                        <text class="vdot-lbl" data-basefs="${R*1.0}" style="font-size:${R*1.0}px">${fieldCountForVenue(p.v)}</text>
                     </g>`).join('');
 
                 const labels = spots.map(p =>
-                    `<text x="${p.x}" y="${p.y}" class="vpin-lbl" data-venue="${p.v.id}" data-basefs="${LBL}" style="font-size:${LBL}px">${esc(p.v['Venue Name'])}</text>`
+                    `<text class="vpin-lbl" data-venue="${p.v.id}" data-basefs="${LBL}" style="font-size:${LBL}px">${esc(p.v['Venue Name'])}</text>`
                 ).join('');
 
                 svg.innerHTML = `<path class="vtwn has" d="${town.d}" style="cursor:default"></path>`
-                                + leads + pins + labels;
+                                + pins + labels;
 
                 // Cache the nodes once — layoutTownMarkers runs on every scroll
                 // notch and should not be re-querying the DOM each time.
                 spots.forEach(p => {
                     const g = svg.querySelector(`.vpin[data-venue="${p.v.id}"]`);
                     p.el = {
-                        circle: g.querySelector('circle'),
-                        count:  g.querySelector('text'),
-                        label:  svg.querySelector(`.vpin-lbl[data-venue="${p.v.id}"]`),
-                        lead:   svg.querySelector(`.vlead[data-venue="${p.v.id}"]`),
-                        dot:    svg.querySelector(`.vtrue[data-venue="${p.v.id}"]`)
+                        body:  g.querySelector('path'),
+                        count: g.querySelector('text'),
+                        label: svg.querySelector(`.vpin-lbl[data-venue="${p.v.id}"]`)
                     };
                 });
 
+                renderMapSide(mapZoomTown, list);
                 document.getElementById('mapBackBtn').style.display = 'block';
                 const zt = document.getElementById('mapZoomTitle');
                 zt.style.display = 'block';
@@ -794,7 +815,11 @@
                         tipZ.style.left = Math.min(e.clientX + 14, window.innerWidth - 300) + 'px';
                         tipZ.style.top  = (e.clientY + 14) + 'px';
                     });
-                    el.addEventListener('mouseleave', () => { tipZ.style.display = 'none'; });
+                    el.addEventListener('mouseenter', () => highlightVenue(v.id, true));
+                    el.addEventListener('mouseleave', () => {
+                        tipZ.style.display = 'none';
+                        highlightVenue(v.id, false);
+                    });
                     el.addEventListener('click', () => {
                         if (svg.dataset.dragged) return;   // that was a pan, not a click
                         cameFromMap = true;
@@ -808,6 +833,7 @@
 
             // ── Whole state: one dot per town ───────────────────────────────
             mapSpots = null;         // no venue labels at state level
+            renderMapSide(null);
             document.getElementById('mapBackBtn').style.display = 'none';
             document.getElementById('mapZoomTitle').style.display = 'none';
             const vbn = CT_TOWNS.viewBox.split(/\s+/).map(Number);
