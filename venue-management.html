@@ -227,11 +227,12 @@
             <!-- Detail Card -->
             <div id="venueCard" style="display:none;">
                 <div class="venue-card">
-                    <!-- Clicking a pin drops you into the list, scrolled past the
-                         tab bar, with no visible way back to the map. Shown only
-                         when the card was opened from a pin. -->
+                    <!-- Always present; the label follows the direction of travel.
+                         Arriving from a pin it reads "Back to map"; opening from
+                         the list it reads "Go to Map" and takes you to this
+                         venue's town. -->
                     <div id="cardBackToMap" style="display:none; margin-bottom:16px;">
-                        <button type="button" onclick="backToMap()"
+                        <button type="button" id="cardMapBtn" onclick="backToMap()"
                             style="background:#ffc93c; color:#4a3600; border:none; border-radius:6px; padding:7px 16px; cursor:pointer;
                                    font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">
                             &larr; Back to map
@@ -442,10 +443,20 @@
         // The map keeps mapZoomTown, so returning lands on the same town.
         let cameFromMap = false;
 
+        // Set by "Go to Map" so the venue you came from is lit when the town
+        // draws — otherwise you land on eleven identical pins and have to hunt.
+        let pendingHighlight = null;
+
         function backToMap() {
+            // From the map, go back to the town you were already on. From the
+            // list, the useful destination is this venue's own town, not the
+            // whole state.
+            if (!cameFromMap) {
+                const v = allVenues.find(x => x.id === currentVenueId);
+                const t = v && townForVenue(v);
+                if (t) { mapZoomTown = t; pendingHighlight = v.id; }
+            }
             cameFromMap = false;
-            const bar = document.getElementById('cardBackToMap');
-            if (bar) bar.style.display = 'none';
             showVMTab('map');
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -807,6 +818,16 @@
 
                 renderMapSide(mapZoomTown, list);
                 svg.onmouseleave = clearHighlights;
+
+                // Arrived via "Go to Map" — light the venue and bring its row
+                // into view. Clears on the next hover, like any other highlight.
+                if (pendingHighlight != null) {
+                    const id = pendingHighlight;
+                    pendingHighlight = null;
+                    highlightVenue(id, true);
+                    const row = document.getElementById('msv-' + id);
+                    if (row) row.scrollIntoView({ block: 'nearest' });
+                }
                 document.getElementById('mapBackBtn').style.display = 'block';
                 const zt = document.getElementById('mapZoomTitle');
                 zt.style.display = 'block';
@@ -1096,7 +1117,9 @@
             renderCAField(v['Venue ID']);
 
             const backBar = document.getElementById('cardBackToMap');
-            if (backBar) backBar.style.display = cameFromMap ? 'block' : 'none';
+            const mapBtn  = document.getElementById('cardMapBtn');
+            if (backBar) backBar.style.display = 'block';
+            if (mapBtn)  mapBtn.innerHTML = cameFromMap ? '&larr; Back to map' : 'Go to Map';
 
             document.getElementById('venueCard').style.display = 'block';
             document.getElementById('saveStatus').style.display = 'none';
