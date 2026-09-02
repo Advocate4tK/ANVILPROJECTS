@@ -2232,10 +2232,17 @@
             refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
             // Rebuild allVenues so venue names resolve correctly — skip for event portals (they have custom venue list)
             if (!currentLeagueLabel) {
+                // ⚠️ rtCode MUST be carried here. This rebuild overwrites the
+                // allVenues built in loadReferenceData(), and it used to drop
+                // the code — so matchVenue() found no venue with an RT code and
+                // every upload citing RTVCT083 was rejected as "not one we
+                // hold", while the legend on the same page displayed that exact
+                // code. Any future shape change here has to keep it.
                 allVenues = venueRecs.map(v => ({
-                    id:    v.id,
-                    numId: v.fields['Venue ID'] || null,
-                    name:  v.fields['Venue Name'] || v.fields['Name'] || ''
+                    id:     v.id,
+                    numId:  v.fields['Venue ID'] || null,
+                    rtCode: v.fields['rt_code'] || null,
+                    name:   v.fields['Venue Name'] || v.fields['Name'] || ''
                 }));
             }
 
@@ -3311,9 +3318,16 @@
                 : hasWarnings
                 ? `<span style="color:#92400e;font-weight:700;font-size:0.72rem;">⚠ ${warnings[0]}</span>`
                 : `<span style="color:#14532d;font-weight:700;font-size:0.72rem;">✓ Ready</span>`;
+            // Show the PARSED date and time, not the raw cell. An Excel date
+            // cell holds 46277 and 9:00 AM holds 0.375 — real values, but
+            // meaningless on screen, and a club cannot confirm what it is about
+            // to submit by reading them. Falls back to the raw text when the
+            // value could not be parsed, so a bad cell is still visible.
+            const shownDate = normalizeDate(row['Date']) || (row['Date'] ?? '');
+            const shownTime = normalizeTime(row['Time']) || (row['Time'] ?? '');
             html += `<tr class="${rowClass}">
                 <td>${i+1}</td>
-                <td>${row['Date']||''}</td><td>${row['Time']||''}</td>
+                <td>${shownDate}</td><td>${shownTime}</td>
                 <td>${row['Home Team']||''}</td><td>${row['Away Team']||''}</td>
                 <td>${row['Age Group']||''}</td><td>${row['Gender']||''}</td>
                 <td>${row['Game Type']||''}</td>
