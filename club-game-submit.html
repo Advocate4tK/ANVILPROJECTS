@@ -2840,23 +2840,74 @@
 
     const VALID_GENDERS = ['female','male','f','m'];
 
-    // Fuzzy match venue name → { id, numId, name } or null
-    function matchVenue(name) {
-        if (!name) return null;
-        const n = name.trim().toLowerCase();
-        return allVenues.find(v => v.name.toLowerCase() === n)
-            || allVenues.find(v => v.name.toLowerCase().includes(n) || n.includes(v.name.toLowerCase()))
-            || null;
+    // ── RT codes ──────────────────────────────────────────────────────────────
+    // The whole point of the code: a club uploads forty games citing RTVCT026
+    // and RTFCT057 instead of typing venue and field names that have to match
+    // ours exactly. Codes are stable and unambiguous; names are neither.
+    //
+    // Typed by a human into a spreadsheet, so normalize hard — case, spaces and
+    // any dashes someone adds for readability all come out.
+    const normCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const VENUE_CODE_RE = /^RTV[A-Z]{2}\d+$/;    // RTVCT026 — state letters vary
+    const FIELD_CODE_RE = /^RTF[A-Z]{2}\d+$/;    // RTFCT057
+
+    // Substring matching on a one- or two-character name is a coin toss:
+    // Old Killingly's fields are literally named "1", "2" and "3", so ANY text
+    // containing "1" used to match field "1". Exact match still works for them.
+    const FUZZ_MIN = 3;
+    function fuzzyFind(pool, key, n) {
+        if (n.length < FUZZ_MIN) return null;
+        return pool.find(x => {
+            const s = String(key(x)).toLowerCase();
+            return s.length >= FUZZ_MIN && (s.includes(n) || n.includes(s));
+        }) || null;
     }
 
-    // Fuzzy match field name within a venue → { id, numId, name } or null
+    // Match venue by RT code, then name → { id, numId, rtCode, name } or null
+    function matchVenue(name) {
+        if (!name) return null;
+        const raw  = String(name).trim();
+        const code = normCode(raw);
+
+        // A code is exact by construction. If it does not resolve, stop —
+        // falling through would let a typo'd code fuzzy-match some unrelated
+        // venue, which is worse than saying we do not recognise it.
+        if (VENUE_CODE_RE.test(code)) return allVenues.find(v => normCode(v.rtCode) === code) || null;
+        if (FIELD_CODE_RE.test(code)) return null;    // field code in the Venue column
+
+        const n = raw.toLowerCase();
+        return allVenues.find(v => v.name.toLowerCase() === n)
+            || fuzzyFind(allVenues, v => v.name, n);
+    }
+
+    // Match field by RT code, then name within the venue → record or null
     function matchField(name, venueId) {
         if (!name) return null;
-        const n = name.trim().toLowerCase();
-        const pool = venueId ? allFields.filter(f => f.venueId === venueId) : allFields;
+        const raw  = String(name).trim();
+        const code = normCode(raw);
+
+        // Field codes are unique system-wide, so one resolves even when the
+        // Venue column was wrong. validateCSVRow flags the mismatch.
+        if (FIELD_CODE_RE.test(code)) return allFields.find(f => normCode(f.rtCode) === code) || null;
+        if (VENUE_CODE_RE.test(code)) return null;    // venue code in the Field column
+
+        // Name matching stays INSIDE the venue. It used to fall back to every
+        // field in the system when the venue did not resolve, which could bind
+        // a game to another club's field and raise no warning, because a match
+        // had technically been found.
+        if (!venueId) return null;
+        const pool = allFields.filter(f => f.venueId === venueId);
+        const n = raw.toLowerCase();
         return pool.find(f => f.name.toLowerCase() === n)
-            || pool.find(f => f.name.toLowerCase().includes(n) || n.includes(f.name.toLowerCase()))
-            || null;
+            || fuzzyFind(pool, f => f.name, n);
+    }
+
+    // Venue row ids belonging to the club currently selected. Empty means we
+    // do not know, in which case nothing is out of scope.
+    function clubVenueIdList() {
+        const clubId = document.getElementById('clubSelect')?.value;
+        const club   = allClubs.find(c => String(c.id) === String(clubId));
+        return club?.venueIds?.length ? club.venueIds : [];
     }
 
     function validateCSVRow(row) {
@@ -2880,13 +2931,43 @@
         if (!gameType)                              errors.push('Missing Game Type');
         else if (!['rec','comp'].includes(gameType)) errors.push(`Invalid Game Type "${row['Game Type']}" — use: Rec or Comp`);
 
-        // Venue/field match warnings (not blocking — assignor can fix)
+        // Venue/field match warnings (not blocking — assignor can fix).
+        // A club following the legend types codes, so when one does not land,
+        // say which kind of code it was and which column it belongs in. "Not
+        // found in system" for all four cases is not enough to act on.
         if (row['Venue'] && !errors.find(e => e.includes('Venue'))) {
-            const vm = matchVenue(row['Venue']);
-            if (!vm) warnings.push(`Venue "${row['Venue']}" not found in system`);
-            else if (row['Field']) {
-                const fm = matchField(row['Field'], vm.id);
-                if (!fm) warnings.push(`Field "${row['Field']}" not recognized — it will still be saved as entered. No action needed.`);
+            const rawV = String(row['Venue']).trim();
+            const cV   = normCode(rawV);
+            const vm   = matchVenue(rawV);
+
+            if (!vm) {
+                warnings.push(
+                    VENUE_CODE_RE.test(cV) ? `Venue code "${rawV}" is not one we hold — check the Venue & Field Codes list`
+                  : FIELD_CODE_RE.test(cV) ? `"${rawV}" is a field code (blue) but it is in the Venue column — that column takes the green RTV code`
+                  : `Venue "${rawV}" not found in system`);
+            } else {
+                // Venues can be shared by more than one club, so an out-of-list
+                // venue is flagged, never rejected.
+                const scope = clubVenueIdList();
+                if (scope.length && !scope.includes(vm.id)) {
+                    warnings.push(`${vm.rtCode || vm.name} is not on this club's venue list — saved anyway, worth a check`);
+                }
+
+                if (row['Field']) {
+                    const rawF = String(row['Field']).trim();
+                    const cF   = normCode(rawF);
+                    const fm   = matchField(rawF, vm.id);
+
+                    if (!fm) {
+                        warnings.push(
+                            FIELD_CODE_RE.test(cF) ? `Field code "${rawF}" is not one we hold — check the Venue & Field Codes list`
+                          : VENUE_CODE_RE.test(cF) ? `"${rawF}" is a venue code (green) but it is in the Field column — that column takes the blue RTF code`
+                          : `Field "${rawF}" not recognized — it will still be saved as entered. No action needed.`);
+                    } else if (fm.venueId && String(fm.venueId) !== String(vm.id)) {
+                        const owner = allVenues.find(v => String(v.id) === String(fm.venueId));
+                        warnings.push(`Field ${fm.rtCode || fm.name} belongs to ${owner ? owner.name : 'another venue'}, not "${vm.name}"`);
+                    }
+                }
             }
         }
         return { errors, warnings };
