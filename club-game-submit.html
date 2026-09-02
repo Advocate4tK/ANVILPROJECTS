@@ -1601,7 +1601,10 @@
           + ` border:1px solid ${bd}; border-radius:4px; padding:1px 8px; font-size:0.8rem; color:${fg};`
           + ` text-align:center; user-select:all;">${txt}</span>`;
 
+        // Venue codes green, field codes blue. One colour for both invited the
+        // obvious mistake — dropping a field code into the Venue column.
         const rtCode  = c => code(c, '#e8f5e9', '#a5d6a7', '#14532d');
+        const rtFCode = c => code(c, '#e8eefc', '#b3c6ea', '#1e3a6e');
         // Placeholder still has to be READ, not squinted at. It gets the same
         // chip treatment as a real code so the column stays aligned and the
         // contrast holds up on the cream background.
@@ -1615,22 +1618,32 @@
         // number is the only thing on screen. CA numbers belong to the export
         // side; they are our problem, not the club's.
 
-        const intro = `<div style="margin:-2px 0 12px; padding:8px 10px; background:#eef7ef;`
-            + ` border:1px solid #a5d6a7; border-radius:6px; color:#14532d; font-size:0.82rem;">`
-            + `Put the <strong>green code</strong> in the <strong>Venue</strong> and <strong>Field</strong>`
-            + ` columns of your upload. The full name works too.</div>`;
+        const swatch = (bg, br, fg) => `<span style="display:inline-block; width:11px; height:11px;`
+            + ` background:${bg}; border:1px solid ${br}; border-radius:3px; vertical-align:-1px;"></span>`;
+
+        const intro = `<div style="margin:-2px 0 12px; padding:8px 10px; background:#f6f4f0;`
+            + ` border:1px solid #d6ccbe; border-radius:6px; color:#3a3630; font-size:0.82rem; line-height:1.7;">`
+            + `${swatch('#e8f5e9', '#a5d6a7')} <strong style="color:#14532d;">Green</strong> codes go in the`
+            + ` <strong>Venue</strong> column. &nbsp;`
+            + `${swatch('#e8eefc', '#b3c6ea')} <strong style="color:#1e3a6e;">Blue</strong> codes go in the`
+            + ` <strong>Field</strong> column. <br>Full names work too — but the codes never change,`
+            + ` so they are the safer thing to type.</div>`;
 
         bodyEl.innerHTML = intro + venues.map(v => {
             const fields = allFields
                 .filter(f => String(f.venueId) === String(v.id))
                 .sort((a, b) => natCmp(a.name, b.name));
 
+            // Indented well past the venue row and hung off a rule, so a field
+            // reads as belonging to the venue above it rather than as a peer.
+            const indent = `padding:4px 0 4px 16px; margin-left:26px; border-left:2px solid #e2d9ce;`;
+
             const fieldRows = fields.length
-                ? fields.map(f => `<div style="padding:4px 0 4px 22px; color:#1f2937; font-size:0.88rem; display:flex; align-items:center; gap:8px;">`
-                    + (f.rtCode ? rtCode(f.rtCode) : pending())
+                ? fields.map(f => `<div style="${indent} color:#1f2937; font-size:0.88rem; display:flex; align-items:center; gap:8px;">`
+                    + (f.rtCode ? rtFCode(f.rtCode) : pending())
                     + `<span>${f.name}</span>`
                     + `</div>`).join('')
-                : `<div style="padding:4px 0 4px 22px; color:#6b6155; font-size:0.82rem;">— no fields on file —</div>`;
+                : `<div style="${indent} color:#6b6155; font-size:0.82rem;">— none allocated yet —</div>`;
 
             return `<div style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid #e2d9ce;">
                 <div style="font-weight:800; color:#09142a; font-size:0.95rem; margin-bottom:3px; display:flex; align-items:center; gap:8px;">`
@@ -2975,7 +2988,7 @@
             if (fields.length) {
                 fields.forEach(f => rows.push(['  ' + (f.rtCode || '(code pending)'), '  ' + f.name]));
             } else {
-                rows.push(['', '  — no fields on file —']);
+                rows.push(['', '  — none allocated yet —']);
             }
             rows.push(['', '']);
         });
