@@ -104,6 +104,13 @@
                      pointer-events:none; user-select:none; }
         .vdot-lbl  { font-family:'JetBrains Mono',monospace; font-weight:600; fill:#4a3600;
                      text-anchor:middle; dominant-baseline:central; pointer-events:none; user-select:none; }
+        /* Red marks the real geocoded point; the line ties it to the pin that
+           had to move to make room for its name. Both non-scaling so they stay
+           hairline-thin at every zoom. */
+        .vlead     { stroke:#ff5252; stroke-width:1.1px; stroke-dasharray:3 2;
+                     vector-effect:non-scaling-stroke; pointer-events:none; opacity:0.85; }
+        .vtrue     { fill:#ff5252; stroke:#4a0d0d; stroke-width:1px;
+                     vector-effect:non-scaling-stroke; pointer-events:none; }
         .map-tip {
             position:fixed; z-index:60; pointer-events:none; display:none;
             background:rgba(4,12,26,0.96); border:1px solid #ffc93c; border-radius:9px;
@@ -461,54 +468,110 @@
             });
             svg.querySelectorAll('[data-basefs]').forEach(el => {
                 el.style.fontSize = (parseFloat(el.dataset.basefs) * k) + 'px';
-                if (el.dataset.basedy) {
-                    el.setAttribute('y', parseFloat(el.dataset.cy) + parseFloat(el.dataset.basedy) * k);
-                }
             });
-            layoutLabels(k);
+            layoutTownMarkers(k);
         }
 
-        // Set while a town is open, so labels can be re-placed on every zoom.
-        let mapSpots = null, mapR = 0, mapLBL = 0;
+        // Set while a town is open. mapSpan is the town's drawn extent, used to
+        // cap how far a pin may be pushed from its real location.
+        let mapSpots = null, mapR = 0, mapLBL = 0, mapSpan = 0;
 
         // Seven of Glastonbury's eleven venues geocoded into a one-mile blob
         // downtown — at whole-town zoom there is physically no room for seven
-        // names, and no amount of label trickery invents it. So placement runs
-        // again on every zoom step. Pin positions are fixed in map units while
-        // the type holds a constant size on screen, which means zooming in
-        // shrinks the label boxes relative to the gaps between pins: names that
-        // could not fit start fitting, and appear on their own.
-        function layoutLabels(k) {
+        // names, and no label trick invents it. So crowded pins are pushed out
+        // to where they fit and a leader line runs back to a red dot on the
+        // real spot. Moving a pin without saying so would be a lie about where
+        // the venue is; the line is what makes the displacement honest.
+        //
+        // The whole layout re-runs on every zoom step. Marker and type sizes
+        // are constant on screen, so their extent in map units shrinks as you
+        // zoom in while the true gaps between venues do not — clusters stop
+        // forming on their own, pins settle back onto their real coordinates,
+        // and the lines and red dots disappear because nothing needs them.
+        function layoutTownMarkers(k) {
             if (!mapSpots) return;
             const svg = document.getElementById('venueMapSvg');
             if (!svg) return;
 
-            const slots = [1.75, -1.55, 3.05, -2.85, 4.35, -4.15].map(m => m * mapR * k);
+            const R   = mapR * k;          // pin radius, in map units at this zoom
+            const LBL = mapLBL * k;
+            const SEP = R * 2.3;
+            const labW = p => String(p.v['Venue Name'] || '').length * LBL * 0.55;
+
+            // Cluster on TRUE positions — single-link, anything within SEP.
+            const clusters = [];
+            mapSpots.forEach(p => {
+                const c = clusters.find(cl => cl.some(q => Math.hypot(q.ox - p.ox, q.oy - p.oy) < SEP));
+                if (c) c.push(p); else clusters.push([p]);
+            });
+
+            clusters.forEach(cl => {
+                if (cl.length < 2) { cl[0].x = cl[0].ox; cl[0].y = cl[0].oy; return; }
+                const cx = cl.reduce((s, p) => s + p.ox, 0) / cl.length;
+                const cy = cl.reduce((s, p) => s + p.oy, 0) / cl.length;
+                // Ring wide enough that the names clear each other around it,
+                // capped so a dense town does not fling pins across the map.
+                const wide = Math.max(...cl.map(labW));
+                const rad  = Math.min(Math.max(SEP, cl.length * wide / (2 * Math.PI) * 0.8),
+                                      mapSpan * 0.2);
+                cl.forEach((p, i) => {
+                    const a = (i / cl.length) * Math.PI * 2 - Math.PI / 2;
+                    p.x = cx + Math.cos(a) * rad;
+                    p.y = cy + Math.sin(a) * rad;
+                });
+            });
+
+            // Labels: first free slot above or below. Top-down so the order a
+            // label wins its slot in stays stable as you scroll-zoom.
+            const slots = [1.75, -1.55, 3.05, -2.85, 4.35, -4.15].map(m => m * R);
             const hits  = (a, b) => Math.abs(a.x - b.x) * 2 < (a.w + b.w)
                                  && Math.abs(a.y - b.y) * 2 < (a.h + b.h);
             const boxes = [];
             let hidden = 0;
 
-            // Top-down so the order a label wins its slot in is stable as you
-            // zoom, rather than the names reshuffling on every scroll notch.
             mapSpots.slice().sort((a, b) => a.y - b.y).forEach(p => {
-                const el = svg.querySelector(`.vpin-lbl[data-venue="${p.v.id}"]`);
-                if (!el) return;
-                const name = String(p.v['Venue Name'] || '');
-                const w = name.length * mapLBL * k * 0.55;
-                const h = mapLBL * k * 1.35;
+                const w = labW(p), h = LBL * 1.35;
                 const dy = slots.find(d => !boxes.some(o => hits({ x: p.x, y: p.y + d, w, h }, o)));
-                if (dy === undefined) { el.style.display = 'none'; hidden++; return; }
-                el.style.display = '';
-                el.setAttribute('y', p.y + dy);
-                boxes.push({ x: p.x, y: p.y + dy, w, h });
+                p.dy = dy;
+                if (dy !== undefined) boxes.push({ x: p.x, y: p.y + dy, w, h });
+                else hidden++;
+            });
+
+            // Write it out.
+            mapSpots.forEach(p => {
+                const e = p.el;
+                if (!e) return;
+                const moved = Math.hypot(p.x - p.ox, p.y - p.oy) > R * 0.4;
+
+                e.circle.setAttribute('cx', p.x);
+                e.circle.setAttribute('cy', p.y);
+                e.count.setAttribute('x', p.x);
+                e.count.setAttribute('y', p.y);
+
+                if (p.dy === undefined) {
+                    e.label.style.display = 'none';
+                } else {
+                    e.label.style.display = '';
+                    e.label.setAttribute('x', p.x);
+                    e.label.setAttribute('y', p.y + p.dy);
+                }
+
+                // Red dot and line only while the pin is off its real spot.
+                e.lead.style.display = e.dot.style.display = moved ? '' : 'none';
+                if (moved) {
+                    e.lead.setAttribute('x1', p.ox); e.lead.setAttribute('y1', p.oy);
+                    e.lead.setAttribute('x2', p.x);  e.lead.setAttribute('y2', p.y);
+                    e.dot.setAttribute('cx', p.ox);  e.dot.setAttribute('cy', p.oy);
+                    e.dot.setAttribute('r', R * 0.3);
+                }
             });
 
             const note = document.getElementById('mapHiddenNote');
             if (note) {
-                note.innerHTML = hidden
-                    ? ` &nbsp;·&nbsp; <span style="color:#8a7f72;">${hidden} name${hidden===1?'':'s'} hidden — zoom in or hover the pin</span>`
-                    : '';
+                const led = mapSpots.filter(p => Math.hypot(p.x - p.ox, p.y - p.oy) > R * 0.4).length;
+                note.innerHTML =
+                    (led ? ` &nbsp;·&nbsp; <span style="color:#8a7f72;">${led} pin${led===1?'':'s'} moved clear of the pile — the red dot is the real spot</span>` : '')
+                  + (hidden ? ` &nbsp;·&nbsp; <span style="color:#8a7f72;">${hidden} name${hidden===1?'':'s'} hidden — zoom in or hover the pin</span>` : '');
             }
         }
 
@@ -651,13 +714,17 @@
                 // and pushed the crowded towns back into overlap.
                 const LBL  = span * 0.019;
 
-                const spots = list.filter(v => v.lat != null)
-                                  .map(v => ({ v, x: projX(v.lng), y: projY(v.lat) }));
+                // ox/oy is the real geocoded point and never moves. x/y is where
+                // the pin is drawn, which layoutTownMarkers() recomputes per zoom.
+                const spots = list.filter(v => v.lat != null).map(v => {
+                    const ox = projX(v.lng), oy = projY(v.lat);
+                    return { v, ox, oy, x: ox, y: oy };
+                });
 
                 // Venues that geocoded to the SAME point are the town-level
                 // fallbacks. That is a data-quality fact, so it stays tied to
-                // an exact match and gets said in the tooltip — the fan-out
-                // below must not be allowed to imply it.
+                // an exact match and gets said in the tooltip — displacing a
+                // pin for legibility must not be allowed to imply it.
                 const exact = {};
                 spots.forEach(p => {
                     const k = p.v.lat.toFixed(4) + ',' + p.v.lng.toFixed(4);
@@ -667,47 +734,41 @@
                     p.stacked = exact[p.v.lat.toFixed(4) + ',' + p.v.lng.toFixed(4)] > 1 ? 1 : 0;
                 });
 
-                // Fanning only exact matches left the near-misses piled up —
-                // Knox Lane, Glastonbury High and Rotary sit a few hundred
-                // yards apart and covered each other. Cluster on drawn
-                // distance instead, so anything that visually collides is
-                // spread whether or not the coordinates match.
-                const SEP = R * 2.3;
-                const clusters = [];
-                spots.forEach(p => {
-                    const c = clusters.find(cl => cl.some(q => Math.hypot(q.x - p.x, q.y - p.y) < SEP));
-                    if (c) c.push(p); else clusters.push([p]);
-                });
-                clusters.forEach(cl => {
-                    if (cl.length < 2) return;
-                    const cx = cl.reduce((s, p) => s + p.x, 0) / cl.length;
-                    const cy = cl.reduce((s, p) => s + p.y, 0) / cl.length;
-                    const rad = SEP * (cl.length > 3 ? 1.15 : 0.9);
-                    cl.forEach((p, i) => {
-                        const a = (i / cl.length) * Math.PI * 2 - Math.PI / 2;
-                        p.x = cx + Math.cos(a) * rad;
-                        p.y = cy + Math.sin(a) * rad;
-                    });
-                });
+                mapSpots = spots; mapR = R; mapLBL = LBL; mapSpan = span;
 
-                // Labels are all rendered; layoutLabels() decides which of them
-                // fit at the current zoom and where each one sits.
-                mapSpots = spots; mapR = R; mapLBL = LBL;
+                // Leaders and red dots go down first so a line never crosses
+                // over a pin. Labels last, above everything, so a neighbouring
+                // pin cannot paint over a name.
+                const leads = spots.map(p =>
+                    `<line class="vlead" data-venue="${p.v.id}" style="display:none"></line>
+                     <circle class="vtrue" data-venue="${p.v.id}" style="display:none"></circle>`
+                ).join('');
 
-                // Two layers, not one group per venue: with a group per venue a
-                // later pin's circle painted over an earlier pin's label.
-                // data-baser / data-basefs let rescaleMapMarkers() hold the
-                // pins and type at a fixed size on screen while you zoom.
                 const pins = spots.map(p => `<g class="vpin" data-venue="${p.v.id}" data-stacked="${p.stacked}">
                         <circle cx="${p.x}" cy="${p.y}" r="${R}" data-baser="${R}" fill="#ffc93c" stroke="#4a3600" stroke-width="1.5" vector-effect="non-scaling-stroke"></circle>
-                        <text x="${p.x}" y="${p.y}" class="vdot-lbl" data-basefs="${R*1.1}" data-cy="${p.y}" data-basedy="0" style="font-size:${R*1.1}px">${fieldCountForVenue(p.v)}</text>
+                        <text x="${p.x}" y="${p.y}" class="vdot-lbl" data-basefs="${R*1.1}" style="font-size:${R*1.1}px">${fieldCountForVenue(p.v)}</text>
                     </g>`).join('');
 
                 const labels = spots.map(p =>
                     `<text x="${p.x}" y="${p.y}" class="vpin-lbl" data-venue="${p.v.id}" data-basefs="${LBL}" style="font-size:${LBL}px">${esc(p.v['Venue Name'])}</text>`
                 ).join('');
 
-                svg.innerHTML = `<path class="vtwn has" d="${town.d}" style="cursor:default"></path>` + pins + labels;
+                svg.innerHTML = `<path class="vtwn has" d="${town.d}" style="cursor:default"></path>`
+                                + leads + pins + labels;
+
+                // Cache the nodes once — layoutTownMarkers runs on every scroll
+                // notch and should not be re-querying the DOM each time.
+                spots.forEach(p => {
+                    const g = svg.querySelector(`.vpin[data-venue="${p.v.id}"]`);
+                    p.el = {
+                        circle: g.querySelector('circle'),
+                        count:  g.querySelector('text'),
+                        label:  svg.querySelector(`.vpin-lbl[data-venue="${p.v.id}"]`),
+                        lead:   svg.querySelector(`.vlead[data-venue="${p.v.id}"]`),
+                        dot:    svg.querySelector(`.vtrue[data-venue="${p.v.id}"]`)
+                    };
+                });
+
                 document.getElementById('mapBackBtn').style.display = 'block';
                 const zt = document.getElementById('mapZoomTitle');
                 zt.style.display = 'block';
@@ -716,7 +777,7 @@
                     `<b style="color:#09142a;">${esc(mapZoomTown)}</b> — ${list.length} venue${list.length===1?'':'s'}`
                     + ` &nbsp;·&nbsp; click a pin to open its record`
                     + `<span id="mapHiddenNote"></span>`;
-                layoutLabels(1);   // after the note span exists, so it can report
+                layoutTownMarkers(1);   // after the note span exists, so it can report
 
                 const tipZ = document.getElementById('mapTip');
                 svg.querySelectorAll('.vpin').forEach(el => {
