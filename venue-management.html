@@ -127,7 +127,9 @@
         .msv-n    { width:23px; height:23px; flex:0 0 23px; border-radius:50%; background:#ffc93c; color:#4a3600;
                     font-family:'JetBrains Mono',monospace; font-size:0.76rem; font-weight:600;
                     display:flex; align-items:center; justify-content:center; }
-        .msv-n.zero { background:#3a2020; color:#ff8a80; }
+        /* No fields ALLOCATED — not a defect, so no error red. Muted, but still
+           distinct enough to scan for the venues that need fields loaded. */
+        .msv-n.zero { background:#2b3550; color:#9fb0cc; }
         .msv-t    { min-width:0; }
         .msv-nm   { font-family:'DM Sans',sans-serif; font-size:0.84rem; font-weight:700; color:#fff;
                     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -625,7 +627,8 @@
                                  onmouseenter="highlightVenue(${v.id}, true)"
                                  onmouseleave="highlightVenue(${v.id}, false)"
                                  onclick="cameFromMap=true; showVMTab('list'); openVenue(${v.id});">
-                        <div class="msv-n ${n === 0 ? 'zero' : ''}">${n}</div>
+                        <div class="msv-n ${n === 0 ? 'zero' : ''}"
+                             title="${n === 0 ? 'No fields allocated in Referee Tool yet' : n + ' field' + (n === 1 ? '' : 's') + ' allocated'}">${n === 0 ? '–' : n}</div>
                         <div class="msv-t">
                             <div class="msv-nm">${esc(v['Venue Name'] || 'Unnamed')}</div>
                             <div class="msv-cd">${esc(v.rt_code || '— no RT code —')}</div>
@@ -795,7 +798,7 @@
 
                 const pins = spots.map(p => `<g class="vpin" data-venue="${p.v.id}" data-stacked="${p.stacked}">
                         <path class="vpin-body"></path>
-                        <text class="vdot-lbl" data-basefs="${R*1.0}" style="font-size:${R*1.0}px">${fieldCountForVenue(p.v)}</text>
+                        <text class="vdot-lbl" data-basefs="${R*1.0}" style="font-size:${R*1.0}px">${fieldCountForVenue(p.v) || '–'}</text>
                     </g>`).join('');
 
                 const labels = spots.map(p =>
@@ -922,13 +925,17 @@
         }
 
         // "three fields" reads faster than "3" when you are scanning a list for
-        // the venues that still need work. No fields is called out in red —
-        // that is usually a gap, not a fact, and Central Assign frequently has
-        // fields we never loaded.
+        // the venues that still need work.
+        //
+        // A zero means we hold NO FIELD RECORDS for the venue — the fields were
+        // never loaded, or there is no CA Venue ID to key them on. It says
+        // nothing about whether the venue has fields. So it reads "none
+        // allocated", not "no fields", and it is not coloured as an error.
         const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six',
                              'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
         function fieldCountLabel(v) {
             const n = v['Venue ID'] != null ? (fieldCountByCaVenue[v['Venue ID']] || 0) : 0;
+            if (n === 0) return 'none allocated';
             const word = n < COUNT_WORDS.length ? COUNT_WORDS[n] : String(n);
             return word + ' field' + (n === 1 ? '' : 's');
         }
@@ -1056,7 +1063,7 @@
                 <div class="result-row ${v.id === currentVenueId ? 'active' : ''}" id="row-${v.id}" onclick="cameFromMap=false; openVenue(${v.id})">
                     <div>
                         <div class="result-name">${v['Venue Name'] || '—'}</div>
-                        <div class="result-sub">${v.rt_code ? `<span class="result-code">${v.rt_code}</span> &nbsp;·&nbsp; ` : ''}${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; <span style="color:${fieldCountLabel(v) === 'no fields' ? '#c0392b' : '#555'}; font-weight:700;">${fieldCountLabel(v)}</span></div>
+                        <div class="result-sub">${v.rt_code ? `<span class="result-code">${v.rt_code}</span> &nbsp;·&nbsp; ` : ''}${[v.address, v.city, v.state].filter(Boolean).join(', ') || 'No address'} &nbsp;·&nbsp; <span style="color:${fieldCountLabel(v) === 'none allocated' ? '#8a7f72' : '#555'}; font-weight:700;">${fieldCountLabel(v)}</span></div>
                         <div style="margin-top:6px;">${v.club_name
                             ? `<span class="club-pill">${v.club_name}</span>`
                             : `<span class="club-pill club-pill-none">No club</span>`}</div>
