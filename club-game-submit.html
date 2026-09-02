@@ -1506,10 +1506,13 @@
 
             allClubs.forEach(c => { clubLeagueMap[c.id] = c.league; });
 
+            // state is carried because the SHORT number a club types is only
+            // unique within one state's series — see matchVenue().
             allVenues = venues.map(v => ({
                 id:     v.id,
                 numId:  v.fields['Venue ID'] || null,
                 rtCode: v.fields['rt_code'] || null,
+                state:  v.fields['state'] || null,
                 name:   v.fields['Venue Name'] || '',
             })).filter(v => v.name);
 
@@ -1517,6 +1520,7 @@
                 id:      f.id,
                 numId:   f.fields['Field ID'] || null,
                 rtCode:  f.fields['rt_code'] || null,
+                state:   f.fields['state'] || null,
                 name:    f.fields['Field Name'] || '',
                 venueId: f.fields['Venue ID']
                              ? venueByAirtableId[parseInt(f.fields['Venue ID'])] : null
@@ -1625,11 +1629,14 @@
 
         const intro = `<div style="margin:-2px 0 12px; padding:8px 10px; background:#f6f4f0;`
             + ` border:1px solid #d6ccbe; border-radius:6px; color:#3a3630; font-size:0.82rem; line-height:1.8;">`
-            + `${swatch('#2e7d32')} <strong style="color:#14532d;">Green</strong> codes go in the`
-            + ` <strong>Venue</strong> column. &nbsp;`
-            + `${swatch('#2f5fb3')} <strong style="color:#1e3a6e;">Blue</strong> codes go in the`
-            + ` <strong>Field</strong> column. <br>Full names work too — but the codes never change,`
-            + ` so they are the safer thing to type.</div>`;
+            + `<strong>Just type the number.</strong> `
+            + `${swatch('#2e7d32')} <strong style="color:#14532d;">green</strong> number in the`
+            + ` <strong>Venue</strong> column, &nbsp;`
+            + `${swatch('#2f5fb3')} <strong style="color:#1e3a6e;">blue</strong> number in the`
+            + ` <strong>Field</strong> column.`
+            + `<br>So <code style="font-family:'JetBrains Mono',monospace;">26</code> and`
+            + ` <code style="font-family:'JetBrains Mono',monospace;">57</code>, not the whole code —`
+            + ` leading zeros do not matter. The full code and the full name both still work.</div>`;
 
         bodyEl.innerHTML = intro + venues.map(v => {
             const fields = allFields
@@ -2242,6 +2249,7 @@
                     id:     v.id,
                     numId:  v.fields['Venue ID'] || null,
                     rtCode: v.fields['rt_code'] || null,
+                    state:  v.fields['state'] || null,
                     name:   v.fields['Venue Name'] || v.fields['Name'] || ''
                 }));
             }
@@ -2912,6 +2920,54 @@
     const VENUE_CODE_RE = /^RTV[A-Z]{2}\d+$/;    // RTVCT026 — state letters vary
     const FIELD_CODE_RE = /^RTF[A-Z]{2}\d+$/;    // RTFCT057
 
+    // ── Short numbers ─────────────────────────────────────────────────────────
+    // A club types 26, not RTVCT026. The COLUMN already says which kind of
+    // thing it is, so the letters restate the header; making someone type them
+    // forty times is the friction that sends a club back to typing names.
+    //
+    // The number alone is only unique WITHIN one state's series — each state
+    // restarts at 001, so RTVCT005 (Addison Park) and RTVMA005 (Durfee High)
+    // both exist. Resolution is therefore scoped to the CLUB'S state, which
+    // makes this safe permanently rather than safe-for-now: a Massachusetts
+    // league can hold its own 001-999 and never collide with Connecticut.
+    //
+    // Compared as INTEGERS, so width never matters — 26, 026 and 0026 are the
+    // same venue. That also survives Excel stripping leading zeros from a
+    // numeric cell, and lets the series grow past 999 without a renumber.
+    const BARE_NUM_RE = /^\d{1,6}$/;
+    const codeNum = c => parseInt(String(c || '').slice(5), 10);
+
+    // The state this club works in, taken from its own venues. Falls back to
+    // whatever state most venues are in rather than hardcoding CT.
+    function clubState() {
+        const ids  = clubVenueIdList();
+        const pool = ids.length ? allVenues.filter(v => ids.includes(v.id)) : allVenues;
+        const tally = {};
+        pool.forEach(v => {
+            const s = String(v.state || '').trim().toUpperCase();
+            if (s) tally[s] = (tally[s] || 0) + 1;
+        });
+        const best = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+        return best ? best[0] : 'CT';
+    }
+
+    // Resolve a bare number. Returns { rec } | { ambiguous:[...] } | { none:true }
+    // Out-of-state hits are RETURNED, not hidden — the caller warns, because a
+    // border club citing a venue across the line is legitimate and should not
+    // be blocked, only pointed at.
+    function resolveShortNumber(pool, prefix, raw) {
+        const want = parseInt(raw, 10);
+        const hits = pool.filter(x => String(x.rtCode || '').startsWith(prefix)
+                                   && codeNum(x.rtCode) === want);
+        const st   = clubState();
+        const mine = hits.filter(x => String(x.rtCode).slice(3, 5) === st);
+        if (mine.length === 1) return { rec: mine[0] };
+        if (mine.length > 1)   return { ambiguous: mine };
+        if (hits.length === 1) return { rec: hits[0], outOfState: true };
+        if (hits.length > 1)   return { ambiguous: hits };
+        return { none: true };
+    }
+
     // Substring matching on a one- or two-character name is a coin toss:
     // Old Killingly's fields are literally named "1", "2" and "3", so ANY text
     // containing "1" used to match field "1". Exact match still works for them.
@@ -2937,8 +2993,16 @@
         if (FIELD_CODE_RE.test(code)) return null;    // field code in the Venue column
 
         const n = raw.toLowerCase();
-        return allVenues.find(v => v.name.toLowerCase() === n)
-            || fuzzyFind(allVenues, v => v.name, n);
+        // Exact NAME before short number: a venue actually called "123" must
+        // still win over venue number 123.
+        const byName = allVenues.find(v => v.name.toLowerCase() === n);
+        if (byName) return byName;
+
+        if (BARE_NUM_RE.test(code)) {
+            const r = resolveShortNumber(allVenues, 'RTV', code);
+            return r.rec || null;
+        }
+        return fuzzyFind(allVenues, v => v.name, n);
     }
 
     // Match field by RT code, then name within the venue → record or null
@@ -2956,11 +3020,23 @@
         // field in the system when the venue did not resolve, which could bind
         // a game to another club's field and raise no warning, because a match
         // had technically been found.
-        if (!venueId) return null;
-        const pool = allFields.filter(f => f.venueId === venueId);
         const n = raw.toLowerCase();
-        return pool.find(f => f.name.toLowerCase() === n)
-            || fuzzyFind(pool, f => f.name, n);
+        const pool = venueId ? allFields.filter(f => f.venueId === venueId) : [];
+
+        // ⚠️ ORDER MATTERS. Exact name INSIDE the venue comes before the short
+        // number, because Old Killingly's fields are literally named "1", "2"
+        // and "3". Typing 1 there means that field, not RTFCT001 somewhere
+        // else in the state. A number like 125 has no such name to collide
+        // with, so it falls through and resolves as a code.
+        const byName = pool.find(f => f.name.toLowerCase() === n);
+        if (byName) return byName;
+
+        if (BARE_NUM_RE.test(code)) {
+            const r = resolveShortNumber(allFields, 'RTF', code);
+            return r.rec || null;
+        }
+        if (!venueId) return null;
+        return fuzzyFind(pool, f => f.name, n);
     }
 
     // Venue row ids belonging to the club currently selected. Empty means we
@@ -3006,11 +3082,20 @@
             const vm   = matchVenue(rawV);
 
             if (!vm) {
-                warnings.push(
-                    VENUE_CODE_RE.test(cV) ? `Venue code "${rawV}" is not one we hold — check the Venue & Field Codes list`
-                  : FIELD_CODE_RE.test(cV) ? `"${rawV}" is a field code (blue) but it is in the Venue column — that column takes the green RTV code`
-                  : `Venue "${rawV}" not found in system`);
+                let msg;
+                if (VENUE_CODE_RE.test(cV))      msg = `Venue code "${rawV}" is not one we hold — check the Venue & Field Codes list`;
+                else if (FIELD_CODE_RE.test(cV)) msg = `"${rawV}" is a field code (blue) but it is in the Venue column — that column takes the green venue number`;
+                else if (BARE_NUM_RE.test(cV)) {
+                    const r = resolveShortNumber(allVenues, 'RTV', cV);
+                    msg = r.ambiguous
+                        ? `Venue number ${rawV} matches more than one venue (${r.ambiguous.map(x => x.rtCode).join(', ')}) — use the full code`
+                        : `No venue number ${rawV} in ${clubState()} — check the Venue & Field Codes list`;
+                } else msg = `Venue "${rawV}" not found in system`;
+                warnings.push(msg);
             } else {
+                if (BARE_NUM_RE.test(cV) && String(vm.rtCode || '').slice(3, 5) !== clubState()) {
+                    warnings.push(`${rawV} resolved to ${vm.rtCode} (${vm.name}) — that is outside ${clubState()}. Use the full code if you meant it.`);
+                }
                 // Venues can be shared by more than one club, so an out-of-list
                 // venue is flagged, never rejected.
                 const scope = clubVenueIdList();
@@ -3024,10 +3109,17 @@
                     const fm   = matchField(rawF, vm.id);
 
                     if (!fm) {
-                        warnings.push(
-                            FIELD_CODE_RE.test(cF) ? `Field code "${rawF}" is not one we hold — check the Venue & Field Codes list`
-                          : VENUE_CODE_RE.test(cF) ? `"${rawF}" is a venue code (green) but it is in the Field column — that column takes the blue RTF code`
-                          : `Field "${rawF}" not recognized — it will still be saved as entered. No action needed.`);
+                        let fmsg;
+                        if (FIELD_CODE_RE.test(cF))      fmsg = `Field code "${rawF}" is not one we hold — check the Venue & Field Codes list`;
+                        else if (VENUE_CODE_RE.test(cF)) fmsg = `"${rawF}" is a venue code (green) but it is in the Field column — that column takes the blue field number`;
+                        else if (BARE_NUM_RE.test(cF)) {
+                            const r = resolveShortNumber(allFields, 'RTF', cF);
+                            fmsg = r.ambiguous
+                                ? `Field number ${rawF} matches more than one field (${r.ambiguous.map(x => x.rtCode).join(', ')}) — use the full code`
+                                : `No field named or numbered ${rawF} at ${vm.name} — it will still be saved as entered`;
+                        }
+                        else fmsg = `Field "${rawF}" not recognized — it will still be saved as entered. No action needed.`;
+                        warnings.push(fmsg);
                     } else if (fm.venueId && String(fm.venueId) !== String(vm.id)) {
                         const owner = allVenues.find(v => String(v.id) === String(fm.venueId));
                         warnings.push(`Field ${fm.rtCode || fm.name} belongs to ${owner ? owner.name : 'another venue'}, not "${vm.name}"`);
@@ -3325,13 +3417,25 @@
             // value could not be parsed, so a bad cell is still visible.
             const shownDate = normalizeDate(row['Date']) || (row['Date'] ?? '');
             const shownTime = normalizeTime(row['Time']) || (row['Time'] ?? '');
+
+            // Echoing "83" back at the club proves nothing. Show what it
+            // RESOLVED TO, so a number typed from muscle memory — an old CA
+            // id, a row off — is caught here rather than after submitting.
+            const rv = matchVenue(row['Venue'] || '');
+            const rf = rv ? matchField(row['Field'] || '', rv.id) : matchField(row['Field'] || '', null);
+            const resolved = (raw, rec) => {
+                const shown = String(raw ?? '');
+                if (!rec || !shown) return shown || '';
+                if (shown.trim().toLowerCase() === String(rec.name).toLowerCase()) return shown;
+                return `${shown}<br><span style="color:#14532d;font-size:0.72rem;font-weight:700;">→ ${rec.name}</span>`;
+            };
             html += `<tr class="${rowClass}">
                 <td>${i+1}</td>
                 <td>${shownDate}</td><td>${shownTime}</td>
                 <td>${row['Home Team']||''}</td><td>${row['Away Team']||''}</td>
                 <td>${row['Age Group']||''}</td><td>${row['Gender']||''}</td>
                 <td>${row['Game Type']||''}</td>
-                <td>${row['Venue']||''}</td><td>${row['Field']||''}</td>
+                <td>${resolved(row['Venue'], rv)}</td><td>${resolved(row['Field'], rf)}</td>
                 <td>${row['Notes']||''}</td>
                 <td>${statusHtml}</td>
             </tr>`;
