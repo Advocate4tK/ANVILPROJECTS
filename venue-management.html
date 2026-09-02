@@ -585,7 +585,15 @@
             const row = document.getElementById('msv-' + id);
             if (pin) pin.classList.toggle('on', on);
             if (row) row.classList.toggle('on', on);
-            if (pin && on) pin.parentNode.appendChild(pin);   // bring to front
+            // Deliberately does NOT reorder the DOM to raise the hovered pin:
+            // re-inserting the node under the cursor re-fires mouseenter and
+            // swallows the matching mouseleave, so highlights stuck on.
+        }
+
+        // Belt and braces: a missed mouseleave anywhere should not leave a pin
+        // lit for the rest of the session.
+        function clearHighlights() {
+            document.querySelectorAll('.vpin.on, .msv.on').forEach(el => el.classList.remove('on'));
         }
 
         function renderMapSide(town, list) {
@@ -596,7 +604,9 @@
             document.getElementById('mapSideHd').textContent =
                 `${town} — ${list.length} venue${list.length === 1 ? '' : 's'}`;
 
-            document.getElementById('mapSideList').innerHTML = list.slice()
+            const listEl = document.getElementById('mapSideList');
+            listEl.onmouseleave = clearHighlights;
+            listEl.innerHTML = list.slice()
                 .sort((a, b) => String(a['Venue Name']).localeCompare(String(b['Venue Name'])))
                 .map(v => {
                     const n = fieldCountForVenue(v);
@@ -796,6 +806,7 @@
                 });
 
                 renderMapSide(mapZoomTown, list);
+                svg.onmouseleave = clearHighlights;
                 document.getElementById('mapBackBtn').style.display = 'block';
                 const zt = document.getElementById('mapZoomTitle');
                 zt.style.display = 'block';
