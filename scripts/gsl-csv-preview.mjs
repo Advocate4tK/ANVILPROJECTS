@@ -50,8 +50,21 @@ const rows = (games || [])
       fmtDate(g.date), fmtTime(g.time), league, ageKey, gender, crew, halfLen(ag.duration),
       g['Home Team'] || '', g['Away Team'] || '',
       vName[g['Venue ID']] || '', fName[g['Field ID']] || '',
-      '', 'League', '', '', '', '', '', '',
-      'Referee Tool', g.id, ag.center ?? '', usesARs ? (ag.ar ?? '') : 0, 0
+      '', 'League',
+      // Home Club / Visiting Club are REQUIRED by CA and validated against CA's
+      // own club registry — this exact string was read off the Edit Game
+      // dropdown. NOT "NECONN Soccer Club": CA carries Neconn and Brooklyn as a
+      // single combined entry, cased "Neconn", ending in "Soccer" not "Soccer
+      // Club". GSL runs as a subsidy of NECONN, so both sides are this club.
+      'Neconn Soccer Club & Brooklyn Youth Soccer',
+      'Neconn Soccer Club & Brooklyn Youth Soccer',
+      '', '', '', '',
+      // AR Fee: CA opens 3 assignment rows (its league config) and each needs a
+      // non-null rate — a 0 came back as
+      //   null value in column "referee_game_rate" ... violates not-null constraint
+      // 25 is CA's own default and already what their existing GSL games carry.
+      // It is not what anybody gets paid; our pay portal is the authority.
+      'Referee Tool', g.id, ag.center ?? '', usesARs ? (ag.ar ?? 25) : 25, 0
     ].map(csvCell).join(',');
   });
 

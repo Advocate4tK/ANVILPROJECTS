@@ -1,6 +1,37 @@
 # Central Assign harvest — what's done, what's left
 
-**Last updated: 2026-08-04**
+**Last updated: 2026-08-29**
+
+## ⚠️ PAGE NUMBERS DRIFT — track the NAME, not the page
+
+The directory grew **3,278 → 3,472** between 2026-08-04 and 2026-08-29, which pushed
+every page forward by roughly one. Old page 22 ended at *Garcia*; on 8/29 that content
+sat on page 23–24. Resuming by page number silently re-sweeps ground already imported —
+it cost two wasted sweeps on 8/29 before anyone noticed.
+
+**Resume by the last surname imported.** The page number is only a hint.
+
+## Status: complete through **GOODBURN** ✅
+
+Page 25 of 70 swept at 150% and imported 2026-08-29 (Liam Gibson → Harry Goodburn).
+50 rows: 49 CT, 1 out-of-state omitted (Brian Good, Harleysville PA).
+**42 inserted, 7 updated, 0 ambiguous, 0 duplicate CA IDs.** Roster 1,477 → **1,519**.
+⚠️ Elizabeth Glover #35084 imported with registration_year 2022, EXPIRED in CA — in the
+roster but must not be assignable. Tenth expired registration the importer tracks.
+
+⭐ Next sweep starts at the first surname AFTER **Goodburn** — page 26 on 8/29 numbering,
+but CHECK THE FIRST NAME before transcribing.
+
+## Status: complete through **GIBSON** ✅
+
+Page 24 of 70 swept at 150% and imported 2026-08-29 (Ganesh → Gibson). 50 rows: 49 CT,
+1 out-of-state omitted (Simon Ghebremariam, Rockland MA). **35 inserted, 2 updated,
+0 ambiguous, 0 duplicate CA IDs.** Roster 1,442 → **1,477**.
+Brianna Gerster #38642 matched an existing row by name+town and was gap-filled with her
+CA ID, email and age. Jaslyn Garcia #40328 gap-filled phone.
+
+⭐ Next sweep starts at the first surname AFTER **Gibson** — on 8/29 numbering that is
+page 25, but CHECK THE FIRST NAME ON THE PAGE before transcribing.
 
 ## Status: pages 1–22 COMPLETE ✅ (Tods target reached)
 
@@ -175,6 +206,139 @@ where is the safe move; the frames keep indefinitely in
 ⚠️ **Shift+F4 does NOT archive.** Sweeps write to `EYES/live/`, which
 self-deletes on a ~5-minute window. Copy to `EYES/harvest/page-NN` immediately
 or the sweep is lost.
+
+⚠️ **The live buffer also wipes on session restart, not just on the timer.**
+Page 26 was swept, partially read, and then lost mid-transcription when the
+session restarted — frames 7–17 were gone before they could be read. Read the
+frames or copy them to `harvest/` in the SAME turn the sweep lands.
+
+## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
+
+**Complete and contiguous through page 52 of 70 (ends Chase Rathbun).
+Resume at page 53. Roster crossed 2,000 on page 37.**
+
+### ⚠️ STATEWIDE badge on MINORS — verify before relying on it
+Two cases in three pages. One would read as a CA data error; two looks like a
+real category. Confirm with an assignor what a Statewide badge means on a
+under-18 record before it drives any assignment logic.
+- **Samuel Pedneault #38242** — 16, Wethersfield (page 49)
+- **Kevin Porzycki #38236** — 15, Southington, reg through 2027 (page 51)
+
+### Out-of-staters ALREADY IN our pools (omitted on the state rule)
+If that rule is ever relaxed, start here — CA already has them working for us.
+- **Benjamin Hanssen #38630** — Westerly RI, Griswold Club (page 28)
+- **Kwesi Isaacs #24626** — Brooklyn NY, Griswold + NorthEast + REFS (page 31)
+- **Olli Muniz #40094** — Middletown NJ, East Haddam (page 45)
+- **Gianluca Palanca #40843** — Brooklyn NY, NorthEast + REFS (page 47)
+
+⚠️ **PAGINATION DRIFT IS REAL.** CA's total moved 3472 → 3473 → 3475 during the
+harvest. When the directory GROWS, rows shift one page later and you get a
+harmless repeat at the page boundary (page 40 re-showed page 39's last row,
+Samuel Mangler). When it SHRINKS, rows shift earlier and a page boundary
+SILENTLY SKIPS people. Every page: check that the first row follows the previous
+page's last row alphabetically. A forward jump means a gap — re-sweep.
+
+### ⭐ ASSIGNORS found inside the referee directory
+The harvest is turning up people who assign, not just people who officiate.
+These belong on the CT assignor outreach list, not only the referee roster.
+- **Joseph Maimone #887** — `joem.refassignor@gmail.com`, Statewide, Hartford,
+  68, CA ID under 900, logged in 2026-08-29 (page 39)
+- **Gokhan Kuruc #40095** — `coachg@vernonsoccerclub.org`, Statewide, Vernon,
+  46 — club coach who also officiates (page 35)
+- **Francis McGarey #1463** — `swdadmin@cjsa.org`, Statewide, Darien, 66 —
+  CJSA **SouthWest District administrator**. A governing-body role address,
+  not personal. Logged in 2026-08-29 (page 42)
+
+- **Zachary Mintz #27254** — `zachary.mintz@refereeassign.onmicrosoft.com`,
+  Statewide, Newington, 37. A Microsoft 365 tenant for an organisation named
+  **refereeassign**. Logged in 2026-08-29 (page 43)
+
+- **Eduardo Mozzo #973** — `sasl.assignor@gmail.com`, Bridgeport, 68.
+  CA ID under 1000, logged in 2026-08-30 (page 44). "SASL" is a league
+  abbreviation — identify which league before reaching out.
+- **Kevin Paul #35023** — `assign@referee123.com`, Woodbridge, 52 (page 49).
+  A role address on a referee-services domain, not a personal inbox.
+
+The pattern: CA's referee directory quietly contains assignors, club coaches
+and CJSA district staff. Grep future pages for `assignor`, `admin`, `cjsa`,
+`district`, `refassign`/`refereeassign`, and club domains — these are outreach
+contacts, not just refs. **Four found in pages 39–44 alone**, three of them on
+founding-era CA IDs (#887, #973, #1463). This is a systematic seam, not luck.
+
+### Lowest CA IDs found (founding-era accounts, all still active)
+#46 Matthew Mercier (p43) · #48 Sin Hang Lai (p36) · #50 Daniel Marques (p40)
+
+⚠️ **A sweep can report "reached the bottom" and be wrong.** The 17:33 page-35
+sweep stalled — frames 7-10 were the same viewport, only ~25 of 50 rows, and no
+pagination footer. ALWAYS confirm the "Page N of 70" footer is present in the
+last frame before transcribing. If it is missing, the sweep is short: discard
+and re-sweep, do not import a partial page.
+
+### ⭐⭐ Refs whose HOME TOWN *is* one of our client clubs
+- **Jack Nelan #895** — EAST HADDAM, in the East Haddam pool, 71 (page 46)
+- **Bryce Quinn #39332** — GRISWOLD, in Griswold Club + NorthEast, 15,
+  no phone on file (page 52)
+- **Maci Ramcke #41287** — MOODUS (East Haddam), 13, new ref through 2027,
+  logged in 2026-08-30, **in NO pool** (page 52)
+- **Eli Klancko #40673** — MOODUS (East Haddam), 14, **in NO pool** (page 34)
+
+### ⭐ Refs living INSIDE our client towns, in no pool
+The harvest keeps surfacing these. They are the highest-value names in it —
+local, certified, and nobody has asked them yet.
+- **Eli Klancko #40673 — MOODUS** (= East Haddam), 14 (page 34)
+- Elliot Kirk #40611 + Sebastian Kirk #39014 — **Glastonbury**, brothers (page 34)
+- Iyeon Kim #35097 — **Glastonbury**, 18 (page 34)
+- carolyn kamp #41226 — **Glastonbury**, new ref (page 33)
+- Benjamin Johnson #31241 — **Glastonbury**, Statewide (page 32)
+- Brady Kelleher #34389 — South Glastonbury (page 33)
+- Nourddine Jalal #5523 — **Lebanon** (NECONN town), already Griswold pool (page 31)
+- Oskar Heikkila #38835 — Higganum (= Haddam), East Haddam adjacent (page 29)
+
+### Top certifications found so far
+- **National** — Colby Johnson #3196, Trumbull (page 32). Highest in the harvest.
+- **National AR** — Justen Lopez #34565, Stamford (page 38)
+- **Regional** — Christo Jamo #30768, Woodbury (page 31) · Johnny Kassay #1415,
+  Monroe (page 33) · Aidan Krok #28113, Bristol (page 35) ·
+  **Collin Manuilow #33853, Woodstock — ALREADY IN Griswold + NorthEast + REFS**
+  (page 40) · **Daniel Marques #50, North Haven — lowest CA ID in the harvest**
+  (page 40)
+- **Regional Next** — Charlie Hall #34545, Plainville (page 28)
+- Statewide is common; the six above are not.
+
+### ⭐ ALL FOUR POOLS
+**Matthew Lindell #2136**, Thompson (page 38) — East Haddam + Griswold Club +
+NorthEast + REFS. The only person in the harvest in all four.
+
+### ⚠️ Apple Private Relay addresses
+Masked forwarders, not real inboxes. Deliverable today, but they break if the
+user changes Apple settings and replies from non-Apple senders can bounce.
+- **Andrew Lord #40326** — `ktybvn7mpk@privaterelay.appleid.com` (page 38)
+- **Quin Parrott #40954** — `fvwpq8rvzc@privaterelay.appleid.com` (page 48)
+
+The page-38 prediction that more would appear held. Treat this as a growing
+blast-deliverability category, not a one-off.
+
+### "Started but never finished" registrations
+A recurring CA pattern: BLANK reg year + EXPIRED badge + still tagged NEW
+REFEREE. These are people who began signing up and stopped. Several logged in
+recently, so they are engaged and recoverable — not dead records.
+Rodriguez Iglesias #41169 · Samuel Jara #41039 · Cameron Kaiser #41058 ·
+Jagger Kalman #41034
+
+### Malformed phone numbers in CA
+Stored as null rather than invented. Verify before calling.
+Hannah Casano #39676 · Matthew Imperato #38001 · Kieran Keefe #37253
+
+⚠️ CA's directory total moved 3472 → 3473 between the page-30 and page-31
+sweeps. The roster is a moving target; a page swept early in a session is not
+guaranteed to match the same page swept later.
+
+
+Page 26 was lost once to a buffer wipe mid-transcription, re-swept at 16:49,
+and imported in full. **Complete and contiguous through page 27 (ends Daniella
+Hale). Resume at page 28.** The fix that made the re-sweep survive: copy the
+frames to `harvest/page-NN` in the SAME turn the sweep lands, then read from
+there — never read straight out of `live/`.
 
 ⚠️ **Out-of-staters are listed, never silently dropped.** Each page file has an
 `_omitted_out_of_state` block naming who was left out and why, per Tod's rule

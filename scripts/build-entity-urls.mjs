@@ -101,7 +101,7 @@ ${STAMP}
 <script src="/config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/js/supabase-client.js?v=14"></script>
-<script src="/schedules/club.js?v=1"></script>
+<script src="/schedules/club.js?v=4"></script>
 </body>
 </html>
 `;
