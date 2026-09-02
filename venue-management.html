@@ -451,25 +451,38 @@
 
             svg.addEventListener('pointerdown', e => {
                 if (!vb) return;
-                panning = { sx: e.clientX, sy: e.clientY, box: { ...vb }, moved: false };
-                svg.setPointerCapture(e.pointerId);
-                svg.style.cursor = 'grabbing';
+                // Deliberately NOT capturing the pointer here. setPointerCapture
+                // redirects every following pointer event to the SVG, which means
+                // the click never reaches the town path underneath and selecting a
+                // town silently stops working. Capture only once a real drag
+                // starts, below.
+                panning = { sx: e.clientX, sy: e.clientY, box: { ...vb }, moved: false, id: e.pointerId };
             });
 
             svg.addEventListener('pointermove', e => {
                 if (!panning) return;
+                const far = Math.abs(e.clientX - panning.sx) > 4 || Math.abs(e.clientY - panning.sy) > 4;
+                if (!far && !panning.moved) return;      // still a click, leave it alone
+                if (!panning.moved) {
+                    panning.moved = true;
+                    svg.setPointerCapture(panning.id);   // now it is a drag
+                    svg.style.cursor = 'grabbing';
+                }
                 const r = svg.getBoundingClientRect();
                 const scale = Math.min(r.width / panning.box.w, r.height / panning.box.h);
-                const dx = (e.clientX - panning.sx) / scale;
-                const dy = (e.clientY - panning.sy) / scale;
-                if (Math.abs(e.clientX - panning.sx) > 3 || Math.abs(e.clientY - panning.sy) > 3) panning.moved = true;
-                setVB({ x: panning.box.x - dx, y: panning.box.y - dy, w: panning.box.w, h: panning.box.h });
+                setVB({ x: panning.box.x - (e.clientX - panning.sx) / scale,
+                        y: panning.box.y - (e.clientY - panning.sy) / scale,
+                        w: panning.box.w, h: panning.box.h });
             });
 
             const endPan = e => {
                 if (!panning) return;
                 // A drag must not register as a click on whatever is underneath.
-                svg.dataset.dragged = panning.moved ? '1' : '';
+                const wasDrag = panning.moved;
+                if (wasDrag) {
+                    try { svg.releasePointerCapture(panning.id); } catch (_) {}
+                }
+                svg.dataset.dragged = wasDrag ? '1' : '';
                 panning = null;
                 svg.style.cursor = 'grab';
                 setTimeout(() => { svg.dataset.dragged = ''; }, 0);
