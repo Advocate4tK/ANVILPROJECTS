@@ -108,6 +108,13 @@
                      pointer-events:none; user-select:none; }
         .vdot-lbl  { font-family:'JetBrains Mono',monospace; font-weight:600; fill:#4a3600;
                      text-anchor:middle; dominant-baseline:central; pointer-events:none; user-select:none; }
+        /* Surrounding towns, drawn under the focused one. A town zoomed in on
+           its own floats in black with no sense of where in the state it sits. */
+        .vtwn-ghost { fill:#0d1526; stroke:#182741; stroke-width:1px;
+                      vector-effect:non-scaling-stroke; pointer-events:none; }
+        .vghost-lbl { font-family:'Barlow Condensed',sans-serif; font-weight:700; fill:#3c4f70;
+                      text-anchor:middle; letter-spacing:0.5px; pointer-events:none; user-select:none; }
+
         .vpin-body { fill:#ffc93c; stroke:#4a3600; stroke-width:1.5px; vector-effect:non-scaling-stroke; }
         .vpin.on .vpin-body { fill:#fff; stroke:#00c853; stroke-width:2.5px; }
 
@@ -581,6 +588,18 @@
                 }
             });
 
+            // Neighbour names: only the ones whose centre is actually on screen.
+            // All 168 are in the DOM, but printing every one would scatter type
+            // across the whole state as you pan.
+            if (vb) {
+                svg.querySelectorAll('.vghost-lbl').forEach(el => {
+                    const gx = parseFloat(el.getAttribute('x'));
+                    const gy = parseFloat(el.getAttribute('y'));
+                    const on = gx > vb.x && gx < vb.x + vb.w && gy > vb.y && gy < vb.y + vb.h;
+                    el.style.display = on ? '' : 'none';
+                });
+            }
+
             const note = document.getElementById('mapHiddenNote');
             if (note) {
                 note.innerHTML = hidden
@@ -763,7 +782,9 @@
                     b.minY = Math.min(b.minY, y); b.maxY = Math.max(b.maxY, y);
                 });
 
-                const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.16 + 0.008;
+                // Roomier than a tight crop: the surrounding towns drawn below
+                // only give context if there is margin for them to show in.
+                const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.26 + 0.008;
                 setVB({ x: b.minX - pad, y: b.minY - pad,
                         w: (b.maxX - b.minX) + pad*2, h: (b.maxY - b.minY) + pad*2 }, true);
 
@@ -805,7 +826,18 @@
                     `<text class="vpin-lbl" data-venue="${p.v.id}" data-basefs="${LBL}" style="font-size:${LBL}px">${esc(p.v['Venue Name'])}</text>`
                 ).join('');
 
-                svg.innerHTML = `<path class="vtwn has" d="${town.d}" style="cursor:default"></path>`
+                // Neighbours first, then their names, then the focused town on
+                // top — so a neighbour's name tucks behind the town in focus
+                // rather than printing across it.
+                const GLBL = span * 0.030;
+                const ghosts = CT_TOWNS.towns.filter(t => t.n !== mapZoomTown);
+                const ghostPaths = ghosts.map(t => `<path class="vtwn-ghost" d="${t.d}"></path>`).join('');
+                const ghostLbls  = ghosts.map(t =>
+                    `<text class="vghost-lbl" x="${t.cx}" y="${t.cy}" data-basefs="${GLBL}"
+                           style="font-size:${GLBL}px">${esc(String(t.n).toUpperCase())}</text>`).join('');
+
+                svg.innerHTML = ghostPaths + ghostLbls
+                                + `<path class="vtwn has" d="${town.d}" style="cursor:default"></path>`
                                 + pins + labels;
 
                 // Cache the nodes once — layoutTownMarkers runs on every scroll
