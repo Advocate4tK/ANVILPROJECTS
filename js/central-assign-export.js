@@ -796,7 +796,9 @@ exportBtn.addEventListener('click', () => {
     const rows = selected.map(rec => {
         const f = rec.fields;
         const src = f['Source Club'] || '';
-        const { name: venueName, caId: venueCaId, fieldCaId, fieldName } = resolveVenue(f);
+        // caId/fieldCaId are deliberately unused in the row: CA's importer wants
+        // names. They stay resolved because they are how we identify the venue.
+        const { name: venueName, fieldName } = resolveVenue(f);
 
         // Gender — CA wants the full word, not M/F
         const gRaw = (f['Gender'] || '').trim();
@@ -855,11 +857,19 @@ exportBtn.addEventListener('click', () => {
             halfLength,
             f['Home Team'] || '',
             f['Away Team'] || '',
-            // CA # wins over CA name on upload — the number maps unambiguously,
-            // the name has to match CA's spelling exactly. The name is only a
-            // fallback, for venues and fields CA hasn't issued a number for.
-            venueCaId ? String(venueCaId) : venueName,
-            fieldCaId ? String(fieldCaId) : fieldName,
+            // NAMES, not numbers — Central Assign's importer said so itself.
+            // 2026-09-03: a file with 867 in this column came back "Venue '867'
+            // not found in the system" on every row, while every other column
+            // passed. CA's own sample uses names, and the July upload that got
+            // through validation used names too.
+            //
+            // The CA id rule still holds where it came from — the Venue Field
+            // column on the OLD format — but the CSV importer resolves by name.
+            // We keep both numbers in the database as identity (that is how we
+            // know which venue is which); they are just not what goes in the file,
+            // which is why the venue directory harvest still mattered.
+            venueName,
+            fieldName || '',
             '',                      // Division — we don't carry one
             DEFAULTS.type,
             // Home Club and Visiting Club are REQUIRED on CA's Add Game form, and
