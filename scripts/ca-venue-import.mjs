@@ -15,10 +15,16 @@
 //     with zero fields, not skipped and not flagged.
 //  ⛔ Never overwrite rt_code, club_name, address, lat or lng. Those are ours;
 //     CA has no opinion on them.
-//  ⚠️ If we already hold a venue on that CA id and the NAME or CITY disagrees,
-//     flag it and skip. Ours have been hand-corrected, and CA has its own
-//     duplicates (Buckingham Park twice, Bentley vs Charles Bentley). A
-//     disagreement is a question, not a fact to overwrite.
+//  ⭐ CENTRAL ASSIGN IS THE SOURCE OF TRUTH FOR NAMES AND CITIES.
+//     Tod, 2026-09-03: "anything that doesn't agree with Central Assign is
+//     wrong." So a name or city that disagrees is OVERWRITTEN with CA's,
+//     spelling and all — "Giddeon Welles", "Maloney HighSchool",
+//     "Manship Park(Canterbury)". Our tidier version is not better; it is a
+//     venue a club cannot find in CA, and CA is where the games end up.
+//
+//     This was the opposite policy until now: conflicts were skipped to
+//     protect our hand-corrections. That preserved eleven small divergences
+//     from the system of record.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -75,7 +81,7 @@ async function nextNum(table, prefix) {
     const fByCa = new Map(haveF.filter(f => f['Field ID'] != null)
                                .map(f => [Number(f['Field ID']), f]));
 
-    let vNew = 0, vSame = 0, fNew = 0, fSame = 0;
+    let vNew = 0, vSame = 0, vFixed = 0, fNew = 0, fSame = 0;
     const conflicts = [], noField = [];
     let vNum = await nextNum('venues', 'RTV'), fNum = await nextNum('fields', 'RTF');
 
@@ -87,10 +93,20 @@ async function nextNum(table, prefix) {
             const nameDiff = norm(existing['Venue Name']) !== norm(v.name);
             const cityDiff = v.city && norm(existing.city) !== norm(v.city);
             if (nameDiff || cityDiff) {
+                // CA wins. Only the name and city are touched — rt_code,
+                // club_name, address, lat and lng are ours and CA has no
+                // opinion on them.
+                const patch = {};
+                if (nameDiff) patch['Venue Name'] = v.name;
+                if (cityDiff) patch.city = v.city;
                 conflicts.push({ caId, ours: existing, theirs: v, nameDiff, cityDiff });
-                continue;                       // flag and skip — never overwrite
-            }
-            vSame++;
+                if (WRITE) {
+                    const r = await fetch(`${URL}/rest/v1/venues?id=eq.${existing.id}`,
+                        { method: 'PATCH', headers: H, body: JSON.stringify(patch) });
+                    if (!r.ok) console.log(`   ✗ could not align CA ${caId}: ` + await r.text());
+                }
+                vFixed++;
+            } else vSame++;
         } else {
             // Report the code the DATABASE assigned, not one predicted here.
             // The trigger mints per STATE — EF Academy in Thornwood NY became
@@ -125,6 +141,31 @@ async function nextNum(table, prefix) {
 
         for (const f of fields) {
             if (f.ca_id != null && fByCa.has(Number(f.ca_id))) { fSame++; continue; }
+
+            // ⚠️ Before inserting, look for a field we ALREADY hold at this
+            // venue under the same name. Deduping on CA Field ID alone was not
+            // enough: our hand-built fields carry no CA id, so nothing matched
+            // and CA's copy went in beside them. Glastonbury High ended up with
+            // 18 rows for 9 pitches and Lions Club Mansfield 28 for 14.
+            //
+            // When we find one, ADOPT rather than insert — give our existing
+            // row CA's name and CA's id. The row id survives, so games already
+            // pointing at it keep working.
+            if (venueRowId) {
+                const mine = haveF.find(x => String(x.venue_id) === String(venueRowId)
+                                          && x['Field ID'] == null
+                                          && norm(x['Field Name']) === norm(f.name));
+                if (mine) {
+                    console.log(`    ~ field CA ${String(f.ca_id ?? '—').padEnd(5)} ${f.name}   (adopted by our existing row)`);
+                    if (WRITE) {
+                        await fetch(`${URL}/rest/v1/fields?id=eq.${mine.id}`, { method: 'PATCH', headers: H,
+                            body: JSON.stringify({ 'Field Name': f.name, 'Field ID': f.ca_id ?? null }) });
+                        mine['Field ID'] = f.ca_id ?? null;
+                    }
+                    fSame++;
+                    continue;
+                }
+            }
             let code = '(pending)';
             if (WRITE && venueRowId) {
                 const r = await fetch(URL + '/rest/v1/fields', {
@@ -159,8 +200,8 @@ async function nextNum(table, prefix) {
         conflicts.forEach(c => {
             console.log(`   CA ${c.caId}  ${c.ours.rt_code}`);
             console.log(`      ours:  "${c.ours['Venue Name']}"  ${c.ours.city || '—'}`);
-            console.log(`      CA:    "${c.theirs.name}"  ${c.theirs.city || '—'}`
-                        + `   ${[c.nameDiff && 'name', c.cityDiff && 'city'].filter(Boolean).join(' + ')} differ`);
+            console.log(`      now:   "${c.theirs.name}"  ${c.theirs.city || '—'}`
+                        + `   ${[c.nameDiff && 'name', c.cityDiff && 'city'].filter(Boolean).join(' + ')}`);
         });
     }
     if (!WRITE) console.log('\nnothing was saved. re-run with --write');
