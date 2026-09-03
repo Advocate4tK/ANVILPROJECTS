@@ -92,7 +92,12 @@ if (unresolved.length) {
 if (noHome.length) {
     const names = [...new Set(noHome.map(g => g['Source Club']))];
     console.log(`\n${noHome.length} games whose Source Club has no ca_club_id - skipped: ${names.join(', ')}`);
-    console.log('  KOVA is a test account and RECREATION is unsanctioned; neither belongs in Central Assign.');
+    // Not all of these are mistakes. KOVA is a test account and RECREATION is
+    // unsanctioned, so neither should ever have a CA club. The summer leagues are
+    // a real question: they play under names Central Assign has no club for, and
+    // "Referee Services Assignor" may be where they belong — a decision, not a
+    // lookup, so this script will not make it.
+    console.log('  Expected: KOVA (test) and RECREATION (unsanctioned). Anything else needs a decision.');
 }
 
 if (!WRITE) { console.log(`\npreview only - ${plan.length} rows would change. Re-run with --write`); process.exit(0); }
