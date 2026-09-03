@@ -6031,10 +6031,8 @@
                 // are never blank, then again once clubs.active_season comes back. They
                 // disagree every year in the weeks after Tod flips the clubs and before the
                 // calendar catches up, and the flip is the one that's right.
-                // Tod, 2026-09-03: open on THIS WEEK. The board is for the games in
-                // front of him; the season-wide range meant scrolling past a month of
-                // played games at every login. 'All Games' is still one click away.
-                setDateRange('this-week', null);
+                setDateRange('all', null);
+                defaultFromToday();
                 fetchActiveSeasonLabel().then(lbl => {
                     if (!lbl) return;
                     _activeSeasonLabel = lbl;
@@ -6047,16 +6045,40 @@
                     const staleFrom = new Date(stale.from);
                     staleFrom.setDate(staleFrom.getDate() - SEASON_PRESEASON_DAYS);
                     if (df && dt && df.value === fmt(staleFrom) && dt.value === fmt(stale.to)) {
-                        setDateRange('this-week', null);
+                        setDateRange('all', null);
+                        defaultFromToday();   // else the repaint puts the season start back
                     }
                 });
             }
 
 
 
+
+            // Open with Date From on TODAY. Tod, 2026-09-03: the default range
+            // began 08/02 — the season start minus preseason slack — so every
+            // login sat on a month of already-played games.
+            //
+            // From only. Date To stays the season end, so everything still to come
+            // is on the board and nothing is cut off at the end of the week. The
+            // quick-picks, This Week included, are unchanged and set BOTH ends when
+            // clicked; this is only where the page lands before anyone clicks.
+            //
+            // Before a season starts, today is outside the range and the season's
+            // own start stands rather than opening on an empty board.
+            function defaultFromToday() {
+                const df = document.getElementById('dateFrom');
+                const dt = document.getElementById('dateTo');
+                if (!df || !dt || !df.value) return;
+                const today = fmt(new Date());
+                if (today > df.value && (!dt.value || today <= dt.value)) df.value = today;
+            }
+
             // Highlight the matching quick-pick manually since no click event fired.
             // "All Games" is now season-bounded, so it IS the default.
-            const _defaultBtnLabel = 'This Week';
+            // Nothing is highlighted on load: the landing range is today through
+            // the end of the season, which is not any of the quick-picks. Lighting
+            // one would claim a range the boxes do not hold.
+            const _defaultBtnLabel = null;
             const defaultBtn = [...document.querySelectorAll('.date-quick-btn')]
                 .find(b => b.textContent.trim() === _defaultBtnLabel);
             if (defaultBtn) defaultBtn.classList.add('active');
