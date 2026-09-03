@@ -7,10 +7,10 @@
 -- Run step 2 FIRST. Without the unique index, re-running this file inserts
 -- every club a second time - ON CONFLICT DO NOTHING has nothing to catch on.
 
--- 140 names read off CA's Home Club dropdown on 2026-09-03. PARTIAL: no I
+-- 154 names read off CA's Home Club dropdown on 2026-09-03. PARTIAL: no I
 -- section, nothing past Woodbury Bethlehem. CA's own typos are deliberate -
 -- "Tournment", "Lyme-Old lyme Soccer Club", "Cantebury Soccer Club".
--- Expect: 140 rows, then 2.
+-- Expect: 154 rows, then 2 (156 total).
 
 insert into public.ca_clubs (name) values
     ('A.C. Connecticut'),

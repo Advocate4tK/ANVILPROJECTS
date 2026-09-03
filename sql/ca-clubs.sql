@@ -17,7 +17,7 @@
 -- including kova-soccer-club and RECREATION, which will never exist in CA, and
 -- CA holds hundreds we never touch. clubs.ca_club_id is the join.
 --
--- WARNING: THE SEED BELOW IS PARTIAL — 140 of CA's names, transcribed from
+-- WARNING: THE SEED BELOW IS PARTIAL — 154 of CA's names, transcribed from
 -- Ralph Eyes captures of the dropdown on 2026-09-03. Known gaps: the whole I
 -- section, and anything after "Woodbury Bethlehem Youth Soccer". Every club we
 -- currently export is present. Add the rest as it is captured; an absent name
