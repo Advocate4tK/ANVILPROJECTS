@@ -522,9 +522,16 @@
                              else, so a typed club name was landing on nothing:
                              our "Stonington Soccer Club" is CA's "Stonington SC".
                              Both are required, because CA requires both. -->
+                        <!-- Home Club is NOT enterable. A club's own page is its own
+                             home club, so it is derived from clubs.ca_club_id and shown
+                             locked. A club cannot get its own name wrong if it never
+                             types it, and it cannot put somebody else's club there. -->
                         <div class="field-group span2">
-                            <label>Home Club <span style="color:#e74c3c">*</span></label>
-                            <select id="gHomeClub"><option value="">&mdash; Select &mdash;</option></select>
+                            <label>Home Club</label>
+                            <input type="text" id="gHomeClubShow" readonly tabindex="-1"
+                                   style="background:#eef1f6;color:#1a2942;font-weight:700;cursor:default;"
+                                   value="&mdash;">
+                            <input type="hidden" id="gHomeClub">
                         </div>
                         <div class="field-group span2">
                             <label>Home Team <span style="color:#e74c3c">*</span></label>
@@ -1510,6 +1517,7 @@
 
             allClubs = clubs.map(c => ({
                 id:          c.id,
+                caClubId:    c.fields['ca_club_id'] || null,
                 slug:        c.fields['Name'] || '',
                 name:        c.fields['Club Name'] || c.fields['Name'] || '',
                 displayName: c.fields['Display Name'] || '',
@@ -1589,7 +1597,7 @@
         // Legend follows the same list the dropdown shows, so a club sees its own
         // venues. Previously this only ever ran for tournaments.
         buildVenueLegend(filtered);
-        preselectHomeClub(true);
+        setHomeClub();
     }
 
     function toggleVenueRef() {
@@ -1741,7 +1749,7 @@
         document.getElementById('createGameBtn').disabled = !ok;
     }
 
-    ['clubSelect','gDate','gTime','gHomeClub','gHome','gAwayClub','gAway','gAge','gDivision','gGender','gGameType','gVenue','gField'].forEach(id => {
+    ['clubSelect','gDate','gTime','gHome','gAwayClub','gAway','gAge','gDivision','gGender','gGameType','gVenue','gField'].forEach(id => {
         document.getElementById(id).addEventListener('input', updateCreateBtn);
         document.getElementById(id).addEventListener('change', updateCreateBtn);
     });
@@ -1893,10 +1901,16 @@
                 const missing = [];
                 if (!g.date)     missing.push('Date');
                 if (!g.time)     missing.push('Time');
-                if (!g.homeClub) missing.push('Home Club');
                 if (!g.home)     missing.push('Home Team');
                 if (!g.awayClub) missing.push('Visiting Club');
                 if (!g.away)     missing.push('Away Team');
+                if (!g.homeClub) {
+                    errorCount++;
+                    stagedGames[i].status = 'error';
+                    stagedGames[i].errorMsg = 'This club is not mapped to a Central Assign club yet - the assignor has to set that before games can be submitted';
+                    renderStagedTable();
+                    continue;
+                }
                 if (!g.age)      missing.push('Age Group');
                 if (!g.gender)   missing.push('Gender');
                 if (!g.gameType) missing.push('Game Type');
@@ -3151,10 +3165,8 @@
     function populateClubPickers() {
         if (!caClubs.length) {
             const msg = '<option value="">&mdash; club list unavailable &mdash;</option>';
-            ['gHomeClub', 'gAwayClub'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.innerHTML = msg;
-            });
+            const away = document.getElementById('gAwayClub');
+            if (away) away.innerHTML = msg;
             console.error('ca_clubs returned nothing - run sql/ca-clubs.sql. Game entry stays blocked until the Central Assign club list loads.');
             return;
         }
@@ -3165,27 +3177,47 @@
         if (fall.length) {
             html += '<option value="" disabled>&mdash;&mdash;&mdash;</option>' + fall.map(opt).join('');
         }
-        ['gHomeClub', 'gAwayClub'].forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            const keep = el.value;
-            el.innerHTML = html;
-            if (keep) el.value = keep;
-        });
-        preselectHomeClub();
+        const away = document.getElementById('gAwayClub');
+        if (away) {
+            const keep = away.value;
+            away.innerHTML = html;
+            if (keep) away.value = keep;
+        }
+        setHomeClub();
     }
 
-    // A club hosts nearly every game it enters, so Home Club is pre-picked from
-    // whichever club is selected above - still editable, because a club can host
-    // a game it is not playing in.
-    function preselectHomeClub(force) {
+    // The CA club this page belongs to. clubs.ca_club_id is the authority - it is
+    // set once, in SQL, against CA's own list. Falling back to matching on our
+    // club name covers a club whose id has not been set yet.
+    function pageCaClub() {
         const sel  = document.getElementById('clubSelect');
-        const home = document.getElementById('gHomeClub');
-        if (!sel || !home || (home.value && !force)) return;
-        const club = allClubs.find(c => String(c.id) === String(sel.value));
-        if (!club) return;
-        const r = resolveCaClub(club.name);
-        if (r.club) home.value = r.club.name;
+        const club = allClubs.find(c => String(c.id) === String(sel?.value));
+        if (!club) return null;
+        if (club.caClubId) {
+            const byId = caClubs.find(c => String(c.id) === String(club.caClubId));
+            if (byId) return byId;
+        }
+        return resolveCaClub(club.name).club || null;
+    }
+
+    // Fill the locked Home Club line. No club has to type or pick its own name;
+    // an unmapped club is told so and left unable to submit, which is the honest
+    // outcome - a game with no home club is a game Central Assign cannot file.
+    function setHomeClub() {
+        const show = document.getElementById('gHomeClubShow');
+        const val  = document.getElementById('gHomeClub');
+        if (!show || !val) return;
+        if (!caClubs.length) {
+            show.value = '\u2014 club list unavailable \u2014';
+            val.value  = '';
+        } else {
+            const sel = document.getElementById('clubSelect');
+            const ca  = pageCaClub();
+            show.value = ca ? ca.name
+                            : (sel && sel.value ? 'not mapped to a Central Assign club' : '\u2014');
+            val.value  = ca ? ca.name : '';
+        }
+        updateCreateBtn();
     }
 
     // Venue row ids belonging to the club currently selected. Empty means we
@@ -3209,8 +3241,12 @@
         // unmatched club is an error, not a warning - CA would reject the row
         // anyway, and it is cheaper to say so here than to have Tod find out
         // when the whole file fails to import.
-        const hcErr = caClubError(row['Home Club'], 'Home Club');
-        if (hcErr) errors.push(hcErr);
+        // Home Club is NOT read from the file. It is this page's club, stamped on
+        // every row - see setHomeClub(). What is checked is that the page HAS a
+        // home club to stamp; without it nothing should be uploaded at all.
+        if (!document.getElementById('gHomeClub')?.value) {
+            errors.push('This club is not mapped to a Central Assign club yet');
+        }
         const acErr = caClubError(row['Away Club'], 'Away Club');
         if (acErr) errors.push(acErr);
         if (!row['Home Team']) errors.push('Missing Home Team');
@@ -3342,11 +3378,10 @@
         return {
             'Date':       row['DATE']     || '',
             'Time':       row['TIME']     || '',
-            // This format carries team names only. The home club is the club doing
-            // the uploading, so fill it; the visiting club is genuinely not in the
-            // file and is left blank, which the preview flags row by row. Guessing
-            // it would put somebody else's game in Central Assign.
-            'Home Club':  templateClubSamples()[0],
+            // This format carries team names only. The home club is stamped from
+            // this page; the visiting club is genuinely not in the file and is left
+            // blank, which the preview flags row by row. Guessing it would put
+            // somebody else's game into Central Assign.
             'Home Team':  mode === 'rec' ? parseGlastRecTeam(home) : parseGlastTravelTeam(home),
             'Away Club':  '',
             'Away Team':  mode === 'rec' ? parseGlastRecTeam(away) : parseGlastTravelTeam(away),
@@ -3361,9 +3396,10 @@
 
     // ── End Glastonbury parsers ───────────────────────────────────────────────
 
-    // Home Club / Away Club sit BEFORE their team so the file reads the way CA's
-    // own form does, club then team. Both are required on upload.
-    const CSV_TEMPLATE_HEADERS = ['Date','Time','Home Club','Home Team','Away Club','Away Team','Age Group','Gender','Game Type','Venue','Field','Notes'];
+    // No Home Club column: it is this club's own page, so the home club is
+    // stamped for them and a column would only be a way to get it wrong. Away
+    // Club is required and must match Central Assign's list exactly.
+    const CSV_TEMPLATE_HEADERS = ['Date','Time','Home Team','Away Club','Away Team','Age Group','Gender','Game Type','Venue','Field','Notes'];
 
     // Two real CA club names for the sample rows: this club's own, and somebody
     // else's for the visiting side. Invented placeholders would be copied
@@ -3435,11 +3471,11 @@
         }
         const noField = vs.find(v => fieldsOf(v).length === 0) || null;
 
-        const [homeClub, awayClub] = templateClubSamples();
+        const awayClub = templateClubSamples()[1];
 
         const rows = [];
         if (withField) {
-            rows.push(['2026-04-05', '10:00 AM', homeClub, 'Your Club U12 Girls', awayClub, 'Visiting Club U12 Girls',
+            rows.push(['2026-04-05', '10:00 AM', 'Your Club U12 Girls', awayClub, 'Visiting Club U12 Girls',
                        'U12', 'Female', 'Rec', withField.rtCode, itsField.rtCode, '']);
         }
         if (noField) {
@@ -3447,11 +3483,11 @@
             // Central Assign may well list some we have not loaded — Bentley
             // Complex is exactly that case. State the rule, not a claim about
             // the venue.
-            rows.push(['2026-04-05', '12:00 PM', homeClub, 'Your Club U10 Boys', awayClub, 'Visiting Club U10 Boys',
+            rows.push(['2026-04-05', '12:00 PM', 'Your Club U10 Boys', awayClub, 'Visiting Club U10 Boys',
                        'U10', 'Male', 'Comp', noField.rtCode, '', 'Field may be left blank']);
         }
         if (!rows.length) {
-            rows.push(['2026-04-05', '10:00 AM', homeClub, 'Your Club U12 Girls', awayClub, 'Visiting Club U12 Girls',
+            rows.push(['2026-04-05', '10:00 AM', 'Your Club U12 Girls', awayClub, 'Visiting Club U12 Girls',
                        'U12', 'Female', 'Rec', (vs[0]?.rtCode || 'Griswold Middle School'), '', '']);
         }
         return rows;
@@ -3490,7 +3526,7 @@
         if (clubNames.length) {
             const sheet = XLSX.utils.aoa_to_sheet([
                 ['Central Assign Clubs'],
-                ['Copy a name from this list into Home Club and Away Club - exactly as written.'],
+                ['Copy a name from this list into the Away Club column - exactly as written.'],
                 ['These are Central Assign\'s spellings, not ours. Do not correct them.'],
                 [''],
                 ['Club'],
@@ -3539,7 +3575,7 @@
         if (clubNames.length) {
             lines.push('',
                 'Central Assign Clubs',
-                'Copy a name into Home Club and Away Club - exactly as written.',
+                'Copy a name into the Away Club column - exactly as written.',
                 'These are Central Assign spellings, not ours. Do not correct them.',
                 '',
                 'Club',
@@ -3654,7 +3690,7 @@
             html += `<tr class="${rowClass}">
                 <td>${i+1}</td>
                 <td>${shownDate}</td><td>${shownTime}</td>
-                <td>${resolvedClub(row['Home Club'])}</td><td>${row['Home Team']||''}</td>
+                <td>${caEsc(document.getElementById('gHomeClub').value || 'not mapped')}</td><td>${row['Home Team']||''}</td>
                 <td>${resolvedClub(row['Away Club'])}</td><td>${row['Away Team']||''}</td>
                 <td>${row['Age Group']||''}</td><td>${row['Gender']||''}</td>
                 <td>${row['Game Type']||''}</td>
@@ -3709,7 +3745,7 @@
             stagedGames.push({
                 date:      normalizeDate(row['Date']),
                 time:      normalizeTime(row['Time']),
-                homeClub:  (resolveCaClub(row['Home Club']).club || {}).name || '',
+                homeClub:  document.getElementById('gHomeClub').value,
                 home:      row['Home Team'],
                 awayClub:  (resolveCaClub(row['Away Club']).club || {}).name || '',
                 away:      row['Away Team'],
