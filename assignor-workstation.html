@@ -7371,6 +7371,18 @@
             // Never a dead dropdown: if no club-tagged venues match (events / untagged
             // clubs), fall back to the full list so the venue is always pickable.
             if (venuesFiltered.length === 0) venuesFiltered = allVenues;
+            // ⚠️ NEVER hide the value you are currently showing. A venue with no
+            // club_name — Rotary Glastonbury, CA 1149 — has an empty clubs array,
+            // so the club filter drops it even when it is THIS GAME'S venue, and
+            // the select falls back to the "Venue…" placeholder. It reads as a
+            // game with no venue when the venue was on the row all along; the club
+            // portal displayed it correctly the whole time. Worse than cosmetic:
+            // the natural fix is to pick one from the list, which overwrites a
+            // correct venue with a different one.
+            if (curVenueId && !venuesFiltered.some(v => v.id == curVenueId)) {
+                const curV = allVenues.find(v => v.id == curVenueId);
+                if (curV) venuesFiltered = [curV, ...venuesFiltered];
+            }
             const venueOpts = venuesFiltered.map(v =>
                 `<option value="${v.id}" ${v.id == curVenueId ? 'selected' : ''}>${v.name}</option>`
             ).join('');
@@ -7871,6 +7883,12 @@
                                 const gameClubLower = (resolveGameClub(f)||'').toLowerCase();
                                 let vf = allVenues.filter(v => !gameClubLower || v.clubs.some(c => c.includes(gameClubLower)||gameClubLower.includes(c)));
                                 if (vf.length === 0) vf = allVenues;   // never a dead dropdown
+                                // Same reason as above: a venue the club filter does
+                                // not claim is still THIS game's venue. Show it.
+                                if (curVenueId && !vf.some(v => v.id == curVenueId)) {
+                                    const curV = allVenues.find(v => v.id == curVenueId);
+                                    if (curV) vf = [curV, ...vf];
+                                }
                                 return vf.map(v=>`<option value="${v.id}" ${v.id==curVenueId?'selected':''}>${v.name}</option>`).join('');
                             })()}
                         </select>
