@@ -137,6 +137,8 @@ let eventLeagueMap     = {}; // event Club Name → CA league ID (from event age
 let eventDurationMap   = {}; // event Club Name → ageKey → {duration, durationTime}
 let eventCrewMap       = {}; // event Club Name → ageKey → crew size (1/2/3)
 let eventRateMap       = {}; // event Club Name → ageKey → {center, ar}
+let assignorsByClub    = {}; // club name → [{name, email}] — CA needs an assignor per game
+let myAssignorEmail    = '';  // whoever is doing the export, when they assign the club
 
 // ── Age group → pay_rates band ───────────────────────────────────────────────
 function ageBand(ageGroup) {
@@ -346,14 +348,15 @@ loadBtn.addEventListener('click', async () => {
               })()
             : Promise.resolve([]);
 
-        const [records, referees, venues, fieldRecs, clubRecs, payRatesResult, tournRaw] = await Promise.all([
+        const [records, referees, venues, fieldRecs, clubRecs, payRatesResult, tournRaw, assignorRecs] = await Promise.all([
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    options),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 500 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 500 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,    { maxRecords: 200 }),
             supabaseClient.client.from('pay_rates').select('*').then(r => r.data || []),
-            tournGamesPromise
+            tournGamesPromise,
+            supabaseClient.getRecords('Assignors', { maxRecords: 50 })
         ]);
 
         // Normalize tournament_games rows into the same {id, fields} shape as regular games
@@ -373,10 +376,35 @@ loadBtn.addEventListener('click', async () => {
                 'Field ID':        g['Field ID']     || null,
                 'Gender':          g['Gender']       || '',
                 'Game Status':     g['Game Status']  || '',
+                'home_club':       g['home_club']    || '',
+                'away_club':       g['away_club']    || '',
                 'game_type':       'Comp',
             }
         });
         const allRecords = [...records, ...tournRaw.map(normTournGame)];
+
+        // ── Assignor per club ────────────────────────────────────────────────
+        // CA's Add Game form marks Assignor REQUIRED, and the only route to it in
+        // the CSV is Primary/Secondary Assignor Email. We were sending both blank,
+        // which may well be what killed the July upload rather than the fee bug
+        // Ron was chasing.
+        //
+        // There is no assignor on the game — games.assignor_id is null across the
+        // board — so the club is the link: assignors.clubs is the array that says
+        // who assigns what.
+        assignorsByClub = {};
+        const _uid = (typeof currentUserId === 'function') ? currentUserId() : null;
+        myAssignorEmail = '';
+        (assignorRecs || []).forEach(r => {
+            const f = r.fields || {};
+            const email = f['email'] || f['Email'] || '';
+            if (!email) return;
+            if (_uid && f['auth_user_id'] === _uid) myAssignorEmail = email;
+            const cl = f['clubs'] || f['Clubs'] || [];
+            (Array.isArray(cl) ? cl : [cl]).filter(Boolean).forEach(c => {
+                (assignorsByClub[String(c).trim().toLowerCase()] ||= []).push({ name: f['name'] || f['Name'] || '', email });
+            });
+        });
 
         // Build lookup: record ID or name → Central Assign numeric ID
         refIdLookup = {};
@@ -808,6 +836,7 @@ exportBtn.addEventListener('click', () => {
         // every rate silently falls through to DEFAULTS — East Haddam's U12
         // games exported at 40/25 instead of their real 50/35. Any club whose
         // age groups carry a division label was affected, which is most of them.
+        const assignorEmails = assignorEmailsFor(src);
         const band     = ageBand(ageKey);
         const clubId   = clubIdMap[src];
         const evRates  = eventRateMap[src]?.[ageKey] || null;
@@ -845,8 +874,8 @@ exportBtn.addEventListener('click', () => {
             f['away_club'] || '',
             '',                      // Home Coach Email
             '',                      // Visiting Coach Email
-            '',                      // Primary Assignor Email
-            '',                      // Secondary Assignor Email
+            assignorEmails.primary,
+            assignorEmails.secondary,
             DEFAULTS.externalSys,
             rec.id || '',            // our game id, so a re-import can be matched
             refFee,
@@ -960,6 +989,18 @@ function resolveVenue(f) {
         fieldCaId: realFieldId,
         fieldName: fieldNameMap[rid] || ''
     };
+}
+
+function assignorEmailsFor(club) {
+    const list = assignorsByClub[String(club || '').trim().toLowerCase()] || [];
+    if (!list.length) return { primary: '', secondary: '' };
+    if (list.length === 1) return { primary: list[0].email, secondary: '' };
+    // Co-assigned. The person generating the file is the primary on it; the other
+    // rides along as secondary. Eric exporting the same club gets the mirror.
+    const mine  = list.find(a => a.email === myAssignorEmail);
+    const first = mine || list[0];
+    const other = list.find(a => a.email !== first.email);
+    return { primary: first.email, secondary: other ? other.email : '' };
 }
 
 function formatDate(dateStr) {
