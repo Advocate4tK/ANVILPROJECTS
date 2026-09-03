@@ -768,7 +768,7 @@ exportBtn.addEventListener('click', () => {
     const rows = selected.map(rec => {
         const f = rec.fields;
         const src = f['Source Club'] || '';
-        const { name: venueName, fieldCaId, fieldName } = resolveVenue(f);
+        const { name: venueName, caId: venueCaId, fieldCaId, fieldName } = resolveVenue(f);
 
         // Gender — CA wants the full word, not M/F
         const gRaw = (f['Gender'] || '').trim();
@@ -820,10 +820,10 @@ exportBtn.addEventListener('click', () => {
             halfLength,
             f['Home Team'] || '',
             f['Away Team'] || '',
-            venueName,
             // CA # wins over CA name on upload — the number maps unambiguously,
-            // the name has to match CA's spelling exactly. Name is the fallback
-            // for fields CA hasn't issued a number for yet.
+            // the name has to match CA's spelling exactly. The name is only a
+            // fallback, for venues and fields CA hasn't issued a number for.
+            venueCaId ? String(venueCaId) : venueName,
             fieldCaId ? String(fieldCaId) : fieldName,
             '',                      // Division — we don't carry one
             DEFAULTS.type,
@@ -970,5 +970,5 @@ function formatTimeForExport(timeStr) {
     if (isNaN(h)) return timeStr;
     const period = h >= 12 ? 'PM' : 'AM';
     const hour12 = h % 12 || 12;
-    return `${hour12}:${String(m || 0).padStart(2, '0')} ${period}`;
+    return `${String(hour12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${period}`;
 }
