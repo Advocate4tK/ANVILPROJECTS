@@ -4846,8 +4846,10 @@
                         </select></div>
                     </div>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
                         <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Home Team</label><input type="text" id="editHome-${gid}" value="${esc(f['Home Team'])}" style="width:150px;border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
                         <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Away Team</label><input type="text" id="editAway-${gid}" value="${esc(f['Away Team'])}" style="width:150px;border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
+                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Visiting Club</label>${caClubSelect(`editAwayClub-${gid}`, f['away_club'])}</div>
                         <div style="flex:1;min-width:140px;"><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Field</label><input type="text" id="editField-${gid}" value="${esc(f['field'])}" style="width:100%;border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
                     </div>
                     <div style="display:flex;gap:8px;">
@@ -5430,6 +5432,44 @@
         let allRefs       = [];
         let allAvail      = [];
         let allVenues     = []; // { id, name } sorted by name
+
+        // ── Central Assign club pickers ──────────────────────────────────────
+        // CA's Add Game form makes Home Club and Visiting Club REQUIRED dropdowns
+        // constrained to its own list, while the team beside each is free text.
+        // Games entered before 2026-09-03 carry no club at all, and Eric's early
+        // ones carry a club name typed into the TEAM box - both are fixed here
+        // rather than by re-entering the game. See sql/ca-clubs.sql.
+        let caClubs = [];
+
+        async function loadCaClubs() {
+            if (caClubs.length) return;
+            try {
+                const r = await supabaseClient.client.from('ca_clubs')
+                    .select('name, is_fallback').order('name');
+                caClubs = r.data || [];
+            } catch (e) { console.error('ca_clubs load failed:', e); }
+        }
+
+        // Real clubs first, CA's generic entries under a divider - nobody should
+        // land on "Other" by scrolling past the end of the alphabet. A club the
+        // list does not contain is still shown, selected, so opening the panel on
+        // an old game never silently rewrites what is stored.
+        function caClubSelect(id, current) {
+            const cur = current || '';
+            const esc2 = v => String(v == null ? '' : v)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const opt = n => `<option value="${esc2(n)}"${n === cur ? ' selected' : ''}>${esc2(n)}</option>`;
+            const real = caClubs.filter(c => !c.is_fallback);
+            const fall = caClubs.filter(c => c.is_fallback);
+            let html = `<select id="${id}" style="width:170px;font-size:0.82rem;">`;
+            html += `<option value=""${cur ? '' : ' selected'}>&mdash; none &mdash;</option>`;
+            if (cur && !caClubs.some(c => c.name === cur)) html += opt(cur);
+            html += real.map(c => opt(c.name)).join('');
+            if (fall.length) html += '<option value="" disabled>&mdash;&mdash;&mdash;</option>' + fall.map(c => opt(c.name)).join('');
+            return html + '</select>';
+        }
+
         let allFields     = []; // { fieldId, name, venueId }
         let clubLookup    = {}; // airtable record ID → club name
 
@@ -6563,6 +6603,8 @@
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS, { maxRecords: 200 })
                 ]);
 
+                await loadCaClubs();
+
                 // ── ENTITY SCOPE — do this ONCE, here, before anything reads `avail` ──
                 // Club mode fetches the whole availability table for the date window, so
                 // submissions belonging to an EVENT or a TOURNAMENT ride along with it.
@@ -7436,8 +7478,10 @@
                         </select></div>
                     </div>
                     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
+                        <div><label>Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
                         <div><label>Home Team</label><input type="text" id="editHome-${gid}" style="width:150px;" value="${(f['Home Team']||'').replace(/"/g,'&quot;')}"></div>
                         <div><label>Away Team</label><input type="text" id="editAway-${gid}" style="width:150px;" value="${(f['Away Team']||'').replace(/"/g,'&quot;')}"></div>
+                        <div><label>Visiting Club</label>${caClubSelect(`editAwayClub-${gid}`, f['away_club'])}</div>
                     </div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                         <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
@@ -7858,8 +7902,10 @@
                             </select></div>
                         </div>
                         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
+                            <div><label>Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
                             <div><label>Home Team</label><input type="text" id="editHome-${gid}" style="width:150px;" value="${(f['Home Team']||'').replace(/"/g,'&quot;')}"></div>
                             <div><label>Away Team</label><input type="text" id="editAway-${gid}" style="width:150px;" value="${(f['Away Team']||'').replace(/"/g,'&quot;')}"></div>
+                            <div><label>Visiting Club</label>${caClubSelect(`editAwayClub-${gid}`, f['away_club'])}</div>
                         </div>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
                             <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
@@ -8872,6 +8918,14 @@
                 updates['Age Group']  = newAge   || cur['Age Group']  || null;
                 updates['field']      = newField || cur['field']      || null;
                 updates['game_type']  = newType  || cur['game_type']  || null;
+
+                // Club pickers. Absent from the DOM (an older panel) means leave
+                // the stored value alone; present and empty means the assignor
+                // deliberately cleared it.
+                const hcEl = document.getElementById(`editHomeClub-${gameId}`);
+                const acEl = document.getElementById(`editAwayClub-${gameId}`);
+                if (hcEl) updates['home_club'] = hcEl.value || null;
+                if (acEl) updates['away_club'] = acEl.value || null;
                 const _gTable2 = window.tournamentMode ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
                 await airtableClient.updateRecord(_gTable2, gameId, updates);
 
