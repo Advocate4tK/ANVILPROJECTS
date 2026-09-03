@@ -516,9 +516,23 @@
                             <label>Time <span style="color:#e74c3c">*</span></label>
                             <input type="time" id="gTime">
                         </div>
+                        <!-- Club is a DROPDOWN, team is free text - the same split
+                             Central Assign enforces on its own Add Game form. CA
+                             constrains the club to its list and rejects anything
+                             else, so a typed club name was landing on nothing:
+                             our "Stonington Soccer Club" is CA's "Stonington SC".
+                             Both are required, because CA requires both. -->
+                        <div class="field-group span2">
+                            <label>Home Club <span style="color:#e74c3c">*</span></label>
+                            <select id="gHomeClub"><option value="">&mdash; Select &mdash;</option></select>
+                        </div>
                         <div class="field-group span2">
                             <label>Home Team <span style="color:#e74c3c">*</span></label>
                             <input type="text" id="gHome" placeholder="e.g. Griswold FC Girls">
+                        </div>
+                        <div class="field-group span2">
+                            <label>Visiting Club <span style="color:#e74c3c">*</span></label>
+                            <select id="gAwayClub"><option value="">&mdash; Select &mdash;</option></select>
                         </div>
                         <div class="field-group span2">
                             <label>Away Team <span style="color:#e74c3c">*</span></label>
@@ -713,6 +727,7 @@
     let allClubs  = [];
     let allVenues = [];
     let allFields = [];
+    let caClubs   = [];   // Central Assign's club dropdown, mirrored - see sql/ca-clubs.sql
     let clubLeagueMap = {};
     let stagedGames   = [];
     let currentClubRecord    = null;
@@ -1526,6 +1541,14 @@
                              ? venueByAirtableId[parseInt(f.fields['Venue ID'])] : null
             })).filter(f => f.name);
 
+            // Central Assign's own club list. Read straight from ca_clubs, which
+            // mirrors CA verbatim - typos included. Never renamed or tidied on the
+            // way through: on upload the string IS the key.
+            const caRes = await supabaseClient.client
+                .from('ca_clubs').select('id, name, aliases, is_fallback').order('name');
+            caClubs = caRes.data || [];
+            populateClubPickers();
+
         } catch (err) {
             alert('Could not load data: ' + err.message);
         }
@@ -1566,6 +1589,7 @@
         // Legend follows the same list the dropdown shows, so a club sees its own
         // venues. Previously this only ever ran for tournaments.
         buildVenueLegend(filtered);
+        preselectHomeClub(true);
     }
 
     function toggleVenueRef() {
@@ -1706,7 +1730,9 @@
         const ok = document.getElementById('clubSelect').value
             && document.getElementById('gDate').value
             && document.getElementById('gTime').value
+            && document.getElementById('gHomeClub').value
             && document.getElementById('gHome').value.trim()
+            && document.getElementById('gAwayClub').value
             && document.getElementById('gAway').value.trim()
             && document.getElementById('gAge').value
             && document.getElementById('gGender').value
@@ -1715,7 +1741,7 @@
         document.getElementById('createGameBtn').disabled = !ok;
     }
 
-    ['clubSelect','gDate','gTime','gHome','gAway','gAge','gDivision','gGender','gGameType','gVenue','gField'].forEach(id => {
+    ['clubSelect','gDate','gTime','gHomeClub','gHome','gAwayClub','gAway','gAge','gDivision','gGender','gGameType','gVenue','gField'].forEach(id => {
         document.getElementById(id).addEventListener('input', updateCreateBtn);
         document.getElementById(id).addEventListener('change', updateCreateBtn);
     });
@@ -1730,7 +1756,9 @@
         const game = {
             date:      document.getElementById('gDate').value,
             time:      document.getElementById('gTime').value,
+            homeClub:  document.getElementById('gHomeClub').value,
             home:      document.getElementById('gHome').value.trim(),
+            awayClub:  document.getElementById('gAwayClub').value,
             away:      document.getElementById('gAway').value.trim(),
             age:       (document.getElementById('gAge').value + (document.getElementById('gDivision').value.trim() ? ' ' + document.getElementById('gDivision').value.trim() : '')),
             gender:    document.getElementById('gGender').value,
@@ -1746,6 +1774,7 @@
 
         // Clear form fields after staging — venue/field reset to force conscious selection
         document.getElementById('gHome').value     = '';
+        document.getElementById('gAwayClub').value = '';
         document.getElementById('gAway').value     = '';
         document.getElementById('gAge').value      = '';
         document.getElementById('gDivision').value = '';
@@ -1788,8 +1817,8 @@
                 <td>${i + 1}</td>
                 <td>${dateDisplay}</td>
                 <td>${timeDisplay}</td>
-                <td>${g.home}</td>
-                <td>${g.away}</td>
+                <td>${g.home}${g.homeClub ? `<br><span style="color:#14532d;font-size:0.72rem;font-weight:700;">${g.homeClub}</span>` : ''}</td>
+                <td>${g.away}${g.awayClub ? `<br><span style="color:#14532d;font-size:0.72rem;font-weight:700;">${g.awayClub}</span>` : ''}</td>
                 <td>${g.age}</td>
                 <td>${g.gender}</td>
                 <td>${g.gameType || 'Rec'}</td>
@@ -1864,7 +1893,9 @@
                 const missing = [];
                 if (!g.date)     missing.push('Date');
                 if (!g.time)     missing.push('Time');
+                if (!g.homeClub) missing.push('Home Club');
                 if (!g.home)     missing.push('Home Team');
+                if (!g.awayClub) missing.push('Visiting Club');
                 if (!g.away)     missing.push('Away Team');
                 if (!g.age)      missing.push('Age Group');
                 if (!g.gender)   missing.push('Gender');
@@ -1882,6 +1913,8 @@
                     'Time':      g.time,
                     'Home Team': g.home,
                     'Away Team': g.away,
+                    'home_club': g.homeClub || null,
+                    'away_club': g.awayClub || null,
                     'Age Group':  g.age,
                     'Gender':     g.gender,
                     'game_type':  g.gameType || 'Rec'
@@ -3039,6 +3072,122 @@
         return fuzzyFind(pool, f => f.name, n);
     }
 
+    // -- Central Assign club resolution ---------------------------------------
+    // A club name has to match CA's dropdown exactly or the game does not import.
+    // These helpers are the ONE place that decides whether a name does, so the
+    // form, the upload preview and the upload commit cannot disagree.
+
+    const caNorm = v => String(v == null ? '' : v).trim().replace(/\s+/g, ' ').toLowerCase();
+
+    // Local HTML escape. There is an esc() further down this file but it lives
+    // inside downloadCSVTemplate and escapes for CSV, not HTML - reaching for it
+    // here is the function-scope trap that already broke one panel.
+    const caEsc = v => String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    // Team qualifiers clubs append to a club name: "Griswold Soccer Club - Boys 1",
+    // "Norwich Youth Soccer Club-Boys B". Strip a SPACED hyphen, or an unspaced one
+    // only when Boys/Girls follows. Never a bare hyphen - "Haddam-Killingworth" and
+    // CA's own "Lyme-Old lyme Soccer Club" are real names.
+    function stripTeamQualifier(raw) {
+        return String(raw == null ? '' : raw)
+            .replace(/\s+[-\u2013]\s+.*$/, '')
+            .replace(/\s*[-\u2013]\s*(?:boys|girls)\b.*$/i, '')
+            .trim();
+    }
+
+    // Returns { club } on a hit, { ambiguous:[...] } when more than one CA club
+    // claims the name, { suggestion } when nothing matches but something is
+    // close, or {} when there is nothing useful to say.
+    //
+    // Fallback rows ("Other", "Referee Services Assignor") are never returned as
+    // automatic matches. They are legal values in CA, but choosing one is a
+    // decision a person makes - not a default we quietly apply to a name we
+    // failed to resolve.
+    function resolveCaClub(raw) {
+        const want = caNorm(stripTeamQualifier(raw));
+        if (!want) return {};
+        const real = caClubs.filter(c => !c.is_fallback);
+
+        const exact = real.filter(c => caNorm(c.name) === want);
+        if (exact.length === 1) return { club: exact[0] };
+        if (exact.length > 1)   return { ambiguous: exact };
+
+        const byAlias = real.filter(c => (c.aliases || []).some(a => caNorm(a) === want));
+        if (byAlias.length === 1) return { club: byAlias[0] };
+        if (byAlias.length > 1)   return { ambiguous: byAlias };
+
+        // Nothing matched, so offer the nearest name: "Stonington Soccer Club"
+        // should point at "Stonington SC" rather than just saying no.
+        const first = want.split(' ')[0];
+        const near  = real.filter(c => {
+            const n = caNorm(c.name);
+            return n.startsWith(first) || n.indexOf(want) !== -1 || want.indexOf(n) !== -1;
+        });
+        if (near.length === 1) return { suggestion: near[0] };
+        if (near.length > 1)   return { suggestions: near.slice(0, 3) };
+        return {};
+    }
+
+    // One line of prose for whatever resolveCaClub decided. '' means the name is
+    // good, which is what every caller tests.
+    function caClubError(raw, label) {
+        const stripped = stripTeamQualifier(raw);
+        if (!stripped) return 'Missing ' + label;
+        const r = resolveCaClub(raw);
+        if (r.club) return '';
+        if (r.ambiguous) return label + ' "' + stripped + '" matches more than one Central Assign club (' +
+            r.ambiguous.map(c => c.name).join(', ') + ') - use the full name';
+        if (r.suggestion) return label + ' "' + stripped + '" is not a Central Assign club - did you mean "' +
+            r.suggestion.name + '"?';
+        if (r.suggestions) return label + ' "' + stripped + '" is not a Central Assign club - closest are ' +
+            r.suggestions.map(c => '"' + c.name + '"').join(', ');
+        return label + ' "' + stripped + '" is not a Central Assign club';
+    }
+
+    // Fill both pickers. Real clubs first, CA's generic entries below a divider
+    // so nobody lands on "Other" by scrolling past the end of the alphabet.
+    function populateClubPickers() {
+        if (!caClubs.length) {
+            const msg = '<option value="">&mdash; club list unavailable &mdash;</option>';
+            ['gHomeClub', 'gAwayClub'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = msg;
+            });
+            console.error('ca_clubs returned nothing - run sql/ca-clubs.sql. Game entry stays blocked until the Central Assign club list loads.');
+            return;
+        }
+        const opt  = c => '<option value="' + caEsc(c.name) + '">' + caEsc(c.name) + '</option>';
+        const real = caClubs.filter(c => !c.is_fallback);
+        const fall = caClubs.filter(c => c.is_fallback);
+        let html = '<option value="">&mdash; Select &mdash;</option>' + real.map(opt).join('');
+        if (fall.length) {
+            html += '<option value="" disabled>&mdash;&mdash;&mdash;</option>' + fall.map(opt).join('');
+        }
+        ['gHomeClub', 'gAwayClub'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const keep = el.value;
+            el.innerHTML = html;
+            if (keep) el.value = keep;
+        });
+        preselectHomeClub();
+    }
+
+    // A club hosts nearly every game it enters, so Home Club is pre-picked from
+    // whichever club is selected above - still editable, because a club can host
+    // a game it is not playing in.
+    function preselectHomeClub(force) {
+        const sel  = document.getElementById('clubSelect');
+        const home = document.getElementById('gHomeClub');
+        if (!sel || !home || (home.value && !force)) return;
+        const club = allClubs.find(c => String(c.id) === String(sel.value));
+        if (!club) return;
+        const r = resolveCaClub(club.name);
+        if (r.club) home.value = r.club.name;
+    }
+
     // Venue row ids belonging to the club currently selected. Empty means we
     // do not know, in which case nothing is out of scope.
     function clubVenueIdList() {
@@ -3054,6 +3203,16 @@
         else if (!normalizeDate(row['Date'])) errors.push(`Unrecognized date format: "${row['Date']}"`);
         if (!row['Time'])      errors.push('Missing Time');
         else if (!normalizeTime(row['Time'])) errors.push(`Unrecognized time format: "${row['Time']}"`);
+        // Club and team are separate requirements. Central Assign takes the club
+        // from a fixed dropdown and the team as free text, so a row needs BOTH:
+        // a club it can match and a team name to label the game with. An
+        // unmatched club is an error, not a warning - CA would reject the row
+        // anyway, and it is cheaper to say so here than to have Tod find out
+        // when the whole file fails to import.
+        const hcErr = caClubError(row['Home Club'], 'Home Club');
+        if (hcErr) errors.push(hcErr);
+        const acErr = caClubError(row['Away Club'], 'Away Club');
+        if (acErr) errors.push(acErr);
         if (!row['Home Team']) errors.push('Missing Home Team');
         if (!row['Away Team']) errors.push('Missing Away Team');
         const age = (row['Age Group'] || '').trim().toUpperCase();
@@ -3183,7 +3342,13 @@
         return {
             'Date':       row['DATE']     || '',
             'Time':       row['TIME']     || '',
+            // This format carries team names only. The home club is the club doing
+            // the uploading, so fill it; the visiting club is genuinely not in the
+            // file and is left blank, which the preview flags row by row. Guessing
+            // it would put somebody else's game in Central Assign.
+            'Home Club':  templateClubSamples()[0],
             'Home Team':  mode === 'rec' ? parseGlastRecTeam(home) : parseGlastTravelTeam(home),
+            'Away Club':  '',
             'Away Team':  mode === 'rec' ? parseGlastRecTeam(away) : parseGlastTravelTeam(away),
             'Age Group':  age,
             'Gender':     gender,
@@ -3196,7 +3361,20 @@
 
     // ── End Glastonbury parsers ───────────────────────────────────────────────
 
-    const CSV_TEMPLATE_HEADERS = ['Date','Time','Home Team','Away Team','Age Group','Gender','Game Type','Venue','Field','Notes'];
+    // Home Club / Away Club sit BEFORE their team so the file reads the way CA's
+    // own form does, club then team. Both are required on upload.
+    const CSV_TEMPLATE_HEADERS = ['Date','Time','Home Club','Home Team','Away Club','Away Team','Age Group','Gender','Game Type','Venue','Field','Notes'];
+
+    // Two real CA club names for the sample rows: this club's own, and somebody
+    // else's for the visiting side. Invented placeholders would be copied
+    // straight into a real upload and rejected.
+    function templateClubSamples() {
+        const real = caClubs.filter(c => !c.is_fallback);
+        const club = allClubs.find(c => String(c.id) === String(document.getElementById('clubSelect')?.value));
+        const mine = (club ? (resolveCaClub(club.name).club || {}).name : '') || (real[0] || {}).name || 'East Haddam Soccer Club';
+        const other = (real.find(c => c.name !== mine) || {}).name || 'Griswold Soccer Club';
+        return [mine, other];
+    }
 
     // ── Venue & Field code legend ─────────────────────────────────────────────
     // The people who FILL the file are not the people on this page. A club
@@ -3257,9 +3435,11 @@
         }
         const noField = vs.find(v => fieldsOf(v).length === 0) || null;
 
+        const [homeClub, awayClub] = templateClubSamples();
+
         const rows = [];
         if (withField) {
-            rows.push(['2026-04-05', '10:00 AM', 'Your Club U12 Girls', 'Visiting Club U12 Girls',
+            rows.push(['2026-04-05', '10:00 AM', homeClub, 'Your Club U12 Girls', awayClub, 'Visiting Club U12 Girls',
                        'U12', 'Female', 'Rec', withField.rtCode, itsField.rtCode, '']);
         }
         if (noField) {
@@ -3267,11 +3447,11 @@
             // Central Assign may well list some we have not loaded — Bentley
             // Complex is exactly that case. State the rule, not a claim about
             // the venue.
-            rows.push(['2026-04-05', '12:00 PM', 'Your Club U10 Boys', 'Visiting Club U10 Boys',
+            rows.push(['2026-04-05', '12:00 PM', homeClub, 'Your Club U10 Boys', awayClub, 'Visiting Club U10 Boys',
                        'U10', 'Male', 'Comp', noField.rtCode, '', 'Field may be left blank']);
         }
         if (!rows.length) {
-            rows.push(['2026-04-05', '10:00 AM', 'Your Club U12 Girls', 'Visiting Club U12 Girls',
+            rows.push(['2026-04-05', '10:00 AM', homeClub, 'Your Club U12 Girls', awayClub, 'Visiting Club U12 Girls',
                        'U12', 'Female', 'Rec', (vs[0]?.rtCode || 'Griswold Middle School'), '', '']);
         }
         return rows;
@@ -3300,6 +3480,24 @@
             ]);
             legend['!cols'] = [{ wch: 8 }, { wch: 16 }, { wch: 42 }];
             XLSX.utils.book_append_sheet(wb, legend, 'Venue & Field Codes');
+        }
+
+        // The club names ship WITH the file, because the person filling it in is
+        // usually not the person on this page and cannot see the dropdown. These
+        // are Central Assign's own spellings - "Stonington SC", "Cantebury
+        // Soccer Club" - and a name that is not on this list is rejected.
+        const clubNames = caClubs.filter(c => !c.is_fallback).map(c => [c.name]);
+        if (clubNames.length) {
+            const sheet = XLSX.utils.aoa_to_sheet([
+                ['Central Assign Clubs'],
+                ['Copy a name from this list into Home Club and Away Club - exactly as written.'],
+                ['These are Central Assign\'s spellings, not ours. Do not correct them.'],
+                [''],
+                ['Club'],
+                ...clubNames
+            ]);
+            sheet['!cols'] = [{ wch: 52 }];
+            XLSX.utils.book_append_sheet(wb, sheet, 'Central Assign Clubs');
         }
 
         XLSX.writeFile(wb, 'referee-tool-games-upload-template.xlsx');
@@ -3335,6 +3533,18 @@
             'Type,Code,Name',
             ...rows.map(r => r.map(esc).join(','))
         ];
+
+        // Same reasoning as the Excel sheet: the club list travels with the file.
+        const clubNames = caClubs.filter(c => !c.is_fallback).map(c => c.name);
+        if (clubNames.length) {
+            lines.push('',
+                'Central Assign Clubs',
+                'Copy a name into Home Club and Away Club - exactly as written.',
+                'These are Central Assign spellings, not ours. Do not correct them.',
+                '',
+                'Club',
+                ...clubNames.map(v => esc(v)));
+        }
 
         const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
         const url  = URL.createObjectURL(blob);
@@ -3395,9 +3605,21 @@
         }
     }
 
+    // What a club typed, plus the CA club it resolved to when the two differ.
+    // "Stonington Soccer Club -> Stonington SC" is the whole point of the column.
+    function resolvedClub(raw) {
+        const shown = caEsc(String(raw == null ? '' : raw));
+        if (!shown) return '';
+        const r = resolveCaClub(raw);
+        if (!r.club) return shown;
+        if (caNorm(r.club.name) === caNorm(stripTeamQualifier(raw))) return shown;
+        return shown + '<br><span style="color:#14532d;font-size:0.72rem;font-weight:700;">&rarr; ' +
+               caEsc(r.club.name) + '</span>';
+    }
+
     function renderCSVPreview(rows) {
         let valid = 0, warned = 0, invalid = 0;
-        let html = `<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Home Team</th><th>Away Team</th><th>Age</th><th>Gender</th><th>Type</th><th>Venue</th><th>Field</th><th>Notes</th><th>Status</th></tr></thead><tbody>`;
+        let html = `<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Home Club</th><th>Home Team</th><th>Away Club</th><th>Away Team</th><th>Age</th><th>Gender</th><th>Type</th><th>Venue</th><th>Field</th><th>Notes</th><th>Status</th></tr></thead><tbody>`;
         rows.forEach((row, i) => {
             const { errors, warnings } = validateCSVRow(row);
             const hasErrors = errors.length > 0, hasWarnings = warnings.length > 0;
@@ -3432,7 +3654,8 @@
             html += `<tr class="${rowClass}">
                 <td>${i+1}</td>
                 <td>${shownDate}</td><td>${shownTime}</td>
-                <td>${row['Home Team']||''}</td><td>${row['Away Team']||''}</td>
+                <td>${resolvedClub(row['Home Club'])}</td><td>${row['Home Team']||''}</td>
+                <td>${resolvedClub(row['Away Club'])}</td><td>${row['Away Team']||''}</td>
                 <td>${row['Age Group']||''}</td><td>${row['Gender']||''}</td>
                 <td>${row['Game Type']||''}</td>
                 <td>${resolved(row['Venue'], rv)}</td><td>${resolved(row['Field'], rf)}</td>
@@ -3486,7 +3709,9 @@
             stagedGames.push({
                 date:      normalizeDate(row['Date']),
                 time:      normalizeTime(row['Time']),
+                homeClub:  (resolveCaClub(row['Home Club']).club || {}).name || '',
                 home:      row['Home Team'],
+                awayClub:  (resolveCaClub(row['Away Club']).club || {}).name || '',
                 away:      row['Away Team'],
                 age,
                 gender:    normGender,

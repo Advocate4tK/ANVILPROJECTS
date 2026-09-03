@@ -802,7 +802,13 @@ exportBtn.addEventListener('click', () => {
             : true;
 
         // Fees — event age_group rates first, then club pay_rates, then defaults
-        const band     = ageBand(ageGroup);
+        //
+        // ageBand takes ageKEY, not the raw age group. Handed "U12 Silver" it
+        // strips the space to "U12SILVER", matches no band, returns null, and
+        // every rate silently falls through to DEFAULTS — East Haddam's U12
+        // games exported at 40/25 instead of their real 50/35. Any club whose
+        // age groups carry a division label was affected, which is most of them.
+        const band     = ageBand(ageKey);
         const clubId   = clubIdMap[src];
         const evRates  = eventRateMap[src]?.[ageKey] || null;
         const clubRate = (clubId && band) ? (payRateByClubId[clubId]?.[band] || null) : null;
@@ -827,8 +833,16 @@ exportBtn.addEventListener('click', () => {
             fieldCaId ? String(fieldCaId) : fieldName,
             '',                      // Division — we don't carry one
             DEFAULTS.type,
-            '',                      // Home Club — left blank; CA fills from the team
-            '',                      // Visiting Club
+            // Home Club and Visiting Club are REQUIRED on CA's Add Game form, and
+            // they are DROPDOWNS there — the club has to be one of CA's own names
+            // while the team beside it is free text. Blank was never going to
+            // import. These come from games.home_club / games.away_club, which the
+            // club portal now writes from that same list (see sql/ca-clubs.sql).
+            // Games entered before 2026-09-03 have neither, so they export blank
+            // and CA will reject them until the club is filled in — visible and
+            // fixable, rather than wrong and accepted.
+            f['home_club'] || '',
+            f['away_club'] || '',
             '',                      // Home Coach Email
             '',                      // Visiting Coach Email
             '',                      // Primary Assignor Email
