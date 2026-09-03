@@ -5413,6 +5413,56 @@
         // rather than by re-entering the game. See sql/ca-clubs.sql.
         let caClubs = [];
 
+        // ── Venue scope, from club_venues ────────────────────────────────────
+        // Which venues an ENTITY plays at, as rows. Replaces the two sources this
+        // used to guess from: venues.club_name (one text club, NULL on 499 of 546
+        // venues) and clubs.venues (text mixing floats, bare ints and quoted
+        // thousands separators). Rotary Glastonbury went missing under both.
+        //
+        // Keyed by lowercase entity NAME because that is all a game carries, and
+        // holding CA venue numbers because allVenues is keyed on those, not row ids.
+        //
+        // "club" here is the table we have, not the only thing this will ever hold —
+        // high schools are coming. Nothing in this lookup assumes a club; it maps an
+        // entity name to the venues it plays at.
+        let venueScopeByEntity = {};
+
+        async function loadVenueScope() {
+            if (Object.keys(venueScopeByEntity).length) return;
+            try {
+                const [cv, cl, vs] = await Promise.all([
+                    supabaseClient.client.from('club_venues').select('club_id, venue_id'),
+                    supabaseClient.client.from('clubs').select('id, name, "Club Name"'),
+                    supabaseClient.client.from('venues').select('id, "Venue ID"')
+                ]);
+                const caByRow = {};
+                (vs.data || []).forEach(v => { if (v['Venue ID']) caByRow[String(v.id)] = Number(v['Venue ID']); });
+                const namesById = {};
+                (cl.data || []).forEach(c => {
+                    namesById[String(c.id)] = [c.name, c['Club Name']]
+                        .filter(Boolean).map(n => String(n).toLowerCase());
+                });
+                (cv.data || []).forEach(r => {
+                    const ca = caByRow[String(r.venue_id)];
+                    if (!ca) return;
+                    (namesById[String(r.club_id)] || []).forEach(n => {
+                        (venueScopeByEntity[n] = venueScopeByEntity[n] || new Set()).add(ca);
+                    });
+                });
+            } catch (e) { console.error('club_venues load failed - falling back to club_name:', e); }
+        }
+
+        // The scoped list for an entity, or null when we hold nothing for it, in
+        // which case the caller keeps its old behaviour. An entity with no rows is
+        // NOT an error: a club that is not live yet has no venues, and its venues
+        // get added at onboarding.
+        function scopedVenues(entityName) {
+            const s = venueScopeByEntity[String(entityName || '').toLowerCase()];
+            if (!s || !s.size) return null;
+            return allVenues.filter(v => s.has(Number(v.id)));
+        }
+
+
         async function loadCaClubs() {
             if (caClubs.length) return;
             try {
@@ -6564,6 +6614,7 @@
                 ]);
 
                 await loadCaClubs();
+                await loadVenueScope();
                 const [venueRes, fieldRes] = await Promise.allSettled([
                     CONFIG.AIRTABLE_TABLES.VENUES ? airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }) : Promise.resolve([]),
                     airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
@@ -7230,7 +7281,9 @@
             const gameClubLower = (resolveGameClub(f) || '').toLowerCase();
             const pillClub      = selectedClubs.size === 1 ? [...selectedClubs][0].toLowerCase() : '';
             const activeClub    = gameClubLower || pillClub;
-            let venuesFiltered = allVenues.filter(v =>
+            // club_venues first; the old club_name guess only when we hold no
+            // rows for this entity (events, tournaments, a club not live yet).
+            let venuesFiltered = scopedVenues(activeClub) || allVenues.filter(v =>
                 !activeClub || v.clubs.some(c => c.includes(activeClub) || activeClub.includes(c))
             );
             // Never a dead dropdown: if no club-tagged venues match (events / untagged
@@ -7736,7 +7789,7 @@
                             <option value="">Venue…</option>${(() => {
                                 const curVenueId = f['Venue ID'] || '';
                                 const gameClubLower = (resolveGameClub(f)||'').toLowerCase();
-                                let vf = allVenues.filter(v => !gameClubLower || v.clubs.some(c => c.includes(gameClubLower)||gameClubLower.includes(c)));
+                                let vf = scopedVenues(gameClubLower) || allVenues.filter(v => !gameClubLower || v.clubs.some(c => c.includes(gameClubLower)||gameClubLower.includes(c)));
                                 if (vf.length === 0) vf = allVenues;   // never a dead dropdown
                                 // Same reason as above: a venue the club filter does
                                 // not claim is still THIS game's venue. Show it.
