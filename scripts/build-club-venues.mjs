@@ -2,7 +2,12 @@
 //
 //   PowerShell, from the referee-tool folder:
 //     node scripts/build-club-venues.mjs            preview
-//     node scripts/build-club-venues.mjs --write    apply
+//
+// ⚠️ --write DOES NOT WORK and cannot: club_venues is RLS select-only for anon
+// by design, and this script runs on the anon key. The parsing lives here (it
+// needs the quote-aware tokenizer); the writing lives in
+// sql/club-venues-02-backfill.sql, run as postgres in DBeaver. The flag is kept
+// only so an old habit fails loudly with a 42501 instead of appearing to work.
 //
 // Run sql/club-venues-01-table.sql FIRST (DBeaver, Alt+X). That creates the
 // table and does backfill 1 — the 47 venues carrying a club_name.
