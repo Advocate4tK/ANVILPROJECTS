@@ -835,22 +835,24 @@ exportBtn.addEventListener('click', () => {
         const band     = ageBand(ageKey);
         const clubId   = clubIdMap[src];
         const evRates  = eventRateMap[src]?.[ageKey] || null;
-        // EXACT age first, then the band. The pay editor offers both forms side by
-        // side — a single-age grid and a banded one — so clubs hold either or
-        // both, and looking up only the band meant NECONN missed every time: it
-        // stores U8/U10/U12/U15/U19 and no bands at all, so every NECONN game
-        // exported at DEFAULTS instead of their real rates. U12 went out at 40/25
-        // against a real 45/30, U15 and U19 at 40/25 against 60/35.
+        // Rec and Comp are DIFFERENT RATES, not duplicates.
         //
-        // Where a club holds BOTH — Lebanon, RHAMYS, WAM, Glastonbury — the exact
-        // age now wins, because it is the more specific statement about that age.
-        // Those clubs still need their duplicates reconciled; this only stops the
-        // lookup missing entirely.
-        const clubRate = clubId
-            ? (payRateByClubId[clubId]?.[ageKey]
-               || (band ? payRateByClubId[clubId]?.[band] : null)
-               || null)
-            : null;
+        // The pay editor has two grids: Rec by single age (U8, U10, U12, U15,
+        // U18, U19) and Comp by band (U9-U10, U11-U12, U13-U15). They never
+        // collide as strings, which is why both live in one table keyed on
+        // age_group alone. Reading only the band therefore charged Rec games a
+        // Comp rate wherever a club had both — Lebanon's Rec U10 is 40 and its
+        // Comp U9-U10 is 50 — and missed entirely for a club with only one
+        // shape. NECONN keeps Rec ages and no bands, so every NECONN game fell
+        // through to DEFAULTS: U12 exported 40/25 against a real 45/30, U15 and
+        // U19 40/25 against 60/35.
+        //
+        // So the GAME says which rate applies. The other shape is a fallback,
+        // because a club that has only entered one grid still means it.
+        const isComp   = String(f['game_type'] || '').trim().toLowerCase() === 'comp';
+        const rateFor  = k => (k && clubId) ? (payRateByClubId[clubId]?.[k] || null) : null;
+        const clubRate = isComp ? (rateFor(band) || rateFor(ageKey))
+                                : (rateFor(ageKey) || rateFor(band));
 
         // Whether we actually USE ARs is ours, and it drives the AR fee.
         // A solo-centre event (GSL) gets 3 slots in CA but a $0 AR fee, so an
