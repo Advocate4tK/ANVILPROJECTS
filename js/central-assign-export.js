@@ -835,7 +835,22 @@ exportBtn.addEventListener('click', () => {
         const band     = ageBand(ageKey);
         const clubId   = clubIdMap[src];
         const evRates  = eventRateMap[src]?.[ageKey] || null;
-        const clubRate = (clubId && band) ? (payRateByClubId[clubId]?.[band] || null) : null;
+        // EXACT age first, then the band. The pay editor offers both forms side by
+        // side — a single-age grid and a banded one — so clubs hold either or
+        // both, and looking up only the band meant NECONN missed every time: it
+        // stores U8/U10/U12/U15/U19 and no bands at all, so every NECONN game
+        // exported at DEFAULTS instead of their real rates. U12 went out at 40/25
+        // against a real 45/30, U15 and U19 at 40/25 against 60/35.
+        //
+        // Where a club holds BOTH — Lebanon, RHAMYS, WAM, Glastonbury — the exact
+        // age now wins, because it is the more specific statement about that age.
+        // Those clubs still need their duplicates reconciled; this only stops the
+        // lookup missing entirely.
+        const clubRate = clubId
+            ? (payRateByClubId[clubId]?.[ageKey]
+               || (band ? payRateByClubId[clubId]?.[band] : null)
+               || null)
+            : null;
 
         // Whether we actually USE ARs is ours, and it drives the AR fee.
         // A solo-centre event (GSL) gets 3 slots in CA but a $0 AR fee, so an
