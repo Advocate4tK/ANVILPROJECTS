@@ -229,7 +229,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Save tournament session availability (session-block mode)
             const refName = window._foundRefName || `${firstName} ${lastName}`;
-            const refEmail = document.getElementById('refereeEmail')?.value.trim() || '';
+            // Typed email first, then the one on the record they identified as.
+            // Without the fallback a returning referee submits anonymously: no
+            // email, no referee_id, and the assignor's board shows the typed name
+            // as a separate person from the roster entry it belongs to.
+            const refEmail = (document.getElementById('refereeEmail')?.value.trim())
+                          || window._foundRefEmail || '';
+            const refId    = window._foundRefId || null;
             if (tournChecked.length || tournWindows.length) {
                 const allTKeys = [...new Set([
                     ...tournChecked.map(cb => cb.dataset.tkey),
@@ -249,6 +255,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const sessionSubs = tournChecked.map(cb => airtableClient.createAvailability({
                     'Referee Name':        refName,
                     'Referee Email':       refEmail,
+                    'referee_id':          refId,
                     'Date':                cb.dataset.date,
                     'Start Time':          cb.dataset.start,
                     'End Time':            cb.dataset.end,
@@ -271,6 +278,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return airtableClient.createAvailability({
                         'Referee Name':        refName,
                         'Referee Email':       refEmail,
+                        'referee_id':          refId,
                         'Date':                date,
                         'Start Time':          arriveVal,
                         'End Time':            departVal,
@@ -300,6 +308,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const evSessionSubs = eventChecked.map(cb => airtableClient.createAvailability({
                     'Referee Name':        refName,
                     'Referee Email':       refEmail,
+                    'referee_id':          refId,
                     'Date':                cb.dataset.date,
                     'Start Time':          cb.dataset.start,
                     'End Time':            cb.dataset.end,
@@ -322,6 +331,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return airtableClient.createAvailability({
                         'Referee Name':        refName,
                         'Referee Email':       refEmail,
+                        'referee_id':          refId,
                         'Date':                date,
                         'Start Time':          arriveVal,
                         'End Time':            departVal,
