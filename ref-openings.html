@@ -1069,8 +1069,11 @@
                   +  `style="cursor:pointer;" onclick="zoomTown(${JSON.stringify(t.n).replace(/"/g, '&quot;')})"/>`;
         });
 
-        // One label per club, at the middle of the towns it plays in.
-        clubs.forEach(c => {
+        // One label per club, at the middle of the towns it plays in. Statewide
+        // ONLY: the font is a fraction of the viewBox, so zooming into a town
+        // blew "GLASTONBURY" up to the width of the county. Inside a town you
+        // already know which town you are in — it is the panel heading.
+        if (!_zoomTown) clubs.forEach(c => {
             const ts = [...byClub[c].towns]
                 .map(n => CT_TOWNS.towns.find(t => t.n.toLowerCase() === n))
                 .filter(Boolean);
@@ -1103,14 +1106,34 @@
                 const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.3 + 0.006;
                 viewBox = `${b.minX - pad} ${b.minY - pad} ${(b.maxX - b.minX) + pad*2} ${(b.maxY - b.minY) + pad*2}`;
 
+                // Which venues actually have games — the only ones worth naming
+                // on the picture. Labelling all thirteen stacked six on top of
+                // each other in Glastonbury's north cluster and read as noise;
+                // the panel underneath names every one of them anyway, in order.
+                const openAt = new Set();
+                let gs = _allOpenGames || [];
+                if (_weekFilter !== 'all') {
+                    const wb = getWeekBounds(_weekFilter === 'this' ? 0 : 1);
+                    gs = gs.filter(g => g.date >= wb.from && g.date <= wb.to);
+                }
+                gs.forEach(g => {
+                    const rec = venueFor(g['Venue ID']);
+                    if (rec && rec.name) openAt.add(rec.name);
+                });
+
                 const r = ((b.maxX - b.minX) + pad*2) * 0.016;
                 here.forEach(v => {
                     if (v.lat == null || v.lng == null) return;
                     const x = projX(v.lng), y = projY(v.lat);
-                    pins += `<circle cx="${x}" cy="${y}" r="${r}" fill="#00c853" stroke="#09142a" stroke-width="${r*0.28}"/>`
-                         +  `<text x="${x}" y="${y - r*1.7}" text-anchor="middle" font-family="DM Sans, sans-serif" `
-                         +  `font-size="${r*1.5}" font-weight="700" fill="#fff" stroke="rgba(9,20,42,0.8)" `
-                         +  `stroke-width="${r*0.35}" paint-order="stroke">${escMap(v.name)}</text>`;
+                    const live = openAt.has(v.name);
+                    pins += `<circle cx="${x}" cy="${y}" r="${live ? r : r*0.72}" `
+                         +  `fill="${live ? '#00c853' : 'rgba(255,255,255,0.45)'}" `
+                         +  `stroke="#09142a" stroke-width="${r*0.28}"/>`;
+                    if (live) {
+                        pins += `<text x="${x}" y="${y - r*1.8}" text-anchor="middle" font-family="DM Sans, sans-serif" `
+                             +  `font-size="${r*1.6}" font-weight="700" fill="#fff" stroke="rgba(9,20,42,0.85)" `
+                             +  `stroke-width="${r*0.4}" paint-order="stroke">${escMap(v.name)}</text>`;
+                    }
                 });
                 panelHtml = townPanel(_zoomTown, here);
             }
