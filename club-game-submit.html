@@ -1844,6 +1844,30 @@
         renderStagedTable();
     }
 
+    // ── What makes two games the same game ───────────────────────────────────
+    // Date + home + away says two opponents meet at most once a day. That is not
+    // youth soccer: a club fields U9 through U14 against the same neighbouring
+    // club on one Saturday.
+    //
+    // It looked fine while team columns held TEAM names — "Griswold FC Girls" and
+    // "Griswold FC Boys" are different strings, so the key separated them by
+    // accident. Eric's 2026-09-03 upload put CLUB names in the team columns, so
+    // every game against Simsbury that day collapsed to one key and the 11:00
+    // was rejected as a duplicate of the 10:00.
+    //
+    // Time is the field that actually tells them apart, and it was simply not in
+    // the key. Age group rides along for the case where a club genuinely runs two
+    // age groups at the same time on different fields.
+    //
+    // Times arrive in two shapes — the database holds "10:00:00", a staged row
+    // holds "10:00" — so they are cut to HH:MM or the same game never matches
+    // itself and every re-upload duplicates.
+    function gameDupKey(date, home, away, time, age) {
+        const t = String(time ?? '').trim().slice(0, 5);
+        const n = v => String(v ?? '').trim().toLowerCase();
+        return `${String(date ?? '').trim()}|${n(home)}|${n(away)}|${t}|${n(age)}`;
+    }
+
     // ── Submit All Games ──────────────────────────────────────────────────────
     document.getElementById('submitBtn').addEventListener('click', async () => {
         const clubId = document.getElementById('clubSelect').value;
@@ -1854,10 +1878,10 @@
 
         // Quick local duplicate pre-check
         const historyKeys = new Set(
-            loadHistory().map(g => `${g.date}|${(g.home||'').toLowerCase()}|${(g.away||'').toLowerCase()}`)
+            loadHistory().map(g => gameDupKey(g.date, g.home, g.away, g.time, g.age))
         );
         const localDups = pending.filter(g =>
-            historyKeys.has(`${g.date}|${g.home.toLowerCase()}|${g.away.toLowerCase()}`)
+            historyKeys.has(gameDupKey(g.date, g.home, g.away, g.time, g.age))
         );
         if (localDups.length > 0) {
             const names = localDups.map(g => `${g.home} vs ${g.away} (${g.date})`).join('\n');
@@ -1878,7 +1902,8 @@
         try {
             const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 1000 });
             existing.forEach(r => {
-                existingKeys.add(`${r.fields['Date']}|${(r.fields['Home Team']||'').toLowerCase()}|${(r.fields['Away Team']||'').toLowerCase()}`);
+                existingKeys.add(gameDupKey(r.fields['Date'], r.fields['Home Team'], r.fields['Away Team'],
+                                            r.fields['Time'], r.fields['Age Group']));
             });
         } catch(e) { console.warn('Duplicate check failed:', e); }
 
@@ -1889,7 +1914,7 @@
             document.getElementById('progressText').textContent = `Submitting ${successCount + errorCount + skipCount + 1} of ${pending.length}…`;
             document.getElementById('progressBar').style.width = Math.round((i / stagedGames.length) * 100) + '%';
 
-            const dupKey = `${g.date}|${g.home.toLowerCase()}|${g.away.toLowerCase()}`;
+            const dupKey = gameDupKey(g.date, g.home, g.away, g.time, g.age);
             if (existingKeys.has(dupKey)) {
                 skipCount++;
                 stagedGames[i].status = 'skipped';
