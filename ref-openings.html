@@ -672,6 +672,38 @@
             .club-selector { width: 100%; flex: unset; }
         }
 
+
+        /* ── Where is this club? ──────────────────────────────────────────────
+           A referee reads "NECONN" or "Coginchaug" in the list and has no idea
+           where that is. The list answers where a GAME is; nothing answers what
+           an ENTITY covers, which is the difference between one town and the
+           whole northeast corner.
+           Phone first: this is opened on a sideline, so it is one full-width
+           picture with no pinching, and the 120KB town file is not fetched at
+           all unless somebody taps the tab. */
+        .view-tabs { display:flex; gap:8px; margin-bottom:14px; }
+        .view-tab {
+            flex:1; padding:9px 14px; border-radius:9px; cursor:pointer;
+            font-family:inherit; font-size:0.84rem; font-weight:700; letter-spacing:0.4px;
+            background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.75);
+            border:1px solid rgba(255,255,255,0.14); transition:background 0.15s, color 0.15s;
+        }
+        .view-tab.active { background:#fff; color:#0f1e3c; border-color:#fff; }
+        #mapPanel { display:none; }
+        #mapPanel.on { display:block; }
+        .map-wrap { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12);
+                    border-radius:12px; padding:10px; margin-bottom:14px; }
+        .map-wrap svg { width:100%; height:auto; display:block; }
+        .map-legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+        .map-legend button {
+            display:flex; align-items:center; gap:7px; padding:7px 11px; border-radius:20px;
+            background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.14);
+            color:#fff; font-family:inherit; font-size:0.78rem; font-weight:700; cursor:pointer;
+        }
+        .map-legend button.sel { background:#00c853; color:#09142a; border-color:#00c853; }
+        .map-legend .sw { width:11px; height:11px; border-radius:3px; flex-shrink:0; }
+        .map-legend .ct { opacity:0.65; font-weight:600; }
+        .map-note { color:rgba(255,255,255,0.55); font-size:0.74rem; margin-top:9px; line-height:1.5; }
     </style>
 </head>
 <body>
@@ -693,6 +725,12 @@
                 <span class="logo-underline"></span>
             </div>
         </div>
+    </div>
+
+    <!-- List / Map -->
+    <div class="view-tabs">
+        <button class="view-tab active" id="tabList" onclick="setView('list')">📋 Open Slots</button>
+        <button class="view-tab" id="tabMap" onclick="setView('map')">🗺️ Where</button>
     </div>
 
     <!-- Filter bar -->
@@ -724,6 +762,15 @@
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
         <span style="color:#00c853; font-size:1.1rem; animation: throb 1.2s ease-in-out infinite;">▶</span>
         <span style="color:#ef4444; font-size:0.82rem; font-weight:700; letter-spacing:0.3px;">Select a game below to view open slots and submit your availability</span>
+    </div>
+
+    <!-- Map: which clubs are where -->
+    <div id="mapPanel">
+        <div class="map-wrap">
+            <div id="mapSvgHost"><div class="loading-state"><div class="loading-spinner"></div>Loading map…</div></div>
+            <div class="map-legend" id="mapLegend"></div>
+            <div class="map-note" id="mapNote"></div>
+        </div>
     </div>
 
     <!-- Game list -->
@@ -776,6 +823,164 @@
             games = games.filter(g => g.date >= bounds.from && g.date <= bounds.to);
         }
         render(games);
+        if (_view === 'map' && _mapLoaded) renderWhereMap();
+    }
+
+    // ── "Where" map ──────────────────────────────────────────────────────────
+    // Shades the towns each club actually plays in and names it there, so a
+    // referee can see that East Haddam is one town and NECONN is a corner of the
+    // state. NOT a venue map: no pins, no zoom, nothing to administer — this
+    // answers one question and gets out of the way.
+
+    let _view = 'list';
+    let _mapLoaded = false, _mapLoading = false;
+
+    // A venue's city is what a club typed, and CT towns swallow the villages
+    // people write. Same table the venue map uses; every one confirmed during
+    // the referee harvest.
+    const VILLAGE_TO_TOWN = {
+        'moodus':'East Haddam', 'quaker hill':'Waterford', 'danielson':'Killingly',
+        'dayville':'Killingly', 'east killingly':'Killingly', 'north grosvenordale':'Thompson',
+        'quinebaug':'Thompson', 'greeneville':'Norwich', 'taftville':'Norwich',
+        'yantic':'Norwich', 'mystic':'Stonington', 'uncasville':'Montville',
+        'willimantic':'Windham', 'oneco':'Sterling', 'higganum':'Haddam',
+        'jewett city':'Griswold', 'wauregan':'Plainfield', 'central village':'Plainfield',
+        'ballouville':'Killingly', 'storrs':'Mansfield', 'storrs mansfield':'Mansfield',
+        'south windham':'Windham', 'gales ferry':'Ledyard', 'old mystic':'Stonington',
+        'poquonock bridge':'Groton', 'baltic':'Sprague', 'terryville':'Plymouth',
+        'rockville':'Vernon', 'collinsville':'Canton', 'pawcatuck':'Stonington'
+    };
+
+    // Muted and distinguishable. Green is deliberately NOT here — it means
+    // "selected" everywhere else on this tool and it means that here too.
+    const MAP_COLORS = ['#5b8def','#c77dff','#f4a259','#4cc9c0','#e5686f',
+                        '#8ab4f8','#d4a373','#9d8df1','#5fb0b7','#e0a3c4'];
+
+    function setView(v) {
+        _view = v;
+        document.getElementById('tabList').classList.toggle('active', v === 'list');
+        document.getElementById('tabMap').classList.toggle('active', v === 'map');
+        document.getElementById('gameList').style.display = v === 'list' ? '' : 'none';
+        document.getElementById('mapPanel').classList.toggle('on', v === 'map');
+        if (v === 'map') ensureMap();
+    }
+
+    // The town file is ~120KB and most people never open this tab. Fetch it the
+    // first time somebody does, not on every page load on a phone in a car park.
+    function ensureMap() {
+        if (_mapLoaded) { renderWhereMap(); return; }
+        if (_mapLoading) return;
+        _mapLoading = true;
+        const sc = document.createElement('script');
+        sc.src = 'js/ct-towns.js?v=1';
+        sc.onload  = () => { _mapLoaded = true; _mapLoading = false; renderWhereMap(); };
+        sc.onerror = () => {
+            _mapLoading = false;
+            document.getElementById('mapSvgHost').innerHTML =
+                '<p style="color:rgba(255,255,255,0.6);font-size:0.85rem;padding:18px;text-align:center;">Map could not load. The list still has every game.</p>';
+        };
+        document.head.appendChild(sc);
+    }
+
+    function townOfVenue(venueId) {
+        const rec = venueId ? venueMap[String(venueId)] : null;
+        const raw = rec && rec.city ? String(rec.city).trim().toLowerCase() : '';
+        if (!raw) return null;
+        return VILLAGE_TO_TOWN[raw] || raw;
+    }
+
+    function renderWhereMap() {
+        const host = document.getElementById('mapSvgHost');
+        if (typeof CT_TOWNS === 'undefined') return;
+
+        // Only what the CURRENT week filter shows — the map should agree with
+        // the list sitting behind it, or it is describing a different page.
+        let games = _allOpenGames || [];
+        if (_weekFilter !== 'all') {
+            const b = getWeekBounds(_weekFilter === 'this' ? 0 : 1);
+            games = games.filter(g => g.date >= b.from && g.date <= b.to);
+        }
+
+        const byClub = {};           // club -> { towns:Set, games:n }
+        let noTown = 0;
+        games.forEach(g => {
+            const club = g['Source Club'] || '';
+            if (!club) return;
+            const e = byClub[club] || (byClub[club] = { towns: new Set(), games: 0 });
+            e.games++;
+            const t = townOfVenue(g['Venue ID']);
+            if (t) e.towns.add(t); else noTown++;
+        });
+
+        const clubs = Object.keys(byClub).sort();
+        const colorOf = {};
+        clubs.forEach((c, i) => { colorOf[c] = MAP_COLORS[i % MAP_COLORS.length]; });
+
+        // town (lowercased) -> the clubs playing there
+        const townClubs = {};
+        clubs.forEach(c => byClub[c].towns.forEach(t => (townClubs[t] = townClubs[t] || []).push(c)));
+
+        const sel = _clubFilter !== 'all' ? _clubFilter : null;
+        const vb  = CT_TOWNS.viewBox;
+        let paths = '', labels = '';
+
+        CT_TOWNS.towns.forEach(t => {
+            const key = t.n.toLowerCase();
+            const here = townClubs[key] || [];
+            let fill = 'rgba(255,255,255,0.05)', stroke = 'rgba(255,255,255,0.16)', sw = 0.0012;
+            if (here.length) {
+                // A town shared by two clubs takes the selected one's colour when
+                // there is a selection, otherwise the first alphabetically — an
+                // honest simplification, and the legend still lists both.
+                const owner = (sel && here.includes(sel)) ? sel : here[0];
+                fill = (sel && owner !== sel) ? 'rgba(255,255,255,0.08)'
+                     : (sel ? '#00c853' : colorOf[owner]);
+                stroke = 'rgba(255,255,255,0.35)'; sw = 0.0016;
+            }
+            paths += `<path d="${t.d}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+        });
+
+        // One label per club, at the middle of the towns it plays in.
+        clubs.forEach(c => {
+            const ts = [...byClub[c].towns]
+                .map(n => CT_TOWNS.towns.find(t => t.n.toLowerCase() === n))
+                .filter(Boolean);
+            if (!ts.length) return;
+            const cx = ts.reduce((a, t) => a + t.cx, 0) / ts.length;
+            const cy = ts.reduce((a, t) => a + t.cy, 0) / ts.length;
+            const on = !sel || sel === c;
+            labels += `<text x="${cx}" y="${cy}" text-anchor="middle" `
+                   +  `font-family="Barlow Condensed, sans-serif" font-size="0.028" font-weight="800" `
+                   +  `fill="${on ? '#fff' : 'rgba(255,255,255,0.35)'}" `
+                   +  `stroke="rgba(9,20,42,0.75)" stroke-width="0.007" paint-order="stroke" `
+                   +  `style="pointer-events:none;">${(c === 'RECREATION' ? 'Recreation' : c).toUpperCase()}</text>`;
+        });
+
+        host.innerHTML = `<svg viewBox="${vb}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Where each club plays">${paths}${labels}</svg>`;
+
+        document.getElementById('mapLegend').innerHTML = clubs.map(c => `
+            <button onclick="mapPick(${JSON.stringify(c).replace(/"/g, '&quot;')})" class="${sel === c ? 'sel' : ''}">
+                <span class="sw" style="background:${colorOf[c]}"></span>
+                ${c === 'RECREATION' ? 'Recreation' : c}
+                <span class="ct">${byClub[c].games}</span>
+            </button>`).join('')
+            + (sel ? `<button onclick="mapPick('all')">Show all</button>` : '');
+
+        document.getElementById('mapNote').textContent = clubs.length
+            ? (noTown ? `Tap a club to see only its games. ${noTown} game${noTown === 1 ? '' : 's'} could not be placed on the map — no town on the venue.`
+                      : 'Tap a club to see only its games.')
+            : 'No open games in this view.';
+    }
+
+    // Tapping a club on the map is the same act as choosing it in the selector,
+    // so it goes through the same path and then shows the games — nobody taps a
+    // map to keep looking at the map.
+    function mapPick(club) {
+        const nativeSel = document.getElementById('clubSelectNative');
+        if (nativeSel) { nativeSel.value = club; onClubSelectChange(nativeSel); }
+        else { _clubFilter = club; applyFilters(); }
+        if (club !== 'all') setView('list');
+        else renderWhereMap();
     }
 
     // Distinct Source Clubs among games that pass the CURRENT WEEK filter (ignoring the club filter — the
