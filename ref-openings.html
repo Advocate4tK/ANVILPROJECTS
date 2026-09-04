@@ -704,6 +704,24 @@
         .map-legend .sw { width:11px; height:11px; border-radius:3px; flex-shrink:0; }
         .map-legend .ct { opacity:0.65; font-weight:600; }
         .map-note { color:rgba(255,255,255,0.55); font-size:0.74rem; margin-top:9px; line-height:1.5; }
+        /* The town panel sits UNDER the map, never replacing it: the geography
+           and the answer have to be readable together or the context is lost. */
+        #mapTownPanel:empty { display:none; }
+        #mapTownPanel { margin-top:12px; border-top:1px solid rgba(255,255,255,0.14); padding-top:11px; }
+        .tp-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .tp-head strong { font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; letter-spacing:1px;
+                          text-transform:uppercase; color:#fff; }
+        .tp-head button { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18);
+                          color:#fff; font-family:inherit; font-size:0.72rem; font-weight:700;
+                          padding:5px 10px; border-radius:16px; cursor:pointer; }
+        .tp-sub { color:rgba(255,255,255,0.6); font-size:0.76rem; margin:3px 0 8px; }
+        .tp-list { list-style:none; margin:0; padding:0; }
+        .tp-list li { display:flex; align-items:center; gap:9px; padding:5px 0;
+                      border-bottom:1px solid rgba(255,255,255,0.07); color:#fff; font-size:0.82rem; }
+        .tp-list li:last-child { border-bottom:none; }
+        .tp-n { background:#00c853; color:#09142a; font-size:0.68rem; font-weight:800;
+                padding:1px 8px; border-radius:9px; }
+        .tp-x { color:rgba(255,255,255,0.35); font-size:0.68rem; font-weight:700; }
     </style>
 </head>
 <body>
@@ -769,6 +787,7 @@
         <div class="map-wrap">
             <div id="mapSvgHost"><div class="loading-state"><div class="loading-spinner"></div>Loading map…</div></div>
             <div class="map-legend" id="mapLegend"></div>
+            <div id="mapTownPanel"></div>
             <div class="map-note" id="mapNote"></div>
         </div>
     </div>
@@ -834,6 +853,34 @@
 
     let _view = 'list';
     let _mapLoaded = false, _mapLoading = false;
+    let _zoomTown = null;   // lowercased town name, or null for the whole state
+
+    // The town paths are equirectangular at cos(41.5N) — the same projection
+    // venue-management uses. A venue pin has to be placed with the identical
+    // maths or it lands next to the town instead of in it.
+    const MAP_K = Math.cos(41.5 * Math.PI / 180);
+    const projX = lng => lng * MAP_K;
+    const projY = lat => -lat;
+
+    function townBBox(d) {
+        const nums = d.match(/-?\d+\.?\d*/g).map(Number);
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (let i = 0; i < nums.length; i += 2) {
+            minX = Math.min(minX, nums[i]);   maxX = Math.max(maxX, nums[i]);
+            minY = Math.min(minY, nums[i+1]); maxY = Math.max(maxY, nums[i+1]);
+        }
+        return { minX, maxX, minY, maxY };
+    }
+
+    // Tapping a town is how a referee asks "what is actually there?" — the point
+    // of the whole tab. Tapping it again, or the background, comes back out.
+    function zoomTown(name) {
+        const k = String(name || '').toLowerCase();
+        _zoomTown = (_zoomTown === k) ? null : (k || null);
+        renderWhereMap();
+        const panel = document.getElementById('mapTownPanel');
+        if (panel && _zoomTown) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
 
     // A venue's city is what a club typed, and CT towns swallow the villages
     // people write. Same table the venue map uses; every one confirmed during
@@ -908,6 +955,60 @@
         return String(VILLAGE_TO_TOWN[raw] || raw).toLowerCase();
     }
 
+    const escMap = v => String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Every venue we hold in a town, geocoded or not, with how many open games
+    // are at each. A venue with no coordinates is still named — dropping it
+    // would quietly tell a referee the town has fewer places than it does.
+    function venuesInTown(townKey) {
+        const seen = new Map();
+        Object.values(venueByCaId).concat(Object.values(venueByRowId)).forEach(v => {
+            if (!v || !v.name) return;
+            const raw = String(v.city || '').trim().toLowerCase()
+                .replace(/^(n|no|s|so|e|w)\.?\s+/, (m, d) =>
+                    ({ n:'north ', no:'north ', s:'south ', so:'south ', e:'east ', w:'west ' })[d]);
+            const t = String(VILLAGE_TO_TOWN[raw] || raw).toLowerCase();
+            if (t !== townKey) return;
+            if (!seen.has(v.name)) seen.set(v.name, v);
+        });
+        return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    function townPanel(townKey, venues) {
+        const proper = (CT_TOWNS.towns.find(t => t.n.toLowerCase() === townKey) || {}).n || townKey;
+
+        let games = _allOpenGames || [];
+        if (_weekFilter !== 'all') {
+            const b = getWeekBounds(_weekFilter === 'this' ? 0 : 1);
+            games = games.filter(g => g.date >= b.from && g.date <= b.to);
+        }
+        const here = games.filter(g => townOfVenue(g['Venue ID']) === townKey);
+        const clubs = [...new Set(here.map(g => g['Source Club']).filter(Boolean))];
+        const perVenue = {};
+        here.forEach(g => {
+            const rec = venueFor(g['Venue ID']);
+            const n = rec && rec.name ? rec.name : '';
+            if (n) perVenue[n] = (perVenue[n] || 0) + 1;
+        });
+
+        const rows = venues.map(v => {
+            const n = perVenue[v.name] || 0;
+            return `<li><span>${escMap(v.name)}</span>`
+                 + (n ? `<span class="tp-n">${n} open</span>` : '')
+                 + (v.lat == null ? `<span class="tp-x" title="not mapped yet">no pin</span>` : '')
+                 + `</li>`;
+        }).join('');
+
+        return `<div class="tp-head">
+                    <strong>${escMap(proper)}</strong>
+                    <button onclick="zoomTown(null)">Back to Connecticut</button>
+                </div>
+                <div class="tp-sub">${clubs.length ? escMap(clubs.join(' · ')) + ' — ' + here.length + ' open game' + (here.length === 1 ? '' : 's')
+                                                   : 'No open games here right now'}</div>
+                <ul class="tp-list">${rows || '<li><span>No venues on file for this town</span></li>'}</ul>`;
+    }
+
     function renderWhereMap() {
         const host = document.getElementById('mapSvgHost');
         if (typeof CT_TOWNS === 'undefined') return;
@@ -962,7 +1063,10 @@
                      : (sel ? '#00c853' : colorOf[owner]);
                 stroke = 'rgba(255,255,255,0.35)'; sw = 0.0016;
             }
-            paths += `<path d="${t.d}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+            // Every town is tappable, not just the shaded ones — a referee
+            // wondering what is in a town is asking the same question either way.
+            paths += `<path d="${t.d}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" `
+                  +  `style="cursor:pointer;" onclick="zoomTown(${JSON.stringify(t.n).replace(/"/g, '&quot;')})"/>`;
         });
 
         // One label per club, at the middle of the towns it plays in.
@@ -981,7 +1085,40 @@
                    +  `style="pointer-events:none;">${(c === 'RECREATION' ? 'Recreation' : c).toUpperCase()}</text>`;
         });
 
-        host.innerHTML = `<svg viewBox="${vb}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Where each club plays">${paths}${labels}</svg>`;
+        // ── Zoomed into one town ─────────────────────────────────────────────
+        let viewBox = vb, pins = '', panelHtml = '';
+        if (_zoomTown) {
+            const town = CT_TOWNS.towns.find(t => t.n.toLowerCase() === _zoomTown);
+            if (town) {
+                const b = townBBox(town.d);
+                // Venues that sit just outside the boundary — geocoding does not
+                // respect town lines — would otherwise be framed off-screen.
+                const here = venuesInTown(_zoomTown);
+                here.forEach(v => {
+                    if (v.lat == null || v.lng == null) return;
+                    const x = projX(v.lng), y = projY(v.lat);
+                    b.minX = Math.min(b.minX, x); b.maxX = Math.max(b.maxX, x);
+                    b.minY = Math.min(b.minY, y); b.maxY = Math.max(b.maxY, y);
+                });
+                const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.3 + 0.006;
+                viewBox = `${b.minX - pad} ${b.minY - pad} ${(b.maxX - b.minX) + pad*2} ${(b.maxY - b.minY) + pad*2}`;
+
+                const r = ((b.maxX - b.minX) + pad*2) * 0.016;
+                here.forEach(v => {
+                    if (v.lat == null || v.lng == null) return;
+                    const x = projX(v.lng), y = projY(v.lat);
+                    pins += `<circle cx="${x}" cy="${y}" r="${r}" fill="#00c853" stroke="#09142a" stroke-width="${r*0.28}"/>`
+                         +  `<text x="${x}" y="${y - r*1.7}" text-anchor="middle" font-family="DM Sans, sans-serif" `
+                         +  `font-size="${r*1.5}" font-weight="700" fill="#fff" stroke="rgba(9,20,42,0.8)" `
+                         +  `stroke-width="${r*0.35}" paint-order="stroke">${escMap(v.name)}</text>`;
+                });
+                panelHtml = townPanel(_zoomTown, here);
+            }
+        }
+
+        host.innerHTML = `<svg viewBox="${viewBox}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Where each club plays">${paths}${labels}${pins}</svg>`;
+        const tp = document.getElementById('mapTownPanel');
+        if (tp) tp.innerHTML = panelHtml;
 
         document.getElementById('mapLegend').innerHTML = clubs.map(c => `
             <button onclick="mapPick(${JSON.stringify(c).replace(/"/g, '&quot;')})" class="${sel === c ? 'sel' : ''}">
@@ -1492,7 +1629,7 @@
                 // town and no address anywhere on the page — RHAMYS's Blackledge Field
                 // in Marlborough vanished off the map while still being counted in the
                 // legend, because the legend counts GAMES and the map needs the VENUE.
-                supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name, address, city, state').limit(5000),
+                supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name, address, city, state, lat, lng').limit(5000),
                 ...CLUBS.map(club =>
                     supabaseClient.client.from('games').select('*')
                         .eq('Source Club', club).gte('date', today)
@@ -1526,7 +1663,11 @@
                     name:    v['Venue Name'] || v.name || '',
                     city:    v.city    || '',
                     address: v.address || '',
-                    state:   v.state   || ''
+                    state:   v.state   || '',
+                    // Only 93 of 546 venues are geocoded. A venue without these
+                    // still gets named in the town panel — it just has no pin.
+                    lat:     v.lat,
+                    lng:     v.lng
                 };
                 if (v['Venue ID']) venueByCaId[String(v['Venue ID'])] = rec;
                 if (v.id)          venueByRowId[String(v.id)]         = rec;
