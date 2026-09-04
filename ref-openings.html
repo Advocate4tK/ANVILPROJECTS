@@ -722,6 +722,9 @@
         .tp-n { background:#00c853; color:#09142a; font-size:0.68rem; font-weight:800;
                 padding:1px 8px; border-radius:9px; }
         .tp-x { color:rgba(255,255,255,0.35); font-size:0.68rem; font-weight:700; }
+        .tp-go { color:#fff; text-decoration:none; display:flex; align-items:center; gap:6px; }
+        .tp-go span { color:#00c853; font-weight:800; }
+        .tp-go:hover { text-decoration:underline; }
     </style>
 </head>
 <body>
@@ -955,6 +958,23 @@
         return String(VILLAGE_TO_TOWN[raw] || raw).toLowerCase();
     }
 
+    // Same link the game cards use (see the .venue-map anchor below): venue name
+    // plus full address, so Google resolves the pitch and not just the town.
+    // A referee tapping a place on a map expects directions — matching the list
+    // is the whole reason it feels like the same product.
+    function mapsUrlFor(v) {
+        if (!v) return '';
+        const addr = [v.address, v.city, v.state].filter(Boolean).join(', ');
+        const q = [v.name, addr].filter(Boolean).join(', ');
+        return q ? 'https://maps.google.com/?q=' + encodeURIComponent(q) : '';
+    }
+
+    function openVenueMaps(name) {
+        const v = (venuesInTown(_zoomTown || '') || []).find(x => x.name === name);
+        const url = mapsUrlFor(v);
+        if (url) window.open(url, '_blank', 'noopener');
+    }
+
     const escMap = v => String(v == null ? '' : v)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -992,9 +1012,15 @@
             if (n) perVenue[n] = (perVenue[n] || 0) + 1;
         });
 
+        // The rows are the real tap target on a phone — a pin is a few
+        // millimetres, a row is the width of the screen.
         const rows = venues.map(v => {
             const n = perVenue[v.name] || 0;
-            return `<li><span>${escMap(v.name)}</span>`
+            const url = mapsUrlFor(v);
+            const nm = url
+                ? `<a class="tp-go" href="${url}" target="_blank" rel="noopener">${escMap(v.name)} <span>›</span></a>`
+                : `<span>${escMap(v.name)}</span>`;
+            return `<li>${nm}`
                  + (n ? `<span class="tp-n">${n} open</span>` : '')
                  + (v.lat == null ? `<span class="tp-x" title="not mapped yet">no pin</span>` : '')
                  + `</li>`;
@@ -1126,9 +1152,11 @@
                     if (v.lat == null || v.lng == null) return;
                     const x = projX(v.lng), y = projY(v.lat);
                     const live = openAt.has(v.name);
+                    const tapVenue = `onclick="event.stopPropagation(); openVenueMaps(${JSON.stringify(v.name).replace(/"/g, '&quot;')})" style="cursor:pointer;"`;
                     pins += `<circle cx="${x}" cy="${y}" r="${live ? r : r*0.72}" `
-                         +  `fill="${live ? '#00c853' : 'rgba(255,255,255,0.45)'}" `
-                         +  `stroke="#09142a" stroke-width="${r*0.28}"/>`;
+                         +  `fill="${live ? '#00c853' : 'rgba(255,255,255,0.62)'}" `
+                         +  `stroke="#09142a" stroke-width="${r*0.22}" ${tapVenue}>`
+                         +  `<title>${escMap(v.name)} — directions</title></circle>`;
                     if (live) {
                         pins += `<text x="${x}" y="${y - r*1.8}" text-anchor="middle" font-family="DM Sans, sans-serif" `
                              +  `font-size="${r*1.6}" font-weight="700" fill="#fff" stroke="rgba(9,20,42,0.85)" `
