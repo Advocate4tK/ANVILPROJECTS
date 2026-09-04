@@ -725,6 +725,9 @@
         .tp-go { color:#fff; text-decoration:none; display:flex; align-items:center; gap:6px; }
         .tp-go span { color:#00c853; font-weight:800; }
         .tp-go:hover { text-decoration:underline; }
+        .tp-list li.hl { background:rgba(0,200,83,0.16); border-radius:6px;
+                         box-shadow:0 0 0 6px rgba(0,200,83,0.16); }
+        .pin-hl { stroke:#00c853 !important; stroke-width:0.004 !important; }
     </style>
 </head>
 <body>
@@ -975,6 +978,20 @@
         if (url) window.open(url, '_blank', 'noopener');
     }
 
+    // Pin and row have to name each other. The pins draw in a different order
+    // from the list (live ones last), so an index will not do — slug the name.
+    const venueKey = n => 'v-' + String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    // Hovering either end lights both. Desktop nicety; on a phone there is no
+    // hover and the row is a link, which is the behaviour that matters there.
+    function hiVenue(key, on) {
+        const row = document.getElementById('tp-' + key);
+        if (row) row.classList.toggle('hl', !!on);
+        document.querySelectorAll('[data-vk="' + key + '"]').forEach(el => {
+            el.classList.toggle('pin-hl', !!on);
+        });
+    }
+
     const escMap = v => String(v == null ? '' : v)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -1020,7 +1037,8 @@
             const nm = url
                 ? `<a class="tp-go" href="${url}" target="_blank" rel="noopener">${escMap(v.name)} <span>›</span></a>`
                 : `<span>${escMap(v.name)}</span>`;
-            return `<li>${nm}`
+            const vk = venueKey(v.name);
+            return `<li id="tp-${vk}" onmouseenter="hiVenue('${vk}',1)" onmouseleave="hiVenue('${vk}',0)">${nm}`
                  + (n ? `<span class="tp-n">${n} open</span>` : '')
                  + (v.lat == null ? `<span class="tp-x" title="not mapped yet">no pin</span>` : '')
                  + `</li>`;
@@ -1160,7 +1178,10 @@
                     if (v.lat == null || v.lng == null) return;
                     const x = projX(v.lng), y = projY(v.lat);
                     const live = openAt.has(v.name);
-                    const tapVenue = `onclick="event.stopPropagation(); openVenueMaps(${JSON.stringify(v.name).replace(/"/g, '&quot;')})" style="cursor:pointer;"`;
+                    const vk = venueKey(v.name);
+                    const tapVenue = `onclick="event.stopPropagation(); openVenueMaps(${JSON.stringify(v.name).replace(/"/g, '&quot;')})" `
+                                   + `onmouseenter="hiVenue('${vk}',1)" onmouseleave="hiVenue('${vk}',0)" `
+                                   + `data-vk="${vk}" style="cursor:pointer;"`;
                     pins += `<circle cx="${x}" cy="${y}" r="${live ? r : r*0.72}" `
                          +  `fill="${live ? '#00c853' : 'rgba(255,255,255,0.62)'}" `
                          +  `stroke="#09142a" stroke-width="${r*0.22}" ${tapVenue}>`
