@@ -2979,7 +2979,26 @@
         return null; // unrecognized
     }
 
-    const VALID_GENDERS = ['female','male','f','m'];
+    // ── Gender ───────────────────────────────────────────────────────────────
+    // The form's own dropdown offers Girls / Boys / Coed. The uploader used to
+    // accept only female|male|f|m, so a club typing the word this page taught it
+    // had every row rejected with "use: Female or Male". Worse, anything that did
+    // get through and was not female became MALE — so "Coed" would have been
+    // silently rewritten to a boys game.
+    //
+    // Five vocabularies are already in the games table as a result:
+    // Boys 56, Girls 91, Coed 23, Male 8, Female 2, and 54 with nothing at all.
+    //
+    // Canonical is Boys / Girls / Coed, matching the dropdown and the majority of
+    // the data. central-assign-export.js already maps those to CA's Male / Female
+    // / Coed, so this round-trips without touching the export.
+    function normalizeGender(raw) {
+        const g = String(raw ?? '').trim().toLowerCase().replace(/[\s_-]/g, '');
+        if (['boys', 'boy', 'b', 'male', 'm'].includes(g))          return 'Boys';
+        if (['girls', 'girl', 'g', 'female', 'f'].includes(g))      return 'Girls';
+        if (['coed', 'co', 'mixed', 'both', 'open'].includes(g))    return 'Coed';
+        return '';   // '' means "not a gender we recognise", not "Male"
+    }
 
     // ── RT codes ──────────────────────────────────────────────────────────────
     // The whole point of the code: a club uploads forty games citing RTVCT026
@@ -3279,9 +3298,9 @@
         const age = (row['Age Group'] || '').trim().toUpperCase();
         if (!age)                          errors.push('Missing Age Group');
         else if (!/^U\d+(\s+\S.*)?$/.test(age)) errors.push(`Invalid Age Group "${row['Age Group']}" — use format: U8, U10, U12, or U12 Gold, etc.`);
-        const gender = (row['Gender'] || '').trim().toLowerCase();
-        if (!gender)                          errors.push('Missing Gender');
-        else if (!VALID_GENDERS.includes(gender)) errors.push(`Invalid Gender "${row['Gender']}" — use: Female or Male`);
+        const genderRaw = String(row['Gender'] ?? '').trim();
+        if (!genderRaw)                       errors.push('Missing Gender');
+        else if (!normalizeGender(genderRaw)) errors.push(`Invalid Gender "${row['Gender']}" — use: Boys, Girls or Coed`);
         if (!row['Venue'])  errors.push('Missing Venue');
         // ⚠️ Field is NOT required — same rule as updateCreateBtn(), see the note
         // there. Plenty of venues genuinely have no fields; Central Assign lists
@@ -3762,8 +3781,10 @@
             const { errors } = validateCSVRow(row);
             if (errors.length) { skipped++; return; }
             const age        = (row['Age Group'] || '').trim().toUpperCase();
-            const genderRaw  = (row['Gender'] || '').trim().toLowerCase();
-            const normGender = (genderRaw === 'f' || genderRaw === 'female') ? 'Female' : 'Male';
+            // Validation already rejected anything unrecognised, so this cannot
+            // fall through to a default — the old code turned every non-female
+            // value, Coed included, into Male.
+            const normGender = normalizeGender(row['Gender']);
             const gameType   = normalizeGameType(row['Game Type'] || '');
             const venueMatch = matchVenue(row['Venue'] || '');
             const fieldMatch = venueMatch ? matchField(row['Field'] || '', venueMatch.id) : matchField(row['Field'] || '', null);
