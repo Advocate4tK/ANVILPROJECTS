@@ -883,7 +883,7 @@
     }
 
     function townOfVenue(venueId) {
-        const rec = venueId ? venueMap[String(venueId)] : null;
+        const rec = venueFor(venueId);
         const raw = rec && rec.city ? String(rec.city).trim().toLowerCase() : '';
         if (!raw) return null;
         // Lowercase on the way OUT as well as in. The alias table returns proper
@@ -901,6 +901,8 @@
 
         // Only what the CURRENT week filter shows — the map should agree with
         // the list sitting behind it, or it is describing a different page.
+        const CT_TOWN_KEYS = new Set(CT_TOWNS.towns.map(t => t.n.toLowerCase()));
+
         let games = _allOpenGames || [];
         if (_weekFilter !== 'all') {
             const b = getWeekBounds(_weekFilter === 'this' ? 0 : 1);
@@ -914,8 +916,12 @@
             if (!club) return;
             const e = byClub[club] || (byClub[club] = { towns: new Set(), games: 0 });
             e.games++;
+            // Count a game as unplaced unless its town is REALLY one of the 169.
+            // Checking only "did we get a string" hid the collision that started
+            // this: venue 648 resolved to "Ludlowe", which is not a Connecticut
+            // town, so nothing shaded and nothing was reported either.
             const t = townOfVenue(g['Venue ID']);
-            if (t) e.towns.add(t); else noTown++;
+            if (t && CT_TOWN_KEYS.has(t)) e.towns.add(t); else noTown++;
         });
 
         const clubs = Object.keys(byClub).sort();
@@ -1121,7 +1127,28 @@
         'RECREATION':   { cls: 'badge-rec', label: 'Recreation' },
     };
 
-    let venueMap = {};
+    // ⚠️ TWO ID SPACES, and they overlap. A venue has our row id AND Central
+    // Assign's "Venue ID", and 219 of the 546 venues have a row id that is also
+    // some OTHER venue's CA id. Both used to be written into one flat object, so
+    // whichever landed last won:
+    //
+    //     row id 648 = Lusitano Stadium, Ludlowe
+    //     CA  id 648 = Blackledge Field, Marlborough   <- a real RHAMYS game
+    //
+    // The game asked for 648 and got Ludlowe. This is the page that tells a
+    // referee where to drive, so a collision does not just lose a shape on the
+    // map — it prints the wrong venue, wrong town and wrong address on the card.
+    // Games carry the CA id, so that map is asked first and the row id is only a
+    // fallback for legacy rows that stored ours.
+    let venueByCaId  = {};
+    let venueByRowId = {};
+    let venueMap = {};   // legacy alias; nothing new should read it
+
+    function venueFor(id) {
+        if (id === null || id === undefined || id === '') return null;
+        const k = String(id);
+        return venueByCaId[k] || venueByRowId[k] || null;
+    }
     let _singleRef = {}; // "Club Name|AgeGroup" -> true when single-ref (event crew rule ar1=ar2=false)
 
     function isFilled(v) {
@@ -1232,7 +1259,7 @@
         const away      = g['Away Team'] || '?';
         const time      = formatTime(g['time'] || g['Time'] || '');
         const venueId   = g['Venue ID'];
-        const venueRec  = venueId ? (venueMap[String(venueId)] || null) : null;
+        const venueRec  = venueFor(venueId);
         const venue     = venueRec ? venueRec.name : '';
         const town      = venueRec ? venueRec.city : '';
         const fullAddr  = venueRec
@@ -1480,7 +1507,7 @@
             // name. A referee's first question about a game is "where is it" —
             // both before they take one and, just as often, afterwards when
             // they're trying to remember where they're driving.
-            venueMap = {};
+            venueMap = {}; venueByCaId = {}; venueByRowId = {};
             (venueRes.data || []).forEach(v => {
                 const rec = {
                     name:    v['Venue Name'] || v.name || '',
@@ -1488,8 +1515,11 @@
                     address: v.address || '',
                     state:   v.state   || ''
                 };
-                if (v['Venue ID']) venueMap[String(v['Venue ID'])] = rec;
+                if (v['Venue ID']) venueByCaId[String(v['Venue ID'])] = rec;
+                if (v.id)          venueByRowId[String(v.id)]         = rec;
+                // Legacy alias keeps working, CA id winning where they collide.
                 if (v.id)          venueMap[String(v.id)]          = rec;
+                if (v['Venue ID']) venueMap[String(v['Venue ID'])] = rec;
             });
 
             // Single-ref crew rules from enabled events (age_groups with both ARs off → one ref)
