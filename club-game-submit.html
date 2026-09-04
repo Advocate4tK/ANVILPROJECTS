@@ -1900,12 +1900,32 @@
         document.getElementById('progressText').textContent = 'Checking for duplicates…';
         let existingKeys = new Set();
         try {
-            const existing = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 1000 });
-            existing.forEach(r => {
-                existingKeys.add(gameDupKey(r.fields['Date'], r.fields['Home Team'], r.fields['Away Team'],
-                                            r.fields['Time'], r.fields['Age Group']));
-            });
-        } catch(e) { console.warn('Duplicate check failed:', e); }
+            // Only games on the SAME DATES can be duplicates of what is being
+            // submitted, so ask for those instead of pulling the table.
+            //
+            // This used to fetch every game with maxRecords: 1000. Under 1000 rows
+            // that is merely wasteful; over it, the cap silently returns a subset
+            // and the check goes half-blind — and the failure flips direction, from
+            // rejecting good games to accepting real duplicates. That exact cap
+            // already cost us once on referees, where it hid rows and duplicated 81.
+            const dates = [...new Set(pending.map(g => g.date).filter(Boolean))];
+            if (dates.length) {
+                const { data, error } = await supabaseClient.client
+                    .from('games')
+                    .select('date, time, "Home Team", "Away Team", "Age Group"')
+                    .in('date', dates);
+                if (error) throw error;
+                (data || []).forEach(r => {
+                    existingKeys.add(gameDupKey(r.date, r['Home Team'], r['Away Team'],
+                                                r.time, r['Age Group']));
+                });
+            }
+        } catch(e) {
+            // A failed lookup must not block a submission. It means duplicates are
+            // not caught this run, which the club can see and undo; a blocked
+            // upload is worse and less visible.
+            console.warn('Duplicate check failed:', e);
+        }
 
         for (let i = 0; i < stagedGames.length; i++) {
             const g = stagedGames[i];
@@ -2304,7 +2324,14 @@
                     ? airtableClient.getRecords('tournament_games', { maxRecords: 500, extraEq: [{ col: 'Source Club', val: currentTournament.key.toUpperCase() }] })
                     : currentLeagueLabel
                         ? airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 500, extraEq: [{ col: 'Source Club', val: currentLeagueLabel }] })
-                        : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 500 }),
+                        // Deliberately NOT scoped server-side. The client-side owner
+                        // test below is a SUBSTRING match — Source Club "East Haddam
+                        // Rec" belongs to the club "East Haddam" — and an exact
+                        // server filter would quietly drop those rows. So the cap is
+                        // raised instead: 500 was already within reach of a single
+                        // NECONN season (133 games) and the spring import is 917, at
+                        // which point a club silently stops seeing its own history.
+                        : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 5000 }),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 5000 }),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 200 })
             ]);
