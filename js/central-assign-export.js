@@ -824,13 +824,6 @@ exportBtn.addEventListener('click', () => {
         // separate question from how many positions CA expects to exist.
         const crew = ageKey === 'U8' ? 1 : 3;
 
-        // Whether we actually USE ARs is still ours, and it drives the AR fee.
-        // A solo-centre event (GSL) gets 3 slots in CA but a $0 AR fee, so an
-        // unfilled AR position never implies a payment.
-        const usesARs = eventCrewMap[src]?.[ageKey] != null
-            ? eventCrewMap[src][ageKey] > 1
-            : true;
-
         // Fees — event age_group rates first, then club pay_rates, then defaults
         //
         // ageBand takes ageKEY, not the raw age group. Handed "U12 Silver" it
@@ -843,6 +836,23 @@ exportBtn.addEventListener('click', () => {
         const clubId   = clubIdMap[src];
         const evRates  = eventRateMap[src]?.[ageKey] || null;
         const clubRate = (clubId && band) ? (payRateByClubId[clubId]?.[band] || null) : null;
+
+        // Whether we actually USE ARs is ours, and it drives the AR fee.
+        // A solo-centre event (GSL) gets 3 slots in CA but a $0 AR fee, so an
+        // unfilled AR position never implies a payment.
+        //
+        // ⚠️ A NULL AR rate on a club's pay_rates means THIS CLUB DOES NOT USE
+        // ARs at that age — it is not "no rate recorded, use the default".
+        // NECONN pays no AR at U8 or U10 and says so on its own profile card,
+        // and every U10 game was still exporting an AR fee of 25 because null
+        // fell through to DEFAULTS.arRate. A missing rate was reading as a
+        // missing entry rather than as the policy it is.
+        const clubHasRow    = !!clubRate;
+        const clubSaysNoARs = clubHasRow && (clubRate.ar === null || clubRate.ar === undefined);
+        const usesARs = eventCrewMap[src]?.[ageKey] != null ? eventCrewMap[src][ageKey] > 1
+                      : clubSaysNoARs                       ? false
+                      : true;
+
         const refFee   = evRates?.center ?? clubRate?.center ?? DEFAULTS.refRate;
         const arFee    = usesARs ? (evRates?.ar ?? clubRate?.ar ?? DEFAULTS.arRate) : 0;
         const fourthFee = DEFAULTS.fourthRate;
