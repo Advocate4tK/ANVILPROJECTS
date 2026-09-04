@@ -2418,13 +2418,28 @@
     }
 
     function goToStep3() {
-        // Validate at least one venue with a name
-        const vBlocks = document.querySelectorAll('.venue-block');
+        // An EMPTY venue block is not an error — it is a slot somebody opened and
+        // did not use. Blocking on it stranded Tod on Canterbury with two good
+        // venues and one untouched third, with no hint that the fix was to
+        // remove a row he had not filled in.
+        //
+        // So: drop the blank ones, then require that something is left. A
+        // half-filled block (fields added, no venue chosen) IS still an error —
+        // that is a real mistake rather than an unused slot.
+        const vBlocks = [...document.querySelectorAll('.venue-block')];
         if (vBlocks.length === 0) { alert('Add at least one venue.'); return; }
+
+        const isBlank = vb => !vb.querySelector('.venue-name-input').value.trim()
+                           && !vb.querySelector('.field-row');
+        vBlocks.filter(isBlank).forEach(vb => vb.remove());
+
+        const kept = [...document.querySelectorAll('.venue-block')];
+        if (kept.length === 0) { alert('Add at least one venue.'); return; }
+
         let valid = true;
-        vBlocks.forEach((vb, i) => {
+        kept.forEach((vb, i) => {
             const vName = vb.querySelector('.venue-name-input').value.trim();
-            if (!vName) { alert(`Venue ${i+1}: please select a venue.`); valid = false; }
+            if (!vName) { alert(`Venue ${i+1}: please select a venue, or remove the block.`); valid = false; }
         });
         if (!valid) return;
         if (_clubTypeMode === 'reference') {
