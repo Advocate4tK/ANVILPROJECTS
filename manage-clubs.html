@@ -750,6 +750,11 @@
                     <button class="section-toggle-btn" onclick="toggleWizard(this)">Show Wizard ▾</button>
                 </div>
                 <div id="wizardContent" style="display:none; margin-top:20px; padding-top:20px; border-top:1px solid #e2d9ce;">
+                    <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-bottom:10px;">
+                        <span style="font-size:0.74rem; color:#8a8378;">Progress is kept in this browser until you create the club.</span>
+                        <button type="button" onclick="saveWizardDraft()" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:6px 14px; border-radius:8px; font-weight:700; font-size:0.78rem; cursor:pointer; font-family:'DM Sans',sans-serif;">💾 Save &amp; finish later</button>
+                        <button type="button" onclick="if(confirm('Discard the saved draft?')){clearWizardDraft();alert('Draft discarded.');}" style="background:none; border:1px solid #e2d9ce; color:#8a8378; padding:6px 12px; border-radius:8px; font-weight:700; font-size:0.78rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Discard draft</button>
+                    </div>
 
             <!-- Entity type selector -->
             <div style="margin-bottom:20px;">
@@ -1225,6 +1230,9 @@
         btn.textContent = shown ? 'Show Wizard ▾' : 'Hide Wizard ▴';
         if (!shown) _completeSteps = null;  // opening fresh for a new entity — not complete-mode
         if (!shown && venueCount === 0) addVenue();
+        // Opening is the only sensible moment to ask. Offered, never forced —
+        // a stale draft must not quietly hijack a new club.
+        if (!shown) { try { offerWizardDraft(); } catch (e) { console.error(e); } }
     }
 
     if (document.readyState === 'loading') {
@@ -1713,7 +1721,168 @@
     }
 
     // ── Step Navigation ───────────────────────────────────────────────────────
+
+    // ── Wizard drafts ────────────────────────────────────────────────────────
+    // Nothing in this wizard touches the database until Review & Create, which
+    // is deliberate: a half-built club that exists is worse than one that has to
+    // be retyped — it turns up in club lists, dropdowns, exports and counts while
+    // it is still missing its venues and its billing.
+    //
+    // So the draft lives in the browser instead. It records every step, not just
+    // the one you are on, and nothing is written anywhere else until you finish.
+    // Per-browser by nature; if this ever needs to follow Tod between machines
+    // the same payload moves to a drafts table, which is a bigger job and should
+    // not be the first one.
+    const WIZ_DRAFT_KEY = 'rt_wizard_draft_v1';
+    let _wizStep = 1;   // kept in step-of, so a draft can reopen where it closed
+
+    function wizSnapshot() {
+        const snap = {
+            v: 1,
+            savedAt: Date.now(),
+            step: _wizStep,
+            entityType: window._entityType || null,
+            clubTypeMode: typeof _clubTypeMode !== 'undefined' ? _clubTypeMode : null,
+            editClubId: typeof _editClubId !== 'undefined' ? _editClubId : null,
+            simple: {},
+            venues: [],
+            ageGroups: [],
+        };
+        // Everything with an id — covers every static field on every step without
+        // having to enumerate them, so a field added later is saved for free.
+        document.querySelectorAll('#wizardContent input[id], #wizardContent select[id], #wizardContent textarea[id]')
+            .forEach(el => {
+                snap.simple[el.id] = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
+            });
+        // Venue blocks are built at runtime, so they are captured structurally:
+        // the hidden source-of-truth inputs the review and create steps read, plus
+        // each field row.
+        document.querySelectorAll('.venue-block').forEach(vb => {
+            const g = sel => vb.querySelector(sel)?.value ?? '';
+            snap.venues.push({
+                select: g('.venue-select'),
+                name:   g('.venue-name-input'),
+                addr:   g('.venue-addr-input'),
+                city:   g('.venue-city-input'),
+                state:  g('.venue-state-input'),
+                zip:    g('.venue-zip-input'),
+                caid:   g('.venue-caid-input'),
+                fields: [...vb.querySelectorAll('.field-row input')].map(i => i.value),
+            });
+        });
+        document.querySelectorAll('#ageGroupList .age-group-row').forEach(row => {
+            const g = sel => row.querySelector(sel)?.value ?? '';
+            snap.ageGroups.push({
+                name: g('.ag-name'), format: g('.ag-format'), half: g('.ag-half'),
+                ar1: !!row.querySelector('.ag-ar1')?.checked,
+                ar2: !!row.querySelector('.ag-ar2')?.checked,
+            });
+        });
+        return snap;
+    }
+
+    function wizDraftLabel(d) {
+        const who = d.simple?.clubName || d.simple?.wizClubName || d.simple?.tournName || 'Untitled';
+        const when = new Date(d.savedAt).toLocaleString('en-US',
+            { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        return `${who} — saved ${when}, step ${d.step} of 7`;
+    }
+
+    function saveWizardDraft(quiet) {
+        try {
+            localStorage.setItem(WIZ_DRAFT_KEY, JSON.stringify(wizSnapshot()));
+            if (!quiet) alert('Saved. Reopen the wizard and it will offer to pick up here.');
+        } catch (e) {
+            console.error('draft save failed', e);
+            if (!quiet) alert('Could not save the draft: ' + e.message);
+        }
+    }
+
+    function loadWizardDraft() {
+        try { return JSON.parse(localStorage.getItem(WIZ_DRAFT_KEY) || 'null'); }
+        catch { return null; }
+    }
+
+    function clearWizardDraft() { try { localStorage.removeItem(WIZ_DRAFT_KEY); } catch {} }
+
+    // Restoring rebuilds the runtime blocks first, then fills them — addVenue and
+    // addField own the markup, and duplicating it here is how the two would drift.
+    function applyWizardDraft(d) {
+        if (!d) return;
+        if (d.entityType) window._entityType = d.entityType;
+        if (d.clubTypeMode) _clubTypeMode = d.clubTypeMode;
+
+        Object.entries(d.simple || {}).forEach(([id, val]) => {
+            const el = document.getElementById(id);
+            if (!el) return;                         // a field that has since moved
+            if (el.type === 'checkbox' || el.type === 'radio') el.checked = !!val;
+            else el.value = val;
+        });
+
+        const vWrap = document.getElementById('venueList');
+        if (vWrap && (d.venues || []).length) {
+            vWrap.innerHTML = ''; venueCount = 0; fieldCounts = {};
+            d.venues.forEach(v => {
+                const idx = venueCount;              // addVenue increments it
+                addVenue();
+                const vb = document.getElementById('venue-' + idx);
+                if (!vb) return;
+                const set = (sel, val) => { const el = vb.querySelector(sel); if (el) el.value = val; };
+                set('.venue-name-input', v.name);  set('.venue-addr-input', v.addr);
+                set('.venue-city-input', v.city);  set('.venue-state-input', v.state);
+                set('.venue-zip-input',  v.zip);   set('.venue-caid-input', v.caid);
+                const selEl = vb.querySelector('.venue-select');
+                if (selEl) {
+                    selEl.value = v.select;
+                    // Re-run the change handler so the "new venue" inputs and the
+                    // address preview come back in the state they were left in.
+                    if (typeof onWizardVenueChange === 'function') onWizardVenueChange(idx);
+                    selEl.value = v.select;
+                }
+                (v.fields || []).forEach((fv, fi) => {
+                    if (typeof addField === 'function') addField(idx);
+                    const inputs = vb.querySelectorAll('.field-row input');
+                    if (inputs[fi]) inputs[fi].value = fv;
+                });
+            });
+        }
+
+        const agWrap = document.getElementById('ageGroupList');
+        if (agWrap && (d.ageGroups || []).length && typeof addAgeGroupRow === 'function') {
+            agWrap.innerHTML = '';
+            d.ageGroups.forEach((a, i) => {
+                addAgeGroupRow();
+                const row = agWrap.querySelectorAll('.age-group-row')[i];
+                if (!row) return;
+                const set = (sel, val) => { const el = row.querySelector(sel); if (el) el.value = val; };
+                set('.ag-name', a.name); set('.ag-format', a.format); set('.ag-half', a.half);
+                const c1 = row.querySelector('.ag-ar1'); if (c1) c1.checked = !!a.ar1;
+                const c2 = row.querySelector('.ag-ar2'); if (c2) c2.checked = !!a.ar2;
+            });
+        }
+
+        goToStep(d.step || 1);
+    }
+
+    // Offered, never forced: a stale draft must not quietly hijack a new club, so
+    // it names what it found and what step it stopped on.
+    function offerWizardDraft() {
+        const d = loadWizardDraft();
+        if (!d) return false;
+        if (!confirm(`Unfinished wizard found:\n\n${wizDraftLabel(d)}\n\nPick up where you left off?\n\n(Cancel starts fresh and discards it.)`)) {
+            clearWizardDraft();
+            return false;
+        }
+        applyWizardDraft(d);
+        return true;
+    }
+
     function goToStep(n, skipScroll = false) {
+        _wizStep = n;
+        // Every step transition is a save point — "save each section" means the
+        // work is safe the moment you leave the section, not when you remember
+        // to press something.
+        try { if (document.getElementById('wizardContent')) saveWizardDraft(true); } catch {}
         document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
         document.getElementById('step-' + n).classList.add('active');
         const isTourney = window._entityType === 'tournament';
@@ -3199,6 +3368,7 @@
             log('', '');
             log('<button type="button" onclick="refreshStatusAfterSave()" style="background:#09142a; color:#fff; border:none; padding:9px 22px; border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; font-family:\'DM Sans\',sans-serif;">↻ Refresh Status — view it in Entity Status</button>', 'info');
             _editClubId = null;
+            clearWizardDraft();   // it exists for real now; a leftover draft would only reopen it
             document.getElementById('createBtn').textContent = 'Create Club';
 
             createBtn.textContent = '✓ Created';
