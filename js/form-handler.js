@@ -387,8 +387,24 @@ document.addEventListener('DOMContentLoaded', function() {
         const lastName  = document.getElementById('refereeLastName').value.trim();
 
         const locations = Array.from(document.querySelectorAll('input[name="locations"]:checked')).map(cb => cb.value);
+
+        // ⚠️ This is the ORDINARY per-day path — the one nearly every submission
+        // uses — and it wrote a typed name with no email and no referee_id. So a
+        // row could not be tied back to the person who made it, and a referee who
+        // signs "Edie Ranta" instead of "Edith Ranta" appeared on the assignor's
+        // board as a second human being. She did it twice, with two spellings,
+        // and became three people on one game.
+        //
+        // The record we matched at the identify step is the authority: prefer its
+        // name, carry its email, and store its id. An id cannot be nicknamed.
+        const refName  = window._foundRefName || `${firstName} ${lastName}`;
+        const refEmail = (document.getElementById('refereeEmail')?.value.trim())
+                      || window._foundRefEmail || '';
+
         const formData = {
-            'Referee Name':       `${firstName} ${lastName}`,
+            'Referee Name':       refName,
+            'Referee Email':      refEmail,
+            'referee_id':         window._foundRefId || null,
             'Date':               dayRow.querySelector('input[name="availableDate[]"]').value,
             'Start Time':         dayRow.querySelector('[name="startTime[]"]').value,
             'End Time':           dayRow.querySelector('[name="endTime[]"]').value,
