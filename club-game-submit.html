@@ -3749,20 +3749,131 @@
                caEsc(r.club.name) + '</span>';
     }
 
-    function renderCSVPreview(rows) {
-        let valid = 0, warned = 0, invalid = 0;
+    // ── Clash detection for the upload preview ───────────────────────────────
+    // Two things a club can only fix BEFORE it submits, and until now learned
+    // about afterwards or not at all:
+    //
+    //   1. the game is already in the system     — it saw "✓ Ready", submitted,
+    //                                              and got "5 skipped"
+    //   2. that field is already booked then     — nobody was told at all, and a
+    //                                              referee turns up to two games
+    //
+    // Both are answered by the games already on those dates, which is one query.
+
+    let _previewExisting = [];   // games on the dates in the file being previewed
+
+    async function loadPreviewClashData(rows) {
+        _previewExisting = [];
+        const dates = [...new Set(rows.map(r => normalizeDate(r['Date'])).filter(Boolean))];
+        if (!dates.length) return;
+        try {
+            const { data, error } = await supabaseClient.client
+                .from('games')
+                .select('id, date, time, "Age Group", "Home Team", "Away Team", "Venue ID", field')
+                .in('date', dates);
+            if (error) throw error;
+            _previewExisting = data || [];
+        } catch (e) {
+            // A failed lookup must not stop a club previewing its file. It loses
+            // the two advisory flags, not the upload.
+            console.warn('Preview clash lookup failed:', e);
+        }
+    }
+
+    // How long a game occupies its field, in minutes. Halves plus a break, from
+    // the same age bands central-assign-export.js uses, so the two agree about
+    // what a U9 is. Unknown ages get 90, which is generous on purpose: a wrong
+    // OVERLAP warning is cheap, a missed one costs somebody a wasted Saturday.
+    function gameSpanMinutes(ageGroup) {
+        const a = String(ageGroup || '').trim().toUpperCase().replace(/\s.*$/, '').replace(/[BG]$/, '');
+        if (['U6','U7','U8','U9','U10'].includes(a)) return 50;    // 2 x 20 + break
+        if (['U11','U12'].includes(a))               return 80;    // 2 x 35 + break
+        if (['U13','U14','U15','U16','U17','U18'].includes(a)) return 90;
+        if (a === 'U19')                             return 100;
+        return 90;
+    }
+
+    const minutesOf = hhmm => {
+        const m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm || ''));
+        return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+    };
+
+    // Same venue, same field, overlapping windows. Field is compared by NAME
+    // because that is what both sides reliably carry — a CA field number is
+    // absent on most of them.
+    function findFieldClash(date, time, age, venueId, fieldName, others) {
+        const start = minutesOf(time);
+        if (!venueId || start == null) return null;
+        const fn = String(fieldName || '').trim().toLowerCase();
+        const end = start + gameSpanMinutes(age);
+        for (const o of others) {
+            if (String(o.venueId) !== String(venueId)) continue;
+            if (String(o.fieldName || '').trim().toLowerCase() !== fn) continue;
+            const oStart = minutesOf(o.time);
+            if (oStart == null) continue;
+            const oEnd = oStart + gameSpanMinutes(o.age);
+            if (start < oEnd && oStart < end) return o;   // real interval overlap
+        }
+        return null;
+    }
+
+    async function renderCSVPreview(rows) {
+        await loadPreviewClashData(rows);
+
+        // Rows already accepted from THIS file count as occupants too — a club
+        // can double-book itself inside one spreadsheet, and nothing downstream
+        // would ever have caught that.
+        const seenThisFile = [];
+        let valid = 0, warned = 0, invalid = 0, dupes = 0;
         let html = `<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Home Club</th><th>Home Team</th><th>Away Club</th><th>Away Team</th><th>Age</th><th>Gender</th><th>Type</th><th>Venue</th><th>Field</th><th>Notes</th><th>Status</th></tr></thead><tbody>`;
         rows.forEach((row, i) => {
             const { errors, warnings } = validateCSVRow(row);
-            const hasErrors = errors.length > 0, hasWarnings = warnings.length > 0;
+
+            const rDate = normalizeDate(row['Date']);
+            const rTime = normalizeTime(row['Time']);
+            const rAge  = (row['Age Group'] || '').trim();
+            const rv2   = matchVenue(row['Venue'] || '');
+            const rf2   = rv2 ? matchField(row['Field'] || '', rv2.id) : null;
+            const rVenueId  = rv2 ? rv2.id : null;
+            const rFieldName = rf2 ? rf2.name : (row['Field'] || '');
+
+            // 1. Is this game already in the system? Same key the submit path
+            //    uses, so what the preview promises is what submit does.
+            const isDup = !errors.length && _previewExisting.some(g =>
+                gameDupKey(g.date, g['Home Team'], g['Away Team'], g.time, g['Age Group'])
+                === gameDupKey(rDate, row['Home Team'], row['Away Team'], rTime, rAge));
+
+            // 2. Is that field taken then? Existing games first, then rows above
+            //    this one in the same file.
+            const clash = (!errors.length && !isDup) ? findFieldClash(rDate, rTime, rAge, rVenueId, rFieldName,
+                _previewExisting
+                    .filter(g => g.date === rDate)
+                    .map(g => ({ venueId: g['Venue ID'], fieldName: g.field, time: g.time,
+                                 age: g['Age Group'], label: `${g['Home Team']} vs ${g['Away Team']}` }))
+                    .concat(seenThisFile)) : null;
+
+            if (!errors.length && !isDup) {
+                seenThisFile.push({ venueId: rVenueId, fieldName: rFieldName, time: rTime,
+                                    age: rAge, label: `row ${i + 1}` });
+            }
+
+            const hasErrors = errors.length > 0;
+            const hasWarnings = warnings.length > 0 || !!clash;
             if (hasErrors) invalid++;
+            else if (isDup) dupes++;
             else if (hasWarnings) warned++;
             else valid++;
+
             const rowClass = hasErrors ? 'csv-row-invalid' : '';
+            const clashMsg = clash
+                ? `${rFieldName ? rFieldName + ' at ' : ''}${rv2 ? rv2.name : ''} is already in use at ${formatTime(clash.time)} — ${clash.label}`
+                : '';
             const statusHtml = hasErrors
                 ? `<span style="color:#991b1b;font-weight:700;font-size:0.72rem;">✗ ${errors[0]}</span>`
-                : hasWarnings
-                ? `<span style="color:#92400e;font-weight:700;font-size:0.72rem;">⚠ ${warnings[0]}</span>`
+                : isDup
+                ? `<span style="color:#6b7280;font-weight:700;font-size:0.72rem;">⏭ Already in the system — will be skipped</span>`
+                : (warnings.length || clash)
+                ? `<span style="color:#92400e;font-weight:700;font-size:0.72rem;">⚠ ${warnings[0] || clashMsg}</span>`
                 : `<span style="color:#14532d;font-weight:700;font-size:0.72rem;">✓ Ready</span>`;
             // Show the PARSED date and time, not the raw cell. An Excel date
             // cell holds 46277 and 9:00 AM holds 0.375 — real values, but
@@ -3801,7 +3912,8 @@
         countEl.innerHTML =
             `<strong>${rows.length}</strong> rows — ` +
             `<span style="color:#14532d;font-weight:700;">${valid} ready</span>` +
-            (warned   ? ` &nbsp;·&nbsp; <span style="color:#92400e;font-weight:700;">${warned} venue warnings (will still add)</span>` : '') +
+            (dupes    ? ` &nbsp;·&nbsp; <span style="color:#6b7280;font-weight:700;">${dupes} already in the system</span>` : '') +
+            (warned   ? ` &nbsp;·&nbsp; <span style="color:#92400e;font-weight:700;">${warned} warnings (will still add)</span>` : '') +
             (invalid  ? ` &nbsp;·&nbsp; <span style="color:#991b1b;font-weight:700;">${invalid} errors (will be skipped)</span>` : '');
         document.getElementById('csvPreviewSection').style.display = 'block';
         document.getElementById('csvAddResult').textContent = '';
