@@ -3209,6 +3209,17 @@
         if (!want) return {};
         const real = caClubs.filter(c => !c.is_fallback);
 
+        // An EXACT name is a person's choice, so a fallback is allowed here:
+        // "Other" and "Referee Services Assignor" are in the dropdown and a club
+        // can pick either. Excluding them everywhere meant the picker offered a
+        // value the uploader then rejected — "Away Club \"Other\" is not a
+        // Central Assign club" — for a club Central Assign really does have.
+        //
+        // Everything BELOW this still works off `real`, because that is guessing:
+        // nothing should ever land on "Other" because an alias was close.
+        const named = caClubs.filter(c => caNorm(c.name) === want);
+        if (named.length === 1) return { club: named[0] };
+
         const exact = real.filter(c => caNorm(c.name) === want);
         if (exact.length === 1) return { club: exact[0] };
         if (exact.length > 1)   return { ambiguous: exact };
