@@ -758,8 +758,8 @@
         <div class="status-updated" id="lastUpdated">Loading…</div>
     </div>
 
-    <!-- Instruction line -->
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+    <!-- Instruction line — list only; it points at a list that is not on screen in map view -->
+    <div id="listHint" style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
         <span style="color:#00c853; font-size:1.1rem; animation: throb 1.2s ease-in-out infinite;">▶</span>
         <span style="color:#ef4444; font-size:0.82rem; font-weight:700; letter-spacing:0.3px;">Select a game below to view open slots and submit your availability</span>
     </div>
@@ -862,6 +862,11 @@
         document.getElementById('tabMap').classList.toggle('active', v === 'map');
         document.getElementById('gameList').style.display = v === 'list' ? '' : 'none';
         document.getElementById('mapPanel').classList.toggle('on', v === 'map');
+        // "Select a game below…" is an instruction about a list that is not on
+        // screen in map view. The open-game count stays: how many and where is
+        // exactly what the map is answering.
+        const hint = document.getElementById('listHint');
+        if (hint) hint.style.display = v === 'list' ? 'flex' : 'none';
         if (v === 'map') ensureMap();
     }
 
@@ -884,8 +889,16 @@
 
     function townOfVenue(venueId) {
         const rec = venueFor(venueId);
-        const raw = rec && rec.city ? String(rec.city).trim().toLowerCase() : '';
+        let raw = rec && rec.city ? String(rec.city).trim().toLowerCase() : '';
         if (!raw) return null;
+        // Expand a leading direction before anything else. Clubs abbreviate, and
+        // Connecticut is full of towns that start with one: NECONN's Bull Hill
+        // Park is entered as "No. Grosvenordale", which matched neither the alias
+        // table nor a town and would have vanished off the map the day they had
+        // an opening there. Handles So. Windsor, E. Hartford, W. Hartford and
+        // No. Haven for free.
+        raw = raw.replace(/^(n|no|s|so|e|w)\.?\s+/, (m, d) =>
+            ({ n:'north ', no:'north ', s:'south ', so:'south ', e:'east ', w:'west ' })[d]);
         // Lowercase on the way OUT as well as in. The alias table returns proper
         // capitals ("moodus" -> "East Haddam") and everything downstream keys
         // towns by t.n.toLowerCase(), so returning the alias as written made
