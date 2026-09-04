@@ -2496,6 +2496,10 @@
         let sheet3PeriodFilter    = null; // null = all, 'AM' = before noon, 'PM' = noon and after
         let sheet3MissingFilter   = false; // true = show only games with at least one empty assigned slot
         let sheet3RefClubFilter   = null;  // null = all, or a club name string (filters ref availability pane)
+        // AR-only: a standing Position Preference on the REFEREE record, not a
+        // per-date choice. Filterable because the moment you need it is the
+        // moment you are staring at an empty AR slot.
+        let sheet3RefAROnly       = false; // true = show only referees who prefer AR
         let sheet3RefDetailName   = null;  // null = full ref list; string = showing that ref's game schedule
         let sheet3OptRoles        = {}; // { 'gid-slot': 'CR' | 'AR' }
         let sheet3SelectedGameId  = null; // game row selection for ref pane filtering
@@ -2951,6 +2955,11 @@
 
         function sheet3SetTimeFilter(val) {
             sheet3TimeFilter = val || null;
+            renderSheet3View(sheet3LastFiltered);
+        }
+
+        function sheet3ToggleAROnly() {
+            sheet3RefAROnly = !sheet3RefAROnly;
             renderSheet3View(sheet3LastFiltered);
         }
 
@@ -3823,12 +3832,23 @@
                     let club = ref ? (ref.fields['Club Preference'] || '') : '';
                     try { const parsed = JSON.parse(club); if (Array.isArray(parsed)) club = parsed.join(', '); } catch {}
                     // Merge in what the ref put on their availability form for this date
-                    const availFormClubs = (availTimeByName[name.toLowerCase()]?.[date] || []).flatMap(s => s.clubs || []).join(', ');
-                    if (availFormClubs) club = club ? `${club}, ${availFormClubs}` : availFormClubs;
+                    // The referee record's Club Preference and the availability
+                    // form's club boxes hold the same club in different cases —
+                    // "RHAMYS" from the record, "rhamys" from the form — and
+                    // joining them printed "RHAMYS, rhamys" in one cell. Merge
+                    // case-insensitively, keeping the first spelling seen.
+                    const availFormClubs = (availTimeByName[name.toLowerCase()]?.[date] || []).flatMap(s => s.clubs || []);
+                    if (availFormClubs.length) {
+                        const seenClub = new Map();
+                        [...String(club || '').split(',').map(x => x.trim()).filter(Boolean), ...availFormClubs]
+                            .forEach(c => { const k = c.toLowerCase(); if (!seenClub.has(k)) seenClub.set(k, c); });
+                        club = [...seenClub.values()].join(', ');
+                    }
                     const exp  = ref ? (ref.fields['Years Reffing'] || '') : '';
                     const rawNote = (a.fields['Notes'] || '').trim();
                     const notes = sessionLabel.test(rawNote) ? '' : rawNote;
-                    refRows.push({ name, date, club, start, end, exp, notes });
+                    const arOnly = ref ? (ref.fields['Position Preference'] || '').trim() === 'AR Only' : false;
+                    refRows.push({ name, date, club, start, end, exp, notes, arOnly });
                 });
                 // Tag each row with conflict flag for selected game's date+time
                 // Conflict detection — tag each row, then hide or sort based on toggle
@@ -3889,6 +3909,7 @@
                         ${sheet3RefHiddenCols.includes('clubDate')  ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubDate"  style="${cell} ${rcw('clubDate')}">${r.date}</td>`}
                         <td data-rcol="clubName"  style="${cell} ${rcw('clubName')} cursor:pointer; ${s3unavail?'text-decoration:line-through;color:#aaa;':s3conflict?'color:#c0392b;':'color:#0f3460;text-decoration:underline dotted;'}" onclick="event.stopPropagation(); sheet3ShowRefDetail('${safeName}')" title="${s3conflict?'Already assigned at this time':'Click to see this ref\'s assignments'}">${r.name}${s3unavail?'<span style=\"font-size:0.65rem;font-weight:700;color:#c0392b;margin-left:4px;\">⚠</span>':s3conflict?'<span style=\"font-size:0.65rem;color:#c0392b;margin-left:4px;\">⚠ on another game</span>':''}${countBadge}</td>
                         ${sheet3RefHiddenCols.includes('clubExp')   ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubExp"   style="${cell} ${rcw('clubExp')}">${fmtExp(r.exp, true)}</td>`}
+                        ${sheet3RefHiddenCols.includes('clubAR')    ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubAR"    style="${cell} ${rcw('clubAR')} text-align:center;">${r.arOnly ? '<span style="font-size:0.6rem;font-weight:800;background:#e67e22;color:#fff;border-radius:3px;padding:1px 4px;">AR</span>' : ''}</td>`}
                         ${sheet3RefHiddenCols.includes('clubClub')  ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubClub"  style="${cell} ${rcw('clubClub')}">${r.club}</td>`}
                         ${sheet3RefHiddenCols.includes('clubStart') ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubStart" style="${cell} ${rcw('clubStart')}">${fmt(r.start)}</td>`}
                         ${sheet3RefHiddenCols.includes('clubEnd')   ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubEnd"   style="${cell} ${rcw('clubEnd')}">${fmt(r.end)}</td>`}
@@ -3896,8 +3917,9 @@
                         ${sheet3RefHiddenCols.includes('clubAssignorNotes') ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubAssignorNotes" style="${cell} ${rcw('clubAssignorNotes')} font-size:0.72rem; color:#6c3483; white-space:nowrap; cursor:pointer;" onclick="sheet3EditAssignorNote(event,'${safeName}')" title="Click to edit assignor note">${s3refObj?.fields['Assignor Notes'] || '<span style=\'color:#ccc;font-style:italic;\'>add note…</span>'}</td>`}
                         <td style="${cell} width:28px; text-align:center; padding:2px 4px;">${s3refObj ? `<button onclick="event.stopPropagation(); refToggleUnavailable('${s3refObj.id}')" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:1rem;padding:2px 5px;border-radius:3px;line-height:1;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background=''" title="Mark unavailable">✕</button>` : ''}</td>
                     </tr>`;
-                }).join('') : `<tr><td colspan="6" style="${cell} color:#888;">No availability submitted.</td></tr>`;
-                const displayRefRows = sheet3RefClubFilter ? refRows.filter(r => r.club === sheet3RefClubFilter) : refRows;
+                }).join('') : `<tr><td colspan="9" style="${cell} color:#888;">No availability submitted.</td></tr>`;
+                let displayRefRows = sheet3RefClubFilter ? refRows.filter(r => r.club === sheet3RefClubFilter) : refRows;
+                if (sheet3RefAROnly) displayRefRows = displayRefRows.filter(r => r.arOnly);
                 refRowsHtml = buildRefRowsHtml(displayRefRows);
                 const cHideX = key => `<span onclick="event.stopPropagation();sheet3RefHideCol('${key}');" style="cursor:pointer;color:#bbb;font-size:0.65rem;padding:0 2px;flex-shrink:0;" title="Hide column">✕</span>`;
                 const cShowStubTh = (key, label) => `<th style="${refStubTh}" onclick="sheet3RefShowCol('${key}')" title="Show ${label}">▶</th>`;
@@ -3908,6 +3930,8 @@
                     ${sheet3RefHiddenCols.includes('clubDate')  ? cShowStubTh('clubDate','Date')   : rTh('clubDate',  hdr, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Date${cHideX('clubDate')}</span>`)}
                     ${rTh('clubName', hdr, 'Name')}
                     ${sheet3RefHiddenCols.includes('clubExp')   ? cShowStubTh('clubExp','Ref Exp') : rTh('clubExp',   `${hdr} cursor:pointer; user-select:none;`, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;" onclick="sheet3SortRefs('exp')" title="Sort by experience">Ref Exp ${sheet3RefSort.col==='exp'?(sheet3RefSort.dir===1?'▲':'▼'):''}${cHideX('clubExp')}</span>`)}
+                    ${sheet3RefHiddenCols.includes('clubAR') ? cShowStubTh('clubAR','AR only')
+                        : rTh('clubAR', `${hdr} cursor:pointer; user-select:none;`, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;" onclick="sheet3ToggleAROnly()" title="Click to show only referees who prefer AR">AR <span style="background:${sheet3RefAROnly?'#e67e22':'#f0ece6'};color:${sheet3RefAROnly?'#fff':'#aaa'};border-radius:8px;padding:0 5px;font-size:0.65rem;font-weight:700;">${sheet3RefAROnly?'Only':'All'}</span>${cHideX('clubAR')}</span>`)}
                     ${clubColHeader}
                     ${sheet3RefHiddenCols.includes('clubStart') ? cShowStubTh('clubStart','Start') : rTh('clubStart', hdr, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">Start${cHideX('clubStart')}</span>`)}
                     ${sheet3RefHiddenCols.includes('clubEnd')   ? cShowStubTh('clubEnd','End')     : rTh('clubEnd',   hdr, `<span style="display:flex;align-items:center;gap:2px;justify-content:space-between;">End${cHideX('clubEnd')}</span>`)}
