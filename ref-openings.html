@@ -1447,7 +1447,12 @@
             // every week-filter change — scoped to only clubs/events/tournaments with games in the current week view.
 
             const [venueRes, ...allResults] = await Promise.all([
-                supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name, address, city, state').limit(500),
+                // 546 venue rows and counting: .limit(500) silently dropped 46 of them,
+                // whichever the database returned last. A game at one of those had no
+                // town and no address anywhere on the page — RHAMYS's Blackledge Field
+                // in Marlborough vanished off the map while still being counted in the
+                // legend, because the legend counts GAMES and the map needs the VENUE.
+                supabaseClient.client.from('venues').select('id, "Venue ID", "Venue Name", name, address, city, state').limit(5000),
                 ...CLUBS.map(club =>
                     supabaseClient.client.from('games').select('*')
                         .eq('Source Club', club).gte('date', today)
