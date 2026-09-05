@@ -6402,7 +6402,20 @@
                             const f = g.fields;
                             const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                             const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
-                            return `${dateLabel}  ${fmtTime(f['Time'])}  ${vName}  ${f['Age Group'] || ''}`;
+                            const age    = f['Age Group'] || '';
+                            const gender = f['Gender'] || '';
+                            // Gender dropped when the age group already carries it.
+                            const displayGender = (!gender || age.toLowerCase().includes(gender.toLowerCase()))
+                                ? '' : (' ' + gender);
+                            // Which positions are actually open, per the club's crew
+                            // rules. NECONN's U8s and U10s have no ARs, so those read
+                            // "CR" alone instead of advertising slots that do not exist.
+                            const soloOnly = _crewSoloOnly(f['Source Club'] || '', age);
+                            const openSlots = [];
+                            if (!f['Center Referee']?.trim()) openSlots.push('CR');
+                            if (!soloOnly && !f['AR 1']?.trim()) openSlots.push('AR');
+                            if (!soloOnly && !f['AR 2']?.trim()) openSlots.push('AR');
+                            return `${dateLabel}  ${fmtTime(f['Time'])}  ${vName}  ${age}${displayGender}  --  ${openSlots.join(' | ')}`;
                         }).join('\n');
                     }).join('\n\n');
 
