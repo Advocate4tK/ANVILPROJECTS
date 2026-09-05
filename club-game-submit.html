@@ -1552,8 +1552,13 @@
         try {
             const [clubs, venues, fieldRecs, refRecs] = await Promise.all([
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,     { maxRecords: 200 }),
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,    { maxRecords: 500 }),
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,    { maxRecords: 500 }),
+                // ⚠️ 500 was BELOW the row count. There are 546 venues and the
+                // query has no ORDER BY, so 46 arbitrary rows were dropped every
+                // load — silently, with no error. Canterbury's Manship Park and
+                // Sterling Community Center were among them, which is why four
+                // rounds of data fixes changed nothing in that dropdown.
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,    { maxRecords: 3000 }),
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,    { maxRecords: 3000 }),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 5000 })
             ]);
             refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
@@ -1664,9 +1669,12 @@
             (v.aliases || []).forEach(a => { if (a && a.trim()) bits.push(a.trim()); });
             const o  = (v.owner || '').trim();
             const ol = o.toLowerCase();
+            // Some venue names already carry the town — "Shepard Hill Elementary
+            // School, Plainfield" does not need "(Plainfield)" after it.
+            const nameHasOwner = ol && String(v.name || '').toLowerCase().includes(ol.split(/\s+/)[0]);
             // Owner shown only when it belongs to someone ELSE — a club does not
             // need telling that its own field is its own.
-            if (o && pageClub && ol !== pageClub && !ol.includes(pageClub) && !pageClub.includes(ol)) {
+            if (o && !nameHasOwner && pageClub && ol !== pageClub && !ol.includes(pageClub) && !pageClub.includes(ol)) {
                 bits.push(o.replace(/\s+(Youth\s+)?Soccer(\s+Club)?$/i, '').trim());
             }
             return bits.length ? ` (${bits.join(' · ')})` : '';
@@ -2413,7 +2421,7 @@
                         // which point a club silently stops seeing its own history.
                         : airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES, { maxRecords: 5000 }),
                 airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 5000 }),
-                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 200 })
+                airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 3000 })
             ]);
             refRecs.forEach(r => { refById[r.id] = r.fields['Name'] || ''; });
             // Rebuild allVenues so venue names resolve correctly — skip for event portals (they have custom venue list)
