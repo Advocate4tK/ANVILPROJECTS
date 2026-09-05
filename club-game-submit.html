@@ -1567,6 +1567,10 @@
                 rtCode: v.fields['rt_code'] || null,
                 state:  v.fields['state'] || null,
                 name:   v.fields['Venue Name'] || '',
+                // Who the venue belongs to. Carried so a SHARED venue can say so
+                // in the dropdown — Canterbury plays at Sterling Town Hall, which
+                // is Plainfield's ground.
+                owner:  v.fields['club_name'] || '',
             })).filter(v => v.name);
 
             allFields = fieldRecs.map(f => ({
@@ -1621,8 +1625,23 @@
             ? allVenues.filter(v => club.venueIds.includes(v.id))
             : allVenues.slice()).sort((a, b) => natCmp(a.name, b.name));
 
+        // ⚠️ The suffix is DISPLAY ONLY. The stored venue name is what goes into
+        // the Central Assign file, and CA matches venues by exact name — writing
+        // "Sterling Town Hall (Plainfield)" into the record would fail every
+        // import the way "Old KHS" and bare field numbers did on 2026-09-05.
+        const pageClub = (club?.name || '').trim().toLowerCase();
+        const ownerTag = v => {
+            const o = (v.owner || '').trim();
+            if (!o) return '';
+            const ol = o.toLowerCase();
+            // Only when it belongs to someone ELSE — a club does not need telling
+            // that its own field is its own.
+            if (!pageClub || ol === pageClub || ol.includes(pageClub) || pageClub.includes(ol)) return '';
+            // "Plainfield Youth Soccer" reads as "Plainfield" in a dropdown.
+            return ` (${o.replace(/\s+(Youth\s+)?Soccer(\s+Club)?$/i, '').trim()})`;
+        };
         venueEl.innerHTML = '<option value="">— Select venue —</option>'
-            + filtered.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+            + filtered.map(v => `<option value="${v.id}">${v.name}${ownerTag(v)}</option>`).join('');
         populateFields();
         // Legend follows the same list the dropdown shows, so a club sees its own
         // venues. Previously this only ever ran for tournaments.
