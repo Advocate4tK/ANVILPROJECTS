@@ -8280,7 +8280,16 @@
                 // Also check what the ref put on their availability form (Preferred Locations).
                 if (!showAllRefs && focusClubs.length > 0 && !query) {
                     const prefs = parsePreferences(r.fields['Club Preference']);
-                    const availFormClubs = Object.values(availTimeByName[name] || {}).flatMap(slot => slot.clubs || []);
+                    // ⚠️ availTimeByName[name][date] is an ARRAY of slots, not a slot.
+                    // Without .flat() this mapped over the per-date ARRAYS, read
+                    // .clubs off an Array (undefined) and returned [] every time —
+                    // so this gate only ever honoured the club preference on the
+                    // REFEREE RECORD, and any ref whose club came from their
+                    // availability form was invisible in Standard 2. Sheet 3 never
+                    // hit it because it indexes one date directly.
+                    const availFormClubs = Object.values(availTimeByName[name] || {})
+                        .flat()
+                        .flatMap(s => s.clubs || []);
                     const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availFormClubs])];
                     if (!merged.some(p => focusClubs.includes(p))) return false;
                 }
