@@ -1464,9 +1464,28 @@
                 // half-covered game doesn't cry wolf. Both list the ACTUAL games so the alarm is a
                 // punch-list you can click, not a "somewhere out there" haystack across 15 clubs.
                 const notCancelled = r => (r.fields['Game Status'] || '') !== 'Cancelled';
+                // ⚠️ THE KICKOFF TIME MATTERS. This used to parse the date only,
+                // so every game today was stamped MIDNIGHT — and midnight is
+                // within 7 hours of any moment, so a single unassigned game today
+                // forced CRITICAL all day, including games already played. Eric
+                // got "22 games need a center — within 7 hours!" at noon, listing
+                // a 9:00 AM game that had finished and games a week out.
+                //
+                // A game with NO time falls back to end of day: never falsely
+                // urgent, never silently dropped either.
                 const gapDate = r => {
-                    const p = String(r.fields['Date'] || r.fields['date'] || '').slice(0, 10).split('-').map(Number);
-                    return (p.length === 3 && p.every(n => !isNaN(n))) ? new Date(p[0], p[1] - 1, p[2]) : new Date(r.fields['Date'] || r.fields['date']);
+                    const ds = String(r.fields['Date'] || r.fields['date'] || '').slice(0, 10);
+                    const p  = ds.split('-').map(Number);
+                    if (p.length !== 3 || p.some(isNaN)) return new Date(r.fields['Date'] || r.fields['date']);
+                    const t  = String(r.fields['Time'] || r.fields['time'] || '').trim();
+                    const m  = t.match(/^(\d{1,2}):(\d{2})/);
+                    let hh = 23, mm = 59;
+                    if (m) {
+                        hh = parseInt(m[1], 10); mm = parseInt(m[2], 10);
+                        if (/pm/i.test(t) && hh < 12)  hh += 12;
+                        if (/am/i.test(t) && hh === 12) hh = 0;
+                    }
+                    return new Date(p[0], p[1] - 1, p[2], hh, mm);
                 };
                 const _filled = v => Array.isArray(v) ? v.length > 0 : !!v;
                 const noCenter = r => !_filled(r.fields['Center Referee']);
@@ -1486,32 +1505,42 @@
                 scopedGames.forEach(r => {
                     if (!notCancelled(r)) return;
                     const d = gapDate(r);
-                    if (isNaN(d) || d < startOfToday || d > in7Days) return;
+                    // Lower bound is NOW, not start of today: a game that has
+                    // already kicked off is not a staffing opportunity, and
+                    // counting it is how the alarm loses credibility.
+                    if (isNaN(d) || d < now || d > in7Days) return;
                     if (noCenter(r)) centerGaps.push({ r, d });
                     else if (arGap(r)) arGaps.push({ r, d });
                 });
 
-                const cWithin = limit => centerGaps.some(g => g.d <= limit);
-                const has7h  = cWithin(in7Hours);
-                const has24h = cWithin(in24Hours);
-                const has48h = cWithin(in48Hours);
-                const has72h = cWithin(in72Hours);
+                // Count the games IN the window being named. The old message
+                // printed every gap in the next seven days beside the words
+                // "within 7 hours", which is how 22 games became a false alarm.
+                const cIn = limit => centerGaps.filter(g => g.d <= limit).length;
+                const has7h  = cIn(in7Hours)  > 0;
+                const has24h = cIn(in24Hours) > 0;
+                const has48h = cIn(in48Hours) > 0;
+                const has72h = cIn(in72Hours) > 0;
                 const has7d  = centerGaps.length > 0;
                 const _n = (arr, unit) => `${arr.length} game${arr.length !== 1 ? 's' : ''} ${unit}`;
+                // "3 need a center in 7 hours · 22 in the next week" — the alarm
+                // and the workload are different numbers and both are worth saying.
+                const _win = (k, unit) => `${k} game${k !== 1 ? 's' : ''} need${k === 1 ? 's' : ''} a center ${unit}`
+                    + (centerGaps.length > k ? ` · ${centerGaps.length} in the next 7 days` : '');
 
                 let heatColor, heatLabel, heatMsg;
                 if (has7h) {
                     heatColor = '#6c3483'; heatLabel = '🟣 CRITICAL';
-                    heatMsg = `${_n(centerGaps, 'need a center')} — within 7 hours!`;
+                    heatMsg = _win(cIn(in7Hours), 'within 7 hours');
                 } else if (has24h) {
                     heatColor = '#e74c3c'; heatLabel = '🔴 URGENT';
-                    heatMsg = `${_n(centerGaps, 'need a center')} — within 24 hours.`;
+                    heatMsg = _win(cIn(in24Hours), 'within 24 hours');
                 } else if (has48h) {
                     heatColor = '#e67e22'; heatLabel = '🟠 WARNING';
-                    heatMsg = `${_n(centerGaps, 'need a center')} — within 48 hours.`;
+                    heatMsg = _win(cIn(in48Hours), 'within 48 hours');
                 } else if (has72h) {
                     heatColor = '#f1c40f'; heatLabel = '🟡 ATTENTION';
-                    heatMsg = `${_n(centerGaps, 'need a center')} — within 72 hours.`;
+                    heatMsg = _win(cIn(in72Hours), 'within 72 hours');
                 } else if (has7d) {
                     heatColor = '#3498db'; heatLabel = '🔵 PLAN AHEAD';
                     heatMsg = `${_n(centerGaps, 'need a center')} this week.`;
