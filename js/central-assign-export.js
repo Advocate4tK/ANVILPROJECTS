@@ -483,6 +483,8 @@ async function loadClubCheckboxes() {
                     data-club="${String(n).replace(/"/g, '&quot;')}" style="display:none;"></span>
             </label>`).join('');
         loadClubPendingCounts();
+        // Same trigger: by the time the club list is built the client is ready.
+        loadAwaitingConfirmation();
 
         // Append active tournaments with 🏆 badge
         const tournRes = await supabaseClient.client.from('tournaments').select('name').eq('status', 'active').order('name');
@@ -1204,6 +1206,91 @@ exportBtn.addEventListener('click', () => {
         renderGamesTable(loadedGames);
     });
 });
+
+// -- Previous uploads awaiting confirmation ----------------------------------
+// A game that has been exported but never confirmed is the one state that used
+// to be unreachable: the confirm bar lives for a few seconds after an export,
+// which is BEFORE Central Assign has said anything. By the time Tod knows the
+// answer it is gone, and the only way back was to guess a date range, uncheck
+// the right filters and reload the whole games table.
+//
+// So this stands on its own at the top of the page and loads itself.
+let _awaiting = [];
+
+async function loadAwaitingConfirmation() {
+    const host = document.getElementById('caAwaitingPanel');
+    if (!host) return;
+    try {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data, error } = await supabaseClient.client
+            .from('games')
+            .select('id, date, "Time", "Home Team", "Away Team", "Source Club", "Age Group", "Game Status", ca_exported_at')
+            .is('ca_imported_at', null)
+            .not('ca_exported_at', 'is', null)
+            .gte('date', today)
+            .order('date');
+        if (error) throw new Error(error.message);
+        _awaiting = (data || []).filter(g => (g['Game Status'] || '') !== 'Cancelled');
+        if (!_awaiting.length) { host.style.display = 'none'; return; }
+
+        const rows = _awaiting.map((g, i) => `
+            <label style="display:flex;align-items:center;gap:10px;padding:4px 0;font-size:0.84rem;cursor:pointer;">
+                <input type="checkbox" class="ca-await-cb" data-idx="${i}" checked>
+                <span style="min-width:150px;color:#ffd479;">${g['Source Club'] || ''}</span>
+                <span style="min-width:88px;">${g.date || ''}</span>
+                <span style="min-width:74px;">${fmtTime(g['Time']) || ''}</span>
+                <span style="min-width:48px;color:#9fb0c8;">${g['Age Group'] || ''}</span>
+                <span>${g['Home Team'] || '?'} vs ${g['Away Team'] || '?'}</span>
+            </label>`).join('');
+
+        host.style.display = 'block';
+        host.innerHTML = `<div style="background:#7d5a00;border:1px solid #e67e22;border-radius:10px;padding:14px 18px;color:#fff;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+                <span style="font-size:0.8rem;font-weight:900;letter-spacing:1.3px;color:#ffd479;">⚠ CONFIRM PREVIOUS UPLOADS</span>
+                <span style="font-size:0.88rem;flex:1;min-width:220px;">
+                    ${_awaiting.length} game${_awaiting.length === 1 ? '' : 's'} exported but never confirmed in Central Assign.
+                </span>
+                <button onclick="confirmAwaiting(true)" style="background:#1e8449;color:#fff;border:none;border-radius:6px;
+                    padding:6px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">✓ CA has these</button>
+                <button onclick="confirmAwaiting(false)" style="background:none;color:#ffd479;border:1px solid #e67e22;
+                    border-radius:6px;padding:6px 12px;font-weight:700;font-size:0.8rem;cursor:pointer;">Still not sent</button>
+            </div>
+            <div style="max-height:240px;overflow:auto;border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;">${rows}</div>
+            <div style="font-size:0.74rem;color:#e8d9b0;margin-top:8px;">
+                Untick anything Central Assign did not take. A game CA reported as a duplicate,
+                or as a field conflict against your own fixture, IS in CA — tick those.
+            </div>
+        </div>`;
+    } catch (e) {
+        console.warn('awaiting-confirmation panel unavailable', e);
+    }
+}
+
+// "Still not sent" clears ca_exported_at so the game drops back to plain red
+// rather than sitting amber forever — the honest state for a file that never
+// actually reached CA.
+async function confirmAwaiting(inCA) {
+    const picked = [...document.querySelectorAll('.ca-await-cb:checked')]
+        .map(cb => _awaiting[parseInt(cb.dataset.idx, 10)])
+        .filter(Boolean);
+    if (!picked.length) { alert('Nothing ticked.'); return; }
+    const ids = picked.map(g => g.id);
+    const patch = inCA ? { ca_imported_at: new Date().toISOString() } : { ca_exported_at: null };
+    try {
+        const { error } = await supabaseClient.client.from('games').update(patch).in('id', ids);
+        if (error) throw new Error(error.message);
+        await loadAwaitingConfirmation();
+        if (typeof loadClubPendingCounts === 'function') loadClubPendingCounts();
+        if (typeof loadedGames !== 'undefined' && loadedGames.length) {
+            loadedGames.forEach(rec => {
+                if (ids.includes(parseInt(rec.id, 10))) Object.assign(rec.fields, patch);
+            });
+            renderGamesTable(loadedGames);
+        }
+    } catch (e) {
+        alert('Could not update: ' + e.message);
+    }
+}
 
 // -- Per-club backlog on the club checkboxes ---------------------------------
 // Same universe as the admin banner and the workstation pills: ALL upcoming
