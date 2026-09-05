@@ -183,6 +183,7 @@
                         <div class="card-icon">📤</div>
                         <h2>Central Assign Export</h2>
                         <p>Download a file ready to upload to Central Assign</p>
+                        <div id="caPendingLine" style="display:none; margin:0 0 10px;"></div>
                         <a href="central-assign-export.html" class="btn btn-secondary">Export Games</a>
                     </div>
 
@@ -1826,6 +1827,58 @@
             } catch(e) { /* non-critical */ }
         }
 
+        // ── Games not yet in Central Assign ──────────────────────────────────
+        // Until ca_exported_at existed there was no way to answer this without
+        // remembering it, so a game could sit assigned and unknown to CA all week.
+        // Counted server-side rather than from loadStats' 1000-row page, because
+        // a truncated page would under-report and a number that quietly lies is
+        // worse than no number.
+        async function loadCAPending() {
+            const el = document.getElementById('caPendingLine');
+            if (!el || !window.supabaseClient) return;
+            try {
+                const today = new Date().toISOString().slice(0, 10);
+                let q = supabaseClient.client
+                    .from('games')
+                    .select('id, "Source Club", "Game Status"')
+                    .is('ca_exported_at', null)
+                    .gte('date', today);
+                // Restricted assignors see only their own clubs, same rule as the
+                // rest of this portal.
+                if (Array.isArray(adminUserClubs) && adminUserClubs.length) {
+                    q = q.in('Source Club', adminUserClubs);
+                }
+                const { data, error } = await q;
+                if (error) throw new Error(error.message);
+                const pending = (data || []).filter(g => (g['Game Status'] || '') !== 'Cancelled');
+                const n = pending.length;
+                if (!n) {
+                    el.style.display = 'block';
+                    el.innerHTML = `<span style="display:inline-block;background:#e8f8ef;border:1px solid #1e8449;color:#1e8449;
+                        border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✓ All upcoming games are in CA</span>`;
+                    return;
+                }
+                // Name the clubs. "12 games" sends Tod hunting; "12 games —
+                // Glastonbury, Griswold" tells him where to start.
+                const byClub = {};
+                pending.forEach(g => {
+                    const c = g['Source Club'] || 'Unknown';
+                    byClub[c] = (byClub[c] || 0) + 1;
+                });
+                const clubs = Object.entries(byClub)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([c, k]) => `${c} ${k}`)
+                    .join(' · ');
+                el.style.display = 'block';
+                el.innerHTML = `<span style="display:inline-block;background:#fdecea;border:1px solid #c0392b;color:#c0392b;
+                    border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">
+                    ⚠ ${n} game${n === 1 ? '' : 's'} not yet uploaded to CA</span>
+                    <div style="font-size:0.72rem;color:#8a8a8a;margin-top:4px;">${clubs}</div>`;
+            } catch (e) {
+                console.warn('CA pending count unavailable', e);
+            }
+        }
+
         async function loadRefAvailTools() {
             if (adminUserClubs !== null) return; // admin only
             const card = document.getElementById('cardRefAvailTools');
@@ -1837,7 +1890,7 @@
             const dash = document.getElementById('adminDashboard');
             if (!dash || dash.style.display === 'none') return;
             document.getElementById('statusBar').style.display = 'block';
-            applyAdminRestrictions().then(() => { loadStats(); loadBanners(); checkNewLeads(); loadRefAvailTools(); });
+            applyAdminRestrictions().then(() => { loadStats(); loadBanners(); checkNewLeads(); loadRefAvailTools(); loadCAPending(); });
         };
 
         window.addEventListener('load', () => { window._adminInit(); });
