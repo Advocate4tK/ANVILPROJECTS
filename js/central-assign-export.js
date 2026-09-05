@@ -864,14 +864,47 @@ exportBtn.addEventListener('click', () => {
     }
 
     // Duplicate check — warn before allowing re-export
-    const priorExports = selected.filter(rec => getExportedAt(rec.fields));
-    if (priorExports.length > 0) {
-        const lines = priorExports.map(rec => {
-            const f = rec.fields;
-            return `  • ${formatDate(f['Date'])} ${fmtTime(f['Time'])} — ${f['Home Team']} vs ${f['Away Team']}\n    (exported ${fmtExportDate(getExportedAt(f))})`;
-        }).join('\n');
+    // -- Duplicate guard -----------------------------------------------------
+    // Two very different situations used to raise the same alarm:
+    //
+    //   CONFIRMED in CA   - re-exporting genuinely risks a duplicate fixture.
+    //   sent, unconfirmed - re-exporting is usually the RIGHT move: CA rejected
+    //                       the file, the venue got fixed, it goes again.
+    //
+    // Warning identically about both taught the reflex to click through, which
+    // is exactly the click that creates the duplicate. Only the confirmed set
+    // raises a stop now; the amber set is mentioned and waved past.
+    //
+    // The old guard read getExportedAt() -- localStorage. That made it
+    // per-browser: on another machine, or after clearing site data, every game
+    // looked never-exported and the warning never fired at all. It reads the
+    // row now.
+    const lineFor = rec => {
+        const f = rec.fields;
+        return `  \u2022 ${formatDate(f['Date'])} ${fmtTime(f['Time'])} \u2014 ${f['Home Team']} vs ${f['Away Team']}`;
+    };
+    const confirmedInCA   = selected.filter(rec => rec.fields['ca_imported_at']);
+    const sentUnconfirmed = selected.filter(rec =>
+        !rec.fields['ca_imported_at'] && (rec.fields['ca_exported_at'] || getExportedAt(rec.fields)));
+
+    if (confirmedInCA.length > 0) {
+        const n = confirmedInCA.length;
         const proceed = confirm(
-            `⚠️ ${priorExports.length} game${priorExports.length > 1 ? 's' : ''} in this selection ${priorExports.length > 1 ? 'were' : 'was'} already exported:\n\n${lines}\n\nExporting again may create duplicates in Central Assign. Continue anyway?`
+            `\u26a0\ufe0f STOP \u2014 Central Assign already has ${n} of these games:\n\n`
+            + `${confirmedInCA.map(lineFor).join('\n')}\n\n`
+            + `You confirmed ${n > 1 ? 'them' : 'it'} as imported, so exporting again will create `
+            + `duplicate fixture${n > 1 ? 's' : ''} in CA.\n\n`
+            + `Only continue if you are deliberately re-sending after a change.\n\nExport anyway?`
+        );
+        if (!proceed) return;
+    }
+
+    if (sentUnconfirmed.length > 0) {
+        const n = sentUnconfirmed.length;
+        const proceed = confirm(
+            `${n} game${n > 1 ? 's were' : ' was'} exported before but never confirmed in Central Assign:\n\n`
+            + `${sentUnconfirmed.map(lineFor).join('\n')}\n\n`
+            + `That usually means CA did not take ${n > 1 ? 'them' : 'it'}, so re-exporting is fine.\n\nContinue?`
         );
         if (!proceed) return;
     }
