@@ -3276,7 +3276,10 @@
                 if (sheet3MissingFilter && !['Center Referee','AR 1','AR 2'].some(p => !resolveRefName(g.fields[p]))) return false;
                 return true;
             });
-            const loadedGameIds = new Set(allGames.map(g => String(g.id)));
+            // Was new Set(allGames...) — every game in the loaded date range,
+            // including ones filtered off the screen. Counts now follow the view.
+            const loadedGameIds = new Set(displayGames.map(g => String(g.id)));
+            visibleGameIds = loadedGameIds;
             // Tournament mode: sort by date+time so all-days + single-day views both sort correctly
             if (window.tournamentMode) {
                 displayGames.sort((a, b) =>
@@ -5455,10 +5458,25 @@
         }
 
         // ── Assigned game count helper (used globally on all ref badges) ─────
+        // ⚠️ Games CURRENTLY ON SCREEN, nothing else. This badge used to count
+        // every assignment a referee had ever had, so Eric showed a 1 in an East
+        // Haddam September view because of a game he worked in the summer. A
+        // number sitting beside a name is read as "how loaded is this ref for
+        // what I am looking at" — anything else is misinformation.
+        //
+        // Set by renderGames() and renderSheet3View() from their own filtered
+        // list, so both templates count the same thing. Null means nothing has
+        // rendered yet, in which case fall back to the total rather than zero.
+        let visibleGameIds = null;
+
         function getRefAssignedCount(refId) {
             if (!refId || !assignedAt[refId]) return 0;
             let n = 0;
-            for (const gameSet of assignedAt[refId].values()) n += gameSet.size;
+            for (const gameSet of assignedAt[refId].values()) {
+                for (const gid of gameSet) {
+                    if (!visibleGameIds || visibleGameIds.has(String(gid))) n++;
+                }
+            }
             return n;
         }
 
@@ -7433,6 +7451,7 @@
             document.getElementById('gameCountPill').textContent = `${filtered.length} game${filtered.length !== 1 ? 's' : ''}`;
 
             // Update visible game dates so the refs panel shows only refs available on those dates
+            visibleGameIds   = new Set(filtered.map(g => String(g.id)));
             visibleGameDates = new Set(filtered.map(g => g.fields['Date']).filter(Boolean));
             visibleGameCountByDate = {};
             filtered.forEach(g => { const d = g.fields['Date']; if (d) visibleGameCountByDate[d] = (visibleGameCountByDate[d] || 0) + 1; });
@@ -8361,7 +8380,15 @@
             const gameDT    = gameDate ? `${gameDate}|${gameTime}` : null;
             const gameClub    = selectedGame ? (resolveGameClub(selectedGame.fields) || '').toLowerCase() : '';
             const showAllRefs = showAllRefsMode;
-            // Build the set of clubs currently in focus (selected game OR club pill filter)
+            // Clubs currently in focus (selected game OR club pill filter).
+            // ⚠️ USED FOR ORDERING ONLY — classify() puts club-preferring refs
+            // first. It used to EXCLUDE, which is why this pane and Sheet 3
+            // disagreed in both directions: Jolie appeared here with no
+            // availability on the dates, and Noah did not appear at all despite
+            // writing that he wanted to centre an East Haddam game on one of
+            // them. Tod, 2026-09-05: "Both pages need to show the same referees
+            // when we're sorting for the same dates and times." Availability on
+            // the visible dates is now the only thing that decides membership.
             const focusClubs  = gameClub
                 ? [gameClub]
                 : (selectedClubs.size > 0 && selectedClubs.size < clubsList.length)
@@ -8383,21 +8410,21 @@
                 // Club preference gate: only show refs who listed a matching club.
                 // Refs with no preference set are hidden — use "Show all refs" to override.
                 // Also check what the ref put on their availability form (Preferred Locations).
-                if (!showAllRefs && focusClubs.length > 0 && !query) {
-                    const prefs = parsePreferences(r.fields['Club Preference']);
-                    // ⚠️ availTimeByName[name][date] is an ARRAY of slots, not a slot.
-                    // Without .flat() this mapped over the per-date ARRAYS, read
-                    // .clubs off an Array (undefined) and returned [] every time —
-                    // so this gate only ever honoured the club preference on the
-                    // REFEREE RECORD, and any ref whose club came from their
-                    // availability form was invisible in Standard 2. Sheet 3 never
-                    // hit it because it indexes one date directly.
-                    const availFormClubs = Object.values(availTimeByName[name] || {})
-                        .flat()
-                        .flatMap(s => s.clubs || []);
-                    const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availFormClubs])];
-                    if (!merged.some(p => focusClubs.includes(p))) return false;
-                }
+                // ⚠️ CLUB NO LONGER EXCLUDES ANYONE. Tod, 2026-09-05: "Both pages
+                // need to show the same referees when we're sorting for the same
+                // dates and times."
+                //
+                // Sheet 3 builds its pane from availability alone — whoever said
+                // they can work these dates, whatever club they named. Standard 2
+                // additionally required a club match, so the two panes answered
+                // different questions and disagreed in both directions: Jolie
+                // appeared here with no availability on the dates, Noah appeared
+                // only in Sheet 3 despite writing that he wanted to CENTER an
+                // East Haddam game on one of them.
+                //
+                // Availability on the visible dates decides who appears. Club now
+                // only decides ORDER — classify() already puts club-preferring
+                // referees first, so nothing useful is lost.
                 if (yearsFilter !== 'any') {
                     const yrs = parseYrs(r.fields['Years Reffing'], -1);
                     if (yearsFilter === '0'    && yrs !== 0)             return false;
