@@ -31,7 +31,7 @@ comment on column public.games.ca_exported_at is
 update public.games
    set ca_exported_at = timestamptz '2026-09-04 20:00:00-04'
  where "Source Club" ilike 'neconn'
-   and "Date" = date '2026-09-12'
+   and games.date = date '2026-09-12'   -- column is lowercase `date`, unlike "Source Club"
    and ca_exported_at is null;
 
 -- ── Backfill: anything else already uploaded ───────────────────────────────
@@ -41,12 +41,12 @@ update public.games
 -- update public.games
 --    set ca_exported_at = timestamptz '2026-09-03 15:01:00-04'
 --  where "Source Club" ilike 'east haddam'
---    and "Date" between date '2026-09-12' and date '2026-09-26'
+--    and games.date between date '2026-09-12' and date '2026-09-26'
 --    and ca_exported_at is null;
 
 select "Source Club", count(*) filter (where ca_exported_at is not null) as in_ca,
        count(*) filter (where ca_exported_at is null)     as not_sent
   from public.games
- where "Date" >= current_date
+ where games.date >= current_date
  group by "Source Club"
  order by "Source Club";
