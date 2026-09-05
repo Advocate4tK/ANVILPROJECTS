@@ -1849,10 +1849,15 @@
             if (!el || !window.supabaseClient) return;
             try {
                 const today = new Date().toISOString().slice(0, 10);
+                // ⚠️ Outstanding means NOT CONFIRMED, not "never exported". A file
+                // can export cleanly and be rejected whole — 2026-09-03 — so an
+                // exported game is still outstanding until CA is confirmed to
+                // hold it. Tod: "Only after a successful confirmation ... should
+                // those numbers be pushed."
                 let q = supabaseClient.client
                     .from('games')
-                    .select('id, "Source Club", "Game Status"')
-                    .is('ca_exported_at', null)
+                    .select('id, "Source Club", "Game Status", ca_exported_at')
+                    .is('ca_imported_at', null)
                     .gte('date', today);
                 // Restricted assignors see only their own clubs, same rule as the
                 // rest of this portal.
@@ -1867,7 +1872,7 @@
                 if (!n) {
                     el.style.display = 'block';
                     el.innerHTML = `<span style="display:inline-block;background:#e8f8ef;border:1px solid #1e8449;color:#1e8449;
-                        border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✓ All upcoming games are in CA</span>`;
+                        border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✓ All upcoming games confirmed in CA</span>`;
                     if (banner) {
                         banner.style.display = 'block';
                         banner.innerHTML = `<div style="background:#1e8449; border-radius:10px; padding:12px 24px;
@@ -1893,18 +1898,28 @@
                 el.style.display = 'block';
                 el.innerHTML = `<span style="display:inline-block;background:#fdecea;border:1px solid #c0392b;color:#c0392b;
                     border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">
-                    ⚠ ${n} game${n === 1 ? '' : 's'} not yet uploaded to CA</span>
+                    ⚠ ${n} game${n === 1 ? '' : 's'} not yet in CA</span>
                     <div style="font-size:0.72rem;color:#8a8a8a;margin-top:4px;">${clubs}</div>`;
                 if (banner) {
                     banner.style.display = 'block';
                     // The whole bar is the link. A count that tells you there is
                     // work and then makes you go find the tool is half a feature.
+                    // Games already in a file but unconfirmed are called out
+                    // separately: "12 never sent" and "12 sent, waiting on you"
+                    // are different jobs, and the second one is a nudge to go
+                    // read what CA said rather than to export again.
+                    const awaiting = pending.filter(g => g.ca_exported_at).length;
+                    const awaitingLine = awaiting
+                        ? `<span style="font-size:0.78rem;font-weight:800;color:#2a1a00;background:#ffd479;
+                             border-radius:6px;padding:3px 10px;white-space:nowrap;">${awaiting} sent, awaiting your confirmation</span>`
+                        : '';
                     banner.innerHTML = `<a href="central-assign-export.html" style="text-decoration:none; display:block;">
                         <div style="background:#c0392b; border-radius:10px; padding:12px 24px;
                             display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                             <span style="font-size:0.82rem;font-weight:900;letter-spacing:1.5px;color:rgba(255,255,255,0.85);">⬆ CENTRAL ASSIGN</span>
-                            <span style="font-size:1.4rem;font-weight:900;color:#fff;letter-spacing:0.5px;">${n} NOT UPLOADED</span>
-                            <span style="font-size:0.85rem;color:rgba(255,255,255,0.92);flex:1;min-width:200px;">${clubs}</span>
+                            <span style="font-size:1.4rem;font-weight:900;color:#fff;letter-spacing:0.5px;">${n} NOT IN CA</span>
+                            <span style="font-size:0.85rem;color:rgba(255,255,255,0.92);flex:1;min-width:180px;">${clubs}</span>
+                            ${awaitingLine}
                             <span style="font-size:0.8rem;font-weight:800;color:#fff;background:rgba(0,0,0,0.22);
                                 border-radius:6px;padding:4px 12px;white-space:nowrap;">Export Games →</span>
                         </div></a>`;

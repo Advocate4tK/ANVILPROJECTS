@@ -3408,11 +3408,11 @@
                     // Distinct from the per-slot CA chips, which say whether a
                     // REFEREE is confirmed — and those cannot be true before this is.
                     ca:       () => {
-                        const sent = !!f['ca_exported_at'];
-                        const when = sent ? new Date(f['ca_exported_at']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-                        return `<td style="${cell} text-align:center;" title="${sent ? 'Exported to Central Assign ' + when : 'Not yet exported to Central Assign'}">`
+                        const st  = caState(f);
+                        const cfg = CA_STATE_STYLE[st];
+                        return `<td style="${cell} text-align:center;" title="${cfg.tip}">`
                              + `<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.5px;border-radius:3px;padding:1px 4px;`
-                             + `background:${sent ? '#1e8449' : '#c0392b'};color:#fff;">CA</span></td>`;
+                             + `background:${cfg.bg};color:#fff;">CA</span></td>`;
                     },
                     center:   () => assignedTd('center', cRefRaw),
                     ar1:      () => isU8 ? `<td style="${cell} min-width:120px; background:repeating-linear-gradient(45deg,#e0e0e0,#e0e0e0 3px,#f0f0f0 3px,#f0f0f0 8px); color:#aaa; cursor:not-allowed; text-align:center; font-size:0.7rem; letter-spacing:0.5px;" title="U8 — CR only">N/A</td>` : assignedTd('ar1', ar1Raw),
@@ -6570,6 +6570,53 @@
             return `${y}-${m}-${day}`;
         }
 
+        // ── Central Assign backlog, per club ──────────────────────────────────
+        // Deliberately counts ALL upcoming games, not the loaded date range. The
+        // admin portal shouts a total; these pills say where it lives, and the
+        // two only reconcile if they count the same universe. It also has to be
+        // there before Load Games — the pill is how you decide what to load.
+        //
+        // Outstanding means NOT CONFIRMED IN CA: never exported and
+        // exported-but-unconfirmed both count. An export that CA rejected is
+        // still work to do.
+        let caPendingByClub = null;
+
+        async function loadCAPendingCounts() {
+            try {
+                const today = new Date().toISOString().slice(0, 10);
+                const { data, error } = await supabaseClient.client
+                    .from('games')
+                    .select('id, "Source Club", "Game Status"')
+                    .is('ca_imported_at', null)
+                    .gte('date', today);
+                if (error) throw new Error(error.message);
+                const map = {};
+                (data || []).forEach(g => {
+                    if ((g['Game Status'] || '') === 'Cancelled') return;
+                    const c = (g['Source Club'] || '').trim();
+                    if (c) map[c.toLowerCase()] = (map[c.toLowerCase()] || 0) + 1;
+                });
+                caPendingByClub = map;
+                applyCAPillCounts();
+            } catch (e) {
+                console.warn('CA pending counts unavailable', e);
+            }
+        }
+
+        function applyCAPillCounts() {
+            if (!caPendingByClub) return;
+            document.querySelectorAll('.club-pill .ca-pill-count').forEach(el => {
+                const club = el.parentElement?.dataset?.club || '';
+                const k = caPendingByClub[club.trim().toLowerCase()] || 0;
+                // No badge when a club is clear. A zero on every pill is noise,
+                // and the absence already says "nothing to do here".
+                if (!k) { el.style.display = 'none'; return; }
+                el.style.display = 'inline-block';
+                el.textContent = k;
+                el.title = `${k} game${k === 1 ? '' : 's'} not yet confirmed in Central Assign`;
+            });
+        }
+
         // ── Club pills ────────────────────────────────────────────────────────
         function buildClubPills() {
             if (window.tournamentMode) return; // tournament workstation has no club pills
@@ -6614,7 +6661,10 @@
                 const isEvent = knownEventsList.includes(club);
                 const baseClass = isEvent ? 'club-pill event-pill' : 'club-pill';
                 pill.className = selectedClubs.has(club) ? `${baseClass} active` : baseClass;
-                pill.textContent = PILL_LABELS[club] || club;
+                const _lbl = PILL_LABELS[club] || club;
+                pill.innerHTML = `${String(_lbl).replace(/&/g,'&amp;').replace(/</g,'&lt;')}`
+                    + `<span class="ca-pill-count" style="display:none;margin-left:6px;background:#c0392b;color:#fff;`
+                    + `font-size:0.62rem;font-weight:800;border-radius:8px;padding:0 6px;vertical-align:middle;"></span>`;
                 pill.dataset.club = club;
                 pill.addEventListener('click', () => {
                     userHasFilteredClubs = true;
@@ -6643,6 +6693,9 @@
                 });
                 wrap.appendChild(pill);
             });
+
+            if (caPendingByClub) applyCAPillCounts();
+            else loadCAPendingCounts();
         }
 
         // ── Load all data ─────────────────────────────────────────────────────
@@ -7700,12 +7753,34 @@
         // Game-level: was this game itself ever exported to Central Assign?
         // Answerable before anyone is assigned, which is exactly what the
         // per-slot confirmation chips cannot do.
+        // ⚠️ GREEN MEANS CONFIRMED, NOT EXPORTED. Tod, 2026-09-05: "Only after a
+        // successful confirmation that games have been uploaded into Central
+        // Assign should those numbers be pushed." A file can export perfectly and
+        // be rejected whole — it happened on 2026-09-03 — so an exported game is
+        // AMBER, still outstanding, until CA is confirmed to hold it.
+        function caState(f) {
+            if (!f) return 'none';
+            if (f['ca_imported_at']) return 'in';
+            if (f['ca_exported_at']) return 'sent';
+            return 'none';
+        }
+
+        const CA_STATE_STYLE = {
+            in:   { bg:'#1e8449', label:'CA', tip:'Confirmed in Central Assign' },
+            sent: { bg:'#e67e22', label:'CA', tip:'Exported but NOT yet confirmed in Central Assign' },
+            none: { bg:'#c0392b', label:'CA', tip:'Not yet sent to Central Assign' },
+        };
+
         function caBadge(f) {
-            const sent = !!(f && f['ca_exported_at']);
-            const when = sent ? new Date(f['ca_exported_at']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-            return `<span title="${sent ? 'Exported to Central Assign ' + when : 'Not yet exported to Central Assign'}"
-                style="flex-shrink:0;background:${sent ? '#1e8449' : '#c0392b'};color:#fff;font-size:0.62rem;font-weight:800;
-                letter-spacing:0.6px;padding:1px 6px;border-radius:4px;">CA</span>`;
+            const st = caState(f);
+            const cfg = CA_STATE_STYLE[st];
+            const when = st !== 'none'
+                ? ' — ' + new Date(f[st === 'in' ? 'ca_imported_at' : 'ca_exported_at'])
+                    .toLocaleDateString('en-US',{month:'short',day:'numeric'})
+                : '';
+            return `<span title="${cfg.tip}${when}"
+                style="flex-shrink:0;background:${cfg.bg};color:#fff;font-size:0.62rem;font-weight:800;
+                letter-spacing:0.6px;padding:1px 6px;border-radius:4px;">${cfg.label}</span>`;
         }
 
         function buildCAConfirmedMap() {

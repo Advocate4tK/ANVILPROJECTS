@@ -172,6 +172,11 @@ function getExportedAt(f) {
 // the workstation could not see it and Eric's exports were invisible to Tod.
 // `ca_exported_at` on the row is what the badges read. The local copy stays
 // only so this page's own "exported at" column keeps working offline.
+// ⚠️ Exporting is NOT uploading. This stamps ca_exported_at only — the AMBER
+// state. Nothing turns green until Tod confirms Central Assign actually took the
+// file (confirmCAImport below). On 2026-09-03 a file exported perfectly and CA
+// rejected every row; an export-only flag would have shown four green games that
+// were nowhere.
 async function markAsExported(games) {
     const history = getExportHistory();
     const now = new Date().toISOString();
@@ -187,15 +192,72 @@ async function markAsExported(games) {
         if (!Number.isFinite(id)) return;
         (byTable[t] = byTable[t] || []).push(id);
     });
+    // One batch id per export file, so the whole upload is confirmed with a
+    // single click instead of game by game.
+    const batch = 'x' + Date.now().toString(36);
     for (const [table, ids] of Object.entries(byTable)) {
         try {
             const { error } = await supabaseClient.client
-                .from(table).update({ ca_exported_at: now }).in('id', ids);
+                .from(table).update({ ca_exported_at: now, ca_export_batch: batch }).in('id', ids);
             if (error) throw new Error(error.message);
         } catch (e) {
             console.warn(`could not stamp ca_exported_at on ${table}`, e);
         }
     }
+    return { batch, count: Object.values(byTable).reduce((a, b) => a + b.length, 0), tables: Object.keys(byTable) };
+}
+
+// ── Confirming the upload ────────────────────────────────────────────────────
+// The step that makes a game green. Deliberately manual: only Central Assign
+// knows whether it took the file, and only Tod can read what it said.
+let _lastExportBatch = null;
+
+async function confirmCAImport(batch, tables) {
+    const now = new Date().toISOString();
+    for (const table of (tables || ['games'])) {
+        const { error } = await supabaseClient.client
+            .from(table).update({ ca_imported_at: now }).eq('ca_export_batch', batch);
+        if (error) throw new Error(error.message);
+    }
+}
+
+function showCAConfirmBar(res) {
+    const host = document.getElementById('caConfirmBar');
+    if (!host || !res || !res.count) return;
+    _lastExportBatch = res;
+    host.style.display = 'block';
+    host.innerHTML = `<div style="background:#7d5a00;border:1px solid #e67e22;border-radius:10px;padding:12px 18px;
+        display:flex;align-items:center;gap:14px;flex-wrap:wrap;color:#fff;">
+        <span style="font-size:0.78rem;font-weight:900;letter-spacing:1.3px;color:#ffd479;">⚠ AWAITING CONFIRMATION</span>
+        <span style="font-size:0.9rem;flex:1;min-width:240px;">
+            ${res.count} game${res.count === 1 ? '' : 's'} exported. Upload the file to Central Assign, then tell me what it said.
+        </span>
+        <button onclick="caConfirmYes()" style="background:#1e8449;color:#fff;border:none;border-radius:6px;
+            padding:6px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">✓ CA took them all</button>
+        <button onclick="caConfirmDismiss()" style="background:none;color:#ffd479;border:1px solid #e67e22;
+            border-radius:6px;padding:6px 12px;font-weight:700;font-size:0.8rem;cursor:pointer;">Not yet</button>
+    </div>`;
+}
+
+async function caConfirmYes() {
+    if (!_lastExportBatch) return;
+    const host = document.getElementById('caConfirmBar');
+    try {
+        await confirmCAImport(_lastExportBatch.batch, _lastExportBatch.tables);
+        if (host) host.innerHTML = `<div style="background:#1e8449;border-radius:10px;padding:12px 18px;color:#fff;font-weight:700;">
+            ✓ ${_lastExportBatch.count} game${_lastExportBatch.count === 1 ? '' : 's'} confirmed in Central Assign.</div>`;
+        _lastExportBatch = null;
+        if (typeof loadedGames !== 'undefined') renderGamesTable(loadedGames);
+    } catch (e) {
+        alert('Could not save the confirmation: ' + e.message);
+    }
+}
+
+// "Not yet" hides the bar but changes NOTHING. The games stay amber and keep
+// showing up as outstanding, which is the honest answer until CA has spoken.
+function caConfirmDismiss() {
+    const host = document.getElementById('caConfirmBar');
+    if (host) host.style.display = 'none';
 }
 
 function fmtExportDate(isoStr) {
@@ -695,13 +757,19 @@ function renderGamesTable(records) {
 
     records.forEach((rec, i) => {
         const f = rec.fields;
-        const exportedAt = getExportedAt(f);
-        const priorBadge = exportedAt
-            ? `<span style="color:#e67e22;font-size:11px;white-space:nowrap;font-weight:600;" title="Exported ${fmtExportDate(exportedAt)}">⚠ ${fmtExportDate(exportedAt)}</span>`
-            : `<span style="color:#aaa;font-size:11px;">—</span>`;
-        const rowBg = exportedAt
-            ? 'background:rgba(230,126,34,0.08);'
-            : (i % 2 === 0 ? 'background:rgba(15,52,96,0.28);' : '');
+        // Three states, and only the last one means the game is actually in CA.
+        const importedAt = f['ca_imported_at'] || null;
+        const exportedAt = f['ca_exported_at'] || getExportedAt(f);
+        const priorBadge = importedAt
+            ? `<span style="color:#2ecc71;font-size:11px;white-space:nowrap;font-weight:700;" title="Confirmed in Central Assign ${fmtExportDate(importedAt)}">✓ in CA</span>`
+            : exportedAt
+                ? `<span style="color:#e67e22;font-size:11px;white-space:nowrap;font-weight:600;" title="Exported ${fmtExportDate(exportedAt)} — not yet confirmed in CA">⚠ sent ${fmtExportDate(exportedAt)}</span>`
+                : `<span style="color:#aaa;font-size:11px;">—</span>`;
+        const rowBg = importedAt
+            ? 'background:rgba(46,204,113,0.10);'
+            : exportedAt
+                ? 'background:rgba(230,126,34,0.08);'
+                : (i % 2 === 0 ? 'background:rgba(15,52,96,0.28);' : '');
         html += `<tr style="font-size:0.78rem;${rowBg}">
             <td style="padding:5px 4px;"><input type="checkbox" class="game-check" data-index="${i}" checked></td>
             <td style="color:#999;padding:5px 4px;">${i + 1}</td>
@@ -964,9 +1032,11 @@ exportBtn.addEventListener('click', () => {
     a.click();
     URL.revokeObjectURL(url);
 
-    // Mark all exported games with timestamp, then refresh table badges
-    markAsExported(selected);
-    renderGamesTable(loadedGames);
+    // Mark all exported games, then ask whether CA actually took them.
+    markAsExported(selected).then(res => {
+        showCAConfirmBar(res);
+        renderGamesTable(loadedGames);
+    });
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
