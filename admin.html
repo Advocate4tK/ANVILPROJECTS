@@ -1788,6 +1788,11 @@
 
         // ── Admin restrictions for non-Admin assignors ───────────────────────
         let adminUserClubs = null; // null = unrestricted (Admin sees everything)
+        // ⚠️ adminUserClubs is NOT a reliable "is restricted" test. An Admin with
+        // clubs listed on their assignor row gets it populated too (see the Admin
+        // branch of applyAdminRestrictions), so anything that scopes a query by it
+        // silently narrows the Admin's view as well. Ask the role instead.
+        let adminUserRole  = null;
 
         async function applyAdminRestrictions() {
             const uid = currentUserId();
@@ -1800,6 +1805,7 @@
                     .maybeSingle();
                 if (!myRow) return;
                 const role  = (myRow.role || 'Assignor').trim();
+                adminUserRole = role;
                 const clubs = (() => {
                     const c = myRow.clubs;
                     if (!c) return null;
@@ -1845,7 +1851,7 @@
                     .gte('date', today);
                 // Restricted assignors see only their own clubs, same rule as the
                 // rest of this portal.
-                if (Array.isArray(adminUserClubs) && adminUserClubs.length) {
+                if (adminUserRole !== 'Admin' && Array.isArray(adminUserClubs) && adminUserClubs.length) {
                     q = q.in('Source Club', adminUserClubs);
                 }
                 const { data, error } = await q;
