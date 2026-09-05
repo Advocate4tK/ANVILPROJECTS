@@ -166,11 +166,36 @@ function getExportedAt(f) {
     return getExportHistory()[gameExportKey(f)] || null;
 }
 
-function markAsExported(games) {
+// ⚠️ The localStorage history is kept, but it is no longer the source of truth.
+// It was keyed Date|Home Team|Away Team|Time, so correcting a team name or
+// moving a kickoff quietly un-exported the game; it never left this browser, so
+// the workstation could not see it and Eric's exports were invisible to Tod.
+// `ca_exported_at` on the row is what the badges read. The local copy stays
+// only so this page's own "exported at" column keeps working offline.
+async function markAsExported(games) {
     const history = getExportHistory();
     const now = new Date().toISOString();
     games.forEach(rec => { history[gameExportKey(rec.fields)] = now; });
     localStorage.setItem(EXPORT_HISTORY_KEY, JSON.stringify(history));
+
+    // Write the stamp per table. A failure here must not lose the download the
+    // user just got, so it warns rather than throws.
+    const byTable = {};
+    games.forEach(rec => {
+        const t = rec._table || 'games';
+        const id = parseInt(rec.id, 10);
+        if (!Number.isFinite(id)) return;
+        (byTable[t] = byTable[t] || []).push(id);
+    });
+    for (const [table, ids] of Object.entries(byTable)) {
+        try {
+            const { error } = await supabaseClient.client
+                .from(table).update({ ca_exported_at: now }).in('id', ids);
+            if (error) throw new Error(error.message);
+        } catch (e) {
+            console.warn(`could not stamp ca_exported_at on ${table}`, e);
+        }
+    }
 }
 
 function fmtExportDate(isoStr) {
@@ -379,7 +404,11 @@ loadBtn.addEventListener('click', async () => {
                 'home_club':       g['home_club']    || '',
                 'away_club':       g['away_club']    || '',
                 'game_type':       'Comp',
-            }
+            },
+            // Tournament games are a different TABLE, not a different shape.
+            // Without this the export stamp would be written to games.id and
+            // silently update whatever club game happens to hold that id.
+            _table: 'tournament_games',
         });
         const allRecords = [...records, ...tournRaw.map(normTournGame)];
 

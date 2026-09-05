@@ -2505,8 +2505,8 @@
         let sheet3SelectedGameId  = null; // game row selection for ref pane filtering
         let sheet3ShowConflicts   = false; // when game selected: show conflicted refs or hide them
 
-        const SHEET3_BASE_COLS  = ['date','time','club','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
-        const SHEET3_COL_LABELS = { date:'Date', time:'Time', club:'Club', ageGroup:'Age', gender:'Gender', homeTeam:'Home Team', awayTeam:'Away Team', venue:'Venue', field:'Field', center:'Center', ar1:'AR1', ar2:'AR2' };
+        const SHEET3_BASE_COLS  = ['date','time','club','ca','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
+        const SHEET3_COL_LABELS = { date:'Date', time:'Time', club:'Club', ca:'CA', ageGroup:'Age', gender:'Gender', homeTeam:'Home Team', awayTeam:'Away Team', venue:'Venue', field:'Field', center:'Center', ar1:'AR1', ar2:'AR2' };
         const SHEET3_COL_MINW   = { center:'120px', ar1:'120px', ar2:'120px' };
         let sheet3ColOrder      = [...SHEET3_BASE_COLS];
         let sheet3ColDragKey      = null;
@@ -2545,6 +2545,13 @@
                 if (splitH && splitH >= 80 && splitH <= 1200) sheet3SplitGamesH = splitH;
                 if (zoomGames && zoomGames >= 0.6 && zoomGames <= 1.5) sheet3ZoomGames = zoomGames;
                 if (zoomRefs  && zoomRefs  >= 0.6 && zoomRefs  <= 1.5) sheet3ZoomRefs  = zoomRefs;
+                // A layout saved before the CA column existed has no 'ca' key.
+                // Without this the column would stay invisible to every assignor
+                // who had ever dragged a column, which is all of them.
+                if (Array.isArray(sheet3ColOrder) && !sheet3ColOrder.includes('ca')) {
+                    const at = sheet3ColOrder.indexOf('club');
+                    sheet3ColOrder.splice(at >= 0 ? at + 1 : sheet3ColOrder.length, 0, 'ca');
+                }
                 if (hiddenCols    && Array.isArray(hiddenCols))    sheet3HiddenCols    = hiddenCols;
                 if (refHiddenCols && Array.isArray(refHiddenCols)) sheet3RefHiddenCols = refHiddenCols;
                 if (seedOrder === 'exp-asc' || seedOrder === 'exp-desc') sheet3SeedOrder = seedOrder;
@@ -3396,6 +3403,16 @@
                         // Normalize "Field #N" → "Field N" for consistent display in tournament mode
                         if (window.tournamentMode) name = String(name || '').replace(/^Field\s*#\s*(\d+)$/i, 'Field $1');
                         return `<td style="${cancelCell}">${name}</td>`;
+                    },
+                    // Has the GAME been pushed to Central Assign? Green yes, red no.
+                    // Distinct from the per-slot CA chips, which say whether a
+                    // REFEREE is confirmed — and those cannot be true before this is.
+                    ca:       () => {
+                        const sent = !!f['ca_exported_at'];
+                        const when = sent ? new Date(f['ca_exported_at']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+                        return `<td style="${cell} text-align:center;" title="${sent ? 'Exported to Central Assign ' + when : 'Not yet exported to Central Assign'}">`
+                             + `<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.5px;border-radius:3px;padding:1px 4px;`
+                             + `background:${sent ? '#1e8449' : '#c0392b'};color:#fff;">CA</span></td>`;
                     },
                     center:   () => assignedTd('center', cRefRaw),
                     ar1:      () => isU8 ? `<td style="${cell} min-width:120px; background:repeating-linear-gradient(45deg,#e0e0e0,#e0e0e0 3px,#f0f0f0 3px,#f0f0f0 8px); color:#aaa; cursor:not-allowed; text-align:center; font-size:0.7rem; letter-spacing:0.5px;" title="U8 — CR only">N/A</td>` : assignedTd('ar1', ar1Raw),
@@ -7680,6 +7697,17 @@
 
         // ── Standard 2 — CA Confirmed State ──────────────────────────────────────
 
+        // Game-level: was this game itself ever exported to Central Assign?
+        // Answerable before anyone is assigned, which is exactly what the
+        // per-slot confirmation chips cannot do.
+        function caBadge(f) {
+            const sent = !!(f && f['ca_exported_at']);
+            const when = sent ? new Date(f['ca_exported_at']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+            return `<span title="${sent ? 'Exported to Central Assign ' + when : 'Not yet exported to Central Assign'}"
+                style="flex-shrink:0;background:${sent ? '#1e8449' : '#c0392b'};color:#fff;font-size:0.62rem;font-weight:800;
+                letter-spacing:0.6px;padding:1px 6px;border-radius:4px;">CA</span>`;
+        }
+
         function buildCAConfirmedMap() {
             caConfirmedMap = {};
             allGames.forEach(g => {
@@ -7923,6 +7951,7 @@
                         ${gn ? `<span style="font-size:0.62rem;color:#aaa;letter-spacing:0.4px;flex-shrink:0;">${gn}</span>` : ''}
                         <span style="font-weight:700;font-size:0.82rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${home} vs ${away}</span>
                         <span style="font-size:0.72rem;color:#666;flex-shrink:0;">${new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} ${time}</span>
+                        ${caBadge(f)}
                         ${age ? `<span class="game-badge" style="flex-shrink:0;font-size:0.68rem;">${age}${f['Gender']==='Female'?' · F':f['Gender']==='Male'?' · M':''}</span>` : ''}
                         ${club ? `<span class="game-badge" style="flex-shrink:0;font-size:0.68rem;">${club}</span>` : ''}
                         ${isFilled ? `<span style="background:#c0392b;color:white;font-size:0.62rem;font-weight:800;letter-spacing:1px;padding:1px 7px;border-radius:4px;text-transform:uppercase;flex-shrink:0;">FILLED</span>` : ''}
@@ -7947,7 +7976,7 @@
                 const allInCABtn = occupiedPositions.length > 0
                     ? `<button onclick="confirmAllCA('${gid}',[${occupiedPositions.map(p=>`'${p}'`).join(',')}],event)"
                         style="background:#1e8449;color:white;border:none;border-radius:6px;padding:2px 9px;font-size:0.75rem;
-                        cursor:pointer;font-weight:700;line-height:1.5;white-space:nowrap;">✓ All in CA</button>`
+                        cursor:pointer;font-weight:700;line-height:1.5;white-space:nowrap;">✓ Refs in CA</button>`
                     : '';
                 const collapseBtn = (allConf || isFilled)
                     ? `<button onclick="s2ToggleExpand('${gid}',event)" style="background:none;border:1px solid #ccc;border-radius:6px;padding:2px 7px;font-size:0.72rem;cursor:pointer;color:#555;">▲ collapse</button>`
@@ -7965,6 +7994,7 @@
                             <span class="game-meta">&nbsp;— ${date ? new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) : '—'} ${f['Time'] ? '@ ' + formatTime(f['Time']) : ''}</span>
                         </div>
                         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                            ${caBadge(f)}
                             ${age ? `<span class="game-badge">${age}${f['Gender']==='Female'?' · F':f['Gender']==='Male'?' · M':''}</span>` : ''}
                             ${resolveGameClub(f) ? `<span class="game-badge" style="background:#f0f0f0;">${resolveGameClub(f)}</span>` : ''}
                             ${isFilled ? `<span style="background:#c0392b;color:white;font-size:0.62rem;font-weight:800;letter-spacing:1px;padding:1px 7px;border-radius:4px;text-transform:uppercase;">FILLED</span>` : ''}
