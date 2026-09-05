@@ -1318,8 +1318,17 @@
                     if (cid) fieldCountByClubId[cid] = (fieldCountByClubId[cid] || 0) + 1;
                 });
 
-                // Scope games to this assignor's clubs (null adminUserClubs = Admin, sees all)
-                const _clubScopedGames = adminUserClubs
+                // ⚠️ SCOPE BY ROLE, NOT BY THE CLUB ARRAY. The comment below used to
+                // say "null adminUserClubs = Admin, sees all" — but that array is
+                // populated for Admins too whenever their assignor row lists clubs
+                // (see the Admin branch of applyAdminRestrictions). So an Admin was
+                // filtered like an assignor and saw LESS than one: Eric's heat meter
+                // read CRITICAL with 22 gaps while Tod's, as Admin, read ALL CLEAR.
+                // The same variable silently zeroed the Central Assign banner earlier
+                // the same day. An Admin sees everything; only an assignor is scoped.
+                const _isRestricted = adminUserRole !== 'Admin'
+                    && Array.isArray(adminUserClubs) && adminUserClubs.length > 0;
+                const _clubScopedGames = _isRestricted
                     ? allGames.filter(g => {
                         const src = g.fields['Source Club'];
                         if (src && adminUserClubs.includes(src)) return true;
