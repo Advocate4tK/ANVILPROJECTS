@@ -279,7 +279,8 @@ function dayBlocksHTML(games) {
         html += `<div class="night">
             <div class="night-header">
                 ${href
-                    ? `<a class="venue-link" href="${href}" target="_blank" rel="noopener">📍 ${esc(vName)} <span class="chev">›</span></a>`
+                    ? `<a class="venue-link" href="${href}" target="_blank" rel="noopener">📍 ${esc(vName)}`
+                      + `<span class="dir-cta">Directions</span><span class="chev">›</span></a>`
                     : `<span>${esc(vName)}</span>`}
                 <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.length} game${list.length === 1 ? '' : 's'}</span>
             </div>`;
@@ -311,7 +312,10 @@ function dayBlocksHTML(games) {
                             ${g.field ? `<div><span class="gb-k">Field</span><span class="gb-v">${esc(g.field)}</span></div>` : ''}
                             <div><span class="gb-k">Season</span><span class="gb-v">${esc(seasonOf(g) || '—')}</span></div>
                         </div>
-                        ${href ? `<a class="gb-map" href="${href}" target="_blank" rel="noopener">📍 ${esc(vName)}${addr ? ' — ' + esc(addr) : ''} &nbsp;›</a>` : ''}
+                        ${href ? `<a class="gb-map" href="${href}" target="_blank" rel="noopener">`
+                              + `<span class="gb-map-cta">📍 Tap for directions</span>`
+                              + `<span class="gb-map-where">${esc(vName)}${addr ? ' — ' + esc(addr) : ''}</span>`
+                              + `<span class="gb-map-chev">›</span></a>` : ''}
                     </div>
                 </div>`;
             });
@@ -398,22 +402,25 @@ function renderList() {
         }
     }
 
-    // Earlier seasons — one collapsed bar each, newest first. Ordered by their
-    // latest game date, not by name: "Spring 2026" sorts before "Summer 2026"
-    // only by accident, and that accident breaks at the turn of the year.
-    const bySeason = {};
-    older.forEach(d => { (bySeason[seasonOfDate(d)] = bySeason[seasonOfDate(d)] || []).push(d); });
-    const archSeasons = Object.keys(bySeason).sort((a, b) =>
-        bySeason[b].slice().sort().pop().localeCompare(bySeason[a].slice().sort().pop()));
-    archSeasons.forEach(s => {
-        html += seasonBar(s, bySeason[s].sort().reverse(), OPEN_SEASONS.has(s));
-    });
+    // ⛔ EARLIER SEASONS ARE NOT RENDERED. Tod, 2026-09-05: "Nobody needs to see
+    // last season stuff on this page." A public schedule answers "when do we
+    // play"; a finished season is a records question, and the archive bars were
+    // pushing it in front of parents who did not ask.
+    //
+    // It matters more than tidiness here: NECONN's Spring 2026 rows were TEST
+    // data from running the new system in parallel with production, and a
+    // collapsed bar reading "Spring 2026 Season Complete · N games played" put
+    // that on an open URL as though it were a record of real fixtures.
+    //
+    // The rows are untouched — nothing is deleted, and `older` is still computed
+    // so the counts below stay honest. This page simply does not show them.
+    void older;
 
-    // Counts follow what's on screen: the current season, plus any archived season
-    // the reader has opened. Locations are the exception — where a club plays is a
-    // fact about the club, not about a season, so that number stays whole even
-    // when the club is between seasons and every other count is zero.
-    const shownDates = current.concat(archSeasons.filter(s => OPEN_SEASONS.has(s)).flatMap(s => bySeason[s]));
+    // Counts follow what's on screen — which is now the current season and
+    // nothing else, since earlier seasons are no longer rendered. Locations are
+    // the exception: where a club plays is a fact about the club, not about a
+    // season, so that number stays whole even between seasons.
+    const shownDates = current;
     updateInfoBar(rows.filter(g => shownDates.includes(g.date)), GAMES);
 
     host.innerHTML = html;
@@ -673,9 +680,19 @@ function seasonRows() {
 
 function refillSeasonFilters() {
     const rows = seasonRows();
+    // Venues are a standing fact about where a club plays, not a per-season one —
+    // unlike a roster, a field doesn't stop existing when a season ends. On a
+    // league/Master page this matters a lot: the visible season can easily have
+    // zero games (a coalition member hasn't uploaded yet), which would otherwise
+    // empty the venue list for every member even though NECONN alone has years
+    // of real venues on file. So on league pages ONLY, venue draws from every
+    // season this tab's clubs have ever played in; team and division stay
+    // season-scoped everywhere, since a roster genuinely does change season to
+    // season and a stale team name is exactly what that scoping was fixing.
+    const venueRows = LEAGUE_ON ? GAMES : rows;
     [['divFilter',   [...new Set(rows.map(divisionLabel).filter(Boolean))].sort()],
      ['teamFilter',  [...new Set(rows.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean))].sort()],
-     ['venueFilter', [...new Set(rows.map(venueName).filter(Boolean))].sort()]
+     ['venueFilter', [...new Set(venueRows.map(venueName).filter(Boolean))].sort()]
     ].forEach(([id, vals]) => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -817,8 +834,15 @@ function drawLeagueTabs(tabs) {
             const keys = [...new Set(Object.values(labels))];
             let games = [], from = 0;
             for (;;) {
+                // ⚠️ QUOTE THE VALUES. This filter is built by string
+                // concatenation, and PostgREST reads a comma as the separator
+                // between conditions — so a club named "Lyme-Old Lyme, Inc."
+                // would split the expression and return the wrong rows with no
+                // error at all. Punctuation in names is not hypothetical here:
+                // one venue is literally "Manship Park(Canterbury)".
+                const orVal = k => `"${String(k).replace(/"/g, '')}"`;
                 const { data, error } = await sb.from('games').select(SAFE_COLUMNS)
-                    .or(keys.map(k => `"Source Club".eq.${k},club.eq.${k}`).join(','))
+                    .or(keys.map(k => `"Source Club".eq.${orVal(k)},club.eq.${orVal(k)}`).join(','))
                     .range(from, from + 999);
                 if (error) throw error;
                 if (!data || !data.length) break;
