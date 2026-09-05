@@ -212,49 +212,113 @@ async function markAsExported(games) {
 // knows whether it took the file, and only Tod can read what it said.
 let _lastExportBatch = null;
 
-async function confirmCAImport(batch, tables) {
+// The three honest answers to "did Central Assign take these?" are yes, no and
+// SOME. Partial imports are the normal case, not the exception: on 2026-09-05 a
+// seven-game file came back 4 imported / 3 errors because CA calls two of the
+// fields "Field #3" and "Field #4" while our records called them 3 and 4. An
+// all-or-nothing confirm would have marked three rejected games green.
+function showCAConfirmBar(res, records) {
+    const host = document.getElementById('caConfirmBar');
+    if (!host || !res || !res.count) return;
+    _lastExportBatch = { ...res, records: records || [] };
+    host.style.display = 'block';
+    host.innerHTML = `<div style="background:#7d5a00;border:1px solid #e67e22;border-radius:10px;padding:12px 18px;
+        display:flex;align-items:center;gap:12px;flex-wrap:wrap;color:#fff;">
+        <span style="font-size:0.78rem;font-weight:900;letter-spacing:1.3px;color:#ffd479;">\u26a0 AWAITING CONFIRMATION</span>
+        <span style="font-size:0.9rem;flex:1;min-width:220px;">
+            ${res.count} game${res.count === 1 ? '' : 's'} exported. Upload the file to Central Assign \u2014 what did it say?
+        </span>
+        <button onclick="caConfirmYes()" style="background:#1e8449;color:#fff;border:none;border-radius:6px;
+            padding:6px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">\u2713 All imported</button>
+        <button onclick="caConfirmSomePrompt()" style="background:#e67e22;color:#fff;border:none;border-radius:6px;
+            padding:6px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">Some imported\u2026</button>
+        <button onclick="caConfirmDismiss()" style="background:none;color:#ffd479;border:1px solid #e67e22;
+            border-radius:6px;padding:6px 12px;font-weight:700;font-size:0.8rem;cursor:pointer;">None / not yet</button>
+    </div>
+    <div id="caConfirmPicker" style="display:none;"></div>`;
+}
+
+// Rows are listed in FILE ORDER and numbered, because that is how CA reports
+// results back \u2014 "Row 2: Field '4' not found". Matching the numbering means
+// reading CA's error list and unticking the same numbers here, with no counting.
+function caConfirmSomePrompt() {
+    const box = document.getElementById('caConfirmPicker');
+    const b = _lastExportBatch;
+    if (!box || !b) return;
+    const rows = b.records.map((rec, i) => {
+        const f = rec.fields;
+        return `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:0.82rem;cursor:pointer;">
+            <input type="checkbox" class="ca-imp-cb" data-idx="${i}" checked>
+            <span style="color:#888;min-width:28px;">${i + 1}</span>
+            <span>${formatDate(f['Date'])} ${fmtTime(f['Time'])} \u2014 ${f['Home Team'] || '?'} vs ${f['Away Team'] || '?'}</span>
+        </label>`;
+    }).join('');
+    box.style.display = 'block';
+    box.innerHTML = `<div style="background:#12233f;border:1px solid #e67e22;border-top:none;
+        border-radius:0 0 10px 10px;padding:12px 18px;color:#fff;">
+        <div style="font-size:0.82rem;color:#ffd479;font-weight:700;margin-bottom:8px;">
+            Untick the rows Central Assign rejected. Row numbers match CA's results list.
+        </div>
+        <div style="max-height:260px;overflow:auto;">${rows}</div>
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+            <button onclick="caConfirmSome()" style="background:#1e8449;color:#fff;border:none;border-radius:6px;
+                padding:6px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">Confirm ticked rows</button>
+            <span style="font-size:0.75rem;color:#9fb0c8;">Unticked games stay outstanding \u2014 fix them and export again.</span>
+        </div>
+    </div>`;
+}
+
+async function stampImported(recs) {
     const now = new Date().toISOString();
-    for (const table of (tables || ['games'])) {
+    const byTable = {};
+    recs.forEach(rec => {
+        const t = rec._table || 'games';
+        const id = parseInt(rec.id, 10);
+        if (Number.isFinite(id)) (byTable[t] = byTable[t] || []).push(id);
+    });
+    for (const [table, ids] of Object.entries(byTable)) {
         const { error } = await supabaseClient.client
-            .from(table).update({ ca_imported_at: now }).eq('ca_export_batch', batch);
+            .from(table).update({ ca_imported_at: now }).in('id', ids);
         if (error) throw new Error(error.message);
     }
 }
 
-function showCAConfirmBar(res) {
+function caConfirmDone(n) {
     const host = document.getElementById('caConfirmBar');
-    if (!host || !res || !res.count) return;
-    _lastExportBatch = res;
-    host.style.display = 'block';
-    host.innerHTML = `<div style="background:#7d5a00;border:1px solid #e67e22;border-radius:10px;padding:12px 18px;
-        display:flex;align-items:center;gap:14px;flex-wrap:wrap;color:#fff;">
-        <span style="font-size:0.78rem;font-weight:900;letter-spacing:1.3px;color:#ffd479;">⚠ AWAITING CONFIRMATION</span>
-        <span style="font-size:0.9rem;flex:1;min-width:240px;">
-            ${res.count} game${res.count === 1 ? '' : 's'} exported. Upload the file to Central Assign, then tell me what it said.
-        </span>
-        <button onclick="caConfirmYes()" style="background:#1e8449;color:#fff;border:none;border-radius:6px;
-            padding:6px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">✓ CA took them all</button>
-        <button onclick="caConfirmDismiss()" style="background:none;color:#ffd479;border:1px solid #e67e22;
-            border-radius:6px;padding:6px 12px;font-weight:700;font-size:0.8rem;cursor:pointer;">Not yet</button>
-    </div>`;
+    if (host) host.innerHTML = `<div style="background:#1e8449;border-radius:10px;padding:12px 18px;color:#fff;font-weight:700;">
+        \u2713 ${n} game${n === 1 ? '' : 's'} confirmed in Central Assign.</div>`;
+    _lastExportBatch = null;
+    if (typeof loadedGames !== 'undefined') renderGamesTable(loadedGames);
+    if (typeof loadClubPendingCounts === 'function') loadClubPendingCounts();
 }
 
 async function caConfirmYes() {
     if (!_lastExportBatch) return;
-    const host = document.getElementById('caConfirmBar');
     try {
         await confirmCAImport(_lastExportBatch.batch, _lastExportBatch.tables);
-        if (host) host.innerHTML = `<div style="background:#1e8449;border-radius:10px;padding:12px 18px;color:#fff;font-weight:700;">
-            ✓ ${_lastExportBatch.count} game${_lastExportBatch.count === 1 ? '' : 's'} confirmed in Central Assign.</div>`;
-        _lastExportBatch = null;
-        if (typeof loadedGames !== 'undefined') renderGamesTable(loadedGames);
+        caConfirmDone(_lastExportBatch.count);
     } catch (e) {
         alert('Could not save the confirmation: ' + e.message);
     }
 }
 
-// "Not yet" hides the bar but changes NOTHING. The games stay amber and keep
-// showing up as outstanding, which is the honest answer until CA has spoken.
+async function caConfirmSome() {
+    const b = _lastExportBatch;
+    if (!b) return;
+    const picked = [...document.querySelectorAll('.ca-imp-cb:checked')]
+        .map(cb => b.records[parseInt(cb.dataset.idx, 10)])
+        .filter(Boolean);
+    if (!picked.length) { caConfirmDismiss(); return; }
+    try {
+        await stampImported(picked);
+        caConfirmDone(picked.length);
+    } catch (e) {
+        alert('Could not save the confirmation: ' + e.message);
+    }
+}
+
+// "None / not yet" hides the bar but changes NOTHING. The games stay amber and
+// keep counting as outstanding, which is the honest answer until CA has spoken.
 function caConfirmDismiss() {
     const host = document.getElementById('caConfirmBar');
     if (host) host.style.display = 'none';
@@ -1069,7 +1133,9 @@ exportBtn.addEventListener('click', () => {
 
     // Mark all exported games, then ask whether CA actually took them.
     markAsExported(selected).then(res => {
-        showCAConfirmBar(res);
+        // The records are handed over too, so "Some imported" can list the exact
+        // rows in the exact order they appear in the file CA is reading.
+        showCAConfirmBar(res, selected);
         renderGamesTable(loadedGames);
     });
 });
