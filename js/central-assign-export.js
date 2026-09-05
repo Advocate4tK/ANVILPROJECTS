@@ -351,8 +351,10 @@ async function loadClubCheckboxes() {
         }
         wrap.innerHTML = names.map(n => `
             <label style="display:flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; white-space:nowrap;">
-                <input type="checkbox" class="club-cb" value="${n}" checked> ${n}
+                <input type="checkbox" class="club-cb" value="${n}" checked> ${n}<span class="ca-club-pending"
+                    data-club="${String(n).replace(/"/g, '&quot;')}" style="display:none;"></span>
             </label>`).join('');
+        loadClubPendingCounts();
 
         // Append active tournaments with 🏆 badge
         const tournRes = await supabaseClient.client.from('tournaments').select('name').eq('status', 'active').order('name');
@@ -1071,6 +1073,45 @@ exportBtn.addEventListener('click', () => {
         renderGamesTable(loadedGames);
     });
 });
+
+// -- Per-club backlog on the club checkboxes ---------------------------------
+// Same universe as the admin banner and the workstation pills: ALL upcoming
+// games not yet CONFIRMED in Central Assign. Counting the loaded date range
+// instead would make three screens disagree about the same number.
+//
+// Club names here come from the clubs table; the count is keyed on a game's
+// "Source Club", and the two are not always spelled the same way. Matched
+// case-insensitively for that reason.
+async function loadClubPendingCounts() {
+    try {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data, error } = await supabaseClient.client
+            .from('games')
+            .select('id, "Source Club", "Game Status"')
+            .is('ca_imported_at', null)
+            .gte('date', today);
+        if (error) throw new Error(error.message);
+        const map = {};
+        (data || []).forEach(g => {
+            if ((g['Game Status'] || '') === 'Cancelled') return;
+            const c = (g['Source Club'] || '').trim().toLowerCase();
+            if (c) map[c] = (map[c] || 0) + 1;
+        });
+        document.querySelectorAll('.ca-club-pending').forEach(el => {
+            const k = map[(el.dataset.club || '').trim().toLowerCase()] || 0;
+            // Nothing shown for a club that is clear - a zero on every row is
+            // noise, and the absence already says there is nothing to do.
+            if (!k) { el.style.display = 'none'; return; }
+            el.textContent = k;
+            el.title = k + ' game' + (k === 1 ? '' : 's') + ' not yet confirmed in Central Assign';
+            el.style.cssText = 'display:inline-block;margin-left:5px;background:#c0392b;color:#fff;'
+                + 'font-size:11px;font-weight:800;border-radius:8px;padding:0 6px;line-height:16px;';
+        });
+    } catch (e) {
+        console.warn('club pending counts unavailable', e);
+    }
+}
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
