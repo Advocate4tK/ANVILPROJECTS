@@ -292,6 +292,18 @@ function caConfirmDone(n) {
     if (typeof loadClubPendingCounts === 'function') loadClubPendingCounts();
 }
 
+// Confirms a whole export file by its batch id. Kept separate from
+// stampImported(): this covers every row that carries the batch, so it is right
+// even if the in-memory record list has been re-rendered underneath us.
+async function confirmCAImport(batch, tables) {
+    const now = new Date().toISOString();
+    for (const table of (tables && tables.length ? tables : ['games'])) {
+        const { error } = await supabaseClient.client
+            .from(table).update({ ca_imported_at: now }).eq('ca_export_batch', batch);
+        if (error) throw new Error(error.message);
+    }
+}
+
 async function caConfirmYes() {
     if (!_lastExportBatch) return;
     try {
