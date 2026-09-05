@@ -763,6 +763,26 @@
     <script>
     let allClubs  = [];
     let allVenues = [];
+    // venue id → [local names]. Used to RESOLVE an upload and to LABEL a
+    // dropdown. ⚠️ Never written into a game and never exported: the CA file
+    // carries venues."Venue Name" and CA matches on exact string.
+    let venueAliases = {};
+
+    async function loadVenueAliases() {
+        try {
+            const { data, error } = await supabaseClient.client
+                .from('venue_aliases').select('venue_id, alias');
+            if (error) throw new Error(error.message);
+            venueAliases = {};
+            (data || []).forEach(r => {
+                const k = String(r.venue_id);
+                (venueAliases[k] = venueAliases[k] || []).push(r.alias);
+            });
+        } catch (e) {
+            console.warn('venue aliases unavailable', e);
+            venueAliases = {};
+        }
+    }
     let allFields = [];
     let caClubs   = [];   // Central Assign's club dropdown, mirrored - see sql/ca-clubs.sql
     let clubLeagueMap = {};
@@ -1559,6 +1579,8 @@
 
             allClubs.forEach(c => { clubLeagueMap[c.id] = c.league; });
 
+            await loadVenueAliases();
+
             // state is carried because the SHORT number a club types is only
             // unique within one state's series — see matchVenue().
             allVenues = venues.map(v => ({
@@ -1571,6 +1593,9 @@
                 // in the dropdown — Canterbury plays at Sterling Town Hall, which
                 // is Plainfield's ground.
                 owner:  v.fields['club_name'] || '',
+                // Local names for the same place. Ross writes "Sterling Town
+                // Hall"; CA and our record call it Sterling Community Center.
+                aliases: venueAliases[String(v.id)] || [],
             })).filter(v => v.name);
 
             allFields = fieldRecs.map(f => ({
@@ -1630,15 +1655,21 @@
         // "Sterling Town Hall (Plainfield)" into the record would fail every
         // import the way "Old KHS" and bare field numbers did on 2026-09-05.
         const pageClub = (club?.name || '').trim().toLowerCase();
+        // ONE parenthetical carrying both facts a picker needs: what else this
+        // place is called, and whose ground it is. Two brackets in a row —
+        // "Sterling Community Center (Sterling Town Hall) (Plainfield)" — reads
+        // like a mistake.
         const ownerTag = v => {
-            const o = (v.owner || '').trim();
-            if (!o) return '';
+            const bits = [];
+            (v.aliases || []).forEach(a => { if (a && a.trim()) bits.push(a.trim()); });
+            const o  = (v.owner || '').trim();
             const ol = o.toLowerCase();
-            // Only when it belongs to someone ELSE — a club does not need telling
-            // that its own field is its own.
-            if (!pageClub || ol === pageClub || ol.includes(pageClub) || pageClub.includes(ol)) return '';
-            // "Plainfield Youth Soccer" reads as "Plainfield" in a dropdown.
-            return ` (${o.replace(/\s+(Youth\s+)?Soccer(\s+Club)?$/i, '').trim()})`;
+            // Owner shown only when it belongs to someone ELSE — a club does not
+            // need telling that its own field is its own.
+            if (o && pageClub && ol !== pageClub && !ol.includes(pageClub) && !pageClub.includes(ol)) {
+                bits.push(o.replace(/\s+(Youth\s+)?Soccer(\s+Club)?$/i, '').trim());
+            }
+            return bits.length ? ` (${bits.join(' · ')})` : '';
         };
         venueEl.innerHTML = '<option value="">— Select venue —</option>'
             + filtered.map(v => `<option value="${v.id}">${v.name}${ownerTag(v)}</option>`).join('');
@@ -3168,6 +3199,14 @@
         // still win over venue number 123.
         const byName = allVenues.find(v => v.name.toLowerCase() === n);
         if (byName) return byName;
+
+        // A local name for the same ground. Ross's schedules say "Sterling Town
+        // Hall"; the record and CA both say "Sterling Community Center". Checked
+        // BEFORE the fuzzy fallback, because an exact alias is a fact and a fuzzy
+        // hit is a guess.
+        const byAlias = allVenues.find(v =>
+            (v.aliases || []).some(a => String(a).trim().toLowerCase() === n));
+        if (byAlias) return byAlias;
 
         if (BARE_NUM_RE.test(code)) {
             const r = resolveShortNumber(allVenues, 'RTV', code);
