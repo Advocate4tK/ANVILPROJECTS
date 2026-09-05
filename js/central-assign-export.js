@@ -304,6 +304,58 @@ async function confirmCAImport(batch, tables) {
     }
 }
 
+// ⚠️ The confirm BAR only exists in the moment after an export. Tod leaves the
+// page to upload the file and read CA's result, and by the time he knows the
+// answer the bar is gone — which is how confirming ended up being done in SQL by
+// hand. This is the same action, available at any time, on the row itself.
+//
+// It also covers the cases CA does not call "Duplicate". A field conflict against
+// our OWN fixture means CA already holds the game (#404236, RHAM vs Colchester,
+// 2026-09-05) — no amount of re-exporting will fix that, and the honest record is
+// simply that CA has it.
+async function setGameCA(rec, inCA) {
+    const table = rec._table || 'games';
+    const id = parseInt(rec.id, 10);
+    if (!Number.isFinite(id)) return;
+    const val = inCA ? new Date().toISOString() : null;
+    const { error } = await supabaseClient.client
+        .from(table).update({ ca_imported_at: val }).eq('id', id);
+    if (error) throw new Error(error.message);
+    rec.fields['ca_imported_at'] = val;
+}
+
+async function toggleGameCA(idx, event) {
+    if (event) event.stopPropagation();
+    const rec = loadedGames[idx];
+    if (!rec) return;
+    const now = !!rec.fields['ca_imported_at'];
+    try {
+        await setGameCA(rec, !now);
+        renderGamesTable(loadedGames);
+        if (typeof loadClubPendingCounts === 'function') loadClubPendingCounts();
+    } catch (e) {
+        alert('Could not update: ' + e.message);
+    }
+}
+
+// Bulk version for the checked rows — the usual case is "CA took most of that
+// file", and ticking them one at a time invites the wrong kind of patience.
+async function markCheckedInCA(inCA) {
+    const recs = [...document.querySelectorAll('.game-check:checked')]
+        .map(cb => loadedGames[parseInt(cb.dataset.index, 10)])
+        .filter(Boolean);
+    if (!recs.length) { alert('No games checked.'); return; }
+    const verb = inCA ? 'Mark' : 'Un-mark';
+    if (!confirm(`${verb} ${recs.length} checked game${recs.length === 1 ? '' : 's'} as in Central Assign?`)) return;
+    try {
+        for (const rec of recs) await setGameCA(rec, inCA);
+        renderGamesTable(loadedGames);
+        if (typeof loadClubPendingCounts === 'function') loadClubPendingCounts();
+    } catch (e) {
+        alert('Could not update: ' + e.message);
+    }
+}
+
 async function caConfirmYes() {
     if (!_lastExportBatch) return;
     try {
@@ -862,7 +914,8 @@ function renderGamesTable(records) {
             <td>${refBadge(f['Center Referee'])}</td>
             <td>${refBadge(f['AR 1'])}</td>
             <td>${refBadge(f['AR 2'])}</td>
-            <td>${priorBadge}</td>
+            <td style="cursor:pointer;" onclick="toggleGameCA(${i}, event)"
+                title="Click to mark this game in / out of Central Assign">${priorBadge}</td>
         </tr>`;
     });
 
