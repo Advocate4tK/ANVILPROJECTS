@@ -8425,6 +8425,31 @@
                 // Availability on the visible dates decides who appears. Club now
                 // only decides ORDER — classify() already puts club-preferring
                 // referees first, so nothing useful is lost.
+                // ⚠️ CLUB SCOPING. Do NOT remove this again.
+                //
+                // 2026-09-05: it was taken out to make this pane agree with
+                // Sheet 3, and every referee available on Sep 12 — NECONN's whole
+                // week — bled into East Haddam. Sheet 3 gets its club scoping
+                // from the availability rows it is built on; this pane starts
+                // from every referee and has only this gate. Removing it removes
+                // club isolation from the workstation, which is a cardinal rule.
+                //
+                // The real cause of Noah Ondras missing was NOT this gate: his
+                // club reaches it through the availability form, and that half
+                // was broken until the .flat() fix earlier the same day. The page
+                // has no cache-busting parameter, so a stale copy still showed
+                // the old behaviour.
+                if (!showAllRefs && focusClubs.length > 0 && !query) {
+                    const prefs = parsePreferences(r.fields['Club Preference']);
+                    // availTimeByName[name][date] is an ARRAY of slots, not a
+                    // slot — without .flat() this read .clubs off an Array and
+                    // returned [] every time, so only the referee RECORD counted.
+                    const availFormClubs = Object.values(availTimeByName[name] || {})
+                        .flat()
+                        .flatMap(s => s.clubs || []);
+                    const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availFormClubs])];
+                    if (!merged.some(p => focusClubs.includes(p))) return false;
+                }
                 if (yearsFilter !== 'any') {
                     const yrs = parseYrs(r.fields['Years Reffing'], -1);
                     if (yearsFilter === '0'    && yrs !== 0)             return false;
