@@ -8441,11 +8441,20 @@
                 // the old behaviour.
                 if (!showAllRefs && focusClubs.length > 0 && !query) {
                     const prefs = parsePreferences(r.fields['Club Preference']);
-                    // availTimeByName[name][date] is an ARRAY of slots, not a
-                    // slot — without .flat() this read .clubs off an Array and
-                    // returned [] every time, so only the referee RECORD counted.
-                    const availFormClubs = Object.values(availTimeByName[name] || {})
-                        .flat()
+                    // ⚠️ ONLY THE DATES ON SCREEN. Object.values() here read the
+                    // clubs from EVERY submission the referee had ever made, so a
+                    // NECONN referee who once ticked East Haddam passed this gate
+                    // forever, on any club and any date — every NECONN name
+                    // available on Sep 12 turned up in East Haddam's pane.
+                    //
+                    // Sheet 3 has its own club gate a few thousand lines up, and
+                    // it reads the clubs from the submission for THAT ROW'S DATE.
+                    // Matching that is what makes the two panes agree; the club
+                    // string is the same, the window over it was not.
+                    const _clubDates = gameDate ? [gameDate] : [...visibleGameDates];
+                    const _slotsByDate = availTimeByName[name] || {};
+                    const availFormClubs = _clubDates
+                        .flatMap(d => _slotsByDate[d] || [])
                         .flatMap(s => s.clubs || []);
                     const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availFormClubs])];
                     if (!merged.some(p => focusClubs.includes(p))) return false;
