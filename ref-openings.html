@@ -1395,12 +1395,19 @@
         return age.startsWith('U8') || age.startsWith('U-8');
     }
 
-    // Single-ref game = U8 (always one ref) OR a crew rule with both ARs off (e.g. GSL).
+    // Crew-rule key. Both sides are normalised because the club string reaching
+    // here is a game's "Source Club" while the rule is stored against the club
+    // record — "NECONN" against "neconn" is the same club and used to miss.
+    function crewKey(club, age) {
+        return `${String(club || '').trim().toLowerCase()}|${String(age || '').trim().toUpperCase()}`;
+    }
+
+    // Single-ref game = U8 (always one ref) OR a crew rule with both ARs off.
     function isSingleRefGame(g) {
         if (isU8Game(g)) return true;
         const src = g['Source Club'] || '';
         const ageBase = (g['Age Group'] || '').replace(/\s*(Boys|Girls)$/i, '').replace(/[BG]$/, '').trim();
-        return !!_singleRef[`${src}|${ageBase}`];
+        return !!_singleRef[crewKey(src, ageBase)];
     }
 
     // A referee decides whether to take a game partly on whether it's a boys or
@@ -1766,7 +1773,7 @@
                     const nm = ev['Club Name'] || '';
                     (Array.isArray(ev.age_groups) ? ev.age_groups : []).forEach(ag => {
                         if (nm && ag.age_group && ag.ar1 === false && ag.ar2 === false) {
-                            _singleRef[`${nm}|${ag.age_group}`] = true;
+                            _singleRef[crewKey(nm, ag.age_group)] = true;
                         }
                         // Pay rates for the collapsed-header chip (C $center · AR $ar), keyed Club|Age
                         if (nm && ag.age_group && ag.center != null) {
@@ -1775,6 +1782,40 @@
                     });
                 });
             } catch(e) { /* fall back to U8-only single-ref */ }
+
+            // ⚠️ CLUB crew rules live in `crew_rules`, keyed by club_id — a
+            // different table from the event rules above. This page read only
+            // the events table, so NO club's crew rules ever reached it: every
+            // U10 on the board showed a full crew of three no matter what
+            // manage-clubs had been told. NECONN is the case that surfaced it
+            // (U8, U9 and U10 all ar1=false, ar2=false, board still said
+            // "3 Open"), and the Crew Rules screen promises the opposite:
+            // "excluded from the openings board and pay portals".
+            //
+            // Registered under BOTH the club's display name and its slug,
+            // because a game's "Source Club" is sometimes one and sometimes the
+            // other ("NECONN" vs "neconn").
+            //
+            // Only the both-ARs-off case is honoured. _singleRef is a boolean —
+            // one referee or three — so a club wanting exactly ONE AR cannot be
+            // expressed here yet. No club needs it today; reshaping it mid-season
+            // to say so would be the riskier change.
+            try {
+                const [crewRes, clubRes] = await Promise.all([
+                    supabaseClient.client.from('crew_rules').select('club_id, age_group, ar1, ar2'),
+                    supabaseClient.client.from('clubs').select('id, name, "Club Name"')
+                ]);
+                const namesById = {};
+                (clubRes.data || []).forEach(c => {
+                    namesById[c.id] = [c['Club Name'], c.name].filter(Boolean);
+                });
+                (crewRes.data || []).forEach(r => {
+                    if (r.ar1 !== false || r.ar2 !== false) return;
+                    (namesById[r.club_id] || []).forEach(nm => {
+                        if (nm && r.age_group) _singleRef[crewKey(nm, r.age_group)] = true;
+                    });
+                });
+            } catch(e) { console.warn('club crew rules unavailable', e); }
 
             // Merge + filter + sort (tag tournament games with their key for direct portal routing)
             const recCount    = _recOrgs.length ? 1 : 0;
