@@ -1224,7 +1224,11 @@ async function loadAwaitingConfirmation() {
         const today = new Date().toISOString().slice(0, 10);
         const { data, error } = await supabaseClient.client
             .from('games')
-            .select('id, date, "Time", "Home Team", "Away Team", "Source Club", "Age Group", "Game Status", ca_exported_at')
+            // ⚠️ select('*') on purpose. The games table mixes conventions —
+            // "Source Club" is quoted and capitalised, `date` and `time` are
+            // plain lowercase — and naming columns here got it wrong twice in
+            // one morning, failing silently into the catch and hiding the panel.
+            .select('*')
             .is('ca_imported_at', null)
             .not('ca_exported_at', 'is', null)
             .gte('date', today)
@@ -1238,9 +1242,9 @@ async function loadAwaitingConfirmation() {
                 <input type="checkbox" class="ca-await-cb" data-idx="${i}" checked>
                 <span style="min-width:150px;color:#ffd479;">${g['Source Club'] || ''}</span>
                 <span style="min-width:88px;">${g.date || ''}</span>
-                <span style="min-width:74px;">${fmtTime(g['Time']) || ''}</span>
+                <span style="min-width:74px;">${fmtTime(g['Time'] || g.time) || ''}</span>
                 <span style="min-width:48px;color:#9fb0c8;">${g['Age Group'] || ''}</span>
-                <span>${g['Home Team'] || '?'} vs ${g['Away Team'] || '?'}</span>
+                <span>${g['Home Team'] || g.home_team || '?'} vs ${g['Away Team'] || g.away_team || '?'}</span>
             </label>`).join('');
 
         host.style.display = 'block';
@@ -1262,7 +1266,13 @@ async function loadAwaitingConfirmation() {
             </div>
         </div>`;
     } catch (e) {
-        console.warn('awaiting-confirmation panel unavailable', e);
+        // Loud, not silent. The first version swallowed a column-name error and
+        // simply did not render, which reads exactly like "nothing to confirm".
+        console.error('awaiting-confirmation panel failed', e);
+        host.style.display = 'block';
+        host.innerHTML = `<div style="background:#5b1a12;border:1px solid #c0392b;border-radius:10px;
+            padding:10px 16px;color:#ffd0c8;font-size:0.82rem;">
+            Could not load games awaiting confirmation: ${String(e.message || e)}</div>`;
     }
 }
 
