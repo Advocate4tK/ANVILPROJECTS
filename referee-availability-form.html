@@ -718,6 +718,18 @@
 
             const presetTime = urlTime ? urlTime.substring(0, 5) : '';
 
+            // ?times= runs PARALLEL to ?dates= — one "HH:MM-HH:MM" per date, so a
+            // referee who picked a 9:00 and a 1:00 game on the same day arrives
+            // with that day already reading 9:00 to 2:30. Falls back to ?time=
+            // for the single-game links that are already out in emails.
+            const urlTimes = new URLSearchParams(window.location.search).get('times');
+            const presetWindows = urlTimes
+                ? urlTimes.split(',').map(w => {
+                    const [a, b] = String(w).split('-');
+                    return { start: (a || '').trim().substring(0, 5), end: (b || '').trim().substring(0, 5) };
+                  })
+                : [];
+
             // ── "You can take more than one" ────────────────────────────────
             // Arriving here from the openings board means the referee tapped ONE
             // game, and the button they pressed said "for This Game". Referees
@@ -736,7 +748,7 @@
                     + "border-radius:12px;padding:16px 20px;margin-bottom:22px;color:#09142a;"
                     + "box-shadow:0 2px 10px rgba(30,132,73,0.18);";
                 tip.innerHTML =
-                      '<div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.15rem;'
+                      '<div style="font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:1.15rem;'
                     + 'letter-spacing:1px;text-transform:uppercase;color:#1e8449;margin-bottom:6px;">'
                     + '⚽ You can take more than one game</div>'
                     + '<div style="font-size:0.95rem;line-height:1.5;">'
@@ -752,8 +764,13 @@
             }
             if (presetDates.length > 0) {
                 presetDates.forEach((date, i) => {
-                    const row = createDayRow(i + 1, presetDates.length > 1, presetTime);
+                    const win = presetWindows[i] || {};
+                    const row = createDayRow(i + 1, presetDates.length > 1, win.start || presetTime);
                     row.querySelector('input[name="availableDate[]"]').value = date;
+                    if (win.end) {
+                        const endSel = row.querySelector('select[name="endTime[]"]');
+                        if (endSel) endSel.value = win.end;
+                    }
                     container.appendChild(row);
                 });
             } else {
@@ -805,6 +822,19 @@
                 attachLocationListeners(PAY_CLUBS);
 
                 // Pre-fill club checkbox from ?club= param — must run after checkboxes are rendered
+                // ?clubs= carries SEVERAL clubs, from a multi-game selection on the
+                // openings board. ?club= (singular) still works for a single-game
+                // link and for every email already sent out.
+                const _urlClubs = new URLSearchParams(window.location.search).get('clubs');
+                if (_urlClubs) {
+                    const _wanted = decodeURIComponent(_urlClubs).split(',')
+                        .map(c => c.trim().toLowerCase()).filter(Boolean);
+                    [...document.querySelectorAll('input[name="locations"]')].forEach(el => {
+                        if (_wanted.includes((el.value || '').trim().toLowerCase()) && !el.disabled) {
+                            el.checked = true; el.dispatchEvent(new Event('change'));
+                        }
+                    });
+                }
                 const _urlClub = new URLSearchParams(window.location.search).get('club');
                 if (_urlClub) {
                     // Case-insensitive, same as the second preselect further down — the link
