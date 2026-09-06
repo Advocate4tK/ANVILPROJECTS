@@ -55,13 +55,14 @@
         + '<path d="M25 33.5 q5.5 4.5 11 1" stroke="#09142a" stroke-width="2.2" fill="none" stroke-linecap="round"/>'
         + '</svg>';
 
-    var queue = [], idx = 0, el = null;
+    var queue = [], idx = 0, el = null, veil = null;
 
     function close(markRest) {
         if (markRest) {
             queue.slice(idx).forEach(function (t) { set(KEY_SEEN(t.id), '1'); });
         }
-        if (el) { el.remove(); el = null; }
+        if (el)   { el.remove();   el = null; }
+        if (veil) { veil.remove(); veil = null; }
         queue = []; idx = 0;
     }
 
@@ -111,27 +112,34 @@
         if (el) return;
         el = document.createElement('div');
         el.className = 'rt-tip-pop';
-        // FLOATING, over the page, near the middle - Tod asked for the Word
-        // behaviour, where the assistant appears in front of what you are doing
-        // and you deal with him. Sat upper-middle rather than dead centre so he
-        // covers the header area rather than the fields being described.
+        // DEAD CENTRE, OVER A DIMMED PAGE. Tod: "I literally want it to be in
+        // their faces." Referees were submitting once per game all weekend and a
+        // polite corner toast is exactly what they scrolled past.
         //
-        // No backdrop and no focus trap: the page underneath stays usable and
-        // scrollable. Clippy interrupted; he never actually blocked the document,
-        // and blocking a referee mid-submission would be a far worse sin than
-        // being annoying.
+        // The veil dims but does not imprison: clicking it closes, and there is
+        // no focus trap. Every exit still works. A tutorial that a referee cannot
+        // escape two days before assignments would be a far worse sin than being
+        // annoying.
+        veil = document.createElement('div');
+        veil.style.cssText =
+              'position:fixed;inset:0;z-index:99998;background:rgba(9,20,42,0.55);'
+            + 'backdrop-filter:blur(1.5px);';
+        veil.addEventListener('click', function () { close(true); });
+        document.body.appendChild(veil);
+
         el.style.cssText =
-              'position:fixed;z-index:99999;left:50%;top:18vh;transform:translateX(-50%);'
-            + 'width:min(430px,calc(100vw - 28px));'
-            + 'background:linear-gradient(135deg,#eefaf3,#dcf1e5);border:2px solid #1e8449;'
-            + 'border-radius:14px;padding:16px 20px;color:#09142a;'
-            + 'box-shadow:0 18px 48px rgba(9,20,42,0.34);font-family:inherit;';
+              'position:fixed;z-index:99999;left:50%;top:50%;transform:translate(-50%,-50%);'
+            + 'width:min(470px,calc(100vw - 28px));'
+            + 'background:linear-gradient(135deg,#f2fdf7,#dcf1e5);border:3px solid #1e8449;'
+            + 'border-radius:16px;padding:20px 24px;color:#09142a;'
+            + 'box-shadow:0 24px 60px rgba(0,0,0,0.45);font-family:inherit;';
         document.body.appendChild(el);
         try {
-            // Keeps the -50% X shift, or he leaps to the right as he lands.
-            el.animate([{ transform: 'translateX(-50%) translateY(14px) scale(.97)', opacity: 0 },
-                        { transform: 'translateX(-50%)', opacity: 1 }],
-                       { duration: 240, easing: 'cubic-bezier(.2,.8,.3,1)' });
+            // Keeps the centring offsets, or he leaps across the screen as he lands.
+            el.animate([{ transform: 'translate(-50%,-50%) scale(.9)', opacity: 0 },
+                        { transform: 'translate(-50%,-50%) scale(1)',  opacity: 1 }],
+                       { duration: 260, easing: 'cubic-bezier(.2,1.1,.3,1)' });
+            veil.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
         } catch (e) {}
     }
 
