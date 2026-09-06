@@ -744,27 +744,57 @@
             // because that is the moment the misunderstanding is formed. Someone
             // who came to the form directly is not making that assumption and
             // does not need a balloon.
-            // The multi-game tip, via the shared tips engine (js/tips.js).
-            // Shown only when ?note= carries a fixture — that is the moment a
-            // referee forms the belief that one form covers one game. RTTips
-            // handles once-per-device, the x, the global off switch, and never
-            // throwing; nothing cosmetic on this page may reach the login gate.
+            // The run for this form, via the shared tips engine (js/tips.js).
+            // Fires on every visit until the referee presses "Turn off tips" —
+            // they come back a few times a season, not daily, and the thing this
+            // explains cost a weekend of support calls.
+            //
+            // Wrapped, because everything below this line in the init still has
+            // to run: a decorative balloon took the login gate down on 2026-09-06
+            // and nothing cosmetic on this page gets to do that again.
             try {
-                if (window.RTTips && new URLSearchParams(window.location.search).get('note')) {
+                if (window.RTTips) {
+                    var _fromGame = new URLSearchParams(window.location.search).get('note');
                     RTTips.show({
-                        id:    'avail-multi-game',
+                        id:    'avail-1-multi',
                         title: 'You can take more than one game',
-                        html:  'You came in from a single game, but this one form can cover your whole day.'
-                             + '<ul style="margin:8px 0 0 18px;padding:0;">'
-                             + '<li><strong>Widen your times</strong> — a start and end that span the day '
-                             + 'makes you available for every game inside it, not just the one you tapped.</li>'
-                             + '<li><strong>Tick more clubs</strong> — if you would travel, check them all '
-                             + 'and you will be considered for their games too.</li>'
-                             + '<li><strong>Add more days</strong> with “+ Add Another Day”.</li>'
-                             + '</ul>'
+                        html:  (_fromGame
+                                 ? 'You came in from a single game, but this one form can cover your whole day. '
+                                 : 'One submission can cover your whole day. ')
+                             + 'You are telling the assignor <strong>when you are free</strong>, not claiming '
+                             + 'one fixture — so there is no need to come back and fill this in again '
+                             + 'for every game you fancy.'
+                    });
+                    RTTips.show({
+                        id:    'avail-2-times',
+                        title: 'Start and End are a window, not a game',
+                        html:  'Put the earliest you could start and the latest you could finish. You will be '
+                             + 'considered for <strong>every game inside that window</strong>. 9:00 AM to 2:00 PM '
+                             + 'covers a morning U10 and an afternoon U12 both — a narrow window is the '
+                             + 'commonest reason a referee sees nothing come back.'
+                    });
+                    RTTips.show({
+                        id:    'avail-3-clubs',
+                        title: 'Tick every club you would travel to',
+                        html:  'Under <strong>Preferred Locations</strong>, check them all if you are willing to '
+                             + 'drive. Each one you leave unticked is a club that will never offer you a game, '
+                             + 'however free you are.'
+                    });
+                    RTTips.show({
+                        id:    'avail-4-maxgames',
+                        title: 'Say how many you will actually work',
+                        html:  '<strong>Maximum games</strong> is how you stay in a wide window without being '
+                             + 'given six matches. Free all day but happy with two? Wide times, max 2.'
+                    });
+                    RTTips.show({
+                        id:    'avail-5-candidate',
+                        title: 'This makes you a candidate',
+                        html:  'Your assignor makes the final call and you will see the games on your schedule '
+                             + 'once they are assigned. Submitting twice does not improve your odds — a '
+                             + 'wider window and more clubs does.'
                     });
                 }
-            } catch (e) { console.warn('multi-game tip skipped', e); }
+            } catch (e) { console.warn('availability tips skipped', e); }
             if (presetDates.length > 0) {
                 presetDates.forEach((date, i) => {
                     const win = presetWindows[i] || {};
