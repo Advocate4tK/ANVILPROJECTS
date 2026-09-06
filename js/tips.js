@@ -55,7 +55,12 @@
         + '<path d="M25 33.5 q5.5 4.5 11 1" stroke="#09142a" stroke-width="2.2" fill="none" stroke-linecap="round"/>'
         + '</svg>';
 
-    var queue = [], idx = 0, el = null, veil = null;
+    var queue = [], idx = 0, el = null, veil = null, again = null, done = false;
+
+    // How long he waits before coming back after an x. Tod, 2026-09-06: "I almost
+    // want the thing to be annoying." Long enough not to fight a tap, short
+    // enough that skipping is not a way out.
+    var NAG_MS = 15000;
 
     // ⚠️ TIPS REPEAT EVERY VISIT. Tod, 2026-09-06: "I want it to show up every
     // time." Once-per-device was the safe default and it was wrong for this job —
@@ -65,15 +70,34 @@
     // "Turn off tips" is therefore the ONLY thing that persists. It is the
     // referee's own decision and it is honoured forever; nothing else is
     // remembered, so seen-ness never silently swallows the message.
-    function close() {
+    // The x means NOT NOW, not never. He comes back in the same session, at the
+    // tip you were on, until you either read the run to the end or press
+    // "Turn off tips" — which is the real door and is honoured forever.
+    //
+    // The run also survives being closed: `queue` and `idx` are kept, so he
+    // resumes rather than restarting and making you re-read tip one.
+    function hide() {
         if (el)   { el.remove();   el = null; }
         if (veil) { veil.remove(); veil = null; }
+    }
+
+    function dismiss() {
+        hide();
+        if (done) return;
+        clearTimeout(again);
+        again = setTimeout(function () { if (!done && queue.length) { mount(); render(); } }, NAG_MS);
+    }
+
+    function finish() {
+        done = true;
+        clearTimeout(again);
+        hide();
         queue = []; idx = 0;
     }
 
     function render() {
         var t = queue[idx];
-        if (!t) { close(); return; }
+        if (!t) { finish(); return; }
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
@@ -83,7 +107,8 @@
         el.innerHTML =
               '<button type="button" data-rt="close" aria-label="Close" '
             + 'style="position:absolute;top:6px;right:8px;background:none;border:none;font-size:1.5rem;'
-            + 'line-height:1;color:#1e8449;cursor:pointer;padding:2px 7px;">&times;</button>'
+            + 'line-height:1;color:#1e8449;cursor:pointer;padding:2px 7px;" '
+            + 'title="Hide for now — it will come back">&times;</button>'
             + '<div style="display:flex;gap:14px;align-items:flex-start;">' + MASCOT + '<div style="min-width:0;">'
             + '<div style="font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:1.12rem;'
             + 'letter-spacing:1px;text-transform:uppercase;color:#1e8449;margin-bottom:5px;padding-right:18px;">'
@@ -93,7 +118,7 @@
             // One primary button that always moves you forward: "Got it" steps to
             // the next tip and finishes on the last. Two different labels for the
             // same green button taught people to read it before pressing it.
-            + '<button type="button" data-rt="' + (more ? 'next' : 'close') + '" '
+            + '<button type="button" data-rt="' + (more ? 'next' : 'finish') + '" '
             + 'style="background:#1e8449;color:#fff;border:none;border-radius:7px;padding:7px 16px;'
             + 'font-weight:800;font-size:0.84rem;cursor:pointer;">'
             + (more ? 'Got it &rarr;' : 'Got it') + '</button>'
@@ -103,12 +128,15 @@
             + '</div></div></div>';
 
         el.querySelectorAll('[data-rt="close"]').forEach(function (b) {
-            b.addEventListener('click', function () { close(); });
+            b.addEventListener('click', function () { dismiss(); });
+        });
+        el.querySelectorAll('[data-rt="finish"]').forEach(function (b) {
+            b.addEventListener('click', function () { finish(); });
         });
         var nx = el.querySelector('[data-rt="next"]');
         if (nx) nx.addEventListener('click', function () { idx++; render(); });
         el.querySelector('[data-rt="off"]').addEventListener('click', function () {
-            set(KEY_OFF, '1'); close();
+            set(KEY_OFF, '1'); finish();
         });
     }
 
@@ -128,7 +156,7 @@
         veil.style.cssText =
               'position:fixed;inset:0;z-index:99998;background:rgba(9,20,42,0.55);'
             + 'backdrop-filter:blur(1.5px);';
-        veil.addEventListener('click', function () { close(); });
+        veil.addEventListener('click', function () { dismiss(); });
         document.body.appendChild(veil);
 
         el.style.cssText =
@@ -166,7 +194,7 @@
             } catch (e) { console.warn('RTTips.show skipped', e); return false; }
         },
 
-        off: function () { try { set(KEY_OFF, '1'); close(); } catch (e) {} },
+        off: function () { try { set(KEY_OFF, '1'); finish(); } catch (e) {} },
         on:  function () { del(KEY_OFF); },
 
         reset: function () {
