@@ -722,13 +722,16 @@
             // referee who picked a 9:00 and a 1:00 game on the same day arrives
             // with that day already reading 9:00 to 2:30. Falls back to ?time=
             // for the single-game links that are already out in emails.
+            let presetWindows = [];
+            try {
             const urlTimes = new URLSearchParams(window.location.search).get('times');
-            const presetWindows = urlTimes
+            presetWindows = urlTimes
                 ? urlTimes.split(',').map(w => {
                     const [a, b] = String(w).split('-');
                     return { start: (a || '').trim().substring(0, 5), end: (b || '').trim().substring(0, 5) };
                   })
                 : [];
+            } catch (e) { console.warn('preset windows skipped', e); presetWindows = []; }
 
             // ── "You can take more than one" ────────────────────────────────
             // Arriving here from the openings board means the referee tapped ONE
@@ -740,6 +743,12 @@
             // because that is the moment the misunderstanding is formed. Someone
             // who came to the form directly is not making that assumption and
             // does not need a balloon.
+            // ⚠ WRAPPED. This init runs in sequence and the Continue button's
+            // click handler is registered ~1000 lines BELOW. A throw here never
+            // reaches it, so the gate silently stops working and the form looks
+            // dead — exactly what happened on 2026-09-06. Cosmetic code must
+            // never be able to do that.
+            try {
             const _fromGame = new URLSearchParams(window.location.search).get('note');
             if (_fromGame) {
                 const fb2 = document.querySelector('.form-container') || document.body;
@@ -762,6 +771,7 @@
                     + '</ul></div>';
                 fb2.insertBefore(tip, fb2.firstChild);
             }
+            } catch (e) { console.warn('multi-game tip skipped', e); }
             if (presetDates.length > 0) {
                 presetDates.forEach((date, i) => {
                     const win = presetWindows[i] || {};
