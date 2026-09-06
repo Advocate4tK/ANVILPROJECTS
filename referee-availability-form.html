@@ -572,6 +572,7 @@
             emailjs.init({ publicKey: CONFIG.EMAILJS.PUBLIC_KEY });
         }
     </script>
+    <script src="js/tips.js?v=1"></script>
     <script src="js/form-handler.js?v=10"></script>
     <script>
         function buildTimeOptions(presetValue) {
@@ -743,108 +744,26 @@
             // because that is the moment the misunderstanding is formed. Someone
             // who came to the form directly is not making that assumption and
             // does not need a balloon.
-            // ⚠ WRAPPED. This init runs in sequence and the Continue button's
-            // click handler is registered ~1000 lines BELOW. A throw here never
-            // reaches it, so the gate silently stops working and the form looks
-            // dead — exactly what happened on 2026-09-06. Cosmetic code must
-            // never be able to do that.
+            // The multi-game tip, via the shared tips engine (js/tips.js).
+            // Shown only when ?note= carries a fixture — that is the moment a
+            // referee forms the belief that one form covers one game. RTTips
+            // handles once-per-device, the x, the global off switch, and never
+            // throwing; nothing cosmetic on this page may reach the login gate.
             try {
-            const _fromGame = new URLSearchParams(window.location.search).get('note');
-            if (_fromGame) {
-                const fb2 = document.querySelector('.form-container') || document.body;
-                const tip = document.createElement('div');
-                tip.style.cssText = "position:relative;background:linear-gradient(135deg,#e8f8ef,#d7f0e3);"
-                    + "border:2px solid #1e8449;border-radius:12px;padding:16px 44px 16px 20px;"
-                    + "margin-bottom:22px;color:#09142a;box-shadow:0 2px 10px rgba(30,132,73,0.18);";
-                tip.innerHTML =
-                    // Dismissable, and it STAYS dismissed. A referee who has read it
-                    // once should not be told again every time they come back from
-                    // the openings board — the padding above leaves room so the x
-                    // never lands on the text.
-                      '<button type="button" aria-label="Dismiss" '
-                    + 'style="position:absolute;top:8px;right:10px;background:none;border:none;'
-                    + 'font-size:1.4rem;line-height:1;color:#1e8449;cursor:pointer;padding:2px 6px;">&times;</button>'
-                      '<div style="font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:1.15rem;'
-                    + 'letter-spacing:1px;text-transform:uppercase;color:#1e8449;margin-bottom:6px;">'
-                    + '⚽ You can take more than one game</div>'
-                    + '<div style="font-size:0.95rem;line-height:1.5;">'
-                    + 'You came in from a single game, but this one form can cover your whole day.'
-                    + '<ul style="margin:8px 0 0 18px;padding:0;">'
-                    + '<li><strong>Widen your times</strong> — a start and end that span the day makes you '
-                    + 'available for every game inside it, not just the one you tapped.</li>'
-                    + '<li><strong>Tick more clubs</strong> — if you would travel, check them all and you will '
-                    + 'be considered for their games too.</li>'
-                    + '<li><strong>Add more days</strong> with “+ Add Another Day”.</li>'
-                    + '</ul></div>';
-                // ── The character ────────────────────────────────────────
-                // It is the LOGO MARK with a face — the red and yellow cards Tod
-                // already uses everywhere. A mascot that is also the brand costs
-                // nothing to draw and earns recognition instead of spending it.
-                //
-                // Clippy's sin was interrupting people mid-task, not existing. This
-                // one appears once, says its piece, and leaves when told — with a
-                // "turn off tips" that means it, across every page.
-                const mascot =
-                      '<svg width="46" height="52" viewBox="0 0 46 52" style="flex-shrink:0;" aria-hidden="true">'
-                    + '<rect x="3" y="6" width="24" height="34" rx="4" fill="#f5c518" transform="rotate(-12 15 23)"/>'
-                    + '<rect x="16" y="10" width="24" height="34" rx="4" fill="#e94560" transform="rotate(9 28 27)"/>'
-                    + '<circle cx="24" cy="24" r="3.1" fill="#fff"/><circle cx="34" cy="26" r="3.1" fill="#fff"/>'
-                    + '<circle cx="24.8" cy="24.6" r="1.5" fill="#09142a"/><circle cx="34.8" cy="26.6" r="1.5" fill="#09142a"/>'
-                    + '<path d="M25 33 q5 4 10 1" stroke="#09142a" stroke-width="2" fill="none" stroke-linecap="round"/>'
-                    + '</svg>';
-
-                tip.innerHTML =
-                      '<button type="button" aria-label="Dismiss" '
-                    + 'style="position:absolute;top:8px;right:10px;background:none;border:none;'
-                    + 'font-size:1.4rem;line-height:1;color:#1e8449;cursor:pointer;padding:2px 6px;">&times;</button>'
-                    + '<div style="display:flex;gap:14px;align-items:flex-start;">'
-                    + mascot
-                    + '<div>'
-                    + '<div style="font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:1.15rem;'
-                    + 'letter-spacing:1px;text-transform:uppercase;color:#1e8449;margin-bottom:6px;">'
-                    + 'You can take more than one game</div>'
-                    + '<div style="font-size:0.95rem;line-height:1.5;">'
-                    + 'You came in from a single game, but this one form can cover your whole day.'
-                    + '<ul style="margin:8px 0 0 18px;padding:0;">'
-                    + '<li><strong>Widen your times</strong> — a start and end that span the day makes you '
-                    + 'available for every game inside it, not just the one you tapped.</li>'
-                    + '<li><strong>Tick more clubs</strong> — if you would travel, check them all and you will '
-                    + 'be considered for their games too.</li>'
-                    + '<li><strong>Add more days</strong> with “+ Add Another Day”.</li>'
-                    + '</ul></div>'
-                    + '<button type="button" class="tips-off" style="margin-top:10px;background:none;border:none;'
-                    + 'padding:0;font-size:0.8rem;color:#1e8449;text-decoration:underline;cursor:pointer;">'
-                    + 'Turn off tips like this</button>'
-                    + '</div></div>';
-
-                // Two levels: the x hides THIS tip; "turn off tips" silences every
-                // tutorial on every page, which is the promise a referee who has
-                // done this fifty times is owed.
-                let _tipsOff = false, _tipSeen = false;
-                try {
-                    _tipsOff  = localStorage.getItem('rtTipsOff') === '1';
-                    _tipSeen  = localStorage.getItem('availTipDismissed') === '1';
-                } catch (e) {}
-                if (!_tipsOff && !_tipSeen) {
-                    fb2.insertBefore(tip, fb2.firstChild);
-                    // A little arrival, then still. Movement is what makes a
-                    // character read as a character rather than an icon — but it
-                    // happens once and stops, because the whole complaint about
-                    // Clippy was that he never stopped.
-                    tip.animate(
-                        [ { transform: 'translateY(-8px)', opacity: 0 }, { transform: 'none', opacity: 1 } ],
-                        { duration: 260, easing: 'ease-out' }
-                    );
-                    tip.querySelector('[aria-label="Dismiss"]').addEventListener('click', () => {
-                        tip.remove();
-                        try { localStorage.setItem('availTipDismissed', '1'); } catch (e) {}
-                    });
-                    tip.querySelector('.tips-off').addEventListener('click', () => {
-                        tip.remove();
-                        try { localStorage.setItem('rtTipsOff', '1'); } catch (e) {}
+                if (window.RTTips && new URLSearchParams(window.location.search).get('note')) {
+                    RTTips.show({
+                        id:    'avail-multi-game',
+                        title: 'You can take more than one game',
+                        html:  'You came in from a single game, but this one form can cover your whole day.'
+                             + '<ul style="margin:8px 0 0 18px;padding:0;">'
+                             + '<li><strong>Widen your times</strong> — a start and end that span the day '
+                             + 'makes you available for every game inside it, not just the one you tapped.</li>'
+                             + '<li><strong>Tick more clubs</strong> — if you would travel, check them all '
+                             + 'and you will be considered for their games too.</li>'
+                             + '<li><strong>Add more days</strong> with “+ Add Another Day”.</li>'
+                             + '</ul>'
                     });
                 }
-            }
             } catch (e) { console.warn('multi-game tip skipped', e); }
             if (presetDates.length > 0) {
                 presetDates.forEach((date, i) => {
