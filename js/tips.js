@@ -57,10 +57,15 @@
 
     var queue = [], idx = 0, el = null, veil = null;
 
-    function close(markRest) {
-        if (markRest) {
-            queue.slice(idx).forEach(function (t) { set(KEY_SEEN(t.id), '1'); });
-        }
+    // ⚠️ TIPS REPEAT EVERY VISIT. Tod, 2026-09-06: "I want it to show up every
+    // time." Once-per-device was the safe default and it was wrong for this job —
+    // referees do not visit often enough to learn from a thing they saw once in
+    // August, and the misunderstanding it fixes cost a whole weekend of support.
+    //
+    // "Turn off tips" is therefore the ONLY thing that persists. It is the
+    // referee's own decision and it is honoured forever; nothing else is
+    // remembered, so seen-ness never silently swallows the message.
+    function close() {
         if (el)   { el.remove();   el = null; }
         if (veil) { veil.remove(); veil = null; }
         queue = []; idx = 0;
@@ -68,8 +73,7 @@
 
     function render() {
         var t = queue[idx];
-        if (!t) { close(false); return; }
-        set(KEY_SEEN(t.id), '1');           // seen the moment it is shown
+        if (!t) { close(); return; }
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
@@ -86,25 +90,25 @@
             + (t.title || '') + '</div>'
             + '<div style="font-size:0.92rem;line-height:1.5;">' + (t.html || '') + '</div>'
             + '<div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">'
-            + (more
-                ? '<button type="button" data-rt="next" style="background:#1e8449;color:#fff;border:none;'
-                  + 'border-radius:7px;padding:6px 14px;font-weight:800;font-size:0.82rem;cursor:pointer;">'
-                  + 'Next tip &rarr;</button>'
-                : '<button type="button" data-rt="close" style="background:#1e8449;color:#fff;border:none;'
-                  + 'border-radius:7px;padding:6px 14px;font-weight:800;font-size:0.82rem;cursor:pointer;">'
-                  + 'Got it</button>')
+            // One primary button that always moves you forward: "Got it" steps to
+            // the next tip and finishes on the last. Two different labels for the
+            // same green button taught people to read it before pressing it.
+            + '<button type="button" data-rt="' + (more ? 'next' : 'close') + '" '
+            + 'style="background:#1e8449;color:#fff;border:none;border-radius:7px;padding:7px 16px;'
+            + 'font-weight:800;font-size:0.84rem;cursor:pointer;">'
+            + (more ? 'Got it &rarr;' : 'Got it') + '</button>'
             + step
             + '<button type="button" data-rt="off" style="margin-left:auto;background:none;border:none;padding:0;'
             + 'font-size:0.76rem;color:#5a7a66;text-decoration:underline;cursor:pointer;">Turn off tips</button>'
             + '</div></div></div>';
 
         el.querySelectorAll('[data-rt="close"]').forEach(function (b) {
-            b.addEventListener('click', function () { close(true); });
+            b.addEventListener('click', function () { close(); });
         });
         var nx = el.querySelector('[data-rt="next"]');
         if (nx) nx.addEventListener('click', function () { idx++; render(); });
         el.querySelector('[data-rt="off"]').addEventListener('click', function () {
-            set(KEY_OFF, '1'); close(false);
+            set(KEY_OFF, '1'); close();
         });
     }
 
@@ -124,7 +128,7 @@
         veil.style.cssText =
               'position:fixed;inset:0;z-index:99998;background:rgba(9,20,42,0.55);'
             + 'backdrop-filter:blur(1.5px);';
-        veil.addEventListener('click', function () { close(true); });
+        veil.addEventListener('click', function () { close(); });
         document.body.appendChild(veil);
 
         el.style.cssText =
@@ -148,19 +152,21 @@
             try {
                 if (!opts || !opts.id) return false;
                 if (get(KEY_OFF) === '1') return false;
-                if (get(KEY_SEEN(opts.id)) === '1') return false;
                 for (var i = 0; i < queue.length; i++) { if (queue[i].id === opts.id) return false; }
 
                 queue.push(opts);
                 mount();
-                // First one paints immediately; later arrivals extend the run and
-                // are picked up when Next is pressed.
-                if (queue.length === 1) render();
+                // ⚠️ RE-RENDER ON EVERY ADD. Pages queue their whole run in one
+                // synchronous burst, so the first call used to paint a lone tip
+                // reading "Got it" — which CLOSED — and tips 2..n never appeared
+                // at all. Re-painting keeps the "1 of 4" counter and the forward
+                // button honest as the run is assembled.
+                render();
                 return true;
             } catch (e) { console.warn('RTTips.show skipped', e); return false; }
         },
 
-        off: function () { try { set(KEY_OFF, '1'); close(false); } catch (e) {} },
+        off: function () { try { set(KEY_OFF, '1'); close(); } catch (e) {} },
         on:  function () { del(KEY_OFF); },
 
         reset: function () {
