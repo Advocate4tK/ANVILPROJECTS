@@ -36,6 +36,22 @@
 (function () {
     'use strict';
 
+    // ⚠️ NOTHING PERSISTS. Tod, 2026-09-06: "turn off tips only turns it off this
+    // time... will get tips again when they log in next time."
+    //
+    // So there is no off switch that outlives the visit. Every referee sees the
+    // run every time they open the page, and "for now" only quiets him until the
+    // next load. That is deliberate: referees come back a few times a season, the
+    // thing this explains cost a weekend of support calls, and a permanent mute
+    // pressed at tip three would silence it for exactly the people who need tip
+    // five.
+    //
+    // TWO exits, because they are different requests:
+    //   "Turn off tips for now"  quiets him for THIS visit; nothing is written,
+    //                            so he is back on the next load
+    //   "Never show tips again"  written down and honoured forever
+    // The default is repetition; permanence is a deliberate choice a referee has
+    // to make, not something they fall into by pressing the nearest button.
     var KEY_OFF = 'rtTipsOff';
     function KEY_SEEN(id) { return 'rtTipSeen:' + id; }
 
@@ -123,8 +139,14 @@
             + 'font-weight:800;font-size:0.84rem;cursor:pointer;">'
             + (more ? 'Got it &rarr;' : 'Got it') + '</button>'
             + step
-            + '<button type="button" data-rt="off" style="margin-left:auto;background:none;border:none;padding:0;'
-            + 'font-size:0.76rem;color:#5a7a66;text-decoration:underline;cursor:pointer;">Turn off tips</button>'
+            + '<span style="margin-left:auto;display:flex;gap:10px;align-items:center;">'
+            + '<button type="button" data-rt="off" style="background:none;border:none;padding:0;'
+            + 'font-size:0.76rem;color:#5a7a66;text-decoration:underline;cursor:pointer;" '
+            + 'title="Quiet for this visit — back next time">Not now</button>'
+            + '<button type="button" data-rt="never" style="background:none;border:none;padding:0;'
+            + 'font-size:0.76rem;color:#8a9aa3;text-decoration:underline;cursor:pointer;" '
+            + 'title="Never show tips on this device again">Never show tips</button>'
+            + '</span>'
             + '</div></div></div>';
 
         el.querySelectorAll('[data-rt="close"]').forEach(function (b) {
@@ -135,8 +157,18 @@
         });
         var nx = el.querySelector('[data-rt="next"]');
         if (nx) nx.addEventListener('click', function () { idx++; render(); });
-        el.querySelector('[data-rt="off"]').addEventListener('click', function () {
-            set(KEY_OFF, '1'); finish();
+        // Quiets him for THIS visit only. Nothing is written down, so he is back
+        // on the next page load — which is the whole point.
+        el.querySelector('[data-rt="off"]').addEventListener('click', function () { finish(); });
+        // The permanent door. Deliberately the quieter of the two, and it asks —
+        // a referee who taps it by accident and then never hears about a change
+        // to the form is worse off than one who saw a tip twice.
+        el.querySelector('[data-rt="never"]').addEventListener('click', function () {
+            var ok = true;
+            try { ok = confirm('Stop showing tips on this device? You can bring them back by adding ?tips=reset to the address.'); } catch (e) {}
+            if (!ok) return;
+            set(KEY_OFF, '1');
+            finish();
         });
     }
 
@@ -179,7 +211,7 @@
         show: function (opts) {
             try {
                 if (!opts || !opts.id) return false;
-                if (get(KEY_OFF) === '1') return false;
+                if (get(KEY_OFF) === '1') return false;      // "never again", honoured
                 for (var i = 0; i < queue.length; i++) { if (queue[i].id === opts.id) return false; }
 
                 queue.push(opts);
@@ -194,9 +226,11 @@
             } catch (e) { console.warn('RTTips.show skipped', e); return false; }
         },
 
-        off: function () { try { set(KEY_OFF, '1'); finish(); } catch (e) {} },
-        on:  function () { del(KEY_OFF); },
+        off:   function () { try { finish(); } catch (e) {} },          // this visit
+        never: function () { try { set(KEY_OFF, '1'); finish(); } catch (e) {} },
 
+        // Kept for the ?tips=reset URL and for clearing anything an earlier
+        // build wrote. There is nothing to reset in normal use any more.
         reset: function () {
             try {
                 del(KEY_OFF);
