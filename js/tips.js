@@ -211,6 +211,11 @@
         show: function (opts) {
             try {
                 if (!opts || !opts.id) return false;
+                // ⚠️ THE RUN IS OVER FOR THIS VISIT. Without this, "Not now" was
+                // useless on the openings board: that page repaints on every
+                // filter change and on its 60-second refresh, and each repaint
+                // called show() again and brought Tippy straight back.
+                if (done) return false;
                 if (get(KEY_OFF) === '1') return false;      // "never again", honoured
                 for (var i = 0; i < queue.length; i++) { if (queue[i].id === opts.id) return false; }
 
