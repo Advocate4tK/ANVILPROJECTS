@@ -111,18 +111,26 @@
         if (el) return;
         el = document.createElement('div');
         el.className = 'rt-tip-pop';
-        // FLOATING, not in the flow. Bottom-right on a desktop - where an
-        // assistant belongs, out of the reading path - and across the bottom on
-        // a phone, where there is no corner to spare.
+        // FLOATING, over the page, near the middle - Tod asked for the Word
+        // behaviour, where the assistant appears in front of what you are doing
+        // and you deal with him. Sat upper-middle rather than dead centre so he
+        // covers the header area rather than the fields being described.
+        //
+        // No backdrop and no focus trap: the page underneath stays usable and
+        // scrollable. Clippy interrupted; he never actually blocked the document,
+        // and blocking a referee mid-submission would be a far worse sin than
+        // being annoying.
         el.style.cssText =
-              'position:fixed;z-index:99999;right:22px;bottom:22px;width:min(400px,calc(100vw - 32px));'
+              'position:fixed;z-index:99999;left:50%;top:18vh;transform:translateX(-50%);'
+            + 'width:min(430px,calc(100vw - 28px));'
             + 'background:linear-gradient(135deg,#eefaf3,#dcf1e5);border:2px solid #1e8449;'
-            + 'border-radius:14px;padding:15px 18px;color:#09142a;'
-            + 'box-shadow:0 10px 34px rgba(9,20,42,0.28);font-family:inherit;';
+            + 'border-radius:14px;padding:16px 20px;color:#09142a;'
+            + 'box-shadow:0 18px 48px rgba(9,20,42,0.34);font-family:inherit;';
         document.body.appendChild(el);
         try {
-            el.animate([{ transform: 'translateY(14px) scale(.97)', opacity: 0 },
-                        { transform: 'none', opacity: 1 }],
+            // Keeps the -50% X shift, or he leaps to the right as he lands.
+            el.animate([{ transform: 'translateX(-50%) translateY(14px) scale(.97)', opacity: 0 },
+                        { transform: 'translateX(-50%)', opacity: 1 }],
                        { duration: 240, easing: 'cubic-bezier(.2,.8,.3,1)' });
         } catch (e) {}
     }
