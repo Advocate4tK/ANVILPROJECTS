@@ -615,8 +615,14 @@ loadBtn.addEventListener('click', async () => {
         const [records, referees, venues, fieldRecs, clubRecs, payRatesResult, tournRaw, assignorRecs] = await Promise.all([
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    options),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
-            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 500 }),
-            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 500 }),
+            // ⚠️ 500 was BELOW the row count. There are 546+ venues and no ORDER BY,
+            // so 46 arbitrary rows were dropped every load — and a venue that did
+            // not load has no NAME, which made resolveVenue fall back to writing
+            // the raw CA id. Central Assign then rejected the row: "Venue '941'
+            // not found in the system." Same cap, same failure, as the club portal
+            // on 2026-09-05.
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES,   { maxRecords: 3000 }),
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 3000 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,    { maxRecords: 200 }),
             supabaseClient.client.from('pay_rates').select('*').then(r => r.data || []),
             tournGamesPromise,
@@ -873,9 +879,17 @@ function venueBadge(f) {
     const fieldPart = fieldName
         ? `<br><span style="color:#555;font-size:11px;">⛳ ${fieldName}</span>`
         : `<br><span style="color:#aaa;font-size:11px;">field —</span>`;
-    return caId
-        ? `<span style="color:#1a7a40;font-weight:600;" title="CA ID: ${caId}">✓ ${name || caId}</span>${fieldPart}`
-        : `<span style="color:#c0392b;font-weight:600;" title="${name || 'Unknown'}">⚠ ${name || 'No Venue ID'}</span>${fieldPart}`;
+    // Green ONLY when we have the name CA will match on. A CA id with no name is
+    // the shape that gets rejected, so it has to look wrong here.
+    if (name && caId) {
+        return `<span style="color:#1a7a40;font-weight:600;" title="CA ID: ${caId}">✓ ${name}</span>${fieldPart}`;
+    }
+    if (caId) {
+        return `<span style="color:#c0392b;font-weight:700;" `
+             + `title="CA id ${caId} is on the game but the venue record did not load, so we have no NAME to send. CA rejects a bare id.">`
+             + `⚠ name missing (id ${caId})</span>${fieldPart}`;
+    }
+    return `<span style="color:#c0392b;font-weight:600;" title="${name || 'Unknown'}">⚠ ${name || 'No Venue ID'}</span>${fieldPart}`;
 }
 
 function genderBadge(val) {
@@ -899,7 +913,11 @@ function renderGamesTable(records) {
     records.forEach(rec => {
         const f = rec.fields;
         const v = resolveVenue(f);
-        if (v.caId)      venueOk++;
+        // ⚠️ Count the NAME, not the id. CA matches venues by name, so a row with
+        // a CA id and no resolved name is a REJECTED row — and counting the id
+        // made the header read "Venues: 3/3 ✓" over a file that CA threw out
+        // whole on 2026-09-07.
+        if (v.name)      venueOk++;
         if (v.fieldName) fieldOk++;
         const cr = extractRefVal(f['Center Referee']);
         if (cr && resolveRefCA(cr)) refOk++;
@@ -1538,8 +1556,13 @@ function resolveVenue(f) {
     const realFieldId = (numFieldId && numFieldId < INVENTED_FIELD_ID_FLOOR) ? numFieldId : null;
 
     if (numVenueId) {
+        // ⚠️ NEVER FALL BACK TO THE ID. CA matches venues by NAME and rejects a
+        // number outright — proven 2026-09-03 with venue 867 and again on 09-07
+        // with 899 and 941. Writing String(numVenueId) turned a local lookup miss
+        // into a failed upload that looked like CA's fault. An empty name is
+        // caught by this page's own venue check BEFORE the file is built.
         return {
-            name:      numericVenueToName[numVenueId] || String(numVenueId),
+            name:      numericVenueToName[numVenueId] || '',
             caId:      numVenueId,   // Venue ID IS the CA venue ID
             fieldCaId: realFieldId,
             fieldName: numFieldId ? (numericFieldToName[numFieldId] || '') : ''
