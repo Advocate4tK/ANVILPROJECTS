@@ -332,16 +332,30 @@
     <script src="js/admin-auth.js"></script>
     <script>requireToolAccess('cardRefManagement');</script>
     <script>
-        // Admin-only page — redirect non-authenticated and non-Admin users
+        // ⚠️ ROLE **OR** PERMISSION. This used to admit Admins only, ignoring the
+        // per-assignor permissions array entirely — so granting Eric
+        // 'cardRefManagement' made the card appear on the portal and the page then
+        // bounced him straight back. From his side the button simply did nothing.
+        //
+        // admin.html already treats 'cardRefManagement' as a real grant (it shows
+        // and hides the card by it), so the page has to honour the same list or
+        // the switch in users.html is decorative.
         (async function() {
             if (!isLoggedIn()) { window.location.href = 'admin.html'; return; }
             const uid = currentUserId();
-            if (uid) {
+            if (!uid) return;
+            try {
                 const recs  = await supabaseClient.getRecords('Assignors', { maxRecords: 50 });
                 const myRec = recs.find(r => r.fields['auth_user_id'] === uid);
-                if (myRec && (myRec.fields['Role'] || '').trim() !== 'Admin') {
+                if (!myRec) return;                       // unknown account: leave as it was
+                const role  = (myRec.fields['Role'] || '').trim();
+                const perms = Array.isArray(myRec.fields['permissions']) ? myRec.fields['permissions'] : [];
+                if (role !== 'Admin' && !perms.includes('cardRefManagement')) {
                     window.location.href = 'admin.html';
                 }
+            } catch (e) {
+                // A lookup failure must not lock an Admin out of their own tool.
+                console.warn('referee-management access check failed', e);
             }
         })();
     </script>
