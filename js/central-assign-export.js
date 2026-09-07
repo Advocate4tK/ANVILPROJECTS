@@ -512,7 +512,7 @@ async function loadClubCheckboxes() {
         }
         wrap.innerHTML = names.map(n => `
             <label style="display:flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; white-space:nowrap;">
-                <input type="checkbox" class="club-cb" value="${n}" checked> ${n}<span class="ca-club-pending"
+                <input type="checkbox" class="club-cb" value="${n}"> ${n}<span class="ca-club-pending"
                     data-club="${String(n).replace(/"/g, '&quot;')}" style="display:none;"></span>
             </label>`).join('');
         loadClubPendingCounts();
@@ -528,7 +528,7 @@ async function loadClubCheckboxes() {
         if (tourns.length) {
             wrap.innerHTML += tourns.map(n => `
                 <label style="display:flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; white-space:nowrap;">
-                    <input type="checkbox" class="club-cb" value="${n}" checked> 🏆 ${n}
+                    <input type="checkbox" class="club-cb" value="${n}"> 🏆 ${n}
                 </label>`).join('');
         }
 
@@ -541,7 +541,7 @@ async function loadClubCheckboxes() {
         if (evNames.length) {
             wrap.innerHTML += evNames.map(n => `
                 <label style="display:flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; white-space:nowrap;">
-                    <input type="checkbox" class="club-cb" value="${n}" checked> 📅 ${n}
+                    <input type="checkbox" class="club-cb" value="${n}"> 📅 ${n}
                 </label>`).join('');
         }
     } catch(e) {
