@@ -1092,6 +1092,7 @@
 
     <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/ref-experience.js?v=1"></script>
     <script src="js/supabase-client.js?v=14"></script>
     <script>var airtableClient = supabaseClient;</script>
     <script src="js/admin-auth.js"></script>
@@ -6856,6 +6857,25 @@
                 refLookup = {};
                 refLookupByName  = {};
                 refLookupByEmail = {};
+                // ⚠️ ONE PLACE. Where a referee has a first_season, their
+                // experience is DERIVED here and written over 'Years Reffing'
+                // before anything reads it — so every display, sort, colour band
+                // and filter downstream keeps working untouched and can never
+                // disagree with another.
+                //
+                // The stored label froze the day it was typed: Jolie Clavette read
+                // Seas 1 for ever. This recomputes on every load, so referees
+                // advance a season on their own and nobody has to remember.
+                refs.forEach(r => {
+                    try {
+                        const fs = r.fields && r.fields['first_season'];
+                        if (fs && window.RefExp) {
+                            const lbl = RefExp.expLabel(fs);
+                            if (lbl) r.fields['Years Reffing'] = lbl;
+                        }
+                    } catch (e) {}
+                });
+
                 refs.forEach(r => {
                     refLookup[r.id] = r;
                     const n = (r.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();

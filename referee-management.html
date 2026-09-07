@@ -328,6 +328,7 @@
 
     <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/ref-experience.js?v=1"></script>
     <script src="js/supabase-client.js?v=14"></script>
     <script src="js/admin-auth.js"></script>
     <script>requireToolAccess('cardRefManagement');</script>
@@ -372,6 +373,18 @@
         async function loadRefs() {
             try {
                 allRefs = await airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 5000 });
+                // Same derivation as the workstation and the blast tool. Note the
+                // EDITOR still shows the raw stored value, so anyone fixing a
+                // record sees what is really in the field rather than the
+                // computed label.
+                allRefs.forEach(r => {
+                    try {
+                        const fs = r.fields && r.fields['first_season'];
+                        if (fs && window.RefExp) {
+                            r.fields['_exp_display'] = RefExp.expLabel(fs);
+                        }
+                    } catch (e) {}
+                });
                 allRefs.sort((a, b) => (a.fields['Name'] || '').localeCompare(b.fields['Name'] || ''));
                 populateClubFilter();
                 applyFilters();

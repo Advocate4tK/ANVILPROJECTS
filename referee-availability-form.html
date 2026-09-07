@@ -287,29 +287,23 @@
                                 <legend>Referee Profile</legend>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="yearsReffing">Years Reffing <span class="required">*</span></label>
-                                        <select id="yearsReffing" name="yearsReffing" required>
-                                            <option value="">Select</option>
-                                            <option value="Seas 1">Season 1 — my very first season</option>
-                                            <option value="Seas 2">Season 2 — completed 1 season, still in Year 1</option>
-                                            <option value="2">Year 2 — completed both seasons, now in year 2</option>
-                                            <option value="3">Year 3</option>
-                                            <option value="4">Year 4</option>
-                                            <option value="5">Year 5</option>
-                                            <option value="6">Year 6</option>
-                                            <option value="7">Year 7</option>
-                                            <option value="8">Year 8</option>
-                                            <option value="9">Year 9</option>
-                                            <option value="10">Year 10</option>
-                                            <option value="11">Year 11</option>
-                                            <option value="12">Year 12</option>
-                                            <option value="13">Year 13</option>
-                                            <option value="14">Year 14</option>
-                                            <option value="15">Year 15</option>
-                                            <option value="20">Year 16–20</option>
-                                            <option value="25">Year 21–25</option>
-                                            <option value="30">Year 26+</option>
+                                        <!-- ⚠️ ASKS WHEN THEY STARTED, NOT WHAT THEY ARE.
+                                             The old question was a dropdown of labels — "Season 1 —
+                                             my very first season" — and it OVERWROTE the referee
+                                             record on every submission. A label is true the day it is
+                                             typed and wrong for ever after, and returning referees
+                                             kept re-picking Season 1 because the honest answer to
+                                             "what are you" drifts. Eric could see people he knew were
+                                             in their second season reading Seas 1.
+                                             A start season cannot rot. Everything else is computed
+                                             from it by js/ref-experience.js. -->
+                                        <label for="firstSeason">When did you start refereeing? <span class="required">*</span></label>
+                                        <select id="firstSeason" name="firstSeason" required>
+                                            <option value="">Select the season of your first game</option>
                                         </select>
+                                        <div style="font-size:0.78rem; color:#6b7280; margin-top:4px;">
+                                            Your first ever season. We work out the rest — you never have to update this.
+                                        </div>
                                     </div>
                                     <div class="form-group">
                                         <label for="certificationLevel">Certification Level</label>
@@ -572,6 +566,7 @@
             emailjs.init({ publicKey: CONFIG.EMAILJS.PUBLIC_KEY });
         }
     </script>
+    <script src="js/ref-experience.js?v=1"></script>
     <script src="js/tips.js?v=9"></script>
     <script src="js/form-handler.js?v=10"></script>
     <script>
@@ -718,6 +713,23 @@
                 : [];
 
             const presetTime = urlTime ? urlTime.substring(0, 5) : '';
+
+            // Fill the "when did you start" dropdown from RefExp, newest first —
+            // most people answering this are new.
+            try {
+                const fsSel = document.getElementById('firstSeason');
+                if (fsSel && window.RefExp && fsSel.options.length <= 1) {
+                    RefExp.seasonOptions(24).forEach(o => {
+                        const opt = document.createElement('option');
+                        opt.value = o.value; opt.textContent = o.label;
+                        fsSel.appendChild(opt);
+                    });
+                    const earlier = document.createElement('option');
+                    earlier.value = 'earlier';
+                    earlier.textContent = 'Earlier than that';
+                    fsSel.appendChild(earlier);
+                }
+            } catch (e) { console.warn('first-season options skipped', e); }
 
             // ?times= runs PARALLEL to ?dates= — one "HH:MM-HH:MM" per date, so a
             // referee who picked a 9:00 and a 1:00 game on the same day arrives
@@ -1616,7 +1628,7 @@
                     { val: f['Phone'],               id: 'refereePhone'       },
                     { val: f['Date of Birth'],        id: 'refereeBirthDate'   },
                     { val: f['Address'],              id: 'refereeAddress'     },
-                    { val: f['Years Reffing'],        id: 'yearsReffing'       },
+                    { val: f['first_season'],         id: 'firstSeason'        },
                     { val: f['Certification Level'],  id: 'certificationLevel' },
                     { val: f['Gender'],               id: 'refereeGender'      },
                 ];
@@ -1692,7 +1704,7 @@
                         document.getElementById('refereeFirstName').value = firstName;
                         document.getElementById('refereeLastName').value  = lastName;
                         if (f['Phone'])               document.getElementById('refereePhone').value         = f['Phone'];
-                        if (f['Years Reffing'])        document.getElementById('yearsReffing').value         = f['Years Reffing'];
+                        if (f['first_season'])         document.getElementById('firstSeason').value          = f['first_season'];
                         if (f['Certification Level'])  document.getElementById('certificationLevel').value   = f['Certification Level'];
                         if (f['Gender'])               document.getElementById('refereeGender').value         = f['Gender'];
                         if (f['Address'])              document.getElementById('refereeAddress').value       = f['Address'];
@@ -1768,7 +1780,7 @@
                             !f['Date of Birth'] && 'Date of Birth',
                             !f['Address']             && 'Address',
                             !(f['City'] && f['Zip Code']) && 'City / Zip',
-                            !f['Years Reffing']       && 'Years Reffing',
+                            (!f['first_season'] && !f['Years Reffing']) && 'When you started refereeing',
                             !f['Gender']              && 'Gender',
                             (isMinor && !f['Guardian Name'])  && 'Guardian Name',
                             (isMinor && !f['Guardian Email']) && 'Guardian Email',
@@ -1888,7 +1900,12 @@
 
                 // Validate only visible required fields (filled fields were hidden by hideFilledFields)
                 const phone = document.getElementById('refereePhone').value.trim();
-                const years = document.getElementById('yearsReffing')?.value || '';
+                // ⚠️ Save the FACT. 'Years Reffing' is still written, but as a
+                // DERIVED label so anything not yet migrated keeps showing the
+                // right thing — it is no longer the source of truth.
+                const firstSeason = document.getElementById('firstSeason')?.value || '';
+                const years = (firstSeason && firstSeason !== 'earlier' && window.RefExp)
+                    ? RefExp.expLabel(firstSeason) : '';
                 const cert  = document.getElementById('certificationLevel')?.value || '';
                 const city  = document.getElementById('refereeCity').value.trim();
                 const zip   = document.getElementById('refereeZip').value.trim();
@@ -1936,6 +1953,10 @@
                         'Phone': phone,
                     };
                     if (years) refereeRecord['Years Reffing'] = years;
+                    // The one that matters. 'earlier' means they started before
+                    // the dropdown reaches, so we store nothing rather than a
+                    // wrong season and they keep whatever they already had.
+                    if (firstSeason && firstSeason !== 'earlier') refereeRecord['first_season'] = firstSeason;
                     if (address)  refereeRecord['Address']  = address;
                     if (refCity)  refereeRecord['City']     = refCity;
                     if (refState) refereeRecord['State']    = refState;
@@ -1978,6 +1999,7 @@
                         const emailSlot  = phoneMatch.fields['Email 2'] ? 'Email 3' : 'Email 2';
                         const updates    = { [emailSlot]: newEmail };
                         if (refereeRecord['Years Reffing']) updates['Years Reffing'] = refereeRecord['Years Reffing'];
+                        if (refereeRecord['first_season'])  updates['first_season']  = refereeRecord['first_season'];
                         if (refereeRecord['Address'])       updates['Address']        = refereeRecord['Address'];
                         if (refereeRecord['City'])          updates['City']           = refereeRecord['City'];
                         if (refereeRecord['State'])         updates['State']          = refereeRecord['State'];
@@ -2067,6 +2089,7 @@
                     const updates = {};
                     if (emailSlot) updates[emailSlot] = email;
                     if (refereeRecord['Years Reffing'])       updates['Years Reffing']       = refereeRecord['Years Reffing'];
+                    if (refereeRecord['first_season'])        updates['first_season']        = refereeRecord['first_season'];
                     if (refereeRecord['Address'])             updates['Address']             = refereeRecord['Address'];
                     if (refereeRecord['City'])                updates['City']                = refereeRecord['City'];
                     if (refereeRecord['State'])               updates['State']               = refereeRecord['State'];
@@ -2135,7 +2158,7 @@
                 window._foundRefId  = null;
                 window._foundRefDob = null;
                 ['refereeFirstName','refereeLastName','refereeEmail','refereePhone',
-                 'refereeBirthDate','refereeAddress','refereeCity','refereeState','refereeZip','yearsReffing','certificationLevel','refereeGender'].forEach(id => {
+                 'refereeBirthDate','refereeAddress','refereeCity','refereeState','refereeZip','firstSeason','certificationLevel','refereeGender'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.value = '';
                 });
@@ -2180,7 +2203,7 @@
                     // Pre-fill all profile fields
                     const fill = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
                     fill('refereePhone',        f['Phone']);
-                    fill('yearsReffing',        f['Years Reffing']);
+                    fill('firstSeason',         f['first_season']);
                     fill('certificationLevel',  f['Certification Level']);
                     fill('refereeGender',       f['Gender']);
                     fill('refereeAddress',      f['Address']);
@@ -2202,7 +2225,7 @@
                         !f['Date of Birth']       && 'Date of Birth',
                         !f['Address']             && 'Address',
                         !(f['City'] && f['Zip Code']) && 'City / Zip',
-                        !f['Years Reffing']       && 'Years Reffing',
+                        (!f['first_season'] && !f['Years Reffing']) && 'When you started refereeing',
                         !f['Gender']              && 'Gender',
                         (mergeMinor && !f['Guardian Name'])  && 'Guardian Name',
                         (mergeMinor && !f['Guardian Email']) && 'Guardian Email',
