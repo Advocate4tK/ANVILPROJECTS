@@ -398,12 +398,15 @@ document.querySelectorAll('input[name="filterMode"]').forEach(radio => {
     radio.addEventListener('change', function() {
         document.getElementById('panelWeek').style.display  = this.value === 'week'  ? 'block' : 'none';
         document.getElementById('panelRange').style.display = this.value === 'range' ? 'block' : 'none';
-        // Clear dates when switching modes
+        // Clear dates when switching modes...
         document.getElementById('dateFrom').value = '';
         document.getElementById('dateTo').value   = '';
         document.getElementById('weekRangeDisplay').textContent = '';
         document.getElementById('pickMonth').value = '';
         document.getElementById('pickWeek').value  = '';
+        // ...but By Week should ARRIVE on this week rather than on two empty
+        // dropdowns, which is the reason it had never been used once.
+        if (this.value === 'week') preselectThisWeek();
     });
 });
 
@@ -436,6 +439,36 @@ function applyWeekPicker() {
     document.getElementById('dateTo').value   = fmt(sun);
     document.getElementById('weekRangeDisplay').textContent = `${display(mon)} — ${display(sun)}`;
 }
+
+// By Week arrives already pointing at THIS week, so trying it costs one click
+// rather than two dropdowns of homework. Tod had never used it once — "a great
+// big clunky looking thing" — largely because it started empty and demanded work
+// before it showed anything.
+//
+// Custom Date Range is the default now, so this only matters to someone who
+// switches. It fills the range too, which means By Week is immediately useful
+// instead of needing both dropdowns touched first.
+function preselectThisWeek() {
+    try {
+        const now = new Date();
+        const mSel = document.getElementById('pickMonth');
+        const wSel = document.getElementById('pickWeek');
+        if (!mSel || !wSel) return;
+
+        // Which Monday-week of the month are we in? Same arithmetic
+        // applyWeekPicker uses, so the two can never disagree.
+        const first     = new Date(now.getFullYear(), now.getMonth(), 1);
+        const dow       = first.getDay();                    // 0=Sun
+        const daysToMon = dow === 0 ? 1 : dow === 1 ? 0 : 8 - dow;
+        const firstMon  = new Date(now.getFullYear(), now.getMonth(), 1 + daysToMon);
+        const week      = Math.floor((now - firstMon) / (7 * 86400000)) + 1;
+
+        mSel.value = String(now.getMonth());
+        wSel.value = String(Math.min(Math.max(week, 1), 4));
+        applyWeekPicker();
+    } catch (e) { console.warn('week preselect skipped', e); }
+}
+preselectThisWeek();
 
 document.getElementById('pickMonth').addEventListener('change', applyWeekPicker);
 document.getElementById('pickWeek').addEventListener('change',  applyWeekPicker);
