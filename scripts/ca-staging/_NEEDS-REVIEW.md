@@ -225,8 +225,35 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 55 of 71 (ends Andrew Roraback).
-Resume at the first surname AFTER RORABACK. Roster crossed 2,000 on page 37.**
+**Complete and contiguous through page 56 of 71 (ends Caleb Sadanowicz).
+Resume at the first surname AFTER SADANOWICZ. Roster crossed 2,000 on page 37.
+THE R's ARE DONE — the harvest is into the S's, the biggest letter left.**
+
+### Page 56 — UPLOADED 2026-09-07 (Rorick → Sadanowicz)
+Swept 15:50, 14 frames, archived to `EYES/harvest/20260907-page56`. Footer confirmed.
+Follows page 55 correctly — Roraback precedes Rorick. 48 CT rows staged, 2 out-of-state
+omitted (Roseman NJ, Rueda NJ). **41 inserted, 6 updated, 0 ambiguous, 0 duplicate
+CA IDs. Roster 2,684 → 2,725.**
+- ⭐⭐ **James Russo #1547 — LEBANON**, 71, CA ID #1547, in BOTH East Haddam and
+  Griswold pools, logged in yesterday. Only the second Lebanon referee found, after
+  Nourddine Jalal #5523 (page 31).
+- ⭐ **Two COVENTRY referees in no pool** — Matthew Rouillard #38112 (15) and
+  aerie rowett #37287 (17). NECONN territory.
+- ⚠️ **Caden Rust #40034 — `ashley.a.rust@uscg.mil`**, a US Coast Guard address, and
+  he is IN the East Haddam pool. Military domains commonly reject outside bulk mail;
+  a blast to him may fail silently. First .mil address in the harvest.
+- **Juan Rumino #909** — 82 years old, CA #909, East Haven, and the only referee in
+  the harvest on his OWN DOMAIN (`juan@rumino.com`). Logged in this week.
+- **Regional badges**: Jeffrey Ruiz #32353 (Fairfield, handle `ruizreferee`, 23) and
+  Adrian Rusu #795 (Monroe, 53). Alex Rusu #19462 is REGIONAL CANDIDATE, not Regional —
+  the importer correctly leaves him Grassroots.
+- Also East Haddam pool: Jackson Rurka #34644 (East Hampton), Maxwell Sabourin #39380
+  (Marlborough, never logged in).
+- Families: three Rusus in Monroe, three Rosens in Greenwich, two Rosses in Brookfield,
+  two Ruskins in Stratford, two Roths in South Windsor.
+- **Hector Rueda #39035 (Roselle Park NJ)** carries a NATIONAL CANDIDATE badge — the
+  highest credential seen on the page, and omitted on the state rule. He belongs on the
+  out-of-staters-already-in-CA list if that rule is ever relaxed.
 
 ### Page 55 — UPLOADED 2026-09-07 (Riviere Jr → Roraback)
 Swept 15:29, 14 frames, archived to `EYES/harvest/20260907-page55`. Footer confirmed.
