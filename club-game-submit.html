@@ -2685,11 +2685,21 @@
                     if (arrow) arrow.style.transform = window._weekCollapsed[key] ? 'rotate(0deg)' : 'rotate(90deg)';
                 };
 
-                // Newest week FIRST. The keys are the Monday of each week, so
-                // descending on the key puts this week above last week and last
-                // month at the bottom. Games INSIDE a week stay chronological —
-                // a Saturday reads in kickoff order, that is what a schedule is.
-                const weekBlocks = Object.entries(weeks).sort((a, b) => b[0].localeCompare(a[0]))
+                // ⚠️ WHAT IS NEXT, FIRST. A plain descending sort was right while every
+                // week was past or current, but a club with games booked into late
+                // October put the FURTHEST week on top and pushed this week to the
+                // bottom — the opposite of useful.
+                //
+                // So: this week, then upcoming in the order they will be played,
+                // then finished weeks below, most recent first. Games INSIDE a week
+                // stay chronological — a Saturday reads in kickoff order, which is
+                // what a schedule is.
+                const weekBlocks = Object.entries(weeks).sort((a, b) => {
+                        const aPast = a[0] < currentWeekKey, bPast = b[0] < currentWeekKey;
+                        if (aPast !== bPast) return aPast ? 1 : -1;      // finished weeks sink
+                        return aPast ? b[0].localeCompare(a[0])          // past: most recent first
+                                     : a[0].localeCompare(b[0]);         // ahead: soonest first
+                    })
                     .map(([key, { label, games: wGames }]) => {
                         const isCurrent = key === currentWeekKey;
                         const isPast = key < currentWeekKey;
