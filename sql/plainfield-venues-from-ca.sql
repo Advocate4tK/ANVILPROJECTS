@@ -20,6 +20,14 @@
 --
 -- ⚠️ No fields are added. CA lists none for any of these, and a field name we
 -- invent would be rejected on import the way Addison Park's were.
+--
+-- rt_code is NOT set here on purpose. sql/rt_codes.sql installs a BEFORE INSERT
+-- trigger that mints the next RTVCT### per state, so setting it by hand would
+-- either collide with the sequence or skip a number. The verify below prints
+-- what the trigger assigned.
+--
+-- If the codes come back NULL, that trigger is missing from this database —
+-- run sql/rt_codes.sql first, then re-run this.
 -- ============================================================================
 
 insert into public.venues ("Venue Name", name, "Venue ID", city, state, club_name)
@@ -47,7 +55,8 @@ update public.clubs c
  where c.id = 50;
 
 -- Verify: four Plainfield venues, and the club list resolving to all of them.
-select id, coalesce(nullif(name,''), "Venue Name") as venue, "Venue ID", city, club_name
+select id, rt_code, coalesce(nullif(name,''), "Venue Name") as venue,
+       "Venue ID" as ca_id, city, club_name
   from public.venues
  where "Venue ID" in (951, 999, 1043, 1180)
  order by "Venue ID";
