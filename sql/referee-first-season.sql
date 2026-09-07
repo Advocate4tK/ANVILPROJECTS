@@ -26,10 +26,27 @@
 -- veteran in the batch. Read the counts before uncommenting anything.
 -- ============================================================================
 
-alter table public.referees add column if not exists first_season smallint;
+-- ⚠️ TEXT, not smallint. The value is 'YYYY-S' — S is 1 for Spring, 2 for Fall —
+-- because the first YEAR is split into two seasons (Seas 1, Seas 2) and a bare
+-- year cannot say which half someone started in. It was declared smallint here
+-- first and the backfill failed on it: "column first_season is of type smallint
+-- but expression is of type text".
+alter table public.referees add column if not exists first_season text;
+
+-- Repair the earlier smallint version. Safe: the column has never held a value.
+do $$
+begin
+    if exists (
+        select 1 from information_schema.columns
+         where table_name = 'referees' and column_name = 'first_season'
+           and data_type <> 'text'
+    ) then
+        alter table public.referees alter column first_season type text using first_season::text;
+    end if;
+end $$;
 
 comment on column public.referees.first_season is
-    'Calendar year the referee first officiated. Experience is DERIVED from this, never stored as a label.';
+    'The season the referee first officiated, as YYYY-S (S: 1 Spring, 2 Fall). Experience is DERIVED from this by js/ref-experience.js, never stored as a label.';
 
 -- ── Look first ─────────────────────────────────────────────────────────────
 -- What is actually in the field, and when were those rows created?
