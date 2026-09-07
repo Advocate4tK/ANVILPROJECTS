@@ -930,6 +930,13 @@ function renderGamesTable(records) {
         const f = rec.fields;
         // Three states, and only the last one means the game is actually in CA.
         const importedAt = f['ca_imported_at'] || null;
+        // ⚠️ A game CA already holds is SHOWN but not TICKED. Absence is
+        // ambiguous — a missing row could mean in CA, cancelled, out of range, or
+        // filtered — so it stays visible and says "✓ in CA". But Select All must
+        // mean "everything outstanding", or a week already done goes back into the
+        // file and the confirm step afterwards stops meaning anything. Ticking one
+        // by hand is still possible; that is how you re-send after a change control.
+        if (importedAt && _hideInCA) return;
         const exportedAt = f['ca_exported_at'] || getExportedAt(f);
         const priorBadge = importedAt
             ? `<span style="color:#2ecc71;font-size:11px;white-space:nowrap;font-weight:700;" title="Confirmed in Central Assign ${fmtExportDate(importedAt)}">✓ in CA</span>`
@@ -942,7 +949,7 @@ function renderGamesTable(records) {
                 ? 'background:rgba(230,126,34,0.08);'
                 : (i % 2 === 0 ? 'background:rgba(15,52,96,0.28);' : '');
         html += `<tr style="font-size:0.78rem;${rowBg}">
-            <td style="padding:5px 4px;"><input type="checkbox" class="game-check" data-index="${i}" checked></td>
+            <td style="padding:5px 4px;"><input type="checkbox" class="game-check" data-index="${i}"${importedAt ? '' : ' checked'}></td>
             <td style="color:#999;padding:5px 4px;">${i + 1}</td>
             <td style="white-space:nowrap;">${formatDate(f['Date'] || '')}</td>
             <td style="white-space:nowrap;">${fmtTime(f['Time'] || '')}</td>
@@ -981,8 +988,24 @@ function checkLimit() {
 }
 
 // ── Select / Deselect All ─────────────────────────────────────────────────────
+// Off by default: seeing the whole week is the point, and hiding is the
+// exception you reach for on a busy one.
+let _hideInCA = false;
+(function wireHideInCA() {
+    const cb = document.getElementById('hideInCA');
+    if (cb) cb.addEventListener('change', function () {
+        _hideInCA = this.checked;
+        if (typeof loadedGames !== 'undefined') renderGamesTable(loadedGames);
+    });
+})();
+
 selectAllBtn.addEventListener('click', () => {
-    document.querySelectorAll('.game-check').forEach(cb => cb.checked = true);
+    // Everything OUTSTANDING. A confirmed game stays unticked unless chosen by
+    // hand, which is what makes Select All safe on a half-done week.
+    document.querySelectorAll('.game-check').forEach(cb => {
+        const rec = loadedGames[parseInt(cb.dataset.index, 10)];
+        cb.checked = !(rec && rec.fields['ca_imported_at']);
+    });
     checkLimit();
 });
 
