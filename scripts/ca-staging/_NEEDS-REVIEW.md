@@ -225,9 +225,34 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 56 of 71 (ends Caleb Sadanowicz).
-Resume at the first surname AFTER SADANOWICZ. Roster crossed 2,000 on page 37.
+**Complete and contiguous through page 57 of 71 (ends Addison Sapia).
+Resume at the first surname AFTER SAPIA. Roster crossed 2,000 on page 37.
 THE R's ARE DONE — the harvest is into the S's, the biggest letter left.**
+
+### Page 57 — UPLOADED 2026-09-07 (Sadlosky → Sapia)
+Swept 15:54, 14 frames, archived to `EYES/harvest/20260907-page57`. Footer confirmed.
+46 CT rows staged, 4 out-of-state omitted (Safran NY, Samchalk NY, Samour MA,
+Sanchez MA). **34 inserted, 9 updated, 0 ambiguous, 0 duplicate CA IDs.
+Roster 2,725 → 2,759.**
+- ⭐⭐ **Madison San Souci #40253 — MOOSUP**, 14, in NO pool. Moosup is Plainfield —
+  Dave Hurteau's town. First Moosup referee in the harvest.
+- ⭐⭐ **Kiran Sandiford #37523 — STORRS**, 29, **REGIONAL**, handle `sandifordreferee`,
+  in no pool. NECONN territory and a serious official. Best NECONN name on the page.
+- **Charles Sanchez #38511** — Meriden, 21, REGIONAL, logged in today, no pool.
+- East Haddam pool: John Salafia #35206 (East Hampton) and Addison Sapia #39646
+  (Old Lyme). joseph salafia #41094 is John's sibling and is NOT in the pool.
+- REFS pool: Jose Joaquin Sanchez #19080 (59, Oxford) and Brynn Samorajczyk #40910
+  (13, Oxford). NorthEast: Emma Santos #40341 (Rocky Hill, no phone, never logged in).
+- ⚠️ **Two expired/incomplete, and CA said so first.** The page carried CA's own banner
+  "2 referees in this view have an expired or missing registration year" and both were
+  found in the read — **Britta Salomonsson #41336** (blank reg + Expired + still tagged
+  New Referee, never logged in) and **Carmine Santaniello #39683** (reg 2025, expired).
+  That banner is a free completeness check on every future page: if the count in the
+  banner does not match what the read turns up, the read is short. USE IT.
+  Santaniello shares a phone with his son Evan #39245, who is current.
+- ⚠️ **Cameron Santos #39021** — `csantos85549@my.npsct.org`, a Newington Public Schools
+  STUDENT account. District mail blocks outside senders and the account dies at
+  graduation. Second institutional address in two pages after Caden Rust's @uscg.mil.
 
 ### Page 56 — UPLOADED 2026-09-07 (Rorick → Sadanowicz)
 Swept 15:50, 14 frames, archived to `EYES/harvest/20260907-page56`. Footer confirmed.
