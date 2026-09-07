@@ -1,6 +1,6 @@
 # Central Assign harvest — what's done, what's left
 
-**Last updated: 2026-08-29**
+**Last updated: 2026-09-07**
 
 ## ⚠️ PAGE NUMBERS DRIFT — track the NAME, not the page
 
@@ -212,10 +212,45 @@ Page 26 was swept, partially read, and then lost mid-transcription when the
 session restarted — frames 7–17 were gone before they could be read. Read the
 frames or copy them to `harvest/` in the SAME turn the sweep lands.
 
+## ⭐⭐ STANDING ORDER — IMPORT EVERY PAGE, DO NOT ASK
+
+Tod, 2026-09-07: *"Always import them. You don't have to ask me to say go. I want
+these imported and we need to get them done quicker."*
+
+Preview-then-ask is dead for this job. The cycle is: sweep → archive → transcribe
+→ `--write` → verify → update this file → next page. The importer backs up before
+every write and never overwrites a non-empty value, which is what makes the
+standing order safe. Report the result with the word **UPLOADED**; do not stop for
+approval between the preview and the write.
+
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 52 of 70 (ends Chase Rathbun).
-Resume at page 53. Roster crossed 2,000 on page 37.**
+**Complete and contiguous through page 54 of 71 (ends Orlando Rivera-anglero).
+Resume at the first surname AFTER RIVERA-ANGLERO. Roster crossed 2,000 on page 37.**
+
+### Page 54 — UPLOADED 2026-09-07 (Ratnavel → Rivera-anglero)
+Swept 15:11, 14 frames, archived to `EYES/harvest/20260907-page54`. Footer confirmed.
+Rows 1-4 (Ranjan, Ranta, Raposa, Rathbun) were page 52's tail and were NOT restaged.
+41 CT rows staged, 5 out-of-state omitted (Reale MA, Reed NY, Reeves MS, Regan MA,
+Rice CO). **36 inserted, 3 updated, 0 ambiguous, 0 duplicate CA IDs. Roster 2,609 →
+2,645.** CA's directory total is now **3,543** (3,478 on page 52 — still growing).
+- **Matthew Rindfleisch #40116 — HIGGANUM** (= Haddam, next door to East Haddam), 14,
+  in NO pool. Second Higganum find after Oskar Heikkila #38835.
+- **Trevor Reid #39371** — 40, Colchester, an ADULT in BOTH East Haddam and Griswold
+  pools, never logged in. Maximus Reinholtz #39930 (Colchester) and Orlando
+  Rivera-anglero #29271 (Middletown) are also East Haddam pool, and all three were
+  gap-fills — already on our roster, now carrying their CA IDs.
+- **Dustin Reep #41030** — 49, Northford, brand-new referee through 2027, logged in
+  the same day. Adult entrants are rare; worth reaching.
+- ⚠️ **Collin Raymond #39431** — `luckyal8@hotmail.com`. Lowercase L before the 8,
+  read at 150%. VERIFY BEFORE EMAILING.
+- Recchi #38873 and Regnier #38947 also sit in `enfield.json` from the town harvest,
+  a year younger. Same CA IDs, same person — a cross-file repeat, not a CA duplicate.
+  The importer's "DUPES INSIDE CA" counter includes these; it is not all CA's fault.
+
+### Page 53 — no file, and that is correct
+Swept and checked 2026-09-07: every row (Pudipeddi → Ranieri) was already in the
+roster from page 52's sweep. Pagination drift, not a gap. Nothing staged.
 
 ### ⚠️ STATEWIDE badge on MINORS — verify before relying on it
 Two cases in three pages. One would read as a CA data error; two looks like a
