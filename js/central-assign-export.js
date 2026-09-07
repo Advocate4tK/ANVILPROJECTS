@@ -1358,7 +1358,10 @@ async function loadClubPendingCounts() {
         const today = new Date().toISOString().slice(0, 10);
         const { data, error } = await supabaseClient.client
             .from('games')
-            .select('id, "Source Club", "Game Status"')
+            // `date` is needed for the span that fills the date range when a club is
+            // ticked. It was missing, so syncRangeToChecked() had nothing to read
+            // and quietly did nothing.
+            .select('id, date, "Source Club", "Game Status"')
             .is('ca_imported_at', null)
             .gte('date', today);
         if (error) throw new Error(error.message);
