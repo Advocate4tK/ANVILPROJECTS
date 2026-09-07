@@ -915,8 +915,10 @@ function renderGamesTable(records) {
         ${sortHdr('date','Date','85px')}
         <th style="width:65px;">Time</th>
         <th style="width:10%;">Club</th>
-        <th style="width:18%;">Home</th>
-        <th style="width:18%;">Away</th>
+        <th style="width:16%;" title="Home Club — must match Central Assign's list exactly">Home Club</th>
+        <th style="width:14%;">Home Team</th>
+        <th style="width:16%;" title="Visiting Club — must match Central Assign's list exactly">Away Club</th>
+        <th style="width:14%;">Away Team</th>
         ${sortHdr('age','Age','44px')}
         <th style="width:36px;">M/F</th>
         <th style="width:18%;">Venue / Field</th>
@@ -955,7 +957,9 @@ function renderGamesTable(records) {
             <td style="white-space:nowrap;">${formatDate(f['Date'] || '')}</td>
             <td style="white-space:nowrap;">${fmtTime(f['Time'] || '')}</td>
             <td style="font-size:11px;color:#555;">${f['Source Club'] || ''}</td>
+            ${clubCell(f['home_club'])}
             <td style="word-break:break-word;">${f['Home Team'] || ''}</td>
+            ${clubCell(f['away_club'])}
             <td style="word-break:break-word;">${f['Away Team'] || ''}</td>
             <td style="text-align:center;">${f['Age Group'] || ''}</td>
             <td style="text-align:center;">${genderBadge(f['Gender'])}</td>
@@ -1542,6 +1546,19 @@ function resolveVenue(f) {
     };
 }
 
+// The two fields that decide whether Central Assign accepts the row at all. They
+// are required dropdowns on CA's own Add Game form, so a blank or a name that is
+// not on CA's list is a rejected game — and until now neither was visible on this
+// page before the file was built.
+function clubCell(v) {
+    const val = String(v || '').trim();
+    if (!val) {
+        return `<td><span style="color:#c0392b;font-size:11px;font-weight:700;" `
+             + `title="Central Assign REQUIRES this. The row will be rejected.">⚠ missing</span></td>`;
+    }
+    return `<td style="font-size:11px;color:#334155;word-break:break-word;">${val}</td>`;
+}
+
 // Show WHOSE assignor email this game will carry, before the file is built.
 // It is not necessarily the person pressing Download: the export reads
 // assignors.clubs, so a club Tod uploads on behalf of another assignor goes out
@@ -1557,7 +1574,12 @@ function assignorCell(club) {
              + `⚠ none on file</span></td>`;
     }
     const mine = primary === myAssignorEmail;
+    // The name is what Tod recognises; the address is what actually goes in the
+    // file. Show both, name first.
+    const list = assignorsByClub[String(club || '').trim().toLowerCase()] || [];
+    const who  = (list.find(a => a.email === primary) || {}).name || '';
     return `<td style="font-size:11px;line-height:1.35;">`
+         + (who ? `<div style="font-weight:700;color:#09142a;">${who}</div>` : '')
          + `<span style="color:${mine ? '#1e8449' : '#0369a1'};font-weight:600;word-break:break-all;">${primary}</span>`
          + (secondary ? `<div style="color:#8a9aa3;word-break:break-all;">+ ${secondary}</div>` : '')
          + `</td>`;
