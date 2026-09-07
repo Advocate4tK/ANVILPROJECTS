@@ -225,8 +225,35 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 54 of 71 (ends Orlando Rivera-anglero).
-Resume at the first surname AFTER RIVERA-ANGLERO. Roster crossed 2,000 on page 37.**
+**Complete and contiguous through page 55 of 71 (ends Andrew Roraback).
+Resume at the first surname AFTER RORABACK. Roster crossed 2,000 on page 37.**
+
+### Page 55 — UPLOADED 2026-09-07 (Riviere Jr → Roraback)
+Swept 15:29, 14 frames, archived to `EYES/harvest/20260907-page55`. Footer confirmed.
+Follows page 54 correctly — Rivera precedes Riviere, no gap and no boundary repeat.
+46 CT rows staged, 4 out-of-state omitted (Rizo CA, Roach NY, Robbertz CO,
+Rodriguez NY). **39 inserted, 6 updated, 0 ambiguous, 0 duplicate CA IDs.
+Roster 2,645 → 2,684.**
+- ⭐⭐ **Kevin Robidoux #41021 — EAST HADDAM**, 14, already in the East Haddam pool.
+  THIRD referee whose home town is one of our client clubs (after Jack Nelan #895
+  and Bryce Quinn #39332).
+- ⭐ **Two GLASTONBURY residents in no pool**: Logan Rodriguez #37572 (16) and
+  Daniel Rooney #5641 (64, founding-era ID).
+- ⭐ **Four NECONN-town referees, none in a pool**: David Rodriguez #41100 (37,
+  Willimantic, ADULT new referee) · Zayden Rodriguez #41355 (13, Willimantic) ·
+  Julio Roger #39922 + Julio Roger Jr #39567 (South Windham, father and son) ·
+  Gianni Romeo #19336 (Storrs Mansfield).
+- **William Riviere Jr #1538 — 83 years old**, CA #1538, still registered for 2026.
+  Oldest referee found in the whole harvest.
+- **Jaime Rodrigues #29609** — `jrodrigues@bridgeportedu.net`, a Bridgeport Public
+  Schools address. Same seam as the assignors found in pages 39-49: work inboxes in
+  the referee directory are outreach contacts, not just officials.
+- Families: three Roods in Tolland (father 46 + two sons), Rodon twins in Fairfield
+  on consecutive IDs, Robles Castro brothers in Stratford, Robidoux siblings in
+  Bristol (Kevin in East Haddam is a DIFFERENT family).
+- ⚠️ **David Rodrigues #5283** — `d11rod1787@gmail.com`. Read as digit ones at 150%
+  but d-l-l is possible. VERIFY BEFORE EMAILING.
+- ⚠️ **Alyssa Robidoux #40065** — `alyssa1gk@gmail.com` is a DIGIT ONE, not an L.
 
 ### Page 54 — UPLOADED 2026-09-07 (Ratnavel → Rivera-anglero)
 Swept 15:11, 14 frames, archived to `EYES/harvest/20260907-page54`. Footer confirmed.
