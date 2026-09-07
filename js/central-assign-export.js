@@ -483,6 +483,8 @@ async function loadClubCheckboxes() {
                     data-club="${String(n).replace(/"/g, '&quot;')}" style="display:none;"></span>
             </label>`).join('');
         loadClubPendingCounts();
+        document.querySelectorAll('.club-cb').forEach(cb =>
+            cb.addEventListener('change', syncRangeToChecked));
         // Same trigger: by the time the club list is built the client is ready.
         loadAwaitingConfirmation();
 
@@ -516,8 +518,12 @@ async function loadClubCheckboxes() {
 }
 loadClubCheckboxes();
 
-document.getElementById('clubSelectAll').addEventListener('click', () =>
-    document.querySelectorAll('.club-cb').forEach(cb => cb.checked = true));
+// All / None change the ticks without firing a change event, so the range has
+// to be synced explicitly or it goes stale behind them.
+document.getElementById('clubSelectAll').addEventListener('click', () => {
+    document.querySelectorAll('.club-cb').forEach(cb => cb.checked = true);
+    syncRangeToChecked();
+});
 document.getElementById('clubClearAll').addEventListener('click', () =>
     document.querySelectorAll('.club-cb').forEach(cb => cb.checked = false));
 
@@ -1310,6 +1316,43 @@ async function confirmAwaiting(inCA) {
 // Club names here come from the clubs table; the count is keyed on a game's
 // "Source Club", and the two are not always spelled the same way. Matched
 // case-insensitively for that reason.
+// club (lowercased) -> { from, to } across its games not yet confirmed in CA.
+let _pendingSpan = {};
+
+// ⚠️ Ticking a club now fills the date range for you. Without this, choosing
+// "Plainfield 9" and pressing Load Games returned nothing whenever the default
+// window did not happen to cover those nine — the badge said there was work and
+// the list said there was none, which reads as a broken page.
+//
+// Widest span across everything ticked, so several clubs at once still works.
+// Untouched when nothing is ticked: that means "all clubs" and a range chosen
+// by hand should not be overwritten.
+function syncRangeToChecked() {
+    try {
+        const checked = [...document.querySelectorAll('.club-cb:checked')]
+            .map(cb => (cb.value || '').trim().toLowerCase())
+            .filter(c => _pendingSpan[c]);
+        if (!checked.length) return;
+
+        let from = null, to = null;
+        checked.forEach(c => {
+            const sp = _pendingSpan[c];
+            if (!from || sp.from < from) from = sp.from;
+            if (!to   || sp.to   > to)   to   = sp.to;
+        });
+        if (!from || !to) return;
+
+        const modeRange = document.getElementById('modeRange');
+        if (modeRange && !modeRange.checked) {
+            modeRange.checked = true;
+            modeRange.dispatchEvent(new Event('change'));
+        }
+        const f = document.getElementById('dateFrom'), t = document.getElementById('dateTo');
+        if (f) f.value = from;
+        if (t) t.value = to;
+    } catch (e) { console.warn('range sync skipped', e); }
+}
+
 async function loadClubPendingCounts() {
     try {
         const today = new Date().toISOString().slice(0, 10);
@@ -1320,10 +1363,19 @@ async function loadClubPendingCounts() {
             .gte('date', today);
         if (error) throw new Error(error.message);
         const map = {};
+        // Also remember the date SPAN of each club's outstanding games, so
+        // ticking a club can set the range for you — see syncRangeToChecked().
+        _pendingSpan = {};
         (data || []).forEach(g => {
             if ((g['Game Status'] || '') === 'Cancelled') return;
             const c = (g['Source Club'] || '').trim().toLowerCase();
-            if (c) map[c] = (map[c] || 0) + 1;
+            if (!c) return;
+            map[c] = (map[c] || 0) + 1;
+            const d = String(g.date || '').slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+            const sp = _pendingSpan[c] || (_pendingSpan[c] = { from: d, to: d });
+            if (d < sp.from) sp.from = d;
+            if (d > sp.to)   sp.to   = d;
         });
         document.querySelectorAll('.ca-club-pending').forEach(el => {
             const k = map[(el.dataset.club || '').trim().toLowerCase()] || 0;
