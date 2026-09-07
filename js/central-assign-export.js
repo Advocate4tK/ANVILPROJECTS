@@ -923,6 +923,7 @@ function renderGamesTable(records) {
         <th style="width:52px;">CR</th>
         <th style="width:52px;">AR1</th>
         <th style="width:52px;">AR2</th>
+        <th style="width:150px;" title="The Primary Assignor Email that will be written into the file for this game">Assignor</th>
         <th style="width:80px;" title="Previously exported to CA">Prior</th>
     </tr></thead><tbody>`;
 
@@ -962,6 +963,7 @@ function renderGamesTable(records) {
             <td>${refBadge(f['Center Referee'])}</td>
             <td>${refBadge(f['AR 1'])}</td>
             <td>${refBadge(f['AR 2'])}</td>
+            ${assignorCell(f['Source Club'] || '')}
             <td style="cursor:pointer;" onclick="toggleGameCA(${i}, event)"
                 title="Click to mark this game in / out of Central Assign">${priorBadge}</td>
         </tr>`;
@@ -1538,6 +1540,27 @@ function resolveVenue(f) {
         fieldCaId: realFieldId,
         fieldName: fieldNameMap[rid] || ''
     };
+}
+
+// Show WHOSE assignor email this game will carry, before the file is built.
+// It is not necessarily the person pressing Download: the export reads
+// assignors.clubs, so a club Tod uploads on behalf of another assignor goes out
+// under THEIR address. That is correct, and invisible until you see it here.
+//
+// A blank is called out loudly. A club with nobody on file exports with an empty
+// Primary Assignor Email, and we have never tested whether CA accepts that.
+function assignorCell(club) {
+    const { primary, secondary } = assignorEmailsFor(club);
+    if (!primary) {
+        return `<td><span style="color:#c0392b;font-size:11px;font-weight:700;" `
+             + `title="No assignor on file for ${club} — this game would export with a BLANK assignor email">`
+             + `⚠ none on file</span></td>`;
+    }
+    const mine = primary === myAssignorEmail;
+    return `<td style="font-size:11px;line-height:1.35;">`
+         + `<span style="color:${mine ? '#1e8449' : '#0369a1'};font-weight:600;word-break:break-all;">${primary}</span>`
+         + (secondary ? `<div style="color:#8a9aa3;word-break:break-all;">+ ${secondary}</div>` : '')
+         + `</td>`;
 }
 
 function assignorEmailsFor(club) {
