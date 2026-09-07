@@ -138,6 +138,12 @@ let eventDurationMap   = {}; // event Club Name → ageKey → {duration, durati
 let eventCrewMap       = {}; // event Club Name → ageKey → crew size (1/2/3)
 let eventRateMap       = {}; // event Club Name → ageKey → {center, ar}
 let assignorsByClub    = {}; // club name → [{name, email}] — CA needs an assignor per game
+// Fallback: the assignor recorded on the CLUB ITSELF (manage-clubs). That is the
+// record Tod actually maintains, and a club can have a correct assignor there
+// while having nobody in the `assignors` table — Canterbury did, which made the
+// export claim "none on file" about a club whose profile plainly named
+// David Paquette.
+let clubOwnAssignor    = {}; // club name → {name, email}
 let myAssignorEmail    = '';  // whoever is doing the export, when they assign the club
 
 // ── Age group → pay_rates band ───────────────────────────────────────────────
@@ -655,6 +661,16 @@ loadBtn.addEventListener('click', async () => {
         // board — so the club is the link: assignors.clubs is the array that says
         // who assigns what.
         assignorsByClub = {};
+        clubOwnAssignor = {};
+        (clubRecs || []).forEach(c => {
+            const f = c.fields || {};
+            const email = (f['Assignor Email'] || f['assignor_email'] || '').trim();
+            if (!email) return;
+            const nm = (f['assignor'] || f['Assignor'] || '').trim();
+            [f['Club Name'], f['Name'], f['name']].filter(Boolean).forEach(key => {
+                clubOwnAssignor[String(key).trim().toLowerCase()] = { name: nm, email };
+            });
+        });
         const _uid = (typeof currentUserId === 'function') ? currentUserId() : null;
         myAssignorEmail = '';
         (assignorRecs || []).forEach(r => {
@@ -1576,8 +1592,10 @@ function assignorCell(club) {
     const mine = primary === myAssignorEmail;
     // The name is what Tod recognises; the address is what actually goes in the
     // file. Show both, name first.
-    const list = assignorsByClub[String(club || '').trim().toLowerCase()] || [];
-    const who  = (list.find(a => a.email === primary) || {}).name || '';
+    const key2 = String(club || '').trim().toLowerCase();
+    const list = assignorsByClub[key2] || [];
+    const who  = (list.find(a => a.email === primary) || {}).name
+              || (clubOwnAssignor[key2] || {}).name || '';
     return `<td style="font-size:11px;line-height:1.35;">`
          + (who ? `<div style="font-weight:700;color:#09142a;">${who}</div>` : '')
          + `<span style="color:${mine ? '#1e8449' : '#0369a1'};font-weight:600;word-break:break-all;">${primary}</span>`
@@ -1586,8 +1604,15 @@ function assignorCell(club) {
 }
 
 function assignorEmailsFor(club) {
-    const list = assignorsByClub[String(club || '').trim().toLowerCase()] || [];
-    if (!list.length) return { primary: '', secondary: '' };
+    const key  = String(club || '').trim().toLowerCase();
+    const list = assignorsByClub[key] || [];
+    // Nobody in the assignors table? Use the assignor on the club's own profile.
+    // A club Tod uploads for somebody else usually has exactly that and nothing
+    // more, and a blank Primary Assignor Email is a row CA may simply refuse.
+    if (!list.length) {
+        const own = clubOwnAssignor[key];
+        return own ? { primary: own.email, secondary: '' } : { primary: '', secondary: '' };
+    }
     if (list.length === 1) return { primary: list[0].email, secondary: '' };
     // Co-assigned. The person generating the file is the primary on it; the other
     // rides along as secondary. Eric exporting the same club gets the mirror.
