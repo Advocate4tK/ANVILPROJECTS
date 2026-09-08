@@ -182,10 +182,8 @@
     // born suspended. So: try it, and if it is suspended, arm ONE listener that
     // plays it on the first tap or key the referee makes, then removes itself.
     // It never nags and it never throws.
-    var whistleBlown = false;
-    function blowWhistle() {
-        if (whistleBlown) return;
-        whistleBlown = true;
+    function blowWhistle(len) {
+        var L = len || 0.45;
         try {
             var ctx = audioCtx();          // ⚠️ the SHARED one — never build a new context here
             if (!ctx) return;
@@ -215,12 +213,12 @@
                     //     1.45s silent
                     gain.gain.setValueAtTime(0.0001, t);
                     gain.gain.exponentialRampToValueAtTime(0.34, t + 0.012);
-                    gain.gain.setValueAtTime(0.34, t + 1.15);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.45);
+                    gain.gain.setValueAtTime(0.34, t + (L * 0.72));
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + L);
 
                     osc.connect(gain).connect(ctx.destination);
                     osc.start(t); lfo.start(t);
-                    osc.stop(t + 1.50); lfo.stop(t + 1.50);
+                    osc.stop(t + L + 0.05); lfo.stop(t + L + 0.05);
                 } catch (e) {}
             };
 
@@ -292,7 +290,7 @@
         var mascot   = firstTip
             ? '<span class="rt-pip-enter">' + MASCOT.replace('</svg>', WHISTLE + '</svg>') + '</span>'
             : MASCOT;
-        if (firstTip) { injectWhistleCss(); armWhistle(); }
+        if (firstTip) injectWhistleCss();
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
@@ -333,10 +331,30 @@
             b.addEventListener('click', function () { dismiss(); });
         });
         el.querySelectorAll('[data-rt="finish"]').forEach(function (b) {
-            b.addEventListener('click', function () { finish(); });
+            b.addEventListener('click', function () { blowWhistle(); finish(); });
         });
         var nx = el.querySelector('[data-rt="next"]');
-        if (nx) nx.addEventListener('click', function () { idx++; render(); });
+        // ⚠️ THE WHISTLE LIVES ON "GOT IT". Tod, 2026-09-08: "we could just code
+        // for it as being purposeful. And when it clicks got it, it blows the
+        // whistle."
+        //
+        // This is the answer after a long detour. A browser will not make a
+        // sound until the page has been touched, so a whistle on Pip's ARRIVAL
+        // is impossible — arrival precedes every gesture. But a button press IS
+        // a gesture, so a whistle on Got it works every time, on every browser,
+        // first visit or hundredth.
+        //
+        // And it is better design than what was being chased: the referee
+        // acknowledges, the whistle goes, play moves on. Exactly what a whistle
+        // is for. Short and crisp (0.45s) rather than the long blast, because
+        // this fires on every card, not once.
+        // The FIRST Got it is the kickoff — a long blast that starts the
+        // session. Every one after it is a short, crisp acknowledgement, the
+        // way a referee restarts play. Ten long blasts would be a nuisance.
+        if (nx) nx.addEventListener('click', function () {
+            blowWhistle(idx === 0 ? 1.2 : 0.45);
+            idx++; render();
+        });
         // Quiets him for THIS visit only. Nothing is written down, so he is back
         // on the next page load — which is the whole point.
         el.querySelector('[data-rt="off"]').addEventListener('click', function () { finish(); });
@@ -380,39 +398,7 @@
         // blows the whistle and replays his entrance, and the card STAYS. Every
         // click after that dismisses as normal. The X always closes, first click
         // or not — someone reaching for the X wants out, not a performance.
-        // ⚠️ THE FIRST CLICK ON THE DARK AREA BUYS THE WHISTLE.
-        // Tod: "now he comes up perfectly... but no whistle."
-        // A browser makes no sound until the page is touched, and the veil covers
-        // the whole screen — so the ONLY thing a referee can touch is the thing
-        // that closes Pip. That is the entire reason the whistle was never heard.
-        //
-        // So the first veil click is spent on the blast rather than the exit:
-        // audio unlocks, the whistle goes, Pip pops again, the card STAYS. The
-        // second click closes it. The X always closes, first click or not —
-        // someone reaching for the X wants out, not a performance.
-        //
-        // ⚠️ THIS CANNOT HIDE PIP. He is mounted before this ever runs. Do not
-        // move any of it near the mount.
-        veil.addEventListener('click', function () {
-            if (!whistleHeard && !audioIsUnlocked()) {
-                whistleHeard = true;
-                var c = audioCtx();
-                var fire = function () {
-                    try {
-                        var pip = el && el.querySelector('.rt-pip-enter');
-                        if (pip && !done) {
-                            pip.classList.remove('rt-pip-enter');
-                            void pip.offsetWidth;      // reflow, or the swap is coalesced
-                            pip.classList.add('rt-pip-enter');
-                        }
-                    } catch (e) {}
-                    blowWhistle();
-                };
-                if (c && c.resume) { c.resume().then(fire).catch(fire); } else { fire(); }
-                return;                                // spent — do not dismiss
-            }
-            dismiss();
-        });
+        veil.addEventListener('click', function () { dismiss(); });
         document.body.appendChild(veil);
 
         el.style.cssText =
@@ -473,6 +459,28 @@
 
     // Blow it now if we are allowed; otherwise wait for the first touch and
     // then blow it AND replay the entrance, so sound and motion arrive together.
+    // ⚠️ ONE AUDIOCONTEXT FOR THE WHOLE FILE. There were two — a probe and a
+    // fresh one inside blowWhistle() — and that was the bug Tod reported four
+    // times: "still no whistle until you hit X". The gate unlocked the probe;
+    // blowWhistle then built a NEW context, born suspended because it was never
+    // the one unlocked, and queued itself for the next click. The X.
+    // A context is unlocked, not a page. Share it or this comes straight back.
+    var _actx = null;
+    function audioCtx() {
+        if (_actx) return _actx;
+        try {
+            var AC = window.AudioContext || window.webkitAudioContext;
+            if (AC) _actx = new AC();
+        } catch (e) {}
+        return _actx;
+    }
+    function audioIsUnlocked() {
+        var c = audioCtx();
+        return !c || c.state === 'running';        // no audio at all — never wait
+    }
+
+    // Blow it now if we are allowed; otherwise wait for the first touch and
+    // then blow it AND replay the entrance, so sound and motion arrive together.
     var whistleArmed = false, whistleHeard = false;
     function armWhistle() {
         if (whistleArmed) return;
@@ -501,7 +509,6 @@
             if (dismissing) return;
             // This gesture is being spent on the whistle — do not let it also
             // close the card behind us.
-            whistleHeard = true;   // armWhistle got there first; the veil need not
             var c = audioCtx();
             var fire = function () {
                 try {
