@@ -225,8 +225,59 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**✅ GAP CLOSED — complete and contiguous through page 67 of 71 (ends Ryan Vincent).
-Resume at the first surname AFTER VINCENT.**
+# 🎉 THE HARVEST IS COMPLETE — all 71 pages, 2026-09-08
+
+**Pages 1 through 71 are read, contiguous and imported.** The directory ends at
+**Reuben Zwick-Lavinsky #40346**. There is no next page and no resume point.
+
+**The arithmetic proves it:** 70 full pages x 50 rows = 3,500, plus 49 on the final
+page = **3,549** — exactly CA's own stated total. If the harvest had skipped a page the
+last page would not have landed on 49.
+
+## Final state
+```
+Referee Tool roster            3,307
+  with a Central Assign ID     3,268   (98.8%)
+  missing a CA ID                 39   (9 of them junk rows, so 30 real people)
+duplicate Central Assign IDs        0
+```
+Every page was imported the same way: frames archived before transcription, out-of-state
+rows listed rather than silently dropped, full table backup written before every write.
+
+## The 39 without a CA ID — what they actually are
+- **9 are junk, not people.** `Test Test`, `Notes`, `John Wick`, `Jill Fluff`,
+  `Jeff Hardy`, `John Jones`, `Audie Murphy`, `Spring Championship Final`,
+  `Championship Weekend`. **These want deleting.**
+- **2 are deliberate out-of-state omissions** — Marcy Malerbi (Shrewsbury MA) and
+  Allison Malerbi (Colorado Springs).
+- **6 are duplicate PEOPLE** already in the roster under their CA row — see the merge
+  table below.
+- **The rest are simply not in Central Assign.** Mostly no-town rows that came in from
+  club rosters and availability forms: Edward Carvalho, Lilly Ouilette, Charlie Saporita,
+  Kaleb Espinoza, Giovanni Marku, Anthony Kyle Dykes, Sierra Hurst-Ruales, Kay Morello,
+  Chris Barber, Samuel Almeida, Max Kerz, Ben Wakely, Steven Gemboski, Suzanne Cohen,
+  Ron Goldstein, Luca Gaggion, Vienna Maragliano, the two Baughmans, Alyssa Xhelaj.
+  ⭐ **Alyssa Xhelaj is worth one check** — a DARYL Xhelaj #39436 exists in CA at the same
+  Rocky Hill address, so she may be registered under a name we do not have.
+
+## ⚠️ THREE DUPLICATE PEOPLE STILL TO MERGE
+| Person | Harvest row (keep) | Older row (merge in, then delete) | Why no match |
+|---|---|---|---|
+| Oliver Tzingounis | id 5269, CA 38237, Mansfield | id 2358, Storrs Mansfield, source GLASTONBURY | emails differ **only by dots** |
+| Matteo Solis White | id 5058, CA 40603, Storrs | id 2498, "Storrs, Mansfield" | our stored email `matteossolis.gmail.com` is **missing the @** |
+| ellie gaul | id 3601, CA 38902, Glastonbury | id 2360, S. Glastonbury | different email |
+Plus the same shape for **vlad Shpilchuk** (= Vladyslav #37739), **Mathew Ramsdell**
+(= Matthew #38303) and **Bennie Hannsen / Ben Hanssen** (= Benjamin #38630, RI, omitted).
+**Do not delete anything without showing Tod first.**
+
+## ✅ Questions this harvest closed
+- **Paul Yanosy** — found on page 71, #35578, 74, Broad Brook, reg 2027. Off the
+  "ask them" list.
+- **Ellie Gaul** — found, CA #38902. Off the list. Only **Rehan Banglawala** remains.
+
+---
+
+**(historical resume marker, kept for context)**
 
 ### ✅ The page-66 gap is closed (2026-09-08)
 Page 66 was swept at 08:01 and imported: Tshwaranang → Vasconcellos, which sits exactly
