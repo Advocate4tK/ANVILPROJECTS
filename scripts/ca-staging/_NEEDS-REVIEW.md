@@ -225,8 +225,31 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 59 of 71 (ends Adam Sheridan).
-Resume at the first surname AFTER SHERIDAN. Roster crossed 2,000 on page 37.
+**Complete and contiguous through page 60 of 71 (ends Daniel Slone).
+Resume at the first surname AFTER SLONE. Roster crossed 2,000 on page 37.
+
+### Page 60 — UPLOADED 2026-09-08 (Jason Sheridan → Slone)
+Swept 21:37, 14 frames, archived to `EYES/harvest/20260907-page60`. Footer confirmed.
+The two Sheridan brothers straddle the boundary — CA sorts Adam before Jason, so page 59
+ended on one and page 60 opened on the other. No gap, no repeat. 49 CT rows staged,
+1 out-of-state omitted (Sinani MA — a 203 CT phone on an MA address; the STATE is the
+test, not the phone). **46 inserted, 2 updated, 0 ambiguous, 0 duplicate CA IDs.
+Roster 2,837 → 2,883.**
+- ⭐⭐⭐ **Aliyah Simas #40174 — CANTERBURY**, 14, in **THREE POOLS** (Griswold Club +
+  NorthEast + REFS). The SECOND Canterbury three-pool referee in two pages, after
+  Francis Senat #5414. Canterbury is turning out to be thick with connected officials.
+- ⭐⭐ **Kristen Sickle #39034** — New Haven, 33, **REGIONAL NEXT** — only the second in
+  the entire harvest, after Charlie Hall #34545 (page 28). Logged in today, in no pool.
+- ⭐ **Jason Sheridan #37399 — Oakdale, Griswold Club** — brother of Adam #33863 from
+  page 59. Both in the same pool.
+- ⭐ **Ryan Skinner #36020 — GLASTONBURY**, 18 (so assignable as an adult), no pool,
+  never logged in.
+- **OXFORD is a REFS pipeline.** Gavin Shupp #36957, Jaden Shupp #31672 and Massimo
+  Sirgado #39667 are all Oxford and all REFS — four Oxford REFS members now across
+  pages 57 and 60. Worth asking who recruited them.
+- NorthEast: Mila Slattery #38560 (Rocky Hill, never logged in).
+- ⚠️ **Rob Sibiga #38463** — reg 2024, EXPIRED, never logged in. Not assignable. He is
+  the one CA's banner flagged, third page running that the check has matched exactly.
 
 ### ⭐ CA's EXPIRED BANNER IS A FREE COMPLETENESS CHECK — USE IT EVERY PAGE
 Some pages carry a yellow banner above the table: *"N referees in this view have an
