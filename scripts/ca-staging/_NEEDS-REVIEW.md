@@ -225,8 +225,37 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 62 of 71 (ends Brady Stillwell).
-Resume at the first surname AFTER STILLWELL. Roster crossed 2,000 on page 37.
+**Complete and contiguous through page 63 of 71 (ends Tyler Szemplinski).
+Resume at the first surname AFTER SZEMPLINSKI. Roster crossed 2,000 on page 37 and
+🎉 **CROSSED 3,000 ON PAGE 63** — 3,001 referees.
+
+### Page 63 — UPLOADED 2026-09-07 (Stoccatore → Szemplinski)
+Swept 21:55, 14 frames, archived to `EYES/harvest/20260907-page63`. Footer confirmed.
+47 CT rows staged, 3 out-of-state omitted. **37 inserted, 11 updated, 0 ambiguous,
+0 duplicate CA IDs. Roster 2,964 → 3,001.**
+- ⭐⭐⭐⭐ **ROSS SWARD #28059 IS IN CA's DIRECTORY** — NECONN's own scheduler, the man
+  whose season schedule we have been auditing. Putnam, 59, in the **NorthEast and REFS**
+  pools. Found by sweeping, not by looking for him.
+- ⭐⭐ **Two more NorthEast + REFS referees from NECONN towns, neither ever logged in**:
+  **Dahveed Storey #40397 (PUTNAM**, Ross's own town) and **Dylan Syriac #40760
+  (WOODSTOCK VALLEY** — and he has NO phone on file, so email is the only channel).
+- ⭐ **Two GLASTONBURY referees in no pool**: Ryan Stoccatore #41246 (13, brand new
+  through 2027) and Hailey Strauss #37483 (16, never logged in).
+- East Haddam pool: **James Strong #1578** (Clinton, **70 years old**, founding-era ID,
+  still logging in), Luca Strunjo #39769 (Clinton), **Michael Surber #37126** (Deep River).
+- ⭐⚠️ **Michael Surber #37126 officiates on `mike.surber@nike.com`** — a NIKE corporate
+  address, and he is in the East Haddam pool. Second corporate domain after Jeremy
+  Scheer @lego.com. Strict filters, and it dies with the job.
+- **Joseph Strickland #2067 is 76** and logged in today — third-oldest active referee
+  in the harvest, after Riviere Jr (83) and Rumino (82).
+- ⚠️ **Francesca Story #39458** — CA stores her town as "Hartland CT" INSIDE the town
+  field, so the row renders "Hartland CT, CT". Left verbatim. Her brother Julian
+  #41285 is stored correctly as East Hartland. Same household, two different data
+  qualities — CA's town field is not trustworthy for matching.
+- ⚠️ **Kevin Suares #847 (North Dartmouth MA) is omitted but is NOT a stranger** —
+  founding-era CA ID, an 860 CONNECTICUT phone, and the handle `connref`. He may have
+  moved away while still working CT games. First entry on the out-of-state list that
+  deserves a second look.
 
 ### ⭐⭐ CANTERBURY IS A CLUSTER — THREE THREE-POOL REFEREES IN THREE PAGES
 - **Francis Senat #5414** — 58, Griswold Club + NorthEast + REFS (page 59)
