@@ -187,9 +187,8 @@
         if (whistleBlown) return;
         whistleBlown = true;
         try {
-            var AC = window.AudioContext || window.webkitAudioContext;
-            if (!AC) return;
-            var ctx = new AC();
+            var ctx = audioCtx();          // ⚠️ the SHARED one — never build a new context here
+            if (!ctx) return;
 
             var play = function () {
                 try {
@@ -208,19 +207,12 @@
                     lfoG.gain.value     = 165;           // depth, in Hz
                     lfo.connect(lfoG).connect(osc.frequency);
 
-                    // ⚠️ IT MUST SPAN THE ENTRANCE. Tod, 2026-09-08: "it needs to
-                    // come out and whistle BEFORE and DURING while the card
-                    // shows."
-                    //
-                    // So this is ONE continuous blast that starts 240ms before
-                    // Pip is mounted and is still going while he bursts forward
-                    // and hangs there. ~1.5s total:
-                    //     0.00s  blast starts   (card not yet on screen)
-                    //     0.24s  Pip bursts out
-                    //     0.33s  he is at the front, held, still blowing
-                    //     1.15s  the blast begins to release
-                    //     1.50s  silent; he falls back into the card
-                    // A real referee holding a call leans on it about this long.
+                    // ⚠️ IT MUST SPAN THE ENTRANCE. Tod: "it needs to come out and
+                    // whistle BEFORE and DURING while the card shows."
+                    //     0.00s blast starts (card not yet on screen)
+                    //     0.24s Pip bursts out
+                    //     1.15s release begins
+                    //     1.45s silent
                     gain.gain.setValueAtTime(0.0001, t);
                     gain.gain.exponentialRampToValueAtTime(0.34, t + 0.012);
                     gain.gain.setValueAtTime(0.34, t + 1.15);
@@ -232,37 +224,10 @@
                 } catch (e) {}
             };
 
-            if (ctx.state === 'suspended') {
-                // ⚠️ CHROME REFUSES AUDIO UNTIL THE PAGE HAS BEEN TOUCHED, and
-                // the tip appears on load, before anyone has touched anything.
-                //
-                // Tod, 2026-09-08: "The whistle isn't happening until I close out
-                // the box. The whistle should come out when the card pops up."
-                // Exactly — the old code queued the blast and fired it on
-                // whatever the first click happened to be, which was the close
-                // button. A whistle that goes off as you dismiss him is worse
-                // than no whistle at all.
-                //
-                // So on the first gesture we do not just play the sound: we
-                // REPLAY THE WHOLE ENTRANCE. Pip bursts forward again and blows
-                // at the same instant, exactly as he was meant to. Sound and
-                // motion arrive together or not at all.
-                //
-                // And if that first gesture closed the card, we stay silent —
-                // there is nobody to whistle at.
-                // Belt and braces: the gate in show() normally means audio is
-                // already unlocked by the time we get here. If some browser
-                // still refuses, play on the next gesture rather than never.
-                var armed = function () {
-                    document.removeEventListener('pointerdown', armed, true);
-                    document.removeEventListener('keydown', armed, true);
-                    ctx.resume().then(play).catch(function () {});
-                };
-                document.addEventListener('pointerdown', armed, true);
-                document.addEventListener('keydown', armed, true);
-            } else {
-                play();
-            }
+            if (ctx.state === 'running') { play(); return; }
+            // Belt and braces. The gate normally unlocks us first; if some
+            // browser still refuses, resume and play rather than never.
+            if (ctx.resume) ctx.resume().then(play).catch(function () {});
         } catch (e) { /* audio is a nicety; never let it break a tip */ }
     }
 
@@ -453,13 +418,25 @@
     // `holding` is what makes the gate survive the burst — once we are waiting,
     // every later show() just queues and returns.
     var holding = false, pendingMount = null;
-    function audioIsUnlocked() {
+    // ⚠️ ONE AUDIOCONTEXT FOR THE WHOLE FILE. There were two — a probe here and
+    // a fresh one inside blowWhistle() — and that was the bug Tod reported four
+    // separate times: "still no whistle until you hit X".
+    // The gate resumed the PROBE on his first touch, then blowWhistle built a
+    // BRAND NEW context, which is born suspended because it was never the one
+    // unlocked. It then queued itself for the next gesture: the X.
+    // A context is unlocked, not a page. Share it or this comes straight back.
+    var _actx = null;
+    function audioCtx() {
+        if (_actx) return _actx;
         try {
             var AC = window.AudioContext || window.webkitAudioContext;
-            if (!AC) return true;                 // no audio at all — never wait
-            if (!audioIsUnlocked._c) audioIsUnlocked._c = new AC();
-            return audioIsUnlocked._c.state === 'running';
-        } catch (e) { return true; }
+            if (AC) _actx = new AC();
+        } catch (e) {}
+        return _actx;
+    }
+    function audioIsUnlocked() {
+        var c = audioCtx();
+        return !c || c.state === 'running';        // no audio at all — never wait
     }
     function whenInteractive(fn) {
         if (audioIsUnlocked()) { fn(); return; }
@@ -469,8 +446,10 @@
             document.removeEventListener('touchstart',  go, true);
             window.removeEventListener('scroll',        go, true);
             clearTimeout(pendingMount);
-            try { if (audioIsUnlocked._c) audioIsUnlocked._c.resume(); } catch (e) {}
-            fn();
+            // Wait for the resume to actually RESOLVE before whistling. Firing
+            // during a still-suspending context is the other half of the same bug.
+            var c = audioCtx();
+            if (c && c.resume) { c.resume().then(fn).catch(fn); } else { fn(); }
         };
         document.addEventListener('pointerdown', go, true);
         document.addEventListener('keydown',     go, true);
