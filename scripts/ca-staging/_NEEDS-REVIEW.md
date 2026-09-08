@@ -225,8 +225,43 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 63 of 71 (ends Tyler Szemplinski).
-Resume at the first surname AFTER SZEMPLINSKI. Roster crossed 2,000 on page 37 and
+**Complete and contiguous through page 64 of 71 (ends Emily Thornton).
+Resume at the first surname AFTER THORNTON.
+
+### 🚨 THE POOLS HAVE NEVER BEEN IMPORTED — Tod, 2026-09-07
+*"The only thing that I care about is porting these referees into our referee pools in
+referee tool. Once we import all of these referees, we'll have an exact copy of Central
+Assign."*
+
+`ca-import.mjs` **never writes the `pools` field.** Grep it: there is no reference to
+pools or Club Preference anywhere in the writer. **318 pool memberships** are sitting in
+the staging JSON, captured and unused — East Haddam 153, Griswold Club 148, NorthEast 78,
+REFS 78; 90 referees in two or more, 46 in three or more.
+Meanwhile the roster's own `Club Preference` is set on only 96 rows and holds CLUB names
+from the availability form ("Griswold", "NECONN", "Glastonbury"), not CA pool names.
+**Those are two different facts and must not be collapsed** — Club Preference is what a
+referee ASKED for; a pool is where Tod PUT them. See the pools backfill work.
+
+### Page 64 — UPLOADED 2026-09-07 (Szewc → Thornton)
+Swept 22:01, 14 frames, archived to `EYES/harvest/20260907-page64`. Footer confirmed.
+49 CT rows staged, 1 out-of-state omitted (Tejeda FL). **36 inserted, 13 updated,
+0 ambiguous, 0 duplicate CA IDs. Roster 3,001 → 3,037.**
+- ⭐⭐ **CANTERBURY REACHES FIVE** three-pool referees: the Tharel siblings #39970 and
+  #38712 join Senat, Simas and Spruance. Nehemiah has never logged in.
+- ⭐ **Emily Tessier #39929 LIVES IN GRISWOLD** and is in three pools — fifth referee
+  whose home town is a client club, after Nelan, Quinn, Robidoux and Slonski.
+- ⭐ **Leah Talaga #39862 — KILLINGLY**, three pools, **never logged in**. This is the
+  Leah Talaga whose U13 AR fee went missing from Eric's payroll subtotal in April: a
+  referee we actually use, who has never signed in to CA.
+- **Scott Taylor #33374 + Alex Taylor #36799 — WILLINGTON**, father and son, both using
+  `+ref` email subaddressing and Scott on his own domain (ipv6tech.net). NECONN
+  territory, neither in a pool.
+- **James Tebo #1589 is 79** and logged in this week — third-oldest active in the harvest.
+- ⚠️ **Michael Tang #38443 — `@medtronic.com`**, third corporate domain after LEGO and Nike.
+- ⚠️ **Journey Thinodeaux #40759** — CA spells the surname "Thinodeaux", the email says
+  "thibodeaux". No phone on file, so email is the ONLY channel. Verify before relying on it.
+- ⚠️ **Ronan Thompson #39454** is in the NorthEast pool but lives in WILTON, the far
+  southwest corner. Either a mis-add or he travels a very long way. Roster crossed 2,000 on page 37 and
 🎉 **CROSSED 3,000 ON PAGE 63** — 3,001 referees.
 
 ### Page 63 — UPLOADED 2026-09-07 (Stoccatore → Szemplinski)
