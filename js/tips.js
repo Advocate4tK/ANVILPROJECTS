@@ -106,8 +106,8 @@
         + '.rt-pip-whistle{animation:rtPipToot 1.5s cubic-bezier(.16,1.1,.3,1) 1 both;transform-origin:2px 3px}'
         + '.rt-pip-puff{opacity:0;transform-origin:14px 3px}'
         // The puffs fire at the TOP of the leap, while he is hanging there.
-        + '.rt-pip-puff1{animation:rtPipPuff .55s ease-out .13s 1 both}'
-        + '.rt-pip-puff2{animation:rtPipPuff .55s ease-out .26s 1 both}'
+        + '.rt-pip-puff1{animation:rtPipPuff .78s ease-out .04s 1 both}'
+        + '.rt-pip-puff2{animation:rtPipPuff .78s ease-out .30s 1 both}'
         // Anyone who has asked their device to stop moving things gets a still
         // whistle. Same information, no motion.
         // THE ARRIVAL. Tod: "he blows his whistle and then falls back into the
@@ -169,7 +169,7 @@
     // Tod, 2026-09-08: "Oh, I think we absolutely should have the whistle blow."
     // Ralph had argued for silence — referees open this on a phone in public.
     // Tod overruled it, and it is his product and his referees. It stays SHORT
-    // SHORT (0.4s) and fires ONCE, on the
+    // A blast of about 0.85s, fired ONCE, on the
     // very first tip a device ever shows. Never again after that.
     //
     // Synthesised rather than a downloaded .mp3: no asset to fetch, nothing to
@@ -201,22 +201,28 @@
 
                     osc.type = 'square';
                     osc.frequency.setValueAtTime(3520, t);
-                    osc.frequency.linearRampToValueAtTime(3760, t + 0.05);
+                    osc.frequency.linearRampToValueAtTime(3760, t + 0.09);
 
                     lfo.type = 'sine';
                     lfo.frequency.value = 34;            // rattle rate
                     lfoG.gain.value     = 165;           // depth, in Hz
                     lfo.connect(lfoG).connect(osc.frequency);
 
-                    // Quick attack, short body, clean release — no click at the end.
+                    // ⚠️ A BLAST, NOT A CHIRP. Tod, 2026-09-08: "The whistle should
+                    // come out right as soon as the tutorial comes up. It doesn't
+                    // come up right away. It should be longer."
+                    // So: instant attack (12ms), and a body that holds for
+                    // two thirds of a second before releasing — about 0.85s in
+                    // total, which is roughly how long a real referee leans on
+                    // one. The old 0.4s read as a chirp.
                     gain.gain.setValueAtTime(0.0001, t);
                     gain.gain.exponentialRampToValueAtTime(0.34, t + 0.012);
-                    gain.gain.setValueAtTime(0.34, t + 0.26);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.40);
+                    gain.gain.setValueAtTime(0.34, t + 0.66);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
 
                     osc.connect(gain).connect(ctx.destination);
                     osc.start(t); lfo.start(t);
-                    osc.stop(t + 0.42); lfo.stop(t + 0.42);
+                    osc.stop(t + 0.88); lfo.stop(t + 0.88);
                 } catch (e) {}
             };
 
@@ -296,7 +302,7 @@
         var mascot   = firstTip
             ? '<span class="rt-pip-enter">' + MASCOT.replace('</svg>', WHISTLE + '</svg>') + '</span>'
             : MASCOT;
-        if (firstTip) { injectWhistleCss(); setTimeout(blowWhistle, 90); }
+        if (firstTip) { injectWhistleCss(); blowWhistle(); }   // ⚠️ NO DELAY — see blowWhistle()
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
