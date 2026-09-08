@@ -434,10 +434,27 @@
         if (whistleArmed) return;
         whistleArmed = true;
         if (audioIsUnlocked()) { blowWhistle(); return; }
-        var go = function () {
+        var go = function (ev) {
+            // ⚠️ DO NOT WHISTLE AT SOMEONE WHO IS LEAVING. Tod, repeatedly:
+            // "no whistle still until you hit the x". His first click on a fresh
+            // load was the X — and since the browser waits for the FIRST gesture
+            // to unlock audio, that click both unlocked it and dismissed Pip. So
+            // the blast landed on the way out, every time.
+            // If the unlocking gesture is a dismissal, we stay silent and stop
+            // listening. Better nothing than a whistle at a closing card.
+            var t = ev && ev.target;
+            var dismissing = false;
+            try {
+                while (t && t !== document) {
+                    var r = t.getAttribute && t.getAttribute('data-rt');
+                    if (r === 'close' || r === 'off' || r === 'never' || r === 'finish') { dismissing = true; break; }
+                    t = t.parentNode;
+                }
+            } catch (e) {}
             document.removeEventListener('pointerdown', go, true);
             document.removeEventListener('keydown',     go, true);
             document.removeEventListener('touchstart',  go, true);
+            if (dismissing) return;
             var c = audioCtx();
             var fire = function () {
                 try {
