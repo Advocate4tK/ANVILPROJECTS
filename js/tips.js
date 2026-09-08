@@ -103,54 +103,53 @@
         + '100%{transform:translate(30px,34px) rotate(0deg)}}'
         + '@keyframes rtPipPuff{0%{opacity:0;transform:translateX(0) scale(.6)}'
         + '35%{opacity:.95}100%{opacity:0;transform:translateX(7px) scale(1.25)}}'
-        + '.rt-pip-whistle{animation:rtPipToot 2.3s cubic-bezier(.3,1.2,.4,1) 1 both;transform-origin:2px 3px}'
+        + '.rt-pip-whistle{animation:rtPipToot 1.5s cubic-bezier(.16,1.1,.3,1) 1 both;transform-origin:2px 3px}'
         + '.rt-pip-puff{opacity:0;transform-origin:14px 3px}'
         // The puffs fire at the TOP of the leap, while he is hanging there.
-        + '.rt-pip-puff1{animation:rtPipPuff .8s ease-out .42s 1 both}'
-        + '.rt-pip-puff2{animation:rtPipPuff .8s ease-out .60s 1 both}'
+        + '.rt-pip-puff1{animation:rtPipPuff .55s ease-out .13s 1 both}'
+        + '.rt-pip-puff2{animation:rtPipPuff .55s ease-out .26s 1 both}'
         // Anyone who has asked their device to stop moving things gets a still
         // whistle. Same information, no motion.
         // THE ARRIVAL. Tod: "he blows his whistle and then falls back into the
         // card. Like, do you remember Clippy used to do something when you first
         // opened up." Pip rises out of the card, leans in to blow, then settles
         // back down with one small bounce. Runs ONCE, on the first tip only.
-        // ⚠️ HE HAS TO ACTUALLY LEAVE THE CARD. Tod, twice: "He doesn't really
-        // come out at you and then fall back onto the card"; then, on a bigger
-        // draft, "Way too timid. We need that to come out big on the screen and
-        // then fall back onto the card."
+        // ⚠️ BOLD, NOT CUTE. Tod: "A referee is loud in bold, not wimpy." and
+        // "While Pip is cute, he needs to be bold."
         //
-        // So this is not a nudge. Pip springs to THREE TIMES size and a long way
-        // above the card — clear of it, out over the dimmed page — hangs there
-        // long enough to blow the whistle, then falls, lands with a squash, and
-        // rebounds into his slot.
+        // The earlier drafts read wimpy because they were SLOW. A long rise, a
+        // long hang and a soft settle is a balloon, not an official. A referee
+        // SNAPS: the whistle is up before you registered the arm moving.
         //
-        // Two things make it possible rather than clipped:
-        //   * position:relative + z-index so he paints ABOVE the card's text
-        //     instead of underneath it on the way past.
-        //   * transform-origin at the feet, so he grows upward out of his spot
-        //     rather than ballooning in every direction from the middle.
-        // The tip card sets no overflow, so nothing crops him.
+        // So the arc is the same height — 3x and 150px clear of the card — but
+        // it happens FAST. Up in 90ms. Held hard, dead still, while the whistle
+        // goes. Then dropped, not floated: down in 180ms, landing with a real
+        // squash. Total 1.5s instead of 2.3s, and the easing is near-linear on
+        // the way down so gravity reads as gravity.
         + '@keyframes rtPipEnter{'
-        + '0%{transform:translateY(34px) scale(.3) rotate(-20deg);opacity:0}'
-        + '11%{transform:translateY(-132px) scale(3.05) rotate(9deg);opacity:1}'
-        + '20%{transform:translateY(-150px) scale(2.85) rotate(-7deg)}'
-        + '50%{transform:translateY(-150px) scale(2.85) rotate(-7deg)}'
-        + '62%{transform:translateY(-120px) scale(2.5) rotate(-3deg)}'
-        + '76%{transform:translateY(-34px) scale(1.5) rotate(2deg)}'
-        + '86%{transform:translateY(6px) scale(.82,1.14) rotate(1deg)}'   /* landing squash */
-        + '93%{transform:translateY(-7px) scale(1.07,.95) rotate(0deg)}'  /* rebound */
+        + '0%{transform:translateY(30px) scale(.4) rotate(-14deg);opacity:0}'
+        + '6%{transform:translateY(-158px) scale(3.25) rotate(6deg);opacity:1}'   /* SNAP up */
+        + '10%{transform:translateY(-150px) scale(3.05) rotate(-4deg)}'
+        + '58%{transform:translateY(-150px) scale(3.05) rotate(-4deg)}'           /* dead still, blowing */
+        + '70%{transform:translateY(-104px) scale(2.5) rotate(-2deg)}'            /* drops */
+        + '80%{transform:translateY(4px) scale(.78,1.2) rotate(1deg)}'            /* lands hard */
+        + '87%{transform:translateY(-11px) scale(1.12,.92) rotate(0deg)}'
+        + '94%{transform:translateY(2px) scale(.97,1.03)}'
         + '100%{transform:translateY(0) scale(1) rotate(0deg)}}'
         + '.rt-pip-enter{display:inline-block;position:relative;z-index:3;'
-        + 'animation:rtPipEnter 2.3s cubic-bezier(.22,1.4,.36,1) 1 both;'
+        + 'animation:rtPipEnter 1.5s cubic-bezier(.16,1.1,.3,1) 1 both;'
         + 'transform-origin:50% 100%}'
-        // He introduces himself, once, on the very first tip a referee ever sees.
-        // Tod wrote the line: "hi my name is pip!" Timed to land just after the
-        // whistle, so it reads as him speaking rather than a label on the card.
-        + '@keyframes rtPipHello{0%{opacity:0;transform:translateY(-4px)}'
-        + '100%{opacity:1;transform:translateY(0)}}'
-        + '.rt-pip-hello{font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:0.82rem;'
-        + 'letter-spacing:.6px;text-transform:uppercase;color:#1e8449;opacity:.85;margin-bottom:2px;'
-        + 'animation:rtPipHello .45s ease-out 1.55s 1 both}'
+        // (A greeting line lived here until 2026-09-08. Tod: "The first card
+        // shouldn't give information, but explain what PIP is." The first CARD
+        // now introduces him — its title is his line — so a separate greeting
+        // above it would say the same thing twice. Keyframes kept in case a page
+        // ever wants the line without a dedicated intro card.)
+        + '@keyframes rtPipHello{0%{opacity:0;transform:translateY(-8px) scale(.86)}'
+        + '60%{opacity:1;transform:translateY(0) scale(1.08)}'
+        + '100%{opacity:1;transform:translateY(0) scale(1)}}'
+        + '.rt-pip-hello{font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:1.05rem;'
+        + 'letter-spacing:1.2px;text-transform:uppercase;color:#1e8449;margin-bottom:3px;'
+        + 'animation:rtPipHello .3s cubic-bezier(.2,1.6,.4,1) .82s 1 both}'
         + '@media (prefers-reduced-motion:reduce){'
         + '.rt-pip-whistle{animation:none}.rt-pip-puff{opacity:.9;animation:none}'
         + '.rt-pip-enter{animation:none}.rt-pip-hello{animation:none;opacity:.85}}';
@@ -159,7 +158,7 @@
     // Tod, 2026-09-08: "Oh, I think we absolutely should have the whistle blow."
     // Ralph had argued for silence — referees open this on a phone in public.
     // Tod overruled it, and it is his product and his referees. It stays SHORT
-    // (about a third of a second), QUIET (0.14 gain), and fires ONCE, on the
+    // SHORT (0.4s) and fires ONCE, on the
     // very first tip a device ever shows. Never again after that.
     //
     // Synthesised rather than a downloaded .mp3: no asset to fetch, nothing to
@@ -200,13 +199,13 @@
 
                     // Quick attack, short body, clean release — no click at the end.
                     gain.gain.setValueAtTime(0.0001, t);
-                    gain.gain.exponentialRampToValueAtTime(0.14, t + 0.02);
-                    gain.gain.setValueAtTime(0.14, t + 0.22);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+                    gain.gain.exponentialRampToValueAtTime(0.34, t + 0.012);
+                    gain.gain.setValueAtTime(0.34, t + 0.26);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.40);
 
                     osc.connect(gain).connect(ctx.destination);
                     osc.start(t); lfo.start(t);
-                    osc.stop(t + 0.36); lfo.stop(t + 0.36);
+                    osc.stop(t + 0.42); lfo.stop(t + 0.42);
                 } catch (e) {}
             };
 
@@ -286,7 +285,7 @@
         var mascot   = firstTip
             ? '<span class="rt-pip-enter">' + MASCOT.replace('</svg>', WHISTLE + '</svg>') + '</span>'
             : MASCOT;
-        if (firstTip) { injectWhistleCss(); setTimeout(blowWhistle, 260); }
+        if (firstTip) { injectWhistleCss(); setTimeout(blowWhistle, 90); }
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
@@ -299,7 +298,6 @@
             + 'line-height:1;color:#1e8449;cursor:pointer;padding:2px 7px;" '
             + 'title="Hide for now — it will come back">&times;</button>'
             + '<div style="display:flex;gap:14px;align-items:flex-start;">' + mascot + '<div style="min-width:0;">'
-            + (firstTip ? '<div class="rt-pip-hello">Hi, my name is ' + PIP + '!</div>' : '')
             + '<div style="font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:1.12rem;'
             + 'letter-spacing:1px;text-transform:uppercase;color:#1e8449;margin-bottom:5px;padding-right:18px;">'
             + (t.title || '') + '</div>'
