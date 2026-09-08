@@ -225,8 +225,41 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 61 of 71 (ends Giovanni Soto).
-Resume at the first surname AFTER SOTO. Roster crossed 2,000 on page 37.
+**Complete and contiguous through page 62 of 71 (ends Brady Stillwell).
+Resume at the first surname AFTER STILLWELL. Roster crossed 2,000 on page 37.
+
+### ⭐⭐ CANTERBURY IS A CLUSTER — THREE THREE-POOL REFEREES IN THREE PAGES
+- **Francis Senat #5414** — 58, Griswold Club + NorthEast + REFS (page 59)
+- **Aliyah Simas #40174** — 14, Griswold Club + NorthEast + REFS (page 60)
+- **Aaron Spruance #38639** — 44, Griswold Club + NorthEast + REFS (page 62)
+Three referees from one small town, all in the same three pools, two of them adults,
+and Spruance has never logged in. Canterbury is Dave Paquette's club and we have just
+started filing their games. Somebody has been recruiting there — worth asking Dave who.
+
+### Page 62 — UPLOADED 2026-09-07 (Marcos Soto → Stillwell)
+Swept 21:49, 15 frames, archived to `EYES/harvest/20260907-page62`. Footer confirmed.
+The Sotos straddle the boundary (Gianmarco, Giovanni, then Marcos). 48 CT rows staged,
+2 out-of-state omitted (Soto NY — apparently Gianmarco's father, Spector PA).
+**40 inserted, 9 updated, 0 ambiguous, 0 duplicate CA IDs. Roster 2,924 → 2,964.**
+- ⭐⭐⭐ **Igor Stambuk #2445 — Vernon**, 55, CA ID founding era, in **THREE POOLS**
+  (East Haddam + Griswold Club + NorthEast) and has **NEVER LOGGED IN**. A veteran
+  sitting in three of our pools that nobody has reached.
+- ⭐⭐ **Jason St George #41069 — NORWICH**, 46, ADULT new referee through 2027, handle
+  `norwichready@gmail.com`, signed up alongside his son Alexander #41080 on consecutive
+  IDs. Neither is in a pool. An adult entering the pipeline in the eastern corner is
+  exactly what NECONN and Griswold are short of.
+- ⭐ **Brady Stillwell #30732** — Colchester, 55, East Haddam + Griswold, logged in today.
+  **Stabach brothers** #37480 and #34428 — Colchester, both in East Haddam + Griswold,
+  neither has ever logged in.
+- Griswold Club: Ian Stallings #39977 and Gavin Stephan #38559 (both Oakdale), Levi
+  Steinhaus #37836 (Waterford).
+- NECONN towns, no pool: Ross Spooner #40929 (Columbia), **joseph stake #37934
+  (Coventry, 56, an ADULT)**, Gilad Stein #40138 (Mansfield).
+- **Steven Stanton #40894 is the FIFTH Oxford referee in the REFS pool.** Oxford is a
+  REFS pipeline — five across pages 57, 60 and 62.
+- ⚠️ **Nathaniel Southard #39211** — `@southingtonschools.org` and at 49 he is STAFF, not
+  a student, living in a different district. Sixth institutional address in five pages.
+- ⚠️ CA tags **Steven Stanton MINOR at 34**. Their error; not carried into our categories.
 
 ### ⚠️ CA RENDERS "Last Login" IN UTC, NOT LOCAL
 Found on page 61: rows read **09/08/2026** while the browser clock in the same
