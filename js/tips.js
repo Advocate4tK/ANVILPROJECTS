@@ -292,7 +292,7 @@
         var mascot   = firstTip
             ? '<span class="rt-pip-enter">' + MASCOT.replace('</svg>', WHISTLE + '</svg>') + '</span>'
             : MASCOT;
-        if (firstTip) injectWhistleCss();
+        if (firstTip) { injectWhistleCss(); armWhistle(); }
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
@@ -368,7 +368,23 @@
         veil.style.cssText =
               'position:fixed;inset:0;z-index:99998;background:rgba(9,20,42,0.55);'
             + 'backdrop-filter:blur(1.5px);';
-        veil.addEventListener('click', function () { dismiss(); });
+        // ⚠️ THE FIRST CLICK WAKES HIM; IT DOES NOT CLOSE HIM.
+        // Tod, six times over: "the whistle doesn't go off until you click off
+        // the tip or hit the x". Here is why that was unavoidable — the veil
+        // covers the whole screen, so EVERY possible first gesture was a
+        // dismissal: the X, 'Not now', 'Got it', or the veil itself. The browser
+        // will not unlock audio until a gesture happens, and every gesture on
+        // offer also removed the card. There was no neutral click to give.
+        //
+        // So the first veil click is spent waking him up: it unlocks the audio,
+        // blows the whistle and replays his entrance, and the card STAYS. Every
+        // click after that dismisses as normal. The X always closes, first click
+        // or not — someone reaching for the X wants out, not a performance.
+        veil.addEventListener('click', function () {
+            if (swallowVeilClick) { swallowVeilClick = false; return; }
+            dismiss();
+        });
+        document.body.appendChild(veil);
 
         el.style.cssText =
               'position:fixed;z-index:99999;left:50%;top:50%;transform:translate(-50%,-50%);'
@@ -426,62 +442,56 @@
         return !c || c.state === 'running';        // no audio at all — never wait
     }
 
-    // ── THE ARRIVAL SEQUENCE ────────────────────────────────────────────────
-    // Tod's spec, verbatim: "as soon as the referee (pip) pops (maybe even a
-    // second before he shows and while he is popping the whistle happens".
-    //
-    // ⚠️ WHY PIP WAITS FOR A TOUCH. A browser will not emit sound until the page
-    // has been interacted with. Pip on page load is BEFORE any interaction, so a
-    // Pip who arrives on load can never arrive with a whistle — not in Chrome,
-    // Edge, Safari or Firefox, and no flag changes it. Six rounds were spent
-    // rearranging WHICH click got the sound before this was faced squarely.
-    //
-    // So his arrival is moved to the referee's first gesture. Then:
-    //
-    //     touch  ->  WHISTLE  ->  450ms  ->  Pip pops, blast still going
-    //
-    // The whistle leads by 450ms and runs 1.5s, so it is sounding before he
-    // appears AND throughout his entrance, which is what was asked for.
-    //
-    // ⚠️ HE CAN NEVER BE LOST. Tod once reported "PIP isnt coming up at all"
-    // when an earlier gate failed to release. There is now a 1.6s backstop: if
-    // nobody touches anything, he arrives anyway, silently. Worst case he is
-    // 1.6s late; he is never absent. On a repeat visit the browser usually
-    // already trusts the site, audio is unlocked, and the whole sequence runs at
-    // once with no wait at all.
-    var arrivalStarted = false, backstop = null;
-
-    function runArrival() {
-        if (arrivalStarted) return;
-        arrivalStarted = true;
-        clearTimeout(backstop);
-        ['pointerdown','mousedown','touchstart','keydown','wheel'].forEach(function (t) {
-            try { document.removeEventListener(t, onGesture, true); } catch (e) {}
-        });
-        try { window.removeEventListener('scroll', onGesture, true); } catch (e) {}
-
-        var fire = function () {
-            injectWhistleCss();
-            blowWhistle();                                   // leads by 450ms
-            setTimeout(function () {
-                if (!done) { mount(); render(); }
-            }, 450);
+    // Blow it now if we are allowed; otherwise wait for the first touch and
+    // then blow it AND replay the entrance, so sound and motion arrive together.
+    var whistleArmed = false, swallowVeilClick = false;
+    function armWhistle() {
+        if (whistleArmed) return;
+        whistleArmed = true;
+        if (audioIsUnlocked()) { blowWhistle(); return; }
+        var go = function (ev) {
+            // ⚠️ DO NOT WHISTLE AT SOMEONE WHO IS LEAVING. Tod, repeatedly:
+            // "no whistle still until you hit the x". His first click on a fresh
+            // load was the X — and since the browser waits for the FIRST gesture
+            // to unlock audio, that click both unlocked it and dismissed Pip. So
+            // the blast landed on the way out, every time.
+            // If the unlocking gesture is a dismissal, we stay silent and stop
+            // listening. Better nothing than a whistle at a closing card.
+            var t = ev && ev.target;
+            var dismissing = false;
+            try {
+                while (t && t !== document) {
+                    var r = t.getAttribute && t.getAttribute('data-rt');
+                    if (r === 'close' || r === 'off' || r === 'never' || r === 'finish') { dismissing = true; break; }
+                    t = t.parentNode;
+                }
+            } catch (e) {}
+            document.removeEventListener('pointerdown', go, true);
+            document.removeEventListener('keydown',     go, true);
+            document.removeEventListener('touchstart',  go, true);
+            if (dismissing) return;
+            // This gesture is being spent on the whistle — do not let it also
+            // close the card behind us.
+            swallowVeilClick = true;
+            var c = audioCtx();
+            var fire = function () {
+                try {
+                    // Replay the entrance so he bursts out again with the blast,
+                    // rather than whistling at a card the referee is closing.
+                    var pip = el && el.querySelector('.rt-pip-enter');
+                    if (pip && !done) {
+                        pip.classList.remove('rt-pip-enter');
+                        void pip.offsetWidth;             // force reflow or the class swap is coalesced
+                        pip.classList.add('rt-pip-enter');
+                    }
+                } catch (e) {}
+                blowWhistle();
+            };
+            if (c && c.resume) { c.resume().then(fire).catch(fire); } else { fire(); }
         };
-        var c = audioCtx();
-        if (c && c.state !== 'running' && c.resume) { c.resume().then(fire).catch(fire); }
-        else { fire(); }
-    }
-
-    function onGesture() { runArrival(); }
-
-    function awaitArrival() {
-        // Already allowed to make noise? Go now — no reason to make anyone wait.
-        if (audioIsUnlocked()) { runArrival(); return; }
-        ['pointerdown','mousedown','touchstart','keydown','wheel'].forEach(function (t) {
-            try { document.addEventListener(t, onGesture, true); } catch (e) {}
-        });
-        try { window.addEventListener('scroll', onGesture, true); } catch (e) {}
-        backstop = setTimeout(runArrival, 1600);             // he ALWAYS shows
+        document.addEventListener('pointerdown', go, true);
+        document.addEventListener('keydown',     go, true);
+        document.addEventListener('touchstart',  go, true);
     }
 
     var RTTips = {
@@ -497,11 +507,6 @@
                 for (var i = 0; i < queue.length; i++) { if (queue[i].id === opts.id) return false; }
 
                 queue.push(opts);
-                // The first card starts the arrival sequence instead of mounting
-                // straight away — see awaitArrival(). Every later card in the
-                // burst simply queues; render() picks them all up.
-                if (!el && !arrivalStarted) { awaitArrival(); return true; }
-                if (!el) return true;                       // sequence in flight
                 // First card waits for the referee's first touch if audio is
                 // still locked, so the whistle lands with the entrance. Every
                 // later card mounts immediately — the gate is already open.
