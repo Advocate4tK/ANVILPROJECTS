@@ -225,8 +225,41 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 64 of 71 (ends Emily Thornton).
-Resume at the first surname AFTER THORNTON.
+**Complete and contiguous through page 65 of 71 (ends Madeleine Trusilo).
+Resume at the first surname AFTER TRUSILO.
+
+### CENTRAL ASSIGN ID COVERAGE — Tod asked 2026-09-07
+**3,016 of 3,073 roster rows carry a CA ID. 57 do not.** They break down:
+- **~22 have surnames AFTER Trusilo** (Turbesi, Turgeon, Tzingounis, Varghese, Vemuri x2,
+  Vera, Vongsarasinh, Vracevic, Wakely, Wang, Watson, Webster, Wilkinson, Wilmot, Wolff,
+  Xhelaj, Yanosy, Zajac x2 ...). **Pages 66-71 fill these automatically.** Page 65 already
+  filled four this way — Trachtenberg #38302 and the three Trujillos #40049/#40050/#40051.
+- **9 are junk rows, not people** — Test Test, Notes, John Wick, Jill Fluff, Jeff Hardy,
+  John Jones, Audie Murphy, Spring Championship Final, Championship Weekend. These want
+  DELETING, not a CA lookup.
+- **The rest are before Trusilo and need a targeted pass**, mostly spelling variants of
+  people already imported: `vlad Shpilchuk` = Vladyslav #37739, `Mathew Ramsdell` =
+  Matthew #38303, `Matteo Solis White` = #40603 (our stored email is
+  `matteossolis.gmail.com` — **missing the @**, which is why no match fired). Two are
+  deliberate out-of-state omissions (the Malerbis, Shrewsbury MA and Colorado Springs).
+  Ellie Gaul and Paul Yanosy are already on the "ask them" list.
+
+**Do the leftover pass only after page 71.** Finishing the sweep is what clears most of it.
+
+### Page 65 — UPLOADED 2026-09-07 (Erin Thornton → Trusilo)
+Swept 22:13, 15 frames, archived to `EYES/harvest/20260907-page65`. Footer confirmed.
+The two Thornton sisters straddle the boundary. 48 CT rows staged, 2 out-of-state omitted
+(Tobin MA, Trank NY). **36 inserted, 11 updated, 0 ambiguous, 0 duplicate CA IDs.
+Roster 3,037 → 3,073.**
+- ⭐ **Rachael Troia #40398 — PLAINFIELD**, Dave Hurteau's club. Adult, three pools,
+  never logged in, and NO phone on file — email is the only way to reach her.
+- **Three Treats in Colchester** — Ryan #32164 (father), Izsak #38651 (shares his phone)
+  and Kaden #33466 — all in East Haddam + Griswold. Two have never logged in.
+- **Jillian Torrey #39104 — North Stonington**, adult, Griswold Club, own domain.
+- **Peter Trenchard #920 is 75**, Statewide, founding-era ID, logged in today.
+- ⚠️ **Keith Tower #40045** is on an **Apple Private Relay** forwarder — third in the
+  harvest. ⚠️ **Lena Trojanowski #39030** is on `@mercyhigh.com`, a high-school account,
+  and she is in the East Haddam pool.
 
 ### 🚨 THE POOLS HAVE NEVER BEEN IMPORTED — Tod, 2026-09-07
 *"The only thing that I care about is porting these referees into our referee pools in
