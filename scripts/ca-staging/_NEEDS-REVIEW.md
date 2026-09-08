@@ -225,10 +225,39 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**⚠️ NOT CONTIGUOUS — PAGE 66 IS MISSING.**
-Pages 1-65 are complete and contiguous (ends Madeleine TRUSILO). **Page 67 is also done**
-(Vasic → Vincent). **Page 66 was skipped** and must be swept before the harvest can be
-called contiguous again. After that, resume at the first surname AFTER VINCENT.
+**✅ GAP CLOSED — complete and contiguous through page 67 of 71 (ends Ryan Vincent).
+Resume at the first surname AFTER VINCENT.**
+
+### ✅ The page-66 gap is closed (2026-09-08)
+Page 66 was swept at 08:01 and imported: Tshwaranang → Vasconcellos, which sits exactly
+between page 65's TRUSILO and page 67's VASIC. **All four stranded referees now have their
+Central Assign IDs**: Ryan Turbesi #41085, Benjamin Turgeon #34705, Oliver Tzingounis
+#38237, Yohan Varghese #38304.
+**40 inserted, 8 updated, 0 ambiguous, 0 duplicate CA IDs. Roster 3,109 → 3,149.
+CA IDs 3,098 of 3,149.**
+- Three **van Heiningens in ASHFORD** (NECONN): Kurt #40400 (49) and Alma #40553 both in
+  the REFS pool, beckett #41327 in none. None of the three has a phone on file.
+- **Brady Turbes #41186 — LEBANON**, new referee through 2027, on an Apple Private Relay
+  address (the fourth in the harvest).
+- CA's banner said 3 expired and exactly three were found — Tuminski, Ursini and the
+  Uddin-Alves record. Check passes.
+- ⚠️ **CA garbage record**: #34531's NAME field literally reads *"daughter of Emily
+  Uddin-Alves"* and its town is *"SOmewhere, RI"*. Omitted on the state rule anyway.
+
+### ⚠️ THREE DUPLICATE PEOPLE TO MERGE — found 2026-09-08
+Three referees exist as TWO rows each: an older row from a club roster with no CA ID, and
+a new row from the harvest with one. Neither the email match nor the name+city match fired
+because **the town is written differently and the email differs by a dot or entirely**.
+
+| Person | Harvest row (keep) | Older row (merge in, then delete) | Why no match |
+|---|---|---|---|
+| Oliver Tzingounis | id 5269, CA 38237, Mansfield | id 2358, Storrs Mansfield, source GLASTONBURY | email differs only by DOTS |
+| Matteo Solis White | id 5058, CA 40603, Storrs | id 2498, "Storrs, Mansfield" | our stored email is `matteossolis.gmail.com` — **missing the @** |
+| ellie gaul | id 3601, CA 38902, Glastonbury | id 2360, S. Glastonbury | different email |
+
+⭐ Note **Ellie Gaul already has a CA ID** — she can come off the "three referees to ask" list.
+**Do not delete anything without showing Tod first.** The merge must carry `source_club`
+and any second email from the old row onto the kept row.
 
 ### 🚨 THE PAGE 66 GAP
 The 2026-09-08 07:55 sweep was taken with the URL on **page=67**, not 66. Page 65 ended at
