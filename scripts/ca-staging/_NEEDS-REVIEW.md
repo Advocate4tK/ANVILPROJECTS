@@ -225,8 +225,42 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 58 of 71 (ends Taylor Schoonerman).
-Resume at the first surname AFTER SCHOONERMAN. Roster crossed 2,000 on page 37.
+**Complete and contiguous through page 59 of 71 (ends Adam Sheridan).
+Resume at the first surname AFTER SHERIDAN. Roster crossed 2,000 on page 37.
+
+### ⭐ CA's EXPIRED BANNER IS A FREE COMPLETENESS CHECK — USE IT EVERY PAGE
+Some pages carry a yellow banner above the table: *"N referees in this view have an
+expired or missing registration year."* That N is CA counting the same rows you are
+about to read. Page 57 said 2 and the read found 2; page 59 said 1 and the read found 1.
+**If the count does not match what the read turns up, the read is short — re-sweep.**
+It costs nothing and it catches a truncated sweep before it becomes a hole in the roster.
+
+### Page 59 — UPLOADED 2026-09-08 (Schrade → Sheridan)
+Swept 21:31, 15 frames, archived to `EYES/harvest/20260907-page59`. Footer confirmed.
+48 CT rows staged, 2 out-of-state omitted (Seelenbrandt MA, Senra RI).
+**40 inserted, 8 updated, 0 ambiguous, 0 duplicate CA IDs. Roster 2,797 → 2,837.**
+- ⭐⭐⭐ **Francis Senat #5414 — CANTERBURY**, 58, in **THREE POOLS AT ONCE** (Griswold
+  Club + NorthEast + REFS), registered through 2027, logged in today. Canterbury is
+  Dave Paquette's club and we just filed their games. Only Matthew Lindell #2136
+  (all four pools) is better connected in the eastern corner.
+- ⭐ **Two GLASTONBURY Sherer brothers** — Aidan #39924 (14) and Harrison #34841 (17),
+  same household, both in NO pool, neither has ever logged in.
+- ⭐ **Jeremy Sheppard #39917** — Norwich, 14, in Griswold Club AND REFS, never logged in.
+  **Adam Sheridan #33863** — Oakdale (Montville), 19, Griswold Club.
+- East Haddam pool: Jaime Serrano #36757 (Clinton, 36, never logged in) and Ivan
+  Shapiro #39472 (Marlborough, never logged in).
+- **Ryan Schumacher #39921 — Coventry**, no pool. Third Coventry referee in three pages.
+- Founding era, and two more COACH handles: **Frank Severo #786 `coachsev@aol.com`**
+  (Greenwich, 60) and **Andrew Shayler #1650 `avoncoach@comcast.net`** (Avon, 71).
+  Both belong on the assignor/coach outreach list, not just the roster.
+- ⚠️ **Griffin Schrade #40585** — `gmschrade@optonline.COM`. Optimum's domain is normally
+  optonline.NET. Transcribed as CA shows it. If it bounces, try .net.
+- ⚠️ **William Shay #37528** — `shayd@guilfordschools.org`, and he lives in MADISON, a
+  different district. Fourth institutional address in three pages.
+- ⚠️ **James Schwab #40416** — CA tags him MINOR at 37. Their error, not ours.
+- Two different RIVERSIDES on one page: Santiago Seitun #38176 is Riverside **CT**
+  (a section of Greenwich) and is staged; Benjamin Senra #38611 is Riverside **RI**
+  and is omitted. Read the state, not the town.
 
 ### Page 58 — UPLOADED 2026-09-08 (Sardinas → Schoonerman)
 Swept 21:26, 14 frames, archived to `EYES/harvest/20260907-page58`. Footer confirmed.
