@@ -114,31 +114,42 @@
         // card. Like, do you remember Clippy used to do something when you first
         // opened up." Pip rises out of the card, leans in to blow, then settles
         // back down with one small bounce. Runs ONCE, on the first tip only.
-        // ⚠️ BOLD, NOT CUTE. Tod: "A referee is loud in bold, not wimpy." and
-        // "While Pip is cute, he needs to be bold."
+        // ⚠️ HE COMES AT YOU, HE DOES NOT JUMP. Tod, 2026-09-08: "it seems like
+        // he drops in from the top and then down into the card. Have him come at
+        // the front of the card and fall back."
         //
-        // The earlier drafts read wimpy because they were SLOW. A long rise, a
-        // long hang and a soft settle is a balloon, not an official. A referee
-        // SNAPS: the whistle is up before you registered the arm moving.
+        // The earlier version travelled UP 158px and fell DOWN — vertical, like
+        // a jump. Wrong axis. What he wants is DEPTH: Pip comes out of the front
+        // of the card toward the viewer, hangs in your face while he blows, then
+        // falls BACK into the surface he came from.
         //
-        // So the arc is the same height — 3x and 150px clear of the card — but
-        // it happens FAST. Up in 90ms. Held hard, dead still, while the whistle
-        // goes. Then dropped, not floated: down in 180ms, landing with a real
-        // squash. Total 1.5s instead of 2.3s, and the easing is near-linear on
-        // the way down so gravity reads as gravity.
+        // So the movement is now almost entirely SCALE, with only a few pixels of
+        // rise for weight. Two things sell it as depth rather than as growth:
+        //   * perspective + translateZ, so he genuinely travels toward the camera
+        //   * a drop-shadow that deepens as he comes forward and collapses as he
+        //     falls back. Without the shadow he reads as inflating; with it he
+        //     reads as approaching.
+        // Still bold, still fast: forward in 90ms, held, then back in ~200ms.
         + '@keyframes rtPipEnter{'
-        + '0%{transform:translateY(30px) scale(.4) rotate(-14deg);opacity:0}'
-        + '6%{transform:translateY(-158px) scale(3.25) rotate(6deg);opacity:1}'   /* SNAP up */
-        + '10%{transform:translateY(-150px) scale(3.05) rotate(-4deg)}'
-        + '58%{transform:translateY(-150px) scale(3.05) rotate(-4deg)}'           /* dead still, blowing */
-        + '70%{transform:translateY(-104px) scale(2.5) rotate(-2deg)}'            /* drops */
-        + '80%{transform:translateY(4px) scale(.78,1.2) rotate(1deg)}'            /* lands hard */
-        + '87%{transform:translateY(-11px) scale(1.12,.92) rotate(0deg)}'
-        + '94%{transform:translateY(2px) scale(.97,1.03)}'
-        + '100%{transform:translateY(0) scale(1) rotate(0deg)}}'
+        + '0%{transform:perspective(600px) translateZ(-220px) scale(.55) rotate(-10deg);opacity:0;'
+        +   'filter:drop-shadow(0 0 0 rgba(0,0,0,0))}'
+        + '6%{transform:perspective(600px) translateZ(180px) translateY(-14px) scale(3.3) rotate(5deg);opacity:1;'
+        +   'filter:drop-shadow(0 26px 22px rgba(9,20,42,.45))}'      /* out at you */
+        + '11%{transform:perspective(600px) translateZ(165px) translateY(-12px) scale(3.1) rotate(-3deg);'
+        +   'filter:drop-shadow(0 24px 20px rgba(9,20,42,.42))}'
+        + '58%{transform:perspective(600px) translateZ(165px) translateY(-12px) scale(3.1) rotate(-3deg);'
+        +   'filter:drop-shadow(0 24px 20px rgba(9,20,42,.42))}'      /* dead still, blowing */
+        + '74%{transform:perspective(600px) translateZ(70px) translateY(-5px) scale(1.9) rotate(-1deg);'
+        +   'filter:drop-shadow(0 12px 12px rgba(9,20,42,.28))}'      /* falling back in */
+        + '86%{transform:perspective(600px) translateZ(-26px) translateY(2px) scale(.9) rotate(1deg);'
+        +   'filter:drop-shadow(0 2px 4px rgba(9,20,42,.12))}'        /* past flush, into the card */
+        + '94%{transform:perspective(600px) translateZ(8px) scale(1.05);'
+        +   'filter:drop-shadow(0 3px 5px rgba(9,20,42,.10))}'
+        + '100%{transform:perspective(600px) translateZ(0) translateY(0) scale(1) rotate(0deg);'
+        +   'filter:drop-shadow(0 0 0 rgba(0,0,0,0))}}'
         + '.rt-pip-enter{display:inline-block;position:relative;z-index:3;'
         + 'animation:rtPipEnter 1.5s cubic-bezier(.16,1.1,.3,1) 1 both;'
-        + 'transform-origin:50% 100%}'
+        + 'transform-origin:50% 60%}'
         // (A greeting line lived here until 2026-09-08. Tod: "The first card
         // shouldn't give information, but explain what PIP is." The first CARD
         // now introduces him — its title is his line — so a separate greeting
