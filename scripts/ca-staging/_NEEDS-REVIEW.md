@@ -228,7 +228,7 @@ approval between the preview and the write.
 **Complete and contiguous through page 60 of 71 (ends Daniel Slone).
 Resume at the first surname AFTER SLONE. Roster crossed 2,000 on page 37.
 
-### Page 60 — UPLOADED 2026-09-08 (Jason Sheridan → Slone)
+### Page 60 — UPLOADED 2026-09-07 (Jason Sheridan → Slone)
 Swept 21:37, 14 frames, archived to `EYES/harvest/20260907-page60`. Footer confirmed.
 The two Sheridan brothers straddle the boundary — CA sorts Adam before Jason, so page 59
 ended on one and page 60 opened on the other. No gap, no repeat. 49 CT rows staged,
@@ -258,7 +258,7 @@ about to read. Page 57 said 2 and the read found 2; page 59 said 1 and the read 
 **If the count does not match what the read turns up, the read is short — re-sweep.**
 It costs nothing and it catches a truncated sweep before it becomes a hole in the roster.
 
-### Page 59 — UPLOADED 2026-09-08 (Schrade → Sheridan)
+### Page 59 — UPLOADED 2026-09-07 (Schrade → Sheridan)
 Swept 21:31, 15 frames, archived to `EYES/harvest/20260907-page59`. Footer confirmed.
 48 CT rows staged, 2 out-of-state omitted (Seelenbrandt MA, Senra RI).
 **40 inserted, 8 updated, 0 ambiguous, 0 duplicate CA IDs. Roster 2,797 → 2,837.**
@@ -285,7 +285,7 @@ Swept 21:31, 15 frames, archived to `EYES/harvest/20260907-page59`. Footer confi
   (a section of Greenwich) and is staged; Benjamin Senra #38611 is Riverside **RI**
   and is omitted. Read the state, not the town.
 
-### Page 58 — UPLOADED 2026-09-08 (Sardinas → Schoonerman)
+### Page 58 — UPLOADED 2026-09-07 (Sardinas → Schoonerman)
 Swept 21:26, 14 frames, archived to `EYES/harvest/20260907-page58`. Footer confirmed.
 ⚠️ **BOUNDARY REPEAT — the harmless kind.** CA's total grew **3,543 → 3,549** between
 the two sweeps, pushing every row six later, so page 58 OPENED with page 57's last six
