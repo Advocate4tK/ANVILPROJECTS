@@ -97,30 +97,52 @@
 
     var WHISTLE_CSS =
           '@keyframes rtPipToot{0%{transform:translate(30px,34px) rotate(0deg)}'
-        + '18%{transform:translate(30px,31px) rotate(-13deg)}'
-        + '55%{transform:translate(30px,31px) rotate(-13deg)}'
+        + '12%{transform:translate(30px,30px) rotate(-15deg)}'
+        + '50%{transform:translate(30px,30px) rotate(-15deg)}'
+        + '72%{transform:translate(30px,34px) rotate(0deg)}'
         + '100%{transform:translate(30px,34px) rotate(0deg)}}'
         + '@keyframes rtPipPuff{0%{opacity:0;transform:translateX(0) scale(.6)}'
         + '35%{opacity:.95}100%{opacity:0;transform:translateX(7px) scale(1.25)}}'
-        + '.rt-pip-whistle{animation:rtPipToot 1.5s cubic-bezier(.3,1.2,.4,1) 1 both;transform-origin:2px 3px}'
+        + '.rt-pip-whistle{animation:rtPipToot 2.3s cubic-bezier(.3,1.2,.4,1) 1 both;transform-origin:2px 3px}'
         + '.rt-pip-puff{opacity:0;transform-origin:14px 3px}'
-        + '.rt-pip-puff1{animation:rtPipPuff .75s ease-out .32s 1 both}'
-        + '.rt-pip-puff2{animation:rtPipPuff .75s ease-out .46s 1 both}'
+        // The puffs fire at the TOP of the leap, while he is hanging there.
+        + '.rt-pip-puff1{animation:rtPipPuff .8s ease-out .42s 1 both}'
+        + '.rt-pip-puff2{animation:rtPipPuff .8s ease-out .60s 1 both}'
         // Anyone who has asked their device to stop moving things gets a still
         // whistle. Same information, no motion.
         // THE ARRIVAL. Tod: "he blows his whistle and then falls back into the
         // card. Like, do you remember Clippy used to do something when you first
         // opened up." Pip rises out of the card, leans in to blow, then settles
         // back down with one small bounce. Runs ONCE, on the first tip only.
+        // ⚠️ HE HAS TO ACTUALLY LEAVE THE CARD. Tod, twice: "He doesn't really
+        // come out at you and then fall back onto the card"; then, on a bigger
+        // draft, "Way too timid. We need that to come out big on the screen and
+        // then fall back onto the card."
+        //
+        // So this is not a nudge. Pip springs to THREE TIMES size and a long way
+        // above the card — clear of it, out over the dimmed page — hangs there
+        // long enough to blow the whistle, then falls, lands with a squash, and
+        // rebounds into his slot.
+        //
+        // Two things make it possible rather than clipped:
+        //   * position:relative + z-index so he paints ABOVE the card's text
+        //     instead of underneath it on the way past.
+        //   * transform-origin at the feet, so he grows upward out of his spot
+        //     rather than ballooning in every direction from the middle.
+        // The tip card sets no overflow, so nothing crops him.
         + '@keyframes rtPipEnter{'
-        + '0%{transform:translateY(10px) scale(.55) rotate(-12deg);opacity:0}'
-        + '22%{transform:translateY(-9px) scale(1.14) rotate(5deg);opacity:1}'
-        + '40%{transform:translateY(-11px) scale(1.1) rotate(-4deg)}'
-        + '62%{transform:translateY(-11px) scale(1.1) rotate(-4deg)}'
-        + '82%{transform:translateY(2px) scale(.97) rotate(1deg)}'
+        + '0%{transform:translateY(34px) scale(.3) rotate(-20deg);opacity:0}'
+        + '11%{transform:translateY(-132px) scale(3.05) rotate(9deg);opacity:1}'
+        + '20%{transform:translateY(-150px) scale(2.85) rotate(-7deg)}'
+        + '50%{transform:translateY(-150px) scale(2.85) rotate(-7deg)}'
+        + '62%{transform:translateY(-120px) scale(2.5) rotate(-3deg)}'
+        + '76%{transform:translateY(-34px) scale(1.5) rotate(2deg)}'
+        + '86%{transform:translateY(6px) scale(.82,1.14) rotate(1deg)}'   /* landing squash */
+        + '93%{transform:translateY(-7px) scale(1.07,.95) rotate(0deg)}'  /* rebound */
         + '100%{transform:translateY(0) scale(1) rotate(0deg)}}'
-        + '.rt-pip-enter{display:inline-block;animation:rtPipEnter 1.5s cubic-bezier(.34,1.4,.5,1) 1 both;'
-        + 'transform-origin:50% 90%}'
+        + '.rt-pip-enter{display:inline-block;position:relative;z-index:3;'
+        + 'animation:rtPipEnter 2.3s cubic-bezier(.22,1.4,.36,1) 1 both;'
+        + 'transform-origin:50% 100%}'
         // He introduces himself, once, on the very first tip a referee ever sees.
         // Tod wrote the line: "hi my name is pip!" Timed to land just after the
         // whistle, so it reads as him speaking rather than a label on the card.
@@ -128,7 +150,7 @@
         + '100%{opacity:1;transform:translateY(0)}}'
         + '.rt-pip-hello{font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:0.82rem;'
         + 'letter-spacing:.6px;text-transform:uppercase;color:#1e8449;opacity:.85;margin-bottom:2px;'
-        + 'animation:rtPipHello .45s ease-out .62s 1 both}'
+        + 'animation:rtPipHello .45s ease-out 1.55s 1 both}'
         + '@media (prefers-reduced-motion:reduce){'
         + '.rt-pip-whistle{animation:none}.rt-pip-puff{opacity:.9;animation:none}'
         + '.rt-pip-enter{animation:none}.rt-pip-hello{animation:none;opacity:.85}}';
@@ -264,7 +286,7 @@
         var mascot   = firstTip
             ? '<span class="rt-pip-enter">' + MASCOT.replace('</svg>', WHISTLE + '</svg>') + '</span>'
             : MASCOT;
-        if (firstTip) { injectWhistleCss(); blowWhistle(); }
+        if (firstTip) { injectWhistleCss(); setTimeout(blowWhistle, 260); }
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
