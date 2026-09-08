@@ -380,8 +380,37 @@
         // blows the whistle and replays his entrance, and the card STAYS. Every
         // click after that dismisses as normal. The X always closes, first click
         // or not — someone reaching for the X wants out, not a performance.
+        // ⚠️ THE FIRST CLICK ON THE DARK AREA BUYS THE WHISTLE.
+        // Tod: "now he comes up perfectly... but no whistle."
+        // A browser makes no sound until the page is touched, and the veil covers
+        // the whole screen — so the ONLY thing a referee can touch is the thing
+        // that closes Pip. That is the entire reason the whistle was never heard.
+        //
+        // So the first veil click is spent on the blast rather than the exit:
+        // audio unlocks, the whistle goes, Pip pops again, the card STAYS. The
+        // second click closes it. The X always closes, first click or not —
+        // someone reaching for the X wants out, not a performance.
+        //
+        // ⚠️ THIS CANNOT HIDE PIP. He is mounted before this ever runs. Do not
+        // move any of it near the mount.
         veil.addEventListener('click', function () {
-            if (swallowVeilClick) { swallowVeilClick = false; return; }
+            if (!whistleHeard && !audioIsUnlocked()) {
+                whistleHeard = true;
+                var c = audioCtx();
+                var fire = function () {
+                    try {
+                        var pip = el && el.querySelector('.rt-pip-enter');
+                        if (pip && !done) {
+                            pip.classList.remove('rt-pip-enter');
+                            void pip.offsetWidth;      // reflow, or the swap is coalesced
+                            pip.classList.add('rt-pip-enter');
+                        }
+                    } catch (e) {}
+                    blowWhistle();
+                };
+                if (c && c.resume) { c.resume().then(fire).catch(fire); } else { fire(); }
+                return;                                // spent — do not dismiss
+            }
             dismiss();
         });
         document.body.appendChild(veil);
@@ -444,7 +473,7 @@
 
     // Blow it now if we are allowed; otherwise wait for the first touch and
     // then blow it AND replay the entrance, so sound and motion arrive together.
-    var whistleArmed = false, swallowVeilClick = false;
+    var whistleArmed = false, whistleHeard = false;
     function armWhistle() {
         if (whistleArmed) return;
         whistleArmed = true;
@@ -472,7 +501,7 @@
             if (dismissing) return;
             // This gesture is being spent on the whistle — do not let it also
             // close the card behind us.
-            swallowVeilClick = true;
+            whistleHeard = true;   // armWhistle got there first; the veil need not
             var c = audioCtx();
             var fire = function () {
                 try {
