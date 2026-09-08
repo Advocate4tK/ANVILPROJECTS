@@ -106,8 +106,8 @@
         + '.rt-pip-whistle{animation:rtPipToot 1.5s cubic-bezier(.16,1.1,.3,1) 1 both;transform-origin:2px 3px}'
         + '.rt-pip-puff{opacity:0;transform-origin:14px 3px}'
         // The puffs fire at the TOP of the leap, while he is hanging there.
-        + '.rt-pip-puff1{animation:rtPipPuff .78s ease-out .04s 1 both}'
-        + '.rt-pip-puff2{animation:rtPipPuff .78s ease-out .30s 1 both}'
+        + '.rt-pip-puff1{animation:rtPipPuff .62s ease-out .02s 3 both}'
+        + '.rt-pip-puff2{animation:rtPipPuff .62s ease-out .22s 3 both}'
         // Anyone who has asked their device to stop moving things gets a still
         // whistle. Same information, no motion.
         // THE ARRIVAL. Tod: "he blows his whistle and then falls back into the
@@ -169,7 +169,7 @@
     // Tod, 2026-09-08: "Oh, I think we absolutely should have the whistle blow."
     // Ralph had argued for silence — referees open this on a phone in public.
     // Tod overruled it, and it is his product and his referees. It stays SHORT
-    // A blast of about 0.85s, fired ONCE, on the
+    // A blast of about 1.5s that spans his whole entrance, fired ONCE, on the
     // very first tip a device ever shows. Never again after that.
     //
     // Synthesised rather than a downloaded .mp3: no asset to fetch, nothing to
@@ -208,21 +208,27 @@
                     lfoG.gain.value     = 165;           // depth, in Hz
                     lfo.connect(lfoG).connect(osc.frequency);
 
-                    // ⚠️ A BLAST, NOT A CHIRP. Tod, 2026-09-08: "The whistle should
-                    // come out right as soon as the tutorial comes up. It doesn't
-                    // come up right away. It should be longer."
-                    // So: instant attack (12ms), and a body that holds for
-                    // two thirds of a second before releasing — about 0.85s in
-                    // total, which is roughly how long a real referee leans on
-                    // one. The old 0.4s read as a chirp.
+                    // ⚠️ IT MUST SPAN THE ENTRANCE. Tod, 2026-09-08: "it needs to
+                    // come out and whistle BEFORE and DURING while the card
+                    // shows."
+                    //
+                    // So this is ONE continuous blast that starts 240ms before
+                    // Pip is mounted and is still going while he bursts forward
+                    // and hangs there. ~1.5s total:
+                    //     0.00s  blast starts   (card not yet on screen)
+                    //     0.24s  Pip bursts out
+                    //     0.33s  he is at the front, held, still blowing
+                    //     1.15s  the blast begins to release
+                    //     1.50s  silent; he falls back into the card
+                    // A real referee holding a call leans on it about this long.
                     gain.gain.setValueAtTime(0.0001, t);
                     gain.gain.exponentialRampToValueAtTime(0.34, t + 0.012);
-                    gain.gain.setValueAtTime(0.34, t + 0.66);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
+                    gain.gain.setValueAtTime(0.34, t + 1.15);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.45);
 
                     osc.connect(gain).connect(ctx.destination);
                     osc.start(t); lfo.start(t);
-                    osc.stop(t + 0.88); lfo.stop(t + 0.88);
+                    osc.stop(t + 1.50); lfo.stop(t + 1.50);
                 } catch (e) {}
             };
 
@@ -438,7 +444,15 @@
     // anyway, silently, because a tutorial nobody sees is worse than a quiet one.
     // On a repeat visit the browser usually already trusts the site and he
     // appears instantly WITH sound.
-    var audioReady = false, pendingMount = null;
+    // ⚠️ THE BURST. A page queues its whole run in one synchronous pass —
+    // ref-openings calls show() ten times back to back. The first version of
+    // this gate only held the FIRST call: call two saw queue.length === 2,
+    // skipped the gate and mounted Pip on the spot, while the whistle sat
+    // waiting for a gesture that had not happened. Tod: "again the whistle only
+    // goes off when I exit the first tip."
+    // `holding` is what makes the gate survive the burst — once we are waiting,
+    // every later show() just queues and returns.
+    var holding = false, pendingMount = null;
     function audioIsUnlocked() {
         try {
             var AC = window.AudioContext || window.webkitAudioContext;
@@ -488,8 +502,11 @@
                 // then Pip bursts out of the card. 240ms is long enough to
                 // register as "something is about to happen" and short enough
                 // that it still reads as one event.
+                if (holding) return true;          // already waiting — just queue it
                 if (!el && queue.length === 1) {
+                    holding = true;
                     whenInteractive(function () {
+                        holding = false;
                         injectWhistleCss();
                         blowWhistle();
                         setTimeout(function () { if (!done) { mount(); render(); } }, 240);
