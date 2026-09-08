@@ -225,8 +225,45 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 60 of 71 (ends Daniel Slone).
-Resume at the first surname AFTER SLONE. Roster crossed 2,000 on page 37.
+**Complete and contiguous through page 61 of 71 (ends Giovanni Soto).
+Resume at the first surname AFTER SOTO. Roster crossed 2,000 on page 37.
+
+### ⚠️ CA RENDERS "Last Login" IN UTC, NOT LOCAL
+Found on page 61: rows read **09/08/2026** while the browser clock in the same
+screenshot read **9:42 PM on 09/07**. After 8 PM Eastern, CA's login dates run a day
+ahead of Connecticut. A "tomorrow" login is not a data error. Do not use these dates for
+anything time-sensitive without converting — and note the same trap caught Ralph, who
+stamped pages 58-60 of these notes with UTC dates before Tod corrected it.
+
+### Page 61 — UPLOADED 2026-09-07 (Slonski → Soto) — THE SMITH PAGE
+Swept 21:42, 15 frames, archived to `EYES/harvest/20260907-page61`. Footer confirmed.
+Seventeen Smiths in a row. 48 CT rows staged, 2 out-of-state omitted (Snider MA,
+Soto NY). **41 inserted, 7 updated, 0 ambiguous, 0 duplicate CA IDs.
+Roster 2,883 → 2,924.**
+- ⭐⭐⭐⭐ **TOD SMITH #31744 IS IN CA's DIRECTORY** — Thompson, `nectassignor@gmail.com`,
+  and in **ALL FOUR POOLS**, only the second person in the harvest to be (after Matthew
+  Lindell #2136). He matched his existing roster row (db id 1380, on file since March)
+  by CA ID; the importer correctly kept his personal `todlsmith@gmail.com` rather than
+  overwriting it with the assignor address.
+- ⭐⭐⭐ **Noah Slonski #41081 — LIVES IN GRISWOLD**, 13, in THREE pools (Griswold Club +
+  NorthEast + REFS), new referee through 2027. FOURTH referee found whose home town is
+  one of our own client clubs, after Nelan, Quinn and Robidoux.
+- ⭐⭐⭐ **Hannah Smith #39815 — THOMPSON**, 25, three pools (Griswold Club + NorthEast +
+  REFS), no phone on file, has NEVER logged in. Same town as Tod.
+- ⚠️⭐ **Isabelle Sobieralski #38267 — `@rhamschools.org`.** That is RHAM, Eric's own
+  territory. 18, in the East Haddam pool, never logged in, on a district student account
+  that blocks outside senders and dies at graduation. Get her a personal address.
+- ⚠️ **TWO different Hannah Smiths on one page** — #39815 (Thompson, 25) and #39068
+  (Somers, 15). The TOWN is what separates them; a name-only match would have merged
+  them. Verified after the write: both landed as separate rows.
+- East Haddam pool: Carter Smith #39923 (Clinton), Connor Sodhi #38028 (Madison),
+  Isabelle Sobieralski #38267 (Marlborough). Griswold Club: Dexter Smith #39177 (Waterford).
+- NECONN towns, none in a pool: Micah Soderberg #33255 (Mansfield Center), Luciana
+  #38164 and Matteo #40603 Solis White (Storrs, same phone), Evan Smith #40937 (Tolland).
+- ⚠️ **Bennett Smith #38471** — `27smithb@wiltonps.org`, fifth institutional address in
+  four pages.
+- ⚠️ **Daniel solorzano #40486** — CA spells the surname one way and his EMAIL another
+  (`solorazano`, extra A). Both transcribed verbatim.
 
 ### Page 60 — UPLOADED 2026-09-07 (Jason Sheridan → Slone)
 Swept 21:37, 14 frames, archived to `EYES/harvest/20260907-page60`. Footer confirmed.
