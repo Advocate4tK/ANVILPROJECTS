@@ -372,7 +372,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         } catch (error) {
             console.error('Submission error:', error);
-            showMessage('error', `Failed to submit form: ${error.message}. Please try again or contact your assignor.`);
+            showMessage('error', humanSubmitError(error));
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
@@ -420,6 +420,50 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Get selected checkbox values
      */
+    // ── Turning database errors into something a referee can act on ──────────
+    //
+    // 2026-09-08: a referee submitting from his phone was shown, verbatim:
+    //
+    //     "Failed to submit form: value too long for type character
+    //      varying(50). Please try again or contact your assignor."
+    //
+    // That is a Postgres error handed to a fourteen-year-old. He emailed Tod a
+    // screenshot, Tod forwarded it, and it took a database session to work out
+    // that he had simply ticked five clubs. The referee could not have known
+    // that, and the message gave him nothing to try.
+    //
+    // The rule: say what the PERSON can do about it. Keep the raw error in the
+    // console for whoever is debugging - never on the screen.
+    function humanSubmitError(error) {
+        const raw = String(error && error.message || error || '');
+
+        // varchar overflow. The usual culprit is the club checkboxes, which are
+        // stored as one joined string. Name the field and the action.
+        if (/value too long for type character varying/i.test(raw)) {
+            return 'That is more text than one of the fields can hold — usually too many '
+                 + 'clubs selected at once. Try unticking a club or two and submitting again. '
+                 + 'If you need all of them, send your assignor a note and they will add the rest.';
+        }
+        // Duplicate submission - the form was double-tapped or resubmitted.
+        if (/duplicate key|already exists/i.test(raw)) {
+            return 'It looks like this availability was already submitted. Check your email for '
+                 + 'the confirmation; if you did not get one, contact your assignor.';
+        }
+        // RLS or auth. The referee cannot fix this and should not be told to retry.
+        if (/row-level security|permission denied|not authorized|JWT/i.test(raw)) {
+            return 'The form could not save your availability because of a permissions problem '
+                 + 'on our side. This is not something you did — please contact your assignor.';
+        }
+        // Offline / flaky mobile connection, which is most of them.
+        if (/failed to fetch|networkerror|load failed|timeout/i.test(raw)) {
+            return 'Could not reach the server — check your connection and try again. '
+                 + 'Your answers are still on the screen.';
+        }
+        // Anything unrecognised: apologise, do not paste the database at them.
+        return 'Something went wrong saving your availability. Please try again, and if it '
+             + 'keeps happening contact your assignor and tell them what you were submitting.';
+    }
+
     function getCheckboxValues(name) {
         const checkboxes = document.querySelectorAll(`input[name="${name}"]:checked`);
         return Array.from(checkboxes).map(cb => cb.value);
