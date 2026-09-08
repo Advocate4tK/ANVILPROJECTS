@@ -71,6 +71,79 @@
         + '<path d="M25 33.5 q5.5 4.5 11 1" stroke="#09142a" stroke-width="2.2" fill="none" stroke-linecap="round"/>'
         + '</svg>';
 
+    // ── PIP ─────────────────────────────────────────────────────────────────
+    // Tod named him 2026-09-08. He had been "Clippy" only in conversation —
+    // nothing in the code ever said it. The name goes on the card as a byline
+    // so referees have something to call him; an unnamed cartoon giving you
+    // instructions is stranger than a named one.
+    var PIP = 'Pip';
+
+    // On the FIRST tip only, Pip blows his whistle: the whistle swings up and
+    // two puff arcs breathe outward. Tod: "little whistle blowing at first tip!"
+    //
+    // ⚠️ DELIBERATELY SILENT. No audio, ever. Referees open this on a phone in
+    // public, at work, in a school corridor. A page that makes an unprompted
+    // noise is a page people close. The animation carries it.
+    //
+    // First tip only — a whistle on every tip stops being a greeting and starts
+    // being a tic.
+    var WHISTLE =
+          '<g class="rt-pip-whistle" transform="translate(30 34)">'
+        + '<rect x="0" y="0" width="11" height="6.5" rx="3" fill="#2c3e50"/>'
+        + '<circle cx="9.5" cy="3.2" r="2.6" fill="#2c3e50"/>'
+        + '<circle cx="9.5" cy="3.2" r="1.1" fill="#7f8c8d"/>'
+        + '<path class="rt-pip-puff rt-pip-puff1" d="M14 3 q4 -2.5 8 0"   stroke="#9fb3c8" stroke-width="1.5" fill="none" stroke-linecap="round"/>'
+        + '<path class="rt-pip-puff rt-pip-puff2" d="M14 3 q6.5 -4.5 13 0" stroke="#9fb3c8" stroke-width="1.3" fill="none" stroke-linecap="round"/>'
+        + '</g>';
+
+    var WHISTLE_CSS =
+          '@keyframes rtPipToot{0%{transform:translate(30px,34px) rotate(0deg)}'
+        + '18%{transform:translate(30px,31px) rotate(-13deg)}'
+        + '55%{transform:translate(30px,31px) rotate(-13deg)}'
+        + '100%{transform:translate(30px,34px) rotate(0deg)}}'
+        + '@keyframes rtPipPuff{0%{opacity:0;transform:translateX(0) scale(.6)}'
+        + '35%{opacity:.95}100%{opacity:0;transform:translateX(7px) scale(1.25)}}'
+        + '.rt-pip-whistle{animation:rtPipToot 1.5s cubic-bezier(.3,1.2,.4,1) 1 both;transform-origin:2px 3px}'
+        + '.rt-pip-puff{opacity:0;transform-origin:14px 3px}'
+        + '.rt-pip-puff1{animation:rtPipPuff .75s ease-out .32s 1 both}'
+        + '.rt-pip-puff2{animation:rtPipPuff .75s ease-out .46s 1 both}'
+        // Anyone who has asked their device to stop moving things gets a still
+        // whistle. Same information, no motion.
+        // THE ARRIVAL. Tod: "he blows his whistle and then falls back into the
+        // card. Like, do you remember Clippy used to do something when you first
+        // opened up." Pip rises out of the card, leans in to blow, then settles
+        // back down with one small bounce. Runs ONCE, on the first tip only.
+        + '@keyframes rtPipEnter{'
+        + '0%{transform:translateY(10px) scale(.55) rotate(-12deg);opacity:0}'
+        + '22%{transform:translateY(-9px) scale(1.14) rotate(5deg);opacity:1}'
+        + '40%{transform:translateY(-11px) scale(1.1) rotate(-4deg)}'
+        + '62%{transform:translateY(-11px) scale(1.1) rotate(-4deg)}'
+        + '82%{transform:translateY(2px) scale(.97) rotate(1deg)}'
+        + '100%{transform:translateY(0) scale(1) rotate(0deg)}}'
+        + '.rt-pip-enter{display:inline-block;animation:rtPipEnter 1.5s cubic-bezier(.34,1.4,.5,1) 1 both;'
+        + 'transform-origin:50% 90%}'
+        // He introduces himself, once, on the very first tip a referee ever sees.
+        // Tod wrote the line: "hi my name is pip!" Timed to land just after the
+        // whistle, so it reads as him speaking rather than a label on the card.
+        + '@keyframes rtPipHello{0%{opacity:0;transform:translateY(-4px)}'
+        + '100%{opacity:1;transform:translateY(0)}}'
+        + '.rt-pip-hello{font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:0.82rem;'
+        + 'letter-spacing:.6px;text-transform:uppercase;color:#1e8449;opacity:.85;margin-bottom:2px;'
+        + 'animation:rtPipHello .45s ease-out .62s 1 both}'
+        + '@media (prefers-reduced-motion:reduce){'
+        + '.rt-pip-whistle{animation:none}.rt-pip-puff{opacity:.9;animation:none}'
+        + '.rt-pip-enter{animation:none}.rt-pip-hello{animation:none;opacity:.85}}';
+
+    function injectWhistleCss() {
+        try {
+            if (document.getElementById('rt-pip-css')) return;
+            var st = document.createElement('style');
+            st.id = 'rt-pip-css';
+            st.textContent = WHISTLE_CSS;
+            document.head.appendChild(st);
+        } catch (e) {}
+    }
+
     var queue = [], idx = 0, el = null, veil = null, again = null, done = false;
 
     // How long he waits before coming back after an x. Tod, 2026-09-06: "I almost
@@ -115,6 +188,15 @@
         var t = queue[idx];
         if (!t) { finish(); return; }
 
+        // First tip gets the full arrival: whistle tucked inside the SVG, and the
+        // whole mascot animated. Later tips get a plain, still Pip — the
+        // entrance is a greeting, and a greeting repeated every card is a tic.
+        var firstTip = (idx === 0);
+        var mascot   = firstTip
+            ? '<span class="rt-pip-enter">' + MASCOT.replace('</svg>', WHISTLE + '</svg>') + '</span>'
+            : MASCOT;
+        if (firstTip) injectWhistleCss();
+
         var more = idx < queue.length - 1;
         var step = queue.length > 1
             ? '<span style="color:#7a8ba0;font-size:0.74rem;">' + (idx + 1) + ' of ' + queue.length + '</span>'
@@ -125,11 +207,13 @@
             + 'style="position:absolute;top:6px;right:8px;background:none;border:none;font-size:1.5rem;'
             + 'line-height:1;color:#1e8449;cursor:pointer;padding:2px 7px;" '
             + 'title="Hide for now — it will come back">&times;</button>'
-            + '<div style="display:flex;gap:14px;align-items:flex-start;">' + MASCOT + '<div style="min-width:0;">'
+            + '<div style="display:flex;gap:14px;align-items:flex-start;">' + mascot + '<div style="min-width:0;">'
+            + (firstTip ? '<div class="rt-pip-hello">Hi, my name is ' + PIP + '!</div>' : '')
             + '<div style="font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:1.12rem;'
             + 'letter-spacing:1px;text-transform:uppercase;color:#1e8449;margin-bottom:5px;padding-right:18px;">'
             + (t.title || '') + '</div>'
             + '<div style="font-size:0.92rem;line-height:1.5;">' + (t.html || '') + '</div>'
+            + '<div style="font-size:0.7rem;color:#7a8ba0;margin-top:7px;font-style:italic;">— ' + PIP + '</div>'
             + '<div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">'
             // One primary button that always moves you forward: "Got it" steps to
             // the next tip and finishes on the last. Two different labels for the
