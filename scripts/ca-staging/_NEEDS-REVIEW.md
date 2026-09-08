@@ -225,8 +225,33 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 57 of 71 (ends Addison Sapia).
-Resume at the first surname AFTER SAPIA. Roster crossed 2,000 on page 37.
+**Complete and contiguous through page 58 of 71 (ends Taylor Schoonerman).
+Resume at the first surname AFTER SCHOONERMAN. Roster crossed 2,000 on page 37.
+
+### Page 58 — UPLOADED 2026-09-08 (Sardinas → Schoonerman)
+Swept 21:26, 14 frames, archived to `EYES/harvest/20260907-page58`. Footer confirmed.
+⚠️ **BOUNDARY REPEAT — the harmless kind.** CA's total grew **3,543 → 3,549** between
+the two sweeps, pushing every row six later, so page 58 OPENED with page 57's last six
+rows (Cameron Santos → Addison Sapia), already imported and not restaged. 44 new rows
+staged, **ZERO out-of-state** — only the second such page in the harvest, after page 52.
+**38 inserted, 5 updated, 0 ambiguous, 0 duplicate CA IDs. Roster 2,759 → 2,797.**
+- ⭐⭐ **THREE SAVOIES IN GILMAN** — and Gilman is a village in **LEBANON**, a NECONN
+  town. Nicholas #39368 (47, the father) and Tyler #37459 (17) are already in the
+  **Griswold Club** pool; Benjamin #40888 (14) is in none.
+- ⭐ **Thomas Scagliarini #911** — Groton, 63, CA ID #911 founding era, adult in the
+  **Griswold Club** pool.
+- ⭐ **Schoonerman twins #40644 and #37750** — East Hampton, both 16, BOTH in the East
+  Haddam pool, and NEITHER has ever logged in. Two assignable bodies nobody has reached.
+- **Daniel Schneider #19922** — REGIONAL with no Statewide tag alongside it, which is
+  unusual. Norwalk, logged in today, no pool.
+- ⚠️ **Jeremy Scheer #801 — `jeremy.scheer@lego.com`.** LEGO's US headquarters is in
+  Enfield, his own town. A corporate inbox: strict filters, and it dies with the job.
+  Third institutional address in three pages (after @uscg.mil and @my.npsct.org) —
+  this is a category now, not a curiosity. **Johnny Scafidi #39047** is on
+  `aya.yale.edu`, a Yale alumni FORWARDER, where a failure will not look like a bounce.
+- Families everywhere: three Schimmecks in New Canaan (Ryan and Tyler are twins), two
+  Schaefers in New Fairfield, two Schermers in Ridgefield, two Schleifs in West
+  Hartford, two Schlossers in New Fairfield, two Scafidis in Guilford.
 THE R's ARE DONE — the harvest is into the S's, the biggest letter left.**
 
 ### Page 57 — UPLOADED 2026-09-07 (Sadlosky → Sapia)
