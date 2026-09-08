@@ -227,7 +227,26 @@
             };
 
             if (ctx.state === 'suspended') {
-                // No gesture yet. Wait for the first one, once.
+                // ⚠️ CHROME REFUSES AUDIO UNTIL THE PAGE HAS BEEN TOUCHED, and
+                // the tip appears on load, before anyone has touched anything.
+                //
+                // Tod, 2026-09-08: "The whistle isn't happening until I close out
+                // the box. The whistle should come out when the card pops up."
+                // Exactly — the old code queued the blast and fired it on
+                // whatever the first click happened to be, which was the close
+                // button. A whistle that goes off as you dismiss him is worse
+                // than no whistle at all.
+                //
+                // So on the first gesture we do not just play the sound: we
+                // REPLAY THE WHOLE ENTRANCE. Pip bursts forward again and blows
+                // at the same instant, exactly as he was meant to. Sound and
+                // motion arrive together or not at all.
+                //
+                // And if that first gesture closed the card, we stay silent —
+                // there is nobody to whistle at.
+                // Belt and braces: the gate in show() normally means audio is
+                // already unlocked by the time we get here. If some browser
+                // still refuses, play on the next gesture rather than never.
                 var armed = function () {
                     document.removeEventListener('pointerdown', armed, true);
                     document.removeEventListener('keydown', armed, true);
@@ -302,7 +321,9 @@
         var mascot   = firstTip
             ? '<span class="rt-pip-enter">' + MASCOT.replace('</svg>', WHISTLE + '</svg>') + '</span>'
             : MASCOT;
-        if (firstTip) { injectWhistleCss(); blowWhistle(); }   // ⚠️ NO DELAY — see blowWhistle()
+        // The whistle already blew, 240ms ago, before Pip was mounted — see the
+        // gate in show(). render() only needs the stylesheet.
+        if (firstTip) injectWhistleCss();
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
@@ -397,6 +418,53 @@
         } catch (e) {}
     }
 
+    // ── Why Pip sometimes waits a beat before appearing ─────────────────────
+    // Tod, twice: "The whistle isn't happening until I close out the box." /
+    // "The whistles should blow... Right when Tippy shows up."
+    //
+    // Chrome — and Safari, and Firefox — will not play a sound until the page
+    // has been interacted with. That is not a bug we can code around; there is
+    // no flag, no permission prompt, no trick. A tip that appears the instant
+    // the page loads is therefore GUARANTEED to be silent, and the queued blast
+    // fires on whatever the referee clicks next. Which was the X.
+    //
+    // So instead of showing Pip and hoping: if audio is currently blocked, we
+    // hold him for the referee's first touch — a tap, a scroll, a keypress —
+    // and THEN he bursts out and blows. Sound and entrance land together every
+    // time, which is what was asked for.
+    //
+    // The wait is normally under a second: people tap or scroll almost at once.
+    // And there is a 4s backstop — if someone truly does nothing, Pip appears
+    // anyway, silently, because a tutorial nobody sees is worse than a quiet one.
+    // On a repeat visit the browser usually already trusts the site and he
+    // appears instantly WITH sound.
+    var audioReady = false, pendingMount = null;
+    function audioIsUnlocked() {
+        try {
+            var AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return true;                 // no audio at all — never wait
+            if (!audioIsUnlocked._c) audioIsUnlocked._c = new AC();
+            return audioIsUnlocked._c.state === 'running';
+        } catch (e) { return true; }
+    }
+    function whenInteractive(fn) {
+        if (audioIsUnlocked()) { fn(); return; }
+        var go = function () {
+            document.removeEventListener('pointerdown', go, true);
+            document.removeEventListener('keydown',     go, true);
+            document.removeEventListener('touchstart',  go, true);
+            window.removeEventListener('scroll',        go, true);
+            clearTimeout(pendingMount);
+            try { if (audioIsUnlocked._c) audioIsUnlocked._c.resume(); } catch (e) {}
+            fn();
+        };
+        document.addEventListener('pointerdown', go, true);
+        document.addEventListener('keydown',     go, true);
+        document.addEventListener('touchstart',  go, true);
+        window.addEventListener('scroll',        go, true);
+        pendingMount = setTimeout(go, 4000);      // backstop
+    }
+
     var RTTips = {
         show: function (opts) {
             try {
@@ -410,6 +478,24 @@
                 for (var i = 0; i < queue.length; i++) { if (queue[i].id === opts.id) return false; }
 
                 queue.push(opts);
+                // First card waits for the referee's first touch if audio is
+                // still locked, so the whistle lands with the entrance. Every
+                // later card mounts immediately — the gate is already open.
+                // ⚠️ THE WHISTLE COMES FIRST. Tod, 2026-09-08: "I would almost
+                // have the whistle blow just before he comes on so it gets
+                // everybody's attention." Which is how it works on a field —
+                // you hear it, then you look. So: blast, a beat of nothing,
+                // then Pip bursts out of the card. 240ms is long enough to
+                // register as "something is about to happen" and short enough
+                // that it still reads as one event.
+                if (!el && queue.length === 1) {
+                    whenInteractive(function () {
+                        injectWhistleCss();
+                        blowWhistle();
+                        setTimeout(function () { if (!done) { mount(); render(); } }, 240);
+                    });
+                    return true;
+                }
                 mount();
                 // ⚠️ RE-RENDER ON EVERY ADD. Pages queue their whole run in one
                 // synchronous burst, so the first call used to paint a lone tip
