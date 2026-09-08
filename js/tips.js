@@ -368,7 +368,22 @@
         veil.style.cssText =
               'position:fixed;inset:0;z-index:99998;background:rgba(9,20,42,0.55);'
             + 'backdrop-filter:blur(1.5px);';
-        veil.addEventListener('click', function () { dismiss(); });
+        // ⚠️ THE FIRST CLICK WAKES HIM; IT DOES NOT CLOSE HIM.
+        // Tod, six times over: "the whistle doesn't go off until you click off
+        // the tip or hit the x". Here is why that was unavoidable — the veil
+        // covers the whole screen, so EVERY possible first gesture was a
+        // dismissal: the X, 'Not now', 'Got it', or the veil itself. The browser
+        // will not unlock audio until a gesture happens, and every gesture on
+        // offer also removed the card. There was no neutral click to give.
+        //
+        // So the first veil click is spent waking him up: it unlocks the audio,
+        // blows the whistle and replays his entrance, and the card STAYS. Every
+        // click after that dismisses as normal. The X always closes, first click
+        // or not — someone reaching for the X wants out, not a performance.
+        veil.addEventListener('click', function () {
+            if (swallowVeilClick) { swallowVeilClick = false; return; }
+            dismiss();
+        });
         document.body.appendChild(veil);
 
         el.style.cssText =
@@ -429,7 +444,7 @@
 
     // Blow it now if we are allowed; otherwise wait for the first touch and
     // then blow it AND replay the entrance, so sound and motion arrive together.
-    var whistleArmed = false;
+    var whistleArmed = false, swallowVeilClick = false;
     function armWhistle() {
         if (whistleArmed) return;
         whistleArmed = true;
@@ -455,6 +470,9 @@
             document.removeEventListener('keydown',     go, true);
             document.removeEventListener('touchstart',  go, true);
             if (dismissing) return;
+            // This gesture is being spent on the whistle — do not let it also
+            // close the card behind us.
+            swallowVeilClick = true;
             var c = audioCtx();
             var fire = function () {
                 try {
