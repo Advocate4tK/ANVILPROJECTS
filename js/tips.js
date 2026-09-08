@@ -352,7 +352,7 @@
         // session. Every one after it is a short, crisp acknowledgement, the
         // way a referee restarts play. Ten long blasts would be a nuisance.
         if (nx) nx.addEventListener('click', function () {
-            blowWhistle(idx === 0 ? 1.2 : 0.45);
+            blowWhistle(0.45);
             idx++; render();
         });
         // Quiets him for THIS visit only. Nothing is written down, so he is back
@@ -530,6 +530,61 @@
         document.addEventListener('touchstart',  go, true);
     }
 
+    // ── TWO SEPARATE EVENTS ─────────────────────────────────────────────────
+    // Tod, 2026-09-08: "I want you to make the whistle come in, be 4 [before]
+    // the pop-up occurs. So make them 2 separate events."
+    //
+    //     referee's first gesture  ->  WHISTLE  ->  500ms  ->  Pip pops
+    //
+    // The gesture is unavoidable: a browser makes no sound until the page has
+    // been touched. But once we accept that, the whistle can properly PRECEDE
+    // him instead of chasing him.
+    //
+    // ⚠️⚠️ PIP MUST NEVER GO MISSING. Two earlier attempts at exactly this cost
+    // Tod a vanished mascot ("PIP isnt coming up at all", "Tippy is gone
+    // again"). So there are THREE independent ways he gets on screen:
+    //     1. the gesture fires the sequence
+    //     2. a 1.6s backstop fires it if nobody touches anything
+    //     3. an INDEPENDENT 2.6s watchdog mounts him directly, bypassing the
+    //        sequencer entirely, if anything above has failed or thrown
+    // Any single one of those is enough. Do not remove the watchdog.
+    var arrivalStarted = false, backstop = null, watchdog = null;
+
+    function showPipNow() {
+        try { if (!el && !done) { mount(); render(); } } catch (e) {}
+    }
+
+    function runArrival() {
+        if (arrivalStarted) return;
+        arrivalStarted = true;
+        try { clearTimeout(backstop); } catch (e) {}
+        ['pointerdown','mousedown','touchstart','keydown','wheel'].forEach(function (t) {
+            try { document.removeEventListener(t, runArrival, true); } catch (e) {}
+        });
+        try { window.removeEventListener('scroll', runArrival, true); } catch (e) {}
+
+        var sequence = function () {
+            try { injectWhistleCss(); blowWhistle(1.4); } catch (e) {}
+            setTimeout(showPipNow, 500);          // he follows the whistle
+        };
+        try {
+            var c = audioCtx();
+            if (c && c.state !== 'running' && c.resume) { c.resume().then(sequence).catch(sequence); }
+            else { sequence(); }
+        } catch (e) { showPipNow(); }
+    }
+
+    function awaitArrival() {
+        // The watchdog is armed FIRST, before anything that could throw.
+        watchdog = setTimeout(showPipNow, 2600);
+        if (audioIsUnlocked()) { runArrival(); return; }
+        ['pointerdown','mousedown','touchstart','keydown','wheel'].forEach(function (t) {
+            try { document.addEventListener(t, runArrival, true); } catch (e) {}
+        });
+        try { window.addEventListener('scroll', runArrival, true); } catch (e) {}
+        backstop = setTimeout(runArrival, 1600);
+    }
+
     var RTTips = {
         show: function (opts) {
             try {
@@ -543,7 +598,15 @@
                 for (var i = 0; i < queue.length; i++) { if (queue[i].id === opts.id) return false; }
 
                 queue.push(opts);
-                // ⚠️ MOUNT UNCONDITIONALLY. NO GATE. EVER.
+                // The first card starts the two-event arrival; the rest of the
+                // burst just queues. If ANY of that throws, mount immediately —
+                // a visible Pip beats a well-timed one.
+                if (!el && !arrivalStarted) {
+                    try { awaitArrival(); } catch (e) { showPipNow(); }
+                    return true;
+                }
+                if (!el) return true;                 // sequence in flight
+                // ⚠️ MOUNT UNCONDITIONALLY ONCE THE SEQUENCE HAS RUN.
                 // Twice now a clever gate — holding the first card back so the
                 // whistle could be legal when it fired — has ended with Tod
                 // reporting "PIP isnt coming up at all" and "Tippy is gone
