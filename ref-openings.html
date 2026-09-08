@@ -473,6 +473,9 @@
             .game-card:not(.is-covered) .game-card-header { padding: 10px 13px; }
             .game-card:not(.is-covered) .game-teams { font-size: 0.94rem; }
             .game-card .badge { font-size: 0.62rem; padding: 2px 7px; }
+            /* Phones get the badge only — the note would crowd out the thing
+               they opened the card to read. */
+            .comp-note { display: none; }
             .game-card { margin-bottom: 7px; }
         }
         .covered-note {
@@ -522,6 +525,29 @@
         .badge-ellis{ background: #164e5f; color: #67e8f9; }   /* Ellis Tech Summer League — teal */
         .badge-def  { background: #334155; color: #94a3b8; }
         .badge-rec  { background: #1e5f1e; color: #86efac; }
+        /* ── Rec vs Comp ────────────────────────────────────────────────────
+           Tod, 2026-09-08: "a referee who picks up a game might not realize...
+           He's getting rejected because it's a comp game."
+           This is a WARNING LABEL, not decoration. A referee who volunteers for
+           a competitive game they are not ready for gets turned down, and after
+           that the board is something they stop trusting.
+           Amber deliberately: this codebase already uses amber for "stop and
+           check" (the AR marker, the unsanctioned badge), so it arrives with a
+           meaning referees have already learned. Rec stays muted green because
+           it is the ordinary case and should not shout. */
+        /* The one-line explanation under a Comp game in the EXPANDED card.
+           Tod: "unless on a cell phone when they open it it just destroys the
+           context. So you might want to just put comp if it's a cell phone."
+           Hidden by CSS at the same 560px breakpoint the rest of the card uses
+           — not by user-agent sniffing, so it also does the right thing when a
+           phone is rotated or a window is resized. On mobile the badge carries
+           the message on its own. */
+        .badge-comp { background: #78350f; color: #fcd34d; font-weight: 800; letter-spacing: 0.5px; }
+        .comp-note {
+            display: block; margin: 8px 14px 0; padding: 7px 10px;
+            background: #fffbeb; border-left: 3px solid #b45309; border-radius: 4px;
+            font-size: 0.78rem; line-height: 1.45; color: #78350f;
+        }
         .badge-unsanctioned { background: #78350f; color: #fcd34d; font-size: 0.58rem; padding: 1px 6px; }
 
         /* ── Venue line ── */
@@ -1587,6 +1613,34 @@
         // A covered game stays listed but offers nothing to submit — the whole
         // point is that the referee can SEE it was taken rather than find an
         // empty page and assume their submission failed.
+        // ── Rec / Comp ──────────────────────────────────────────────────────
+        // Tod, 2026-09-08: "a referee who picks up a game might not realize...
+        // He's getting rejected because it's a comp game."
+        //
+        // Only labels a value we actually recognise. Tournament and event games
+        // come from other tables and carry no game_type at all; an unlabelled
+        // game is honest, a mislabelled one sends a referee to the wrong field.
+        function gameLevel(g) {
+            const t = String((g.fields && g.fields.game_type) || g.game_type || '').trim().toLowerCase();
+            if (t === 'rec')  return 'Rec';
+            if (t === 'comp' || t === 'competitive' || t === 'travel') return 'Comp';
+            return null;
+        }
+        function gameLevelBadge(g) {
+            const lvl = gameLevel(g);
+            if (!lvl) return '';
+            const cls = lvl === 'Comp' ? 'badge-comp' : 'badge-rec';
+            return `<span class="badge ${cls}">${lvl}</span>`;
+        }
+        // Desktop-only sentence inside the opened card. Hidden under 560px by
+        // .comp-note in the stylesheet — on a phone the badge says it alone.
+        function compNote(g) {
+            if (gameLevel(g) !== 'Comp') return '';
+            return `<div class="comp-note"><strong>Competitive game.</strong> These are played at a
+                higher level than rec. If you have not worked comp before, take it only if you are
+                comfortable — or message your assignor first rather than being turned away later.</div>`;
+        }
+
         const covered = !!g._covered;
 
         return `<div class="game-card${covered ? ' is-covered' : ''}">
@@ -1596,6 +1650,7 @@
                 <span class="game-teams">${home} vs ${away}</span>
                 <span class="game-meta-line">${time}</span>
                 ${ageDisp ? `<span class="badge badge-age">${ageDisp}</span>` : ''}
+                ${gameLevelBadge(g)}
                 ${/* The collapsed row answers only what decides a tap: when, what
                       level, WHERE, and is it open. The VENUE replaces the league
                       badge — a referee's first question is whether they can get
@@ -1624,6 +1679,10 @@
                 ${finalSlotsHtml}
                 ${isRec && payType ? `<div style="padding:6px 14px; background:#fffbeb; border-top:1px solid #fef3c7; font-size:0.75rem; color:#92400e;"><strong>Payment:</strong> ${payType}</div>` : ''}
                 ${_rate && _rate.center != null ? `<div style="text-align:center; padding:8px 14px 2px; font-size:0.95rem; font-weight:800; color:#0f7a3d;">💵 Center&nbsp;$${_rate.center}${_rate.ar != null ? ` &nbsp;·&nbsp; AR&nbsp;$${_rate.ar}` : ''}</div>` : ''}
+                ${/* Directly above the submit button on purpose — it is the last
+                      thing read before deciding to take the game. Suppressed on
+                      phones by CSS; there the amber Comp badge carries it. */''}
+                ${covered ? '' : compNote(g)}
                 ${covered
                     ? `<span class="covered-note">This game is fully covered — nothing to submit. Nothing went wrong with your form.</span>`
                     : `<a class="avail-link" href="${availUrl}" ${isRec ? 'style="background:#1d4ed8;"' : ''}>${availLabel}</a>`}
@@ -1679,6 +1738,15 @@
                     title: 'Tick every club you would travel to',
                     html:  'The form lists all the clubs. Check every one you are willing to drive to and '
                          + 'you will be considered for their games too — one submission, several clubs.'
+                });
+                RTTips.show({
+                    id:    'openings-4-rec-comp',
+                    title: 'Rec or Comp — check the badge',
+                    html:  'Every game now carries a level. <strong>Rec</strong> is recreational; '
+                         + '<strong>Comp</strong> is competitive and played at a higher level.<br><br>'
+                         + 'If you have not worked comp before, it is worth a message to your assignor '
+                         + 'before you take one — better than being turned away after you have '
+                         + 'put it in your calendar.'
                 });
                 RTTips.show({
                     id:    'openings-5-filled',
