@@ -8025,7 +8025,12 @@
                 const ar1  = ['FILLED','EMPTY'].includes(f['AR 1'])           ? f['AR 1']           : resolveRefName(f['AR 1']);
                 const ar2  = ['FILLED','EMPTY'].includes(f['AR 2'])           ? f['AR 2']           : resolveRefName(f['AR 2']);
                 const isU8 = (age || '').startsWith('U8');
-                const hideARs = isU8 || (hideU10Games && (age || '').startsWith('U10'));
+                // ⚠️ ASK THE CREW RULES, NOT THE AGE STRING. isSingleRefGame() checks
+                // crewAllowed(club, age, 'AR 1'/'AR 2'), which is where "NECONN U10 gets
+                // no ARs" actually lives; it already returns true for U8, so U8 behaviour
+                // is unchanged. Before this, a NECONN U10 with a center and no ARs counted
+                // as NOT full, which made the header call fully-crewed games "unassigned".
+                const hideARs = isSingleRefGame(f) || (hideU10Games && (age || '').startsWith('U10'));
                 const full = cRef && (hideARs || (ar1 && ar2));
                 const gid  = String(g.id);
                 const conf = caConfirmedMap[gid] || new Set();
@@ -8059,7 +8064,14 @@
                 const cRef = ['FILLED','EMPTY'].includes(f['Center Referee']) ? f['Center Referee'] : resolveRefName(f['Center Referee']);
                 const ar1  = ['FILLED','EMPTY'].includes(f['AR 1'])           ? f['AR 1']           : resolveRefName(f['AR 1']);
                 const ar2  = ['FILLED','EMPTY'].includes(f['AR 2'])           ? f['AR 2']           : resolveRefName(f['AR 2']);
-                const hideARs = (age || '').startsWith('U8') || (hideU10Games && (age || '').startsWith('U10'));
+                // ⚠️ SAME FIX AS THE COUNTER ABOVE — ask the crew rules, not the age string.
+                // The AR *cells* have always used isSingleRefGame() (see the slot renderer),
+                // so they correctly showed N/A for NECONN U10. The CARD did not, so `full`
+                // was false, `allConf` was false, the ▲ collapse button never rendered, and
+                // pressing "✓ Refs in CA" confirmed the center but the card could never flip
+                // to its confirmed state. One cause, three symptoms. Tod, 2026-09-08:
+                // "So the U-10 games won't let me click Refs in CA. And collapse."
+                const hideARs = isSingleRefGame(f) || (hideU10Games && (age || '').startsWith('U10'));
                 const full = !isCancelled && cRef && (hideARs || (ar1 && ar2));
                 const conf = caConfirmedMap[gid] || new Set();
                 const posConfirmed = pos => conf.has(pos);
