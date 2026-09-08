@@ -225,8 +225,42 @@ approval between the preview and the write.
 
 ## ✅ Page 26 gap CLOSED — sequence is contiguous through 37
 
-**Complete and contiguous through page 65 of 71 (ends Madeleine Trusilo).
-Resume at the first surname AFTER TRUSILO.
+**⚠️ NOT CONTIGUOUS — PAGE 66 IS MISSING.**
+Pages 1-65 are complete and contiguous (ends Madeleine TRUSILO). **Page 67 is also done**
+(Vasic → Vincent). **Page 66 was skipped** and must be swept before the harvest can be
+called contiguous again. After that, resume at the first surname AFTER VINCENT.
+
+### 🚨 THE PAGE 66 GAP
+The 2026-09-08 07:55 sweep was taken with the URL on **page=67**, not 66. Page 65 ended at
+**TRUSILO** and page 67 opens at **VASIC** — a forward jump. Everything in between is
+unread: the **Tu / Tw / Ty / U / early-Va** surnames.
+Roster rows sitting in that gap, still with no Central Assign ID:
+**Ryan Turbesi** (Pomfret Center) · **Ben Turgeon** (Glastonbury) ·
+**Oliver Tzingounis** (Storrs Mansfield) · **Yohan Varghese** (South Windsor).
+This is the forward-jump the pagination rule warns about — except the cause was
+navigation, not drift. **Check the URL and the footer page number on every sweep.**
+
+### Page 67 — UPLOADED 2026-09-08 (Vasic → Vincent)
+Swept 07:55, 14 frames, archived to `EYES/harvest/20260908-page67`. Footer confirmed
+"Page 67 of 71". 47 CT rows staged, 3 out-of-state omitted (Vasile NY, Vemparala NY,
+Ventura NY). **36 inserted, 12 updated, 0 ambiguous, 0 duplicate CA IDs.
+Roster 3,073 → 3,109. CA IDs now 3,055 of 3,109; 54 missing.**
+- ⭐⭐ **FOUR VIDALS IN LEDYARD, all in the Griswold Club pool** — William #32282 (50,
+  the father), Nathaniel #32283 (20), Victoria #34637 (18), Alexander #39157 (14).
+  The largest single-family block in the whole harvest. Nathaniel has never logged in.
+- Filled three more missing CA IDs: **Nikhil Vemuri #38960, Sachin Vemuri #38959** (twins,
+  South Windsor) and **Hugo Vera #35241**.
+- East Haddam pool: Mateo Vasic #37448 (Middletown), Maddy #34961 + Tucker #40159 Ventola
+  (Durham, neither logged in), Emma Verruso #40029 (Colchester).
+- ⚠️ **THREE more institutional addresses, and one is the only channel to the person**:
+  **Camden Verderame #40261** is on `@hartfordschools.org` with **NO phone on file** —
+  a district account for a boy who lives in Wethersfield, i.e. a different district.
+  **Gavin villepigue #35239** is on a `students.` subdomain at 18, so graduation kills it
+  imminently. **Colin Venhorst #41199** uses his guardian's WORK address at
+  bloomfieldschools.org — his brother James #38768 has the same guardian's personal
+  address, so prefer that row's email for the household.
+- ⚠️ **Sophia Vaughn #40117** — CA's town field reads `Naugartuck1966#`, which looks like
+  a password typed into the wrong box. Left verbatim.
 
 ### CENTRAL ASSIGN ID COVERAGE — Tod asked 2026-09-07
 **3,016 of 3,073 roster rows carry a CA ID. 57 do not.** They break down:
