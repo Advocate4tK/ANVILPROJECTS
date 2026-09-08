@@ -81,9 +81,8 @@
     // On the FIRST tip only, Pip blows his whistle: the whistle swings up and
     // two puff arcs breathe outward. Tod: "little whistle blowing at first tip!"
     //
-    // ⚠️ DELIBERATELY SILENT. No audio, ever. Referees open this on a phone in
-    // public, at work, in a school corridor. A page that makes an unprompted
-    // noise is a page people close. The animation carries it.
+    // Paired with a real whistle sound — see blowWhistle(). Ralph argued for
+    // silence and Tod overruled it; his product, his referees.
     //
     // First tip only — a whistle on every tip stops being a greeting and starts
     // being a tic.
@@ -133,6 +132,76 @@
         + '@media (prefers-reduced-motion:reduce){'
         + '.rt-pip-whistle{animation:none}.rt-pip-puff{opacity:.9;animation:none}'
         + '.rt-pip-enter{animation:none}.rt-pip-hello{animation:none;opacity:.85}}';
+
+    // ── The whistle, out loud ────────────────────────────────────────────────
+    // Tod, 2026-09-08: "Oh, I think we absolutely should have the whistle blow."
+    // Ralph had argued for silence — referees open this on a phone in public.
+    // Tod overruled it, and it is his product and his referees. It stays SHORT
+    // (about a third of a second), QUIET (0.14 gain), and fires ONCE, on the
+    // very first tip a device ever shows. Never again after that.
+    //
+    // Synthesised rather than a downloaded .mp3: no asset to fetch, nothing to
+    // 404, and it cannot be blocked by the CDN rules the rest of the app lives
+    // under. A real pea whistle is a tone around 3-4kHz with a fast warble; a
+    // square wave plus a vibrato LFO gets close enough to read as "whistle".
+    //
+    // ⚠️ BROWSERS BLOCK AUDIO WITHOUT A GESTURE. The tip can appear on page
+    // load, before anyone has touched anything, and the AudioContext will be
+    // born suspended. So: try it, and if it is suspended, arm ONE listener that
+    // plays it on the first tap or key the referee makes, then removes itself.
+    // It never nags and it never throws.
+    var whistleBlown = false;
+    function blowWhistle() {
+        if (whistleBlown) return;
+        whistleBlown = true;
+        try {
+            var AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return;
+            var ctx = new AC();
+
+            var play = function () {
+                try {
+                    var t    = ctx.currentTime;
+                    var osc  = ctx.createOscillator();
+                    var gain = ctx.createGain();
+                    var lfo  = ctx.createOscillator();   // the warble of the pea
+                    var lfoG = ctx.createGain();
+
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(3520, t);
+                    osc.frequency.linearRampToValueAtTime(3760, t + 0.05);
+
+                    lfo.type = 'sine';
+                    lfo.frequency.value = 34;            // rattle rate
+                    lfoG.gain.value     = 165;           // depth, in Hz
+                    lfo.connect(lfoG).connect(osc.frequency);
+
+                    // Quick attack, short body, clean release — no click at the end.
+                    gain.gain.setValueAtTime(0.0001, t);
+                    gain.gain.exponentialRampToValueAtTime(0.14, t + 0.02);
+                    gain.gain.setValueAtTime(0.14, t + 0.22);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+
+                    osc.connect(gain).connect(ctx.destination);
+                    osc.start(t); lfo.start(t);
+                    osc.stop(t + 0.36); lfo.stop(t + 0.36);
+                } catch (e) {}
+            };
+
+            if (ctx.state === 'suspended') {
+                // No gesture yet. Wait for the first one, once.
+                var armed = function () {
+                    document.removeEventListener('pointerdown', armed, true);
+                    document.removeEventListener('keydown', armed, true);
+                    ctx.resume().then(play).catch(function () {});
+                };
+                document.addEventListener('pointerdown', armed, true);
+                document.addEventListener('keydown', armed, true);
+            } else {
+                play();
+            }
+        } catch (e) { /* audio is a nicety; never let it break a tip */ }
+    }
 
     function injectWhistleCss() {
         try {
@@ -195,7 +264,7 @@
         var mascot   = firstTip
             ? '<span class="rt-pip-enter">' + MASCOT.replace('</svg>', WHISTLE + '</svg>') + '</span>'
             : MASCOT;
-        if (firstTip) injectWhistleCss();
+        if (firstTip) { injectWhistleCss(); blowWhistle(); }
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
