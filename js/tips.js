@@ -507,26 +507,17 @@
                 for (var i = 0; i < queue.length; i++) { if (queue[i].id === opts.id) return false; }
 
                 queue.push(opts);
-                // First card waits for the referee's first touch if audio is
-                // still locked, so the whistle lands with the entrance. Every
-                // later card mounts immediately — the gate is already open.
-                // ⚠️ THE WHISTLE COMES FIRST. Tod, 2026-09-08: "I would almost
-                // have the whistle blow just before he comes on so it gets
-                // everybody's attention." Which is how it works on a field —
-                // you hear it, then you look. So: blast, a beat of nothing,
-                // then Pip bursts out of the card. 240ms is long enough to
-                // register as "something is about to happen" and short enough
-                // that it still reads as one event.
-                // ⚠️ NEVER WITHHOLD PIP. An earlier version held the first card
-                // until the referee touched the page, so the whistle could be
-                // legal when it fired. It was clever and it was wrong: Tod,
-                // "PIP isnt coming up at all". A tutorial nobody sees is worth
-                // nothing, and audio is a garnish. He shows IMMEDIATELY now.
+                // ⚠️ MOUNT UNCONDITIONALLY. NO GATE. EVER.
+                // Twice now a clever gate — holding the first card back so the
+                // whistle could be legal when it fired — has ended with Tod
+                // reporting "PIP isnt coming up at all" and "Tippy is gone
+                // again". A tutorial nobody sees is worth nothing. The sound is
+                // a garnish; Pip is the product.
                 //
-                // If the browser will not let us make a sound yet, we arm the
-                // whistle for the referee's first touch — and when it fires we
-                // REPLAY his entrance with it, so the blast still arrives with
-                // the movement instead of landing on a dismissed card.
+                // If a future session is tempted to defer this mount for audio,
+                // for animation timing, for anything: don't. Browsers refuse
+                // sound before a gesture and Pip appears before any gesture
+                // exists. That is simply the trade, and visibility wins.
                 mount();
                 // ⚠️ RE-RENDER ON EVERY ADD. Pages queue their whole run in one
                 // synchronous burst, so the first call used to paint a lone tip
