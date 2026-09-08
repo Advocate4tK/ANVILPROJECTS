@@ -292,9 +292,7 @@
         var mascot   = firstTip
             ? '<span class="rt-pip-enter">' + MASCOT.replace('</svg>', WHISTLE + '</svg>') + '</span>'
             : MASCOT;
-        // The whistle already blew, 240ms ago, before Pip was mounted — see the
-        // gate in show(). render() only needs the stylesheet.
-        if (firstTip) injectWhistleCss();
+        if (firstTip) { injectWhistleCss(); armWhistle(); }
 
         var more = idx < queue.length - 1;
         var step = queue.length > 1
@@ -375,7 +373,7 @@
 
         el.style.cssText =
               'position:fixed;z-index:99999;left:50%;top:50%;transform:translate(-50%,-50%);'
-            + 'width:min(470px,calc(100vw - 28px));'
+            + 'width:min(640px,calc(100vw - 28px));'   // Tod: "also this should be wider"
             + 'background:linear-gradient(135deg,#f2fdf7,#dcf1e5);border:3px solid #1e8449;'
             + 'border-radius:16px;padding:20px 24px;color:#09142a;'
             + 'box-shadow:0 24px 60px rgba(0,0,0,0.45);font-family:inherit;';
@@ -409,21 +407,11 @@
     // anyway, silently, because a tutorial nobody sees is worse than a quiet one.
     // On a repeat visit the browser usually already trusts the site and he
     // appears instantly WITH sound.
-    // ⚠️ THE BURST. A page queues its whole run in one synchronous pass —
-    // ref-openings calls show() ten times back to back. The first version of
-    // this gate only held the FIRST call: call two saw queue.length === 2,
-    // skipped the gate and mounted Pip on the spot, while the whistle sat
-    // waiting for a gesture that had not happened. Tod: "again the whistle only
-    // goes off when I exit the first tip."
-    // `holding` is what makes the gate survive the burst — once we are waiting,
-    // every later show() just queues and returns.
-    var holding = false, pendingMount = null;
-    // ⚠️ ONE AUDIOCONTEXT FOR THE WHOLE FILE. There were two — a probe here and
-    // a fresh one inside blowWhistle() — and that was the bug Tod reported four
-    // separate times: "still no whistle until you hit X".
-    // The gate resumed the PROBE on his first touch, then blowWhistle built a
-    // BRAND NEW context, which is born suspended because it was never the one
-    // unlocked. It then queued itself for the next gesture: the X.
+    // ⚠️ ONE AUDIOCONTEXT FOR THE WHOLE FILE. There were two — a probe and a
+    // fresh one inside blowWhistle() — and that was the bug Tod reported four
+    // times: "still no whistle until you hit X". The gate unlocked the probe;
+    // blowWhistle then built a NEW context, born suspended because it was never
+    // the one unlocked, and queued itself for the next click. The X.
     // A context is unlocked, not a page. Share it or this comes straight back.
     var _actx = null;
     function audioCtx() {
@@ -438,24 +426,37 @@
         var c = audioCtx();
         return !c || c.state === 'running';        // no audio at all — never wait
     }
-    function whenInteractive(fn) {
-        if (audioIsUnlocked()) { fn(); return; }
+
+    // Blow it now if we are allowed; otherwise wait for the first touch and
+    // then blow it AND replay the entrance, so sound and motion arrive together.
+    var whistleArmed = false;
+    function armWhistle() {
+        if (whistleArmed) return;
+        whistleArmed = true;
+        if (audioIsUnlocked()) { blowWhistle(); return; }
         var go = function () {
             document.removeEventListener('pointerdown', go, true);
             document.removeEventListener('keydown',     go, true);
             document.removeEventListener('touchstart',  go, true);
-            window.removeEventListener('scroll',        go, true);
-            clearTimeout(pendingMount);
-            // Wait for the resume to actually RESOLVE before whistling. Firing
-            // during a still-suspending context is the other half of the same bug.
             var c = audioCtx();
-            if (c && c.resume) { c.resume().then(fn).catch(fn); } else { fn(); }
+            var fire = function () {
+                try {
+                    // Replay the entrance so he bursts out again with the blast,
+                    // rather than whistling at a card the referee is closing.
+                    var pip = el && el.querySelector('.rt-pip-enter');
+                    if (pip && !done) {
+                        pip.classList.remove('rt-pip-enter');
+                        void pip.offsetWidth;             // force reflow or the class swap is coalesced
+                        pip.classList.add('rt-pip-enter');
+                    }
+                } catch (e) {}
+                blowWhistle();
+            };
+            if (c && c.resume) { c.resume().then(fire).catch(fire); } else { fire(); }
         };
         document.addEventListener('pointerdown', go, true);
         document.addEventListener('keydown',     go, true);
         document.addEventListener('touchstart',  go, true);
-        window.addEventListener('scroll',        go, true);
-        pendingMount = setTimeout(go, 4000);      // backstop
     }
 
     var RTTips = {
@@ -481,17 +482,16 @@
                 // then Pip bursts out of the card. 240ms is long enough to
                 // register as "something is about to happen" and short enough
                 // that it still reads as one event.
-                if (holding) return true;          // already waiting — just queue it
-                if (!el && queue.length === 1) {
-                    holding = true;
-                    whenInteractive(function () {
-                        holding = false;
-                        injectWhistleCss();
-                        blowWhistle();
-                        setTimeout(function () { if (!done) { mount(); render(); } }, 240);
-                    });
-                    return true;
-                }
+                // ⚠️ NEVER WITHHOLD PIP. An earlier version held the first card
+                // until the referee touched the page, so the whistle could be
+                // legal when it fired. It was clever and it was wrong: Tod,
+                // "PIP isnt coming up at all". A tutorial nobody sees is worth
+                // nothing, and audio is a garnish. He shows IMMEDIATELY now.
+                //
+                // If the browser will not let us make a sound yet, we arm the
+                // whistle for the referee's first touch — and when it fires we
+                // REPLAY his entrance with it, so the blast still arrives with
+                // the movement instead of landing on a dismissed card.
                 mount();
                 // ⚠️ RE-RENDER ON EVERY ADD. Pages queue their whole run in one
                 // synchronous burst, so the first call used to paint a lone tip
