@@ -1370,10 +1370,24 @@
         }
 
         // parseYrs: converts 'Years Reffing' field value to a numeric index.
-        function crewAllowed(clubName, ageGroup, slot) {
+        // ⚠️ THE GAME TYPE IS NOT OPTIONAL. A U10 rec game and a U10 comp game are
+        // different games: NECONN rec U10 runs one official, NED comp U10 runs three.
+        // Until 2026-09-09 this function could not tell them apart, so Eric's correctly
+        // staffed CA games came back to us showing a single referee and the club portal
+        // called them "Assigned".
+        //
+        // Resolution order, matching the way central-assign-export.js resolves fees:
+        //   1. the rule for THIS club + age + game type
+        //   2. the legacy untyped rule (game_type NULL = "applies to both"), so a club
+        //      nobody has split yet behaves exactly as it always has
+        //   3. permissive
+        // Events write untyped rules and are unaffected.
+        function crewAllowed(clubName, ageGroup, slot, gameType) {
             if (!window._crewRules) return true;
             const ag = (ageGroup || '').replace(/\s*(Boys|Girls)$/i, '').replace(/[BG]$/, '').trim();
-            const rule = (window._crewRules[clubName] || {})[ag];
+            const gt = String(gameType || '').trim().toUpperCase() === 'COMP' ? 'Comp' : 'Rec';
+            const forClub = window._crewRules[clubName] || {};
+            const rule = forClub[ag + '|' + gt] || forClub[ag];
             if (!rule) return true;
             return slot === 'AR 1' ? rule.ar1 : slot === 'AR 2' ? rule.ar2 : true;
         }
@@ -1383,7 +1397,8 @@
             const age = f['Age Group'] || '';
             if (age === 'U8' || age.toUpperCase().startsWith('U8')) return true;
             const src = f['Source Club'] || '';
-            return !crewAllowed(src, age, 'AR 1') && !crewAllowed(src, age, 'AR 2');
+            const gt  = f['game_type'] || '';
+            return !crewAllowed(src, age, 'AR 1', gt) && !crewAllowed(src, age, 'AR 2', gt);
         }
 
         // "Seas 1" / "Seas 2" (strings) → 0 / 1.  Integer 2+ → that integer.  Missing → missing arg (default -1).
@@ -3317,7 +3332,7 @@
                     const posName   = gcols[field] || field;
                     const isFil     = rawName === 'FILLED';
                     const isEmpty   = rawName === 'EMPTY';
-                    const isBlocked = rawName === '—' && !crewAllowed(f['Source Club'] || '', f['Age Group'] || '', posName);
+                    const isBlocked = rawName === '—' && !crewAllowed(f['Source Club'] || '', f['Age Group'] || '', posName, f['game_type'] || '');
                     const isCleared = !isFil && !isEmpty && !isBlocked && !!cleared[field];
                     const hasRef    = !isFil && !isEmpty && !isBlocked && rawName !== '—' && !isCleared;
                     if (isBlocked) {
@@ -6335,11 +6350,11 @@
 
             let payRatesByClubId = {};
             let payRatesByEventName = {}; // keyed by event "Club Name" — events store rates in age_groups JSONB
-            window._crewRules = {}; // { clubName: { ageGroup: { ar1, ar2 } } }
+            window._crewRules = {}; // { clubName: { 'ageGroup|Comp'|'ageGroup|Rec'|'ageGroup': { ar1, ar2 } } }
             const clubIds = Object.values(clubIdByName);
             const [ratesRes, crewRes, evRatesRes] = await Promise.all([
                 clubIds.length ? supabaseClient.client.from('pay_rates').select('club_id, age_group, center, ar').in('club_id', clubIds) : Promise.resolve({ data: [] }),
-                clubIds.length ? supabaseClient.client.from('crew_rules').select('club_id, age_group, ar1, ar2').in('club_id', clubIds) : Promise.resolve({ data: [] }),
+                clubIds.length ? supabaseClient.client.from('crew_rules').select('club_id, age_group, ar1, ar2, game_type').in('club_id', clubIds) : Promise.resolve({ data: [] }),
                 supabaseClient.client.from('events').select('"Club Name", age_groups').eq('enabled', true)
             ]);
             if (ratesRes.data) ratesRes.data.forEach(r => {
@@ -6351,7 +6366,10 @@
             if (crewRes.data) crewRes.data.forEach(r => {
                 const name = clubNameById[r.club_id] || String(r.club_id);
                 if (!window._crewRules[name]) window._crewRules[name] = {};
-                window._crewRules[name][r.age_group] = { ar1: r.ar1, ar2: r.ar2 };
+                // Typed rules are stored under "age|Comp" / "age|Rec"; an untyped legacy
+                // row keeps the bare "age" key and acts as the fallback for both.
+                const key = r.game_type ? `${r.age_group}|${r.game_type}` : r.age_group;
+                window._crewRules[name][key] = { ar1: r.ar1, ar2: r.ar2 };
             });
             if (evRatesRes.data) evRatesRes.data.forEach(ev => {
                 const evName = ev['Club Name'];
@@ -7013,13 +7031,14 @@
                         });
                         const crewIds = Object.values(crewNameToId);
                         if (crewIds.length) {
-                            const { data: crewData } = await supabaseClient.client.from('crew_rules').select('club_id, age_group, ar1, ar2').in('club_id', crewIds);
+                            const { data: crewData } = await supabaseClient.client.from('crew_rules').select('club_id, age_group, ar1, ar2, game_type').in('club_id', crewIds);
                             const crewIdToName = {};
                             Object.entries(crewNameToId).forEach(([n, id]) => { crewIdToName[id] = n; });
                             (crewData || []).forEach(r => {
                                 const name = crewIdToName[r.club_id] || String(r.club_id);
                                 if (!window._crewRules[name]) window._crewRules[name] = {};
-                                window._crewRules[name][r.age_group] = { ar1: r.ar1, ar2: r.ar2 };
+                                const key = r.game_type ? `${r.age_group}|${r.game_type}` : r.age_group;
+                                window._crewRules[name][key] = { ar1: r.ar1, ar2: r.ar2 };
                             });
                         }
                     }
@@ -8034,10 +8053,12 @@
                 const ar2  = ['FILLED','EMPTY'].includes(f['AR 2'])           ? f['AR 2']           : resolveRefName(f['AR 2']);
                 const isU8 = (age || '').startsWith('U8');
                 // ⚠️ ASK THE CREW RULES, NOT THE AGE STRING. isSingleRefGame() checks
-                // crewAllowed(club, age, 'AR 1'/'AR 2'), which is where "NECONN U10 gets
-                // no ARs" actually lives; it already returns true for U8, so U8 behaviour
-                // is unchanged. Before this, a NECONN U10 with a center and no ARs counted
-                // as NOT full, which made the header call fully-crewed games "unassigned".
+                // crewAllowed(club, age, 'AR 1'/'AR 2', gameType) — where "NECONN REC U10
+                // gets no ARs" actually lives; it already returns true for U8, so U8
+                // behaviour is unchanged. Before this, a NECONN U10 with a center and no
+                // ARs counted as NOT full, which made the header call fully-crewed games
+                // "unassigned". The game type joined that question on 2026-09-09: the same
+                // club's COMP U10 runs a full three-person crew.
                 const hideARs = isSingleRefGame(f) || (hideU10Games && (age || '').startsWith('U10'));
                 const full = cRef && (hideARs || (ar1 && ar2));
                 const gid  = String(g.id);
@@ -8167,8 +8188,8 @@
                     </div>
                     <div class="slots" style="${hideARs ? 'grid-template-columns:1fr;' : ''}">
                         ${makeSlot2(gid, 'Center Referee', 'Center', cRef, f['Center Referee'])}
-                        ${hideARs ? '' : makeSlot2(gid, 'AR 1', 'AR 1', (!crewAllowed(f['Source Club'],age,'AR 1') && !ar1) ? 'BLOCKED' : ar1, f['AR 1'])}
-                        ${hideARs ? '' : makeSlot2(gid, 'AR 2', 'AR 2', (!crewAllowed(f['Source Club'],age,'AR 2') && !ar2) ? 'BLOCKED' : ar2, f['AR 2'])}
+                        ${hideARs ? '' : makeSlot2(gid, 'AR 1', 'AR 1', (!crewAllowed(f['Source Club'],age,'AR 1',f['game_type']) && !ar1) ? 'BLOCKED' : ar1, f['AR 1'])}
+                        ${hideARs ? '' : makeSlot2(gid, 'AR 2', 'AR 2', (!crewAllowed(f['Source Club'],age,'AR 2',f['game_type']) && !ar2) ? 'BLOCKED' : ar2, f['AR 2'])}
                     </div>
                     <div class="venue-field-row" onclick="event.stopPropagation()">
                         <span style="font-size:0.72rem;color:#888;">📍</span>

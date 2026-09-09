@@ -104,7 +104,7 @@ const SHELL = `
 // something we do. The select list below is explicit for exactly that reason:
 // DO NOT change it to '*'.
 // ─────────────────────────────────────────────────────────────────────────────
-const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season';
+const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type';
 
 let GAMES = [], VENUES = {};
 const TODAY = new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD, local
@@ -114,6 +114,13 @@ const esc  = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp
 
 // Same normalisation the openings board uses — "U10" alone can't tell a parent
 // whether it's the boys' or the girls' team playing.
+// A travel game is a different commitment from a rec game - longer drive, a real
+// referee crew, a different standard. Families should be able to see which is which
+// on the schedule itself rather than working it out from the opponent's name.
+function isCompGame(g) {
+    return String(g['game_type'] || '').trim().toUpperCase() === 'COMP';
+}
+
 function gameGender(g) {
     const raw = String(g['Gender'] || '').trim().toLowerCase();
     if (raw) {
@@ -294,11 +301,12 @@ function dayBlocksHTML(games) {
                 // Collapsed row answers "is this my kid's game". The body answers
                 // "where exactly am I going and who is home" — the two questions a
                 // parent actually has, in that order.
-                html += `<div class="game-item" data-gid="${esc(g.id)}">
+                html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}" data-gid="${esc(g.id)}">
                     <div class="game-row">
                         <span class="game-chevron">▶</span>
                         ${g.field ? `<span class="${fieldClass(g.field)}">${esc(g.field)}</span>` : ''}
                         ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
+                        ${isCompGame(g) ? `<span class="comp-chip">Comp</span>` : ''}
                         <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
                         <span class="vs">vs</span>
                         <span class="team-b">${esc(g['Away Team'] || 'TBD')}</span>
