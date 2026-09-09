@@ -1374,6 +1374,21 @@
         }
 
         // parseYrs: converts 'Years Reffing' field value to a numeric index.
+        // Which grid columns hold an ASSIGNMENT rather than information about the
+        // game. These keep their own background — filled, blocked, seeded, conflict —
+        // so the comp tint stops before them.
+        function ASSIGNMENT_COLS(k) {
+            return k === 'center' || k === 'ar1' || k === 'ar2' || /^opt\d+$/.test(k);
+        }
+
+        // Paint a background onto a rendered <td>. Appended LAST so it wins over the
+        // cell's default, and only ever called on information columns.
+        function tintTd(td, colour) {
+            return /^<td[^>]*style="/.test(td)
+                ? td.replace(/^(<td[^>]*style=")/, `$1background:${colour};`)
+                : td.replace(/^<td/, `<td style="background:${colour};"`);
+        }
+
         // ⚠️ THE GAME TYPE IS NOT OPTIONAL. A U10 rec game and a U10 comp game are
         // different games: NECONN rec U10 runs one official, NED comp U10 runs three.
         // Until 2026-09-09 this function could not tell them apart, so Eric's correctly
@@ -2006,11 +2021,11 @@
                 const f        = g.fields;
                 const gid      = String(g.id);
                 const isFilledGame = (f['Game Status'] || '') === 'Filled';
-                // Filled amber still wins — that is a state, and comp is a label.
+                // Comp tints the information columns only — see renderSheet3View.
+                // Filled amber still wins outright: that is a state, comp is a label.
                 const _isComp  = (f['game_type'] || '').toUpperCase() === 'COMP';
-                const rowBg    = isFilledGame ? '#fff8e1'
-                               : _isComp      ? (i % 2 === 0 ? '#f8f5ff' : '#f1e9fd')
-                                              : (i % 2 === 0 ? '#ffffff' : '#f6f8fa');
+                const _compTint = i % 2 === 0 ? '#f8f5ff' : '#f1e9fd';
+                const rowBg    = isFilledGame ? '#fff8e1' : (i % 2 === 0 ? '#ffffff' : '#f6f8fa');
                 const venueObj = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                 const fieldObj = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
                 const cRefRaw  = resolveRefName(f['Center Referee']) || '—';
@@ -2061,7 +2076,10 @@
                     opt0: () => optTd(0), opt1: () => optTd(1), opt2: () => optTd(2),
                     opt3: () => optTd(3), opt4: () => optTd(4), opt5: () => optTd(5),
                 };
-                return `<tr id="s2row-${gid}" style="background:${rowBg};" oncontextmenu="sheet2ShowGameMenu(event,'${gid}'); return false;">${sheet2ColOrder.map(k => colRenderers[k]()).join('')}</tr>`;
+                return `<tr id="s2row-${gid}" style="background:${rowBg};" oncontextmenu="sheet2ShowGameMenu(event,'${gid}'); return false;">${sheet2ColOrder.map(k => {
+                    const raw = colRenderers[k]();
+                    return (_isComp && !isFilledGame && !ASSIGNMENT_COLS(k)) ? tintTd(raw, _compTint) : raw;
+                }).join('')}</tr>`;
             }).join('') : `<tr><td colspan="${sheet2ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
             const thDrag = 'cursor:grab; user-select:none;';
@@ -3325,12 +3343,14 @@
                 const f           = g.fields;
                 const gid         = String(g.id);
                 const isCancelled = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
-                // Comp games tint the whole row purple, matching the command centre's
-                // Comp panel, the club portal and the public schedule. The zebra stripe
-                // is kept inside the purple so alternating rows stay readable.
+                // Comp games tint the INFORMATION half of the row purple and stop at the
+                // assignment columns. Tod, 2026-09-09: "just a tint on the row up till you
+                // get to the assignments themselves." Centre / AR / Opt cells carry their
+                // own colour — filled, blocked, seeded, conflicting — and a purple wash
+                // behind them would fight the thing the assignor is actually reading.
                 const _isComp     = (f['game_type'] || '').toUpperCase() === 'COMP';
-                const rowBg       = _isComp ? (i % 2 === 0 ? '#f8f5ff' : '#f1e9fd')
-                                            : (i % 2 === 0 ? '#ffffff' : '#f6f8fa');
+                const _compTint   = i % 2 === 0 ? '#f8f5ff' : '#f1e9fd';
+                const rowBg       = i % 2 === 0 ? '#ffffff' : '#f6f8fa';
                 const cancelCell  = isCancelled ? `${cell} text-decoration:line-through; color:#c0392b;` : cell;
                 const venueObj    = allVenues.find(v => String(v.id) === String(f['Venue ID']));
                 const fieldObj = allFields.find(x => String(x.fieldId) === String(f['Field ID']));
@@ -3508,7 +3528,9 @@
                 return periodDivider + `<tr style="background:${_isSel ? '#a5d6a7' : rowBg};">${_dotTd}${sheet3ColOrder.map(k => {
                     if (sheet3HiddenCols.includes(k)) return `<td style="${stubTd}"></td>`;
                     const raw = colRenderers[k] ? colRenderers[k]() : '<td></td>';
-                    return raw.replace(/^<td/, `<td data-gcol="${k}"`);
+                    let td = raw.replace(/^<td/, `<td data-gcol="${k}"`);
+                    if (_isComp && !_isSel && !ASSIGNMENT_COLS(k)) td = tintTd(td, _compTint);
+                    return td;
                 }).join('')}</tr>`;
             }).join('') : `<tr><td colspan="${sheet3ColOrder.length + 1}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
