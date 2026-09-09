@@ -3360,13 +3360,18 @@
                     const gcols     = { center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' };
                     const posName   = gcols[field] || field;
                     const isFil     = rawName === 'FILLED';
-                    const isEmpty   = rawName === 'EMPTY' && !ruleDenies;
+                    // ⚠️ ruleDenies MUST be declared before isEmpty uses it. It was not, and
+                    // `const` in the temporal dead zone threw a ReferenceError inside every
+                    // assignedTd() call — renderSheet3View died partway and the page fell back
+                    // to the Standard 2 render. Sheet 3 simply disappeared.
+                    //
                     // A slot the crew rule denies reads N/A whether it is bare or carries an
                     // EMPTY stamp from a past Apply. Before this, a stamped rec U10 showed the
-                    // grey "Empty" pill while U8 showed "N/A" — two labels for one meaning,
-                    // on the same screen. A deliberate EMPTY on a slot the rule ALLOWS still
-                    // reads Empty: that is the assignor saying "leave this one", not the rule.
+                    // grey "Empty" pill while U8 showed "N/A" — two labels for one meaning, on
+                    // the same screen. A deliberate EMPTY on a slot the rule ALLOWS still reads
+                    // Empty: that is the assignor saying "leave this one", not the rule.
                     const ruleDenies = !crewAllowed(f['Source Club'] || '', f['Age Group'] || '', posName, f['game_type'] || '');
+                    const isEmpty   = rawName === 'EMPTY' && !ruleDenies;
                     const isBlocked = (rawName === '—' || rawName === 'EMPTY') && ruleDenies;
                     const isCleared = !isFil && !isEmpty && !isBlocked && !!cleared[field];
                     const hasRef    = !isFil && !isEmpty && !isBlocked && rawName !== '—' && !isCleared;
