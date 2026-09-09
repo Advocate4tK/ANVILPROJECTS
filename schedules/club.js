@@ -104,7 +104,7 @@ const SHELL = `
 // something we do. The select list below is explicit for exactly that reason:
 // DO NOT change it to '*'.
 // ─────────────────────────────────────────────────────────────────────────────
-const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type';
+const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage';
 
 let GAMES = [], VENUES = {};
 const TODAY = new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD, local
@@ -307,6 +307,7 @@ function dayBlocksHTML(games) {
                         ${g.field ? `<span class="${fieldClass(g.field)}">${esc(g.field)}</span>` : ''}
                         ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
                         ${isCompGame(g) ? `<span class="comp-chip">Comp</span>` : ''}
+                        ${g['is_scrimmage'] ? `<span class="scrim-chip">Scrimmage</span>` : ''}
                         <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
                         <span class="vs">vs</span>
                         <span class="team-b">${esc(g['Away Team'] || 'TBD')}</span>

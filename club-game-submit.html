@@ -251,6 +251,10 @@
            cancelled: those mean "act on this" and outrank a label. */
         .game-card.comp-game { background:#f8f5ff; border-left-color:#7c3aed; }
         .game-card.comp-game .game-matchup { color:#5b21b6; }
+        .scrim-chip { display:inline-block; margin-left:8px; vertical-align:middle;
+                      font-size:0.62rem; font-weight:800; text-transform:uppercase;
+                      letter-spacing:0.5px; color:#5b21b6; background:#f3ecff;
+                      border:1px solid #c4b5fd; border-radius:4px; padding:1px 6px; }
         .game-card.change-req     { border-left-color: var(--amber); background: #fffbeb; }
         .game-card.change-done    { border-left-color: var(--accent); background: #f0fdf4; }
         .game-card.cancelled-game { border-left-color: #dc2626; background: #fef2f2; opacity: 0.82; }
@@ -638,6 +642,16 @@
                                 <option value="Rec">Rec</option>
                                 <option value="Comp">Comp / Travel</option>
                             </select>
+                        </div>
+                        <!-- Scrimmage is NOT a game type. A scrimmage is still Rec or Comp
+                             and crews and pays as that type — the checkbox sits beside the
+                             selector, never inside it. -->
+                        <div class="field-group row-start">
+                            <label>Scrimmage?</label>
+                            <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:0.88rem; color:#444; cursor:pointer; padding:8px 0;">
+                                <input type="checkbox" id="gScrimmage" style="width:17px; height:17px; cursor:pointer; accent-color:#7c3aed;">
+                                <span>Friendly / scrimmage &mdash; not a league game</span>
+                            </label>
                         </div>
                         <div class="field-group span2 row-start">
                             <label>Venue <span style="color:#e74c3c">*</span></label>
@@ -1882,6 +1896,7 @@
             age:       (document.getElementById('gAge').value + (document.getElementById('gDivision').value.trim() ? ' ' + document.getElementById('gDivision').value.trim() : '')),
             gender:    document.getElementById('gGender').value,
             gameType:  document.getElementById('gGameType').value,
+            scrimmage: document.getElementById('gScrimmage')?.checked || false,
             venueId,   venueName,
             fieldId,   fieldName,
             notes:     document.getElementById('gNotes').value.trim(),
@@ -1940,7 +1955,7 @@
                 <td>${g.away}</td>
                 <td>${g.age}</td>
                 <td>${g.gender}</td>
-                <td>${g.gameType || 'Rec'}</td>
+                <td>${g.gameType || 'Rec'}${g.scrimmage ? ' <span style="font-size:0.68rem;font-weight:800;color:#5b21b6;background:#f3ecff;border:1px solid #c4b5fd;border-radius:4px;padding:1px 5px;">SCRIM</span>' : ''}</td>
                 <td>${g.venueName}</td>
                 <td>${g.fieldName}</td>
                 <td>${g.notes}</td>
@@ -2087,7 +2102,8 @@
                     'away_club': g.awayClub || null,
                     'Age Group':  g.age,
                     'Gender':     g.gender,
-                    'game_type':  g.gameType || 'Rec'
+                    'game_type':  g.gameType || 'Rec',
+                    'is_scrimmage': !!g.scrimmage
                 };
 
                 // ── Stamp the season AT SUBMISSION ────────────────────────────────
@@ -2285,6 +2301,10 @@
         // Competitive games are visually distinct for the club. Tournament rows keep
         // their own identity and are deliberately NOT lumped in with comp.
         const compCls = (f['game_type'] || '').toUpperCase() === 'COMP' ? ' comp-game' : '';
+        // Shown NEXT TO the comp treatment, never instead of it: a comp scrimmage
+        // is both, and the club needs to see both.
+        const scrimChip = f['is_scrimmage']
+            ? `<span class="scrim-chip">Scrimmage</span>` : '';
 
         if (opts.changeResolved) {
             // Green "resolved" card — notification that the change was handled
@@ -2327,7 +2347,7 @@
             const noteHtml = note ? `<div style="background:#eaf3ff; border-left:3px solid #1a3a6b; border-radius:6px; padding:10px 14px; margin-top:8px; font-size:0.82rem;"><div style="font-size:0.72rem; color:#1a3a6b; margin-bottom:4px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;">💬 Message from Assignor · ${note.ts}</div><div style="color:#333; line-height:1.5;">${note.message}</div></div>` : '';
             return `<div class="game-card change-req${compCls}">
                 <div class="game-card-main">
-                    <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                    <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}${scrimChip}</div>
                     <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
                     <div class="game-refs">${refsHtml}</div>
                     ${chgDetail}
@@ -2344,7 +2364,7 @@
         if (opts.cancelled) {
             return `<div class="game-card cancelled-game${compCls}">
                 <div class="game-card-main">
-                    <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                    <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}${scrimChip}</div>
                     <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
                     <div class="game-refs"><span style="color:#dc2626; font-size:0.78rem; font-style:italic;">Referee assignments cleared</span></div>
                 </div>
@@ -2389,7 +2409,7 @@
 
         return `<div class="game-card${opts.currentWeek ? ' current-week-card' : ''}${compCls}">
             <div class="game-card-main">
-                <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
+                <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}${scrimChip}</div>
                 <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${venueName}</div>
                 <div class="game-refs">${refsHtml}</div>
                 <div class="change-form" id="chgForm_${r.id}" style="margin-top:10px;">
@@ -4084,6 +4104,9 @@
                 age,
                 gender:    normGender,
                 gameType,
+                // Optional CSV column. Absent on every existing template, so a club
+                // that has never heard of it uploads exactly as before.
+                scrimmage: /^(y|yes|true|1|scrim|scrimmage)$/i.test(String(row['Scrimmage'] || '').trim()),
                 venueId:   venueMatch ? venueMatch.id   : '',
                 venueName: venueMatch ? venueMatch.name : (row['Venue'] || ''),
                 fieldId:   fieldMatch ? fieldMatch.id   : '',
