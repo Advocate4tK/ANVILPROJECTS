@@ -1374,21 +1374,6 @@
         }
 
         // parseYrs: converts 'Years Reffing' field value to a numeric index.
-        // Which grid columns hold an ASSIGNMENT rather than information about the
-        // game. These keep their own background — filled, blocked, seeded, conflict —
-        // so the comp tint stops before them.
-        function ASSIGNMENT_COLS(k) {
-            return k === 'center' || k === 'ar1' || k === 'ar2' || /^opt\d+$/.test(k);
-        }
-
-        // Paint a background onto a rendered <td>. Appended LAST so it wins over the
-        // cell's default, and only ever called on information columns.
-        function tintTd(td, colour) {
-            return /^<td[^>]*style="/.test(td)
-                ? td.replace(/^(<td[^>]*style=")/, `$1background:${colour};`)
-                : td.replace(/^<td/, `<td style="background:${colour};"`);
-        }
-
         // ⚠️ THE GAME TYPE IS NOT OPTIONAL. A U10 rec game and a U10 comp game are
         // different games: NECONN rec U10 runs one official, NED comp U10 runs three.
         // Until 2026-09-09 this function could not tell them apart, so Eric's correctly
@@ -2076,10 +2061,10 @@
                     opt0: () => optTd(0), opt1: () => optTd(1), opt2: () => optTd(2),
                     opt3: () => optTd(3), opt4: () => optTd(4), opt5: () => optTd(5),
                 };
-                return `<tr id="s2row-${gid}" style="background:${rowBg};" oncontextmenu="sheet2ShowGameMenu(event,'${gid}'); return false;">${sheet2ColOrder.map(k => {
-                    const raw = colRenderers[k]();
-                    return (_isComp && !isFilledGame && !ASSIGNMENT_COLS(k)) ? tintTd(raw, _compTint) : raw;
-                }).join('')}</tr>`;
+                // Same rule as Sheet 3 — tint the row, let the assignment cells paint
+                // themselves. Filled amber still wins outright: a state outranks a label.
+                const _trBg = isFilledGame ? '#fff8e1' : _isComp ? _compTint : rowBg;
+                return `<tr id="s2row-${gid}" style="background:${_trBg};" oncontextmenu="sheet2ShowGameMenu(event,'${gid}'); return false;">${sheet2ColOrder.map(k => colRenderers[k]()).join('')}</tr>`;
             }).join('') : `<tr><td colspan="${sheet2ColOrder.length}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
             const thDrag = 'cursor:grab; user-select:none;';
@@ -3349,6 +3334,17 @@
                 // own colour — filled, blocked, seeded, conflicting — and a purple wash
                 // behind them would fight the thing the assignor is actually reading.
                 const _isComp     = (f['game_type'] || '').toUpperCase() === 'COMP';
+                // ⚠️ THE TINT GOES ON THE ROW, NOT ON INDIVIDUAL CELLS.
+                // The first attempt rewrote each rendered <td> with a regex to inject a
+                // background. A cell whose opening tag carries a '>' inside an event
+                // handler failed that match, got a SECOND style attribute prepended, and
+                // the browser honoured the first — so those cells lost their borders and
+                // the grid lines vanished on comp rows. Never regex-patch rendered HTML.
+                //
+                // It is unnecessary anyway: assignedTd() and optTd() ALWAYS set an
+                // explicit background (filled, blocked, seeded, conflict, or rowBg), so
+                // they paint over the row tint themselves and the purple stops at the
+                // Centre column with nothing extra to do.
                 const _compTint   = i % 2 === 0 ? '#f8f5ff' : '#f1e9fd';
                 const rowBg       = i % 2 === 0 ? '#ffffff' : '#f6f8fa';
                 const cancelCell  = isCancelled ? `${cell} text-decoration:line-through; color:#c0392b;` : cell;
@@ -3525,12 +3521,10 @@
                 }
                 const _isSel = gid === sheet3SelectedGameId;
                 const _dotTd = `<td style="border:1px solid #d0d7de; width:22px; min-width:22px; max-width:22px; padding:0; text-align:center; vertical-align:middle; cursor:pointer;" onclick="sheet3SelectGame('${gid}'); event.stopPropagation();" oncontextmenu="sheet3ShowGameMenu(event,'${gid}'); return false;" title="${_isSel ? 'Deselect — show all refs' : 'Select · Right-click to edit'}"><span style="display:inline-block; width:11px; height:11px; border-radius:50%; background:${_isSel ? 'radial-gradient(circle at 35% 35%, #ffe066, #f0a500)' : 'transparent'}; border:2px solid ${_isSel ? '#c47f00' : '#ccc'}; box-shadow:${_isSel ? '0 0 5px 1px rgba(240,165,0,0.6)' : 'none'};"></span></td>`;
-                return periodDivider + `<tr style="background:${_isSel ? '#a5d6a7' : rowBg};">${_dotTd}${sheet3ColOrder.map(k => {
+                return periodDivider + `<tr style="background:${_isSel ? '#a5d6a7' : _isComp ? _compTint : rowBg};">${_dotTd}${sheet3ColOrder.map(k => {
                     if (sheet3HiddenCols.includes(k)) return `<td style="${stubTd}"></td>`;
                     const raw = colRenderers[k] ? colRenderers[k]() : '<td></td>';
-                    let td = raw.replace(/^<td/, `<td data-gcol="${k}"`);
-                    if (_isComp && !_isSel && !ASSIGNMENT_COLS(k)) td = tintTd(td, _compTint);
-                    return td;
+                    return raw.replace(/^<td/, `<td data-gcol="${k}"`);
                 }).join('')}</tr>`;
             }).join('') : `<tr><td colspan="${sheet3ColOrder.length + 1}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
