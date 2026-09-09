@@ -713,6 +713,10 @@
                 </div>
 
                 <div id="crewRulesBody" style="display:none;">
+                    <!-- Tournaments and events keep the single grid: their age groups live
+                         on the entity record, not in crew_rules, and they have no Comp/Rec
+                         split. -->
+                    <div id="crewSingleWrap">
                     <table style="border-collapse:collapse; width:100%; max-width:420px; margin-bottom:16px;">
                         <thead>
                             <tr>
@@ -723,6 +727,42 @@
                         </thead>
                         <tbody id="crewRulesRows"></tbody>
                     </table>
+                    </div><!-- /crewSingleWrap -->
+
+                    <!-- Clubs get Rec and Comp side by side, mirroring the Pay Rates card.
+                         A U10 rec game and a U10 comp game are different games: NECONN rec
+                         U10 runs one official, NED comp U10 runs three. One row per
+                         club+age could never say that, which is why Eric's correctly
+                         staffed CA games came back to us showing a single referee. -->
+                    <div id="crewRecCompWrap" style="display:none;">
+                    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:6px;">
+                        <!-- Rec -->
+                        <div style="flex:1; min-width:260px;">
+                            <div style="background:#09142a; color:#fff; padding:6px 12px; border-radius:6px 6px 0 0; font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">Rec</div>
+                            <table style="width:100%; border-collapse:collapse; font-family:'DM Sans',sans-serif; font-size:0.88rem; border:1px solid #e2d9ce; border-top:none;">
+                                <thead><tr style="background:#f7f8fc; border-bottom:2px solid #e2d9ce;">
+                                    <th style="text-align:left; padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Age</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">AR 1</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">AR 2</th>
+                                </tr></thead>
+                                <tbody id="crewRulesBodyRec"></tbody>
+                            </table>
+                        </div>
+                        <!-- Comp -->
+                        <div style="flex:1; min-width:260px;">
+                            <div style="background:#7c3aed; color:#fff; padding:6px 12px; border-radius:6px 6px 0 0; font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">Comp</div>
+                            <table style="width:100%; border-collapse:collapse; font-family:'DM Sans',sans-serif; font-size:0.88rem; border:1px solid #e2d9ce; border-top:none;">
+                                <thead><tr style="background:#f7f8fc; border-bottom:2px solid #e2d9ce;">
+                                    <th style="text-align:left; padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">Age</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">AR 1</th>
+                                    <th style="padding:7px 10px; color:#09142a; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px;">AR 2</th>
+                                </tr></thead>
+                                <tbody id="crewRulesBodyComp"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div style="font-size:0.74rem; color:#aaa; margin-bottom:16px;">Unchecked = that slot does not exist for this age and game type. It is blocked in the workstation and excluded from the openings board and pay portals.</div>
+                    </div><!-- /crewRecCompWrap -->
 
                     <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                         <button onclick="saveCrewRules()" id="saveCrewBtn"
@@ -2975,7 +3015,16 @@
             _wizardExistingPay[r.age_group] = r;
         });
         _wizardExistingCrew = {};
-        (crewRes.data || []).forEach(r => { _wizardExistingCrew[r.age_group] = r; });
+        // A club now has up to two rules per age (Rec and Comp) but the wizard shows one
+        // grid. Seed it from REC deterministically — otherwise whichever row happened to
+        // come back last would win, and re-saving the wizard would silently push one
+        // game type's rule onto the other. The Crew Rules card is where the two are
+        // edited apart.
+        (crewRes.data || []).forEach(r => {
+            const gt = (r.game_type || '').toLowerCase();
+            if (gt === 'comp') return;
+            if (gt === 'rec' || !_wizardExistingCrew[r.age_group]) _wizardExistingCrew[r.age_group] = r;
+        });
 
         _wizardExistingBilling = billingRes.data || null;
 
@@ -3217,17 +3266,27 @@
             }
 
             // ── Save crew rules ──────────────────────────────────────────────
+            // The wizard has ONE set of AR checkboxes, deliberately — a new club is
+            // being described, not fine-tuned. It writes the same answer as both the
+            // Rec and the Comp rule so the club is born fully typed; the Crew Rules
+            // card is where the two are pulled apart afterwards.
+            //
+            // ⚠️ NOT upsert. The old onConflict 'club_id,age_group' target is dropped
+            // by sql/crew-rules-game-type.sql to allow two rows per age, and an upsert
+            // naming a constraint that no longer exists fails outright.
             const crewRows = [];
             document.querySelectorAll('#wizCrewRows .wiz-crew-ar1').forEach(cb => {
                 const ag  = cb.dataset.ag;
                 const ar2 = document.querySelector(`#wizCrewRows .wiz-crew-ar2[data-ag="${ag}"]`);
-                crewRows.push({ club_id: savedClubId, age_group: ag, ar1: cb.checked, ar2: ar2?.checked ?? cb.checked });
+                const on1 = cb.checked, on2 = ar2?.checked ?? cb.checked;
+                crewRows.push({ club_id: savedClubId, age_group: ag, ar1: on1, ar2: on2, game_type: 'Rec'  });
+                crewRows.push({ club_id: savedClubId, age_group: ag, ar1: on1, ar2: on2, game_type: 'Comp' });
             });
             if (crewRows.length) {
-                const { error: crewErr } = await supabaseClient.client.from('crew_rules')
-                    .upsert(crewRows, { onConflict: 'club_id,age_group' });
+                await supabaseClient.client.from('crew_rules').delete().eq('club_id', savedClubId);
+                const { error: crewErr } = await supabaseClient.client.from('crew_rules').insert(crewRows);
                 if (crewErr) log(`⚠ Crew rules: ${crewErr.message}`, 'err');
-                else log(`👥 ${crewRows.length} crew rule(s) saved.`, 'ok');
+                else log(`👥 ${crewRows.length / 2} age group(s) saved for Rec and Comp.`, 'ok');
             }
 
             // ── Save billing contract terms ──────────────────────────────────────
@@ -4590,6 +4649,10 @@
         const isEvent      = rawId.startsWith('e:');
         const entityId     = (isTournament || isEvent) ? rawId.slice(2) : rawId;
         body.style.display = 'block';
+        // Clubs get the Rec/Comp pair; tournaments and events keep the single grid.
+        const isClub = !isTournament && !isEvent;
+        document.getElementById('crewSingleWrap').style.display  = isClub ? 'none'  : 'block';
+        document.getElementById('crewRecCompWrap').style.display = isClub ? 'block' : 'none';
         document.getElementById('crewRulesRows').innerHTML = '<tr><td colspan="3" style="padding:10px;color:#aaa;font-size:0.84rem;">Loading…</td></tr>';
         try {
             if (isEvent) {
@@ -4641,22 +4704,39 @@
             } else {
                 const { data, error } = await supabaseClient.client.from('crew_rules').select('*').eq('club_id', parseInt(entityId));
                 if (error) throw new Error(error.message);
-                const existing = {};
-                (data || []).forEach(r => { existing[r.age_group] = r; });
-                document.getElementById('crewRulesRows').innerHTML = CREW_AGE_GROUPS.map(ag => {
-                    const rule = existing[ag];
+
+                // Three shapes can be on file for a club+age:
+                //   game_type 'Rec'  — explicit rec rule
+                //   game_type 'Comp' — explicit comp rule
+                //   game_type NULL   — the legacy row, written before the split existed.
+                // A NULL row is what the club has always meant, so it seeds BOTH columns
+                // until someone differentiates them. That is what makes opening this card
+                // on a club that has never been touched show exactly today's behaviour.
+                const legacy = {}, byRec = {}, byComp = {};
+                (data || []).forEach(r => {
+                    const gt = (r.game_type || '').toLowerCase();
+                    if      (gt === 'rec')  byRec[r.age_group]  = r;
+                    else if (gt === 'comp') byComp[r.age_group] = r;
+                    else                    legacy[r.age_group] = r;
+                });
+
+                const rowsFor = (bucket, type, accent) => CREW_AGE_GROUPS.map(ag => {
+                    const rule = bucket[ag] || legacy[ag] || null;
                     const ar1  = rule ? rule.ar1 : true;
                     const ar2  = rule ? rule.ar2 : true;
                     return `<tr style="border-bottom:1px solid #f1f5f9;">
-                        <td style="padding:10px 14px; font-weight:700; font-size:0.88rem; color:#09142a;">${ag}</td>
-                        <td style="text-align:center; padding:10px 14px;">
-                            <input type="checkbox" id="crew_ar1_${ag}" ${ar1 ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;accent-color:#0ea5e9;">
+                        <td style="padding:9px 10px; font-weight:700; font-size:0.86rem; color:#09142a;">${ag}</td>
+                        <td style="text-align:center; padding:9px 10px;">
+                            <input type="checkbox" id="crew_ar1_${type}_${ag}" ${ar1 ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;accent-color:${accent};">
                         </td>
-                        <td style="text-align:center; padding:10px 14px;">
-                            <input type="checkbox" id="crew_ar2_${ag}" ${ar2 ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;accent-color:#0ea5e9;">
+                        <td style="text-align:center; padding:9px 10px;">
+                            <input type="checkbox" id="crew_ar2_${type}_${ag}" ${ar2 ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;accent-color:${accent};">
                         </td>
                     </tr>`;
                 }).join('');
+
+                document.getElementById('crewRulesBodyRec').innerHTML  = rowsFor(byRec,  'rec',  '#09142a');
+                document.getElementById('crewRulesBodyComp').innerHTML = rowsFor(byComp, 'comp', '#7c3aed');
             }
         } catch(e) {
             document.getElementById('crewRulesRows').innerHTML = `<tr><td colspan="3" style="padding:10px;color:#e74c3c;font-size:0.84rem;">Could not load: ${e.message}</td></tr>`;
@@ -4700,14 +4780,27 @@
                     .from('tournaments').update({ age_groups: updated }).eq('id', entityId);
                 if (saveErr) throw new Error(saveErr.message);
             } else {
-                const rows = CREW_AGE_GROUPS.map(ag => ({
-                    club_id:   parseInt(entityId),
-                    age_group: ag,
-                    ar1: document.getElementById(`crew_ar1_${ag}`)?.checked ?? true,
-                    ar2: document.getElementById(`crew_ar2_${ag}`)?.checked ?? true
-                }));
-                const { error } = await supabaseClient.client.from('crew_rules')
-                    .upsert(rows, { onConflict: 'club_id,age_group' });
+                // ⚠️ DELETE-then-INSERT, not upsert. The old code upserted on
+                // 'club_id,age_group', a target that no longer exists once the migration
+                // drops that unique constraint to make room for a second row per age.
+                // Same shape savePayRates() already uses. It also clears the legacy
+                // NULL-game_type rows, so a club is fully migrated the first time it is
+                // saved and there is never a stale default shadowing a real rule.
+                const clubIdInt = parseInt(entityId);
+                const rows = [];
+                for (const [type, gt] of [['rec', 'Rec'], ['comp', 'Comp']]) {
+                    CREW_AGE_GROUPS.forEach(ag => rows.push({
+                        club_id:   clubIdInt,
+                        age_group: ag,
+                        game_type: gt,
+                        ar1: document.getElementById(`crew_ar1_${type}_${ag}`)?.checked ?? true,
+                        ar2: document.getElementById(`crew_ar2_${type}_${ag}`)?.checked ?? true
+                    }));
+                }
+                const { error: delErr } = await supabaseClient.client.from('crew_rules')
+                    .delete().eq('club_id', clubIdInt);
+                if (delErr) throw new Error(delErr.message);
+                const { error } = await supabaseClient.client.from('crew_rules').insert(rows);
                 if (error) throw new Error(error.message);
             }
             msg.textContent = '✅ Crew rules saved.';
@@ -4731,27 +4824,45 @@
         try {
             const [rulesRes, gamesRes] = await Promise.all([
                 supabaseClient.client.from('crew_rules').select('*').eq('club_id', parseInt(rawId)),
-                supabaseClient.client.from('games').select('id, "Age Group", "AR 1", "AR 2"').eq('Source Club', clubName)
+                supabaseClient.client.from('games').select('id, "Age Group", "AR 1", "AR 2", game_type').eq('Source Club', clubName)
             ]);
             if (rulesRes.error) throw new Error(rulesRes.error.message);
             if (gamesRes.error) throw new Error(gamesRes.error.message);
-            const rules = {};
-            (rulesRes.data || []).forEach(r => { rules[r.age_group] = r; });
+
+            // Each game is matched to the rule for ITS OWN type. A club running both
+            // gets both sets applied in one pass — Tod, 2026-09-09, chose whole-club
+            // over per-type when asked. Legacy NULL-game_type rows still answer for
+            // any club not yet migrated.
+            const typed = {}, legacy = {};
+            (rulesRes.data || []).forEach(r => {
+                const gt = (r.game_type || '').toLowerCase();
+                if (gt === 'rec' || gt === 'comp') typed[`${r.age_group}|${gt}`] = r;
+                else                               legacy[r.age_group] = r;
+            });
             const games = gamesRes.data || [];
-            let stamped = 0;
+            let stamped = 0, opened = 0;
             for (const g of games) {
                 const ag   = (g['Age Group'] || '').replace(/\s*(Boys|Girls)$/i, '').replace(/[BG]$/, '').trim();
-                const rule = rules[ag];
+                const gt   = (g.game_type || 'Rec').toLowerCase() === 'comp' ? 'comp' : 'rec';
+                const rule = typed[`${ag}|${gt}`] || legacy[ag];
                 if (!rule) continue;
                 const updates = {};
+                // Block a slot the rule says does not exist...
                 if (!rule.ar1 && (!g['AR 1'] || g['AR 1'] === '')) updates['AR 1'] = 'EMPTY';
                 if (!rule.ar2 && (!g['AR 2'] || g['AR 2'] === '')) updates['AR 2'] = 'EMPTY';
+                // ...and RE-OPEN one that a previous apply blocked but the rule now
+                // allows. Without this, a comp game stamped EMPTY under the old
+                // single-rule world stays permanently unassignable even after its
+                // comp rule is ticked on — the exact case of NECONN's U10 travel games.
+                if (rule.ar1 && g['AR 1'] === 'EMPTY') updates['AR 1'] = null;
+                if (rule.ar2 && g['AR 2'] === 'EMPTY') updates['AR 2'] = null;
                 if (Object.keys(updates).length > 0) {
                     await supabaseClient.client.from('games').update(updates).eq('id', g.id);
-                    stamped++;
+                    if (updates['AR 1'] === 'EMPTY' || updates['AR 2'] === 'EMPTY') stamped++;
+                    else opened++;
                 }
             }
-            msg.textContent = `✅ Applied — ${stamped} game slot${stamped !== 1 ? 's' : ''} stamped EMPTY.`;
+            msg.textContent = `✅ Applied — ${stamped} game${stamped !== 1 ? 's' : ''} blocked, ${opened} re-opened.`;
             msg.style.color = '#15803d'; msg.style.display = 'block';
         } catch(e) {
             msg.textContent = '✗ Apply failed: ' + e.message;
