@@ -2726,6 +2726,53 @@
             } catch(e) { sheet3StagedRefs = sheet3LoadStagedRefsCache(); sheet3AutoSeed(); sheet3StagingLoaded = true; }
         }
 
+        // ── Did this referee ASK for this game? ──────────────────────────────────
+        // Eric, 2026-09-09: "if a referee asks for a specific game, why doesn't that
+        // opt cell populate with that referee?" It did not, because nothing read the
+        // request. Availability rows carry it two ways:
+        //
+        //   availability.game  — the game id, sent as ?gid= from the openings board.
+        //                        Exact. Populated from 2026-09-09 onward.
+        //   availability.Notes — "Interested in {Home} vs {Away} ({Age}) — {Date} @ {Time}"
+        //                        Free text, and the ONLY record for the 47 rows already
+        //                        submitted this season. Matched on the team names, which
+        //                        is why it is a fallback and not the primary.
+        //
+        // Team names are compared loosely: the note is generated from the same fields
+        // the game carries, but clubs rename teams mid-season and a stale note should
+        // fail to match rather than match the wrong game.
+        function availRequestsGame(availFields, game) {
+            const gid = String(game.id);
+            if (availFields['game'] && String(availFields['game']) === gid) return true;
+
+            const note = String(availFields['Notes'] || availFields['notes'] || '');
+            if (!/interested in/i.test(note)) return false;
+
+            const norm = v => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const home = norm(game.fields['Home Team']);
+            const away = norm(game.fields['Away Team']);
+            if (!home || !away) return false;
+            const n = norm(note);
+            if (!(n.includes(home) && n.includes(away))) return false;
+
+            // ⚠️ THE KICKOFF TIME IS WHAT MAKES THIS SAFE.
+            // Team names alone are ambiguous because they nest: "Woodstock" is a
+            // substring of "Woodstock1", so a note naming one matched BOTH games.
+            // Measured against the 47 requests on file, names alone produced 13
+            // multi-matches — a referee floated to Opt 1 on games they never asked
+            // for, which is worse than not matching at all. Adding the time took
+            // that to 1. If the note carries no time, fall back to names.
+            const m = note.match(/@\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+            if (m && game.fields['Time']) {
+                let h = parseInt(m[1], 10);
+                const ap = m[3].toUpperCase();
+                if (ap === 'PM' && h !== 12) h += 12;
+                if (ap === 'AM' && h === 12) h = 0;
+                return String(game.fields['Time']).slice(0, 5) === `${String(h).padStart(2, '0')}:${m[2]}`;
+            }
+            return true;
+        }
+
         function sheet3AutoSeed() {
             const getExp = name => {
                 const ref = refLookupByName[(name || '').trim().toLowerCase()];
@@ -2758,11 +2805,26 @@
                 const gameTime = g.fields['Time'] || '';
                 const seen = new Set();
                 const names = [];
+                const requested = new Set();   // asked for THIS game by name
                 allAvail.forEach(a => {
                     if (a.fields['Date'] !== gameDate) return;
                     const name = (a.fields['Referee Name'] || '').trim();
                     if (!name || seen.has(name.toLowerCase())) return;
                     if (assignedAtSlot.has(name.toLowerCase())) return;
+                    // ⚠️ A REQUEST OVERRIDES THE SOFT FILTERS BELOW.
+                    // Club preference and the availability window are guesses about who
+                    // MIGHT take a game. An explicit request is not a guess. A referee who
+                    // asked for this fixture was being dropped for not listing the club, or
+                    // for a start time fifteen minutes late — the two filters exist to find
+                    // candidates, and this person already volunteered.
+                    // Still respected: already assigned to an overlapping game (above).
+                    const asked = availRequestsGame(a.fields, g);
+                    if (asked) {
+                        requested.add(name.toLowerCase());
+                        seen.add(name.toLowerCase());
+                        names.push(name);
+                        return;
+                    }
                     if (gameClubLower) {
                         const ref = refLookupByName[name.toLowerCase()];
                         const prefs = parsePreferences(ref?.fields['Club Preference'] || '');
@@ -2777,7 +2839,11 @@
                     names.push(name);
                 });
                 // Sort by experience per seed order
+                // Requesters take Opt 1 onward; everyone else keeps the experience order.
                 names.sort((a, b) => {
+                    const ra = requested.has(a.toLowerCase()) ? 0 : 1;
+                    const rb = requested.has(b.toLowerCase()) ? 0 : 1;
+                    if (ra !== rb) return ra - rb;
                     const diff = getExp(a) - getExp(b);
                     return sheet3SeedOrder === 'exp-asc' ? diff : -diff;
                 });

@@ -411,7 +411,13 @@ document.addEventListener('DOMContentLoaded', function() {
             'Max Games':          dayRow.querySelector('input[name="maxGames[]"]').value || '1',
             'Notes':              document.getElementById('notes').value.trim(),
             'Status':             'New',
-            'Preferred Locations': locations.join(', ')
+            'Preferred Locations': locations.join(', '),
+            // The game the referee actually asked for, when they arrived from a link on
+            // the openings board. Null for a general availability submission — most rows
+            // legitimately have no requested game. The workstation seeder reads this to
+            // put a requester in Opt 1 instead of ranking them by experience like anyone
+            // else who happened to be free.
+            'game':               new URLSearchParams(window.location.search).get('gid') || null
         };
 
         return formData;

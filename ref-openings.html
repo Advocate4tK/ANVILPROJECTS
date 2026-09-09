@@ -1581,20 +1581,27 @@
         const payType      = g.pay_type || '';
         const gameDesc     = `${home} vs ${away} (${age}) — ${formatDate(g.date || '')}${time ? ' @ ' + time : ''}`;
         const noteParam    = encodeURIComponent(`Interested in ${gameDesc}`);
+        // ⚠️ THE GAME ID TRAVELS WITH THE REQUEST.
+        // Until 2026-09-09 the only record of WHICH game a referee wanted was the
+        // English sentence in noteParam. availability.game existed and was null on
+        // every row, so the workstation seeder had nothing to match on and a referee
+        // who asked for a specific game ranked no higher than one who was merely
+        // free. Eric: "why don't the opt cells populate with that referee?"
+        const gidParam     = g.id ? `&gid=${encodeURIComponent(g.id)}` : '';
         const formCfg      = _formConfig[club] || {};
         const isJotform    = !isRec && !isTournament && !isEvent && formCfg.formType === 'jotform';
         const availUrl     = isRec
             ? `recreation-portal.html`
             : isTournament
-                ? `referee-availability-form.html?tournament=${encodeURIComponent(g._tournamentKey)}&note=${noteParam}&date=${encodeURIComponent(g.date || '')}&time=${encodeURIComponent(g.time || g.Time || g['Time'] || '')}`
+                ? `referee-availability-form.html?tournament=${encodeURIComponent(g._tournamentKey)}&note=${noteParam}${gidParam}&date=${encodeURIComponent(g.date || '')}&time=${encodeURIComponent(g.time || g.Time || g['Time'] || '')}`
                 : isEvent
-                    ? `referee-availability-form.html?event=${encodeURIComponent(window._eventSlugByName[club])}&note=${noteParam}&date=${encodeURIComponent(g.date || '')}&time=${encodeURIComponent(g.time || g.Time || g['Time'] || '')}`
+                    ? `referee-availability-form.html?event=${encodeURIComponent(window._eventSlugByName[club])}&note=${noteParam}${gidParam}&date=${encodeURIComponent(g.date || '')}&time=${encodeURIComponent(g.time || g.Time || g['Time'] || '')}`
                     : (isJotform && formCfg.jotformUrl)
                         ? formCfg.jotformUrl
                         // `age` carries the game's Age Group so the form can pre-tick the matching
                         // bracket. Sent RAW (U14, U10G, U13B) — the form does the banding, so the
                         // two pages can't drift into disagreeing about where U14 belongs.
-                        : `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}${age ? '&age=' + encodeURIComponent(age) : ''}${(g.time||g.Time||g['Time']) ? '&time=' + encodeURIComponent((g.time||g.Time||g['Time'])) : ''}`;
+                        : `referee-availability-form.html?dates=${g.date || ''}&club=${encodeURIComponent(club)}&note=${noteParam}${gidParam}${age ? '&age=' + encodeURIComponent(age) : ''}${(g.time||g.Time||g['Time']) ? '&time=' + encodeURIComponent((g.time||g.Time||g['Time'])) : ''}`;
         const availLabel   = isRec
             ? 'Contact Your Assignor to Work This Game'
             : isTournament
