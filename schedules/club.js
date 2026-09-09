@@ -104,7 +104,15 @@ const SHELL = `
 // something we do. The select list below is explicit for exactly that reason:
 // DO NOT change it to '*'.
 // ─────────────────────────────────────────────────────────────────────────────
-const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage';
+const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type';
+// ⚠️ is_scrimmage is deliberately NOT in SAFE_COLUMNS.
+// PostgREST rejects the ENTIRE select if one column is missing, so naming a
+// column here before its migration has run takes every public schedule page
+// down with "The schedule could not be loaded right now" — which is exactly
+// what happened on 2026-09-09. Public pages must never depend on deploy order.
+// The chip below reads g['is_scrimmage'] anyway: undefined until the column
+// exists and the row carries it, which renders nothing. Add it here only once
+// sql/games-is-scrimmage.sql has been applied.
 
 let GAMES = [], VENUES = {};
 const TODAY = new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD, local
