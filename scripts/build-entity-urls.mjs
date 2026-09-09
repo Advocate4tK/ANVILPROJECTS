@@ -93,7 +93,7 @@ ${STAMP}
 <title>${esc(title)} — Schedule</title>
 <link rel="canonical" href="https://referee-tool.com/${slugOf(clubName)}/schedule">
 <link rel="stylesheet" href="/css/styles.css">
-<link rel="stylesheet" href="/schedules/club.css?v=7">
+<link rel="stylesheet" href="/schedules/club.css?v=8">
 </head>
 <body>
 <div id="clubSchedule"></div>
@@ -101,7 +101,7 @@ ${STAMP}
 <script src="/config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/js/supabase-client.js?v=14"></script>
-<script src="/schedules/club.js?v=7"></script>
+<script src="/schedules/club.js?v=8"></script>
 </body>
 </html>
 `;

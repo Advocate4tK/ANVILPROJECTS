@@ -104,15 +104,14 @@ const SHELL = `
 // something we do. The select list below is explicit for exactly that reason:
 // DO NOT change it to '*'.
 // ─────────────────────────────────────────────────────────────────────────────
-const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type';
-// ⚠️ is_scrimmage is deliberately NOT in SAFE_COLUMNS.
-// PostgREST rejects the ENTIRE select if one column is missing, so naming a
-// column here before its migration has run takes every public schedule page
-// down with "The schedule could not be loaded right now" — which is exactly
-// what happened on 2026-09-09. Public pages must never depend on deploy order.
-// The chip below reads g['is_scrimmage'] anyway: undefined until the column
-// exists and the row carries it, which renders nothing. Add it here only once
-// sql/games-is-scrimmage.sql has been applied.
+const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage';
+// ⚠️ EVERY COLUMN NAMED HERE MUST ALREADY EXIST IN THE DATABASE.
+// PostgREST rejects the ENTIRE select if one is missing — not that column, the
+// whole query — so adding a name here before its migration has run takes every
+// public schedule page down with "The schedule could not be loaded right now".
+// That happened on 2026-09-09 with is_scrimmage: the code shipped, the ALTER
+// had not. Families see these pages. Run the migration FIRST, verify the column
+// is live, and only then add it here.
 
 let GAMES = [], VENUES = {};
 const TODAY = new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD, local
