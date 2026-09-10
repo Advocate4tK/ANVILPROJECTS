@@ -224,6 +224,7 @@
 
         /* ── Scheduled Games ── */
         .ref-badge { background: #16a34a; color: #fff; font-size:0.72rem; font-weight:700; padding:2px 7px; border-radius:8px; white-space:nowrap; display:inline-block; margin:1px 2px; }
+        .ref-badge.ref-badge-state { background:#e5e7eb; color:#6b7280; font-weight:600; }
         .status-badge { font-size:0.7rem; font-weight:700; padding:2px 9px; border-radius:10px; white-space:nowrap; letter-spacing:0.2px; }
         .status-submitted   { background:#dcfce7; color:#14532d; }
         .status-assigned    { background:rgba(9,20,42,0.08); color:var(--deep); }
@@ -2294,9 +2295,21 @@
         const center     = resolveRef(f['Center Referee']);
         const ar1        = resolveRef(f['AR 1']);
         const ar2        = resolveRef(f['AR 2']);
-        const refBadges  = [center && `<span class="ref-badge">${center}</span>`,
-                            ar1    && `<span class="ref-badge">AR1 ${ar1}</span>`,
-                            ar2    && `<span class="ref-badge">AR2 ${ar2}</span>`].filter(Boolean).join('&nbsp;');
+        // ⚠️ 'EMPTY' AND 'FILLED' ARE SLOT STATES, NOT PEOPLE.
+        // The club portal was rendering them as green referee badges — "AR1 EMPTY"
+        // sitting beside a real name, as though someone called EMPTY had been given
+        // the game. EMPTY means the crew rule says that slot does not exist for this
+        // club at this age and game type, so a U10 rec game correctly has no ARs and
+        // should simply show its centre. FILLED means the assignor has closed the
+        // slot without naming anyone yet, which IS worth telling the club — shown
+        // muted rather than as a person.
+        const isState  = v => v === 'EMPTY' || v === 'FILLED';
+        const nameOnly = v => (isState(v) ? '' : v);
+        const stateChip = (lbl, v) => v === 'FILLED'
+            ? `<span class="ref-badge ref-badge-state">${lbl} covered</span>` : '';
+        const refBadges  = [center && (isState(center) ? stateChip('CR', center) : `<span class="ref-badge">${center}</span>`),
+                            nameOnly(ar1) ? `<span class="ref-badge">AR1 ${ar1}</span>` : stateChip('AR1', ar1),
+                            nameOnly(ar2) ? `<span class="ref-badge">AR2 ${ar2}</span>` : stateChip('AR2', ar2)].filter(Boolean).join('&nbsp;');
         const refsHtml   = refBadges
             ? `<span class="game-refs-label">Refs:</span>${refBadges}`
             : `<span style="color:#aaa; font-size:0.8rem; font-style:italic;">No refs assigned yet</span>`;
