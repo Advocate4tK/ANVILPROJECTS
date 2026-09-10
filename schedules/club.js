@@ -43,6 +43,10 @@ const SHELL = `
     <select id="divFilter"><option value="">All divisions</option></select>
     <select id="teamFilter"><option value="">All teams</option></select>
     <select id="venueFilter"><option value="">All locations</option></select>
+    <!-- Shown only when this tab actually has both kinds — a rec-only club has no
+         use for it, and an offered choice that can only return everything or
+         nothing is worse than no choice. Populated from the data like the rest. -->
+    <select id="typeFilter" style="display:none;"><option value="">All game types</option></select>
   </div>
 
   <div class="view-tabs" id="viewTabs" style="display:none;">
@@ -126,6 +130,12 @@ const esc  = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp
 // on the schedule itself rather than working it out from the opponent's name.
 function isCompGame(g) {
     return String(g['game_type'] || '').trim().toUpperCase() === 'COMP';
+}
+
+// The word families use. Anything not explicitly Comp reads as Rec — a blank
+// game_type on an old row must not become a third option in the filter.
+function gameTypeLabel(g) {
+    return isCompGame(g) ? 'Comp' : 'Rec';
 }
 
 function gameGender(g) {
@@ -267,10 +277,12 @@ function filtered() {
     const dv = document.getElementById('divFilter').value;
     const tm = document.getElementById('teamFilter').value;
     const vn = document.getElementById('venueFilter').value;
+    const ty = document.getElementById('typeFilter')?.value || '';
     return GAMES.filter(g =>
         (!dv || divisionLabel(g) === dv) &&
         (!tm || g['Home Team'] === tm || g['Away Team'] === tm) &&
-        (!vn || venueName(g) === vn));
+        (!vn || venueName(g) === vn) &&
+        (!ty || gameTypeLabel(g) === ty));
 }
 
 function render() {
@@ -682,7 +694,7 @@ function fillFilters() {
     // teams that no longer exist, next to a header saying "no games posted".
     // Picking one produced "No games match that filter", which reads as a bug.
     refillSeasonFilters();
-    ['divFilter', 'teamFilter', 'venueFilter'].forEach(id =>
+    ['divFilter', 'teamFilter', 'venueFilter', 'typeFilter'].forEach(id =>
         document.getElementById(id).addEventListener('change', render));
     document.getElementById('filterBar').style.display = '';
 }
@@ -708,7 +720,8 @@ function refillSeasonFilters() {
     const venueRows = LEAGUE_ON ? GAMES : rows;
     [['divFilter',   [...new Set(rows.map(divisionLabel).filter(Boolean))].sort()],
      ['teamFilter',  [...new Set(rows.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean))].sort()],
-     ['venueFilter', [...new Set(venueRows.map(venueName).filter(Boolean))].sort()]
+     ['venueFilter', [...new Set(venueRows.map(venueName).filter(Boolean))].sort()],
+     ['typeFilter',  [...new Set(rows.map(gameTypeLabel))].sort()]
     ].forEach(([id, vals]) => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -718,6 +731,10 @@ function refillSeasonFilters() {
         while (el.options.length > 1) el.remove(1);
         vals.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); });
         el.value = vals.includes(keep) ? keep : '';
+        // The game-type filter earns its place only on a tab that HAS both kinds.
+        // On a rec-only club it would offer "Rec" and "All", which can only return
+        // everything or everything — a control that cannot change the answer.
+        if (id === 'typeFilter') el.style.display = vals.length > 1 ? '' : 'none';
     });
 }
 
@@ -743,7 +760,7 @@ let LEAGUE_ON = false;
 // called. Calling it a second time without this would double every dropdown and
 // fire render() twice per change.
 function resetFilterBar() {
-    ['seasonFilter', 'divFilter', 'teamFilter', 'venueFilter'].forEach(id => {
+    ['seasonFilter', 'divFilter', 'teamFilter', 'venueFilter', 'typeFilter'].forEach(id => {
         const old = document.getElementById(id);
         if (!old) return;
         const fresh = old.cloneNode(false);              // drops options AND listeners
