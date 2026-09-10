@@ -3058,9 +3058,44 @@
         return result;
     }
 
+    // ── Header matching forgives what real spreadsheets look like ─────────────
+    // Headers were taken verbatim, so a club whose sheet said "Home team" instead
+    // of "Home Team" had EVERY row rejected for "Missing Home Team" — sixty errors
+    // that look catastrophic and are one lowercase letter. NECONN's REC GAMES
+    // sheet had four ("Home team", "Away team", "Age group", "Date (mm/dd/yyyy)"),
+    // which is what prompted this.
+    //
+    // Compared case-insensitively with punctuation dropped and any parenthetical
+    // suffix ignored, so "Date (mm/dd/yyyy)", "DATE" and "date " are all Date. An
+    // unrecognised header is kept verbatim so nothing silently disappears.
+    var CSV_HEADER_KEY = function (h) {
+        return String(h == null ? '' : h)
+            .replace(/\([^)]*\)/g, ' ')
+            .replace(/[^a-z0-9]+/gi, ' ')
+            .trim().toLowerCase();
+    };
+    var CSV_HEADER_MAP = (function () {
+        var canon = ['Date','Time','Home Team','Home Club','Away Club','Away Team','Age Group',
+                     'Gender','Game Type','Venue','Field','Notes','Scrimmage','Division',
+                     'GROUPING','LOCATION','SURFACE'];
+        var m = {};
+        canon.forEach(function (c) { m[CSV_HEADER_KEY(c)] = c; });
+        // Genuine synonyms seen in club sheets.
+        m[CSV_HEADER_KEY('Visiting Club')] = 'Away Club';
+        m[CSV_HEADER_KEY('Visiting Team')] = 'Away Team';
+        m[CSV_HEADER_KEY('Age')]           = 'Age Group';
+        m[CSV_HEADER_KEY('Type')]          = 'Game Type';
+        m[CSV_HEADER_KEY('Start Time')]    = 'Time';
+        return m;
+    })();
+    function canonicalHeader(h) {
+        var raw = String(h == null ? '' : h).trim();
+        return CSV_HEADER_MAP[CSV_HEADER_KEY(raw)] || raw;
+    }
+
     function parseCSV(text) {
         const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
-        const headers = parseCSVLine(lines[0]).map(h => h.trim());
+        const headers = parseCSVLine(lines[0]).map(h => canonicalHeader(h));
         const rows = [];
         for (let i = 1; i < lines.length; i++) {
             const vals = parseCSVLine(lines[i]);
@@ -3656,7 +3691,7 @@
     // No Home Club column: it is this club's own page, so the home club is
     // stamped for them and a column would only be a way to get it wrong. Away
     // Club is required and must match Central Assign's list exactly.
-    const CSV_TEMPLATE_HEADERS = ['Date','Time','Home Team','Away Club','Away Team','Age Group','Gender','Game Type','Venue','Field','Notes'];
+    const CSV_TEMPLATE_HEADERS = ['Date','Time','Home Team','Away Club','Away Team','Age Group','Gender','Game Type','Scrimmage','Venue','Field','Notes'];
 
     // Two real CA club names for the sample rows: this club's own, and somebody
     // else's for the visiting side. Invented placeholders would be copied
@@ -3733,7 +3768,7 @@
         const rows = [];
         if (withField) {
             rows.push(['2026-04-05', '10:00 AM', 'Your Club U12 Girls', awayClub, 'Visiting Club U12 Girls',
-                       'U12', 'Female', 'Rec', withField.rtCode, itsField.rtCode, '']);
+                       'U12', 'Female', 'Rec', '', withField.rtCode, itsField.rtCode, '']);
         }
         if (noField) {
             // Do NOT say "this venue has no fields". We only know we hold none;
@@ -3741,11 +3776,11 @@
             // Complex is exactly that case. State the rule, not a claim about
             // the venue.
             rows.push(['2026-04-05', '12:00 PM', 'Your Club U10 Boys', awayClub, 'Visiting Club U10 Boys',
-                       'U10', 'Male', 'Comp', noField.rtCode, '', 'Field may be left blank']);
+                       'U10', 'Male', 'Comp', 'Y', noField.rtCode, '', 'A scrimmage - still Rec or Comp']);
         }
         if (!rows.length) {
             rows.push(['2026-04-05', '10:00 AM', 'Your Club U12 Girls', awayClub, 'Visiting Club U12 Girls',
-                       'U12', 'Female', 'Rec', (vs[0]?.rtCode || 'Griswold Middle School'), '', '']);
+                       'U12', 'Female', 'Rec', '', (vs[0]?.rtCode || 'Griswold Middle School'), '', '']);
         }
         return rows;
     }
@@ -3821,6 +3856,8 @@
             '',
             'Venue & Field Codes',
             'Put the RTV code in the Venue column and the RTF code in the Field column.',
+            'Game Type is Rec or Comp. Scrimmage is Y for a friendly, blank otherwise -',
+            'a scrimmage is still Rec or Comp, so fill in both columns.',
             'Full names work too. Leave Field blank when a venue has no fields.',
             '',
             'Type,Code,Name',
