@@ -1286,19 +1286,53 @@ exportBtn.addEventListener('click', () => {
         ].map(csvCell).join(',');
     });
 
-    // No BOM, CRLF endings — byte-for-byte the shape of CA's own
-    // game_import_sample.csv, and of the file CA's importer parsed cleanly.
-    const content = [headers.map(csvCell).join(','), ...rows].join('\r\n') + '\r\n';
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    // ── ONE FILE PER CLUB ────────────────────────────────────────────────────
+    // Tod, 2026-09-10: "we need to have separate export csv files for NECONN and
+    // CANTERBURY and PLAINFIELD."
+    //
+    // A single combined file was fine while an export meant one club. It stopped
+    // being fine once the master board carries three: Central Assign is uploaded
+    // per club, so a mixed file has to be split by hand before it can be used —
+    // every single time. `rows` is built in the same order as `selected`, so the
+    // split is done by index. No second pass over the fee logic, and no chance of
+    // the two disagreeing about which row belongs to whom.
+    const byClub = new Map();
+    selected.forEach((rec, i) => {
+        const club = (rec.fields && (rec.fields['Source Club'] || rec.fields['club'])) || 'games';
+        if (!byClub.has(club)) byClub.set(club, []);
+        byClub.get(club).push(rows[i]);
+    });
+
     const ts = new Date();
     const datePart = ts.toISOString().split('T')[0];
     const timePart = `${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}`;
-    a.download = `central-assign-export-${datePart}-${timePart}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const slug = v => String(v || 'games').toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'games';
+
+    // ⚠️ STAGGERED. Chrome asks once about multiple downloads and then allows the
+    // rest, but a tight loop of .click() drops some of them silently — you get
+    // fewer files than clubs and no error saying so.
+    let _dl = 0;
+    byClub.forEach((clubRows, club) => {
+        // No BOM, CRLF endings — byte-for-byte the shape of CA's own
+        // game_import_sample.csv, and of the file CA's importer parsed cleanly.
+        const content = [headers.map(csvCell).join(','), ...clubRows].join('\r\n') + '\r\n';
+        const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        setTimeout(() => {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `central-assign-${slug(club)}-${datePart}-${timePart}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }, _dl);
+        _dl += 350;
+    });
+
+    if (byClub.size > 1) {
+        console.log(`CA export split into ${byClub.size} files — `
+            + [...byClub.entries()].map(([c, r]) => `${c}: ${r.length}`).join(' | '));
+    }
 
     // Mark all exported games, then ask whether CA actually took them.
     markAsExported(selected).then(res => {
