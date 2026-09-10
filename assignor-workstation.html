@@ -1414,6 +1414,25 @@
             return !crewAllowed(src, age, 'AR 1', gt) && !crewAllowed(src, age, 'AR 2', gt);
         }
 
+        function isScrimmage(f) { return !!f['is_scrimmage']; }
+
+        // ⚠️ A SCRIMMAGE IS STAFFED AS SOON AS IT HAS A CENTRE.
+        // Tod, 2026-09-10: "it's the assignor's discretion whether he wants to assign
+        // a center and two ARs or just a center for those games. If it's a scrimmage,
+        // it shouldn't flag you as something being wrong... Scrimmage instantly means
+        // the game doesn't matter."
+        //
+        // The AR slots stay VISIBLE and assignable - discretion means the choice is
+        // still there. What changes is that nothing nags: the card reads complete, the
+        // header stops counting it unassigned, and it collapses like any finished game.
+        // A crew rule describes what a LEAGUE game needs; a scrimmage is not one, so
+        // the rule stops being a requirement and becomes an option.
+        function crewSatisfied(f, cRef, ar1, ar2, noARs) {
+            if (!cRef) return false;
+            if (isScrimmage(f)) return true;
+            return !!(noARs || (ar1 && ar2));
+        }
+
         // "Seas 1" / "Seas 2" (strings) → 0 / 1.  Integer 2+ → that integer.  Missing → missing arg (default -1).
         // Scale: 0 = Season 1, 1 = Season 2, 2 = Year 2, 3 = Year 3, ...
         function parseYrs(v, missing) {
@@ -1542,7 +1561,7 @@
                 const cRef = resolveRefName(f['Center Referee']);
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
-                const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
+                const fullyAssigned = crewSatisfied(f, cRef, ar1, ar2, isSingleRefGame(f));
 
                 // Available refs for this game's date + club preference
                 const gameDate  = f['Date'] || '';
@@ -1667,7 +1686,7 @@
                 const cRef = resolveRefName(f['Center Referee']);
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
-                const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
+                const fullyAssigned = crewSatisfied(f, cRef, ar1, ar2, isSingleRefGame(f));
                 const isCancelled      = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
                 const isChangeRequested = (f['Game Status'] || '') === 'Change Requested';
                 const isCancelRequest   = isChangeRequested && /\[CANCELLATION REQUEST/i.test(f['Notes'] || '');
@@ -5112,7 +5131,7 @@
                 const cRef = resolveRefName(f['Center Referee']);
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
-                const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
+                const fullyAssigned = crewSatisfied(f, cRef, ar1, ar2, isSingleRefGame(f));
                 const isCancelled   = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
                 const isU8          = age === 'U8';
 
@@ -6448,7 +6467,7 @@
                 const ar1 = resolveRefName(f['AR 1']);
                 const ar2 = resolveRefName(f['AR 2']);
                 const soloOnly = _crewSoloOnly(f['Source Club'] || '', age);
-                const fullyAssigned = soloOnly ? !!cr : (!!cr && !!ar1 && !!ar2);
+                const fullyAssigned = crewSatisfied(f, cr, ar1, ar2, soloOnly);
                 if (fullyAssigned) return false;
                 if (!isAllClubs && !selectedClubs.has(f['Source Club'])) return false;
                 return true;
@@ -7710,7 +7729,7 @@
                 const cRef = resolveRefName(f['Center Referee']);
                 const ar1  = resolveRefName(f['AR 1']);
                 const ar2  = resolveRefName(f['AR 2']);
-                const fullyAssigned = cRef && (isSingleRefGame(f) || (ar1 && ar2));
+                const fullyAssigned = crewSatisfied(f, cRef, ar1, ar2, isSingleRefGame(f));
                 const selected      = selectedGame && selectedGame.id === gid;
                 const isCancelled   = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
                 const isChangeReq   = (f['Game Status'] || '') === 'Change Requested';
@@ -8180,10 +8199,12 @@
                 // "unassigned". The game type joined that question on 2026-09-09: the same
                 // club's COMP U10 runs a full three-person crew.
                 const hideARs = isSingleRefGame(f) || (hideU10Games && (age || '').startsWith('U10'));
-                const full = cRef && (hideARs || (ar1 && ar2));
+                const full = crewSatisfied(f, cRef, ar1, ar2, hideARs);
                 const gid  = String(g.id);
                 const conf = caConfirmedMap[gid] || new Set();
-                const allConfirmed = full && (hideARs ? conf.has('Center Referee') : conf.has('Center Referee') && conf.has('AR 1') && conf.has('AR 2'));
+                const allConfirmed = full && ((hideARs || isScrimmage(f))
+                    ? conf.has('Center Referee') && (!ar1 || conf.has('AR 1')) && (!ar2 || conf.has('AR 2'))
+                    : conf.has('Center Referee') && conf.has('AR 1') && conf.has('AR 2'));
                 if (allConfirmed) confirmed++;
                 else if (full) planned++;
                 else unassigned++;
@@ -8221,11 +8242,11 @@
                 // to its confirmed state. One cause, three symptoms. Tod, 2026-09-08:
                 // "So the U-10 games won't let me click Refs in CA. And collapse."
                 const hideARs = isSingleRefGame(f) || (hideU10Games && (age || '').startsWith('U10'));
-                const full = !isCancelled && cRef && (hideARs || (ar1 && ar2));
+                const full = !isCancelled && crewSatisfied(f, cRef, ar1, ar2, hideARs);
                 const conf = caConfirmedMap[gid] || new Set();
                 const posConfirmed = pos => conf.has(pos);
-                const allConf = full && (hideARs
-                    ? posConfirmed('Center Referee')
+                const allConf = full && ((hideARs || isScrimmage(f))
+                    ? posConfirmed('Center Referee') && (!ar1 || posConfirmed('AR 1')) && (!ar2 || posConfirmed('AR 2'))
                     : posConfirmed('Center Referee') && posConfirmed('AR 1') && posConfirmed('AR 2'));
                 const isExpanded = s2ExpandedGames.has(gid);
 
