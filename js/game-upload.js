@@ -159,8 +159,8 @@ uploadBtn.addEventListener('click', async () => {
     try {
         const [clubs, venues, fieldRecs] = await Promise.all([
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,  { maxRecords: 200 }),
-            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 500 }),
-            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 500 })
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.VENUES, { maxRecords: 3000 }),
+            airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS, { maxRecords: 5000 })
         ]);
 
         // Club name → league number, email, display name
