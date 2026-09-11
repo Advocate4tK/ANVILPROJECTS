@@ -2419,9 +2419,21 @@
                 <label>Time</label>
                 <input type="time" id="modTime_${r.id}" value="${timeRaw}">
                 <label>Venue</label>
-                <select id="modVenue_${r.id}">
+                <select id="modVenue_${r.id}" onchange="rebuildModFields('${r.id}', this.value)">
                     <option value="">— Select Venue —</option>
                     ${allVenues.map(v => `<option value="${v.numId}" ${parseFloat(f['Venue ID']) === parseFloat(v.numId) ? 'selected' : ''}>${v.name}</option>`).join('')}
+                </select>
+                <!-- ⚠️ THE FIELD BELONGED HERE FROM THE START. Tod, 2026-09-11:
+                     "the screenshot I sent has no ability to adjust a venue's field."
+                     A venue with seven pitches and no field named sends a referee to the
+                     wrong corner of a complex - Manship has sixteen games like that. Until
+                     now the only way to set one was a database script. -->
+                <label>Field <span style="font-weight:400; color:#888;">(optional)</span></label>
+                <select id="modField_${r.id}">
+                    <option value="">&mdash; No field / not specified &mdash;</option>
+                    ${allFields
+                        .filter(x => String(x.venueId) === String(allVenues.find(v => parseFloat(v.numId) === parseFloat(f['Venue ID']))?.id))
+                        .map(x => `<option value="${x.numId || ''}" ${parseFloat(f['Field ID']) === parseFloat(x.numId) ? 'selected' : ''}>${x.name}</option>`).join('')}
                 </select>
                 <label>Age Group</label>
                 <select id="modAge_${r.id}">
@@ -2931,6 +2943,22 @@
         }
     }
 
+    // ⚠️ THE FIELD LIST HAS TO FOLLOW THE VENUE.
+    // The Field options are built for the game's CURRENT venue. Move the game to a
+    // different venue and, without this, the old venue's pitches stay on screen —
+    // so a club could save Sterling's "Field 2" onto a game at Prince Hill.
+    // Clearing the selection is deliberate: a field at the old venue means nothing
+    // at the new one.
+    function rebuildModFields(gameId, venueNumId) {
+        const sel = document.getElementById('modField_' + gameId);
+        if (!sel) return;
+        const venue = allVenues.find(v => parseFloat(v.numId) === parseFloat(venueNumId));
+        const list  = venue ? allFields.filter(x => String(x.venueId) === String(venue.id)) : [];
+        sel.innerHTML = '<option value="">&mdash; No field / not specified &mdash;</option>'
+            + list.map(x => `<option value="${x.numId || ''}">${x.name}</option>`).join('');
+        sel.value = '';
+    }
+
     async function saveModifiedGame(gameId) {
         const msgEl   = document.getElementById('modMsg_' + gameId);
         const newDate = document.getElementById('modDate_' + gameId).value;
@@ -2938,6 +2966,7 @@
         const venueId = document.getElementById('modVenue_' + gameId).value;
         const age     = document.getElementById('modAge_' + gameId).value;
         const gender  = document.getElementById('modGender_' + gameId).value;
+        const fieldId = document.getElementById('modField_' + gameId)?.value ?? '';
 
         if (!newDate) { msgEl.textContent = 'Date is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
         msgEl.textContent = 'Saving…'; msgEl.style.color = '#555'; msgEl.style.display = 'block';
@@ -2947,6 +2976,10 @@
         if (venueId)  updates['Venue ID']  = parseFloat(venueId);
         if (age)      updates['Age Group'] = age;
         if (gender)   updates['Gender']    = gender;
+        // ⚠️ Written even when EMPTY, unlike the fields above. Blank is a real answer
+        // here - "we do not know which pitch yet" - and a club that picks the wrong one
+        // must be able to take it back. The others cannot meaningfully be cleared.
+        updates['Field ID'] = fieldId ? parseFloat(fieldId) : null;
 
         try {
             const _saveTable = currentTournament ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
