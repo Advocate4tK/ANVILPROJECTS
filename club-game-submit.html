@@ -2467,6 +2467,31 @@
                         <label>New Time (optional)</label>
                         <input type="time" id="chgTime_${r.id}">
                     </div>
+                    <!-- ⚠️ A CHANGE IS NOT ALWAYS A TIME CHANGE. Tod, 2026-09-11:
+                         "the week of change request does not render an ability to change
+                         venue or field."
+                         Once a game is inside its own week the Modify panel is gone, so a
+                         club whose pitch floods or double-books had nowhere to say so -
+                         they had to describe it in the Reason box and hope the assignor
+                         read it. Moving to another field is the commonest late change. -->
+                    <div class="change-form-grid">
+                        <div>
+                            <label>New Venue (optional)</label>
+                            <select id="chgVenue_${r.id}" onchange="rebuildChgFields('${r.id}', this.value)">
+                                <option value="">&mdash; Same venue &mdash;</option>
+                                ${allVenues.map(v => `<option value="${v.numId}">${v.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label>New Field (optional)</label>
+                            <select id="chgField_${r.id}">
+                                <option value="">&mdash; Same field &mdash;</option>
+                                ${allFields
+                                    .filter(x => String(x.venueId) === String(allVenues.find(v => parseFloat(v.numId) === parseFloat(f['Venue ID']))?.id))
+                                    .map(x => `<option value="${x.numId || ''}">${x.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
                     <label id="chgReasonLabel_${r.id}">Reason <span style="color:#e74c3c">*</span></label>
                     <textarea id="chgReason_${r.id}" placeholder="Explain the requested change…"></textarea>
                     <div class="change-form-btns">
@@ -2993,11 +3018,26 @@
         }
     }
 
+    // The field list follows the venue here too - same reason as the Modify panel.
+    // "Same field" stays the default: a request naming a venue but not a field is a
+    // legitimate thing to send.
+    function rebuildChgFields(gameId, venueNumId) {
+        const sel = document.getElementById('chgField_' + gameId);
+        if (!sel) return;
+        const venue = allVenues.find(v => parseFloat(v.numId) === parseFloat(venueNumId));
+        const list  = venue ? allFields.filter(x => String(x.venueId) === String(venue.id)) : [];
+        sel.innerHTML = '<option value="">&mdash; Same field &mdash;</option>'
+            + list.map(x => `<option value="${x.numId || ''}">${x.name}</option>`).join('');
+        sel.value = '';
+    }
+
     async function submitChangeRequest(gameId) {
         const isCancelling = document.getElementById('chgCancel_' + gameId)?.checked || false;
         const reason  = (document.getElementById('chgReason_' + gameId).value || '').trim();
         const newDate = isCancelling ? '' : (document.getElementById('chgDate_' + gameId).value || '');
         const newTime = isCancelling ? '' : (document.getElementById('chgTime_' + gameId).value || '');
+        const newVenue = isCancelling ? '' : (document.getElementById('chgVenue_' + gameId)?.value || '');
+        const newField = isCancelling ? '' : (document.getElementById('chgField_' + gameId)?.value || '');
         const msgEl   = document.getElementById('chgMsg_' + gameId);
 
         if (!isCancelling && !newDate) { msgEl.textContent = 'A requested date is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
@@ -3010,6 +3050,11 @@
         let noteText  = isCancelling ? `\n\n[CANCELLATION REQUEST – ${now}]` : `\n\n[CHANGE REQUEST – ${now}]`;
         if (newDate)  noteText += `\nRequested Date: ${newDate}`;
         if (newTime)  noteText += `\nRequested Time: ${newTime}`;
+        // Names, not ids - the assignor reads this, not a machine.
+        if (newVenue) noteText += `
+Requested Venue: ${allVenues.find(v => parseFloat(v.numId) === parseFloat(newVenue))?.name || newVenue}`;
+        if (newField) noteText += `
+Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newField))?.name || newField}`;
         noteText += `\nReason: ${reason}`;
         if (currentSubmitter) noteText += `\nRequested by: ${currentSubmitter}`;
 
