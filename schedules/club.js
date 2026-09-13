@@ -277,6 +277,34 @@ function primarySeason(rows) {
     return latest ? seasonOf({ date: latest }) : now;
 }
 
+// ── ⚠️ A SEASON IS TOO LONG TO READ AT ONCE ────────────────────────────────
+// Ross, via Tod 2026-09-13: "the list page is too long and should be broken down
+// by week rather than the whole thing."
+// The master page carries 225 games over 19 game days. Fully expanded that is a
+// scroll nobody finishes, and the day a family actually wants is somewhere in the
+// middle of it. Weeks collapse; the nearest one is open.
+//
+// Weeks run MONDAY to SUNDAY, matching the club portal's "Week of Sep 7 – Sep 13"
+// so the two pages describe time the same way.
+function weekStart(iso) {
+    const d = new Date(iso + 'T12:00:00');
+    const dow = (d.getDay() + 6) % 7;           // Mon=0 … Sun=6
+    d.setDate(d.getDate() - dow);
+    return d.toLocaleDateString('en-CA');
+}
+
+function weekLabel(startIso) {
+    const a = new Date(startIso + 'T12:00:00');
+    const b = new Date(startIso + 'T12:00:00'); b.setDate(b.getDate() + 6);
+    const f = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `Week of ${f(a)} – ${f(b)}`;
+}
+
+// Which weeks are open. The nearest upcoming one opens itself; anything the user
+// opens stays open until they close it. A live filter overrides all of it — see
+// renderList — because a search that hides its own results is broken.
+let OPEN_WEEKS = new Set();
+
 const seasonIcon = s => /spring/i.test(s) ? '🌱' : /summer/i.test(s) ? '☀️'
                       : /fall/i.test(s) ? '🍂' : /winter/i.test(s) ? '❄️' : '';
 
@@ -460,7 +488,37 @@ function renderList() {
         </div>`;
     };
 
-    let html = upcoming.map(block).join('');
+    // ⚠️ A FILTER OVERRIDES THE COLLAPSE. If someone picks a team or "Comp", the
+    // matches are spread across the season and hiding them behind closed weeks
+    // makes the filter look broken. Any active filter expands everything.
+    const filterOn = ['divFilter','teamFilter','venueFilter','typeFilter']
+        .some(id => (document.getElementById(id)?.value || '') !== '');
+
+    const weeks = [];
+    upcoming.forEach(d => {
+        const ws = weekStart(d);
+        const last = weeks[weeks.length - 1];
+        if (last && last.start === ws) last.dates.push(d);
+        else weeks.push({ start: ws, dates: [d] });
+    });
+    // The nearest upcoming week opens by default; the rest stay shut until asked.
+    if (weeks.length && !OPEN_WEEKS.size) OPEN_WEEKS.add(weeks[0].start);
+
+    let html = weeks.map(w => {
+        const n     = w.dates.reduce((sum, d) => sum + byDate[d].length, 0);
+        const locs  = new Set(w.dates.flatMap(d => byDate[d].map(g => venueName(g)))).size;
+        const open  = filterOn || OPEN_WEEKS.has(w.start);
+        // One week is not worth a collapse — a club with a single game day would
+        // get a header wrapping a header.
+        if (weeks.length === 1) return w.dates.map(block).join('');
+        return `<div class="weekgroup${open ? ' open' : ''}">
+            <button class="week-head" data-week="${w.start}">
+                <span>${esc(weekLabel(w.start))} &nbsp;·&nbsp; ${n} game${n === 1 ? '' : 's'} &nbsp;·&nbsp; ${locs} location${locs === 1 ? '' : 's'}</span>
+                <span class="week-chev">▶</span>
+            </button>
+            <div class="weekgroup-body">${w.dates.map(block).join('')}</div>
+        </div>`;
+    }).join('');
 
     // The club has been flipped to a season it has no games in yet. Rendering
     // nothing above the archive would read as a broken page, and the old season
@@ -503,6 +561,14 @@ function renderList() {
     updateInfoBar(rows.filter(g => shownDates.includes(g.date)), GAMES);
 
     host.innerHTML = html;
+
+    host.querySelectorAll('.week-head').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const w = btn.dataset.week;
+            if (OPEN_WEEKS.has(w)) OPEN_WEEKS.delete(w); else OPEN_WEEKS.add(w);
+            renderList();
+        });
+    });
 
     host.querySelectorAll('.archive-head').forEach(btn => {
         btn.addEventListener('click', () => {
