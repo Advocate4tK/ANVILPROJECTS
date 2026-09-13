@@ -108,7 +108,7 @@ const SHELL = `
 // something we do. The select list below is explicit for exactly that reason:
 // DO NOT change it to '*'.
 // ─────────────────────────────────────────────────────────────────────────────
-const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage';
+const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage,home_club,away_club,"Field ID"';
 // ⚠️ EVERY COLUMN NAMED HERE MUST ALREADY EXIST IN THE DATABASE.
 // PostgREST rejects the ENTIRE select if one is missing — not that column, the
 // whole query — so adding a name here before its migration has run takes every
@@ -117,7 +117,7 @@ const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",
 // had not. Families see these pages. Run the migration FIRST, verify the column
 // is live, and only then add it here.
 
-let GAMES = [], VENUES = {};
+let GAMES = [], VENUES = {}, FIELDS = {};
 const TODAY = new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD, local
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -128,6 +128,52 @@ const esc  = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp
 // A travel game is a different commitment from a rec game - longer drive, a real
 // referee crew, a different standard. Families should be able to see which is which
 // on the schedule itself rather than working it out from the opponent's name.
+// ── ⚠️ A CLUB'S SCHEDULE IS ITS HOME **AND** AWAY GAMES ─────────────────────
+// Tod, 2026-09-13: "they really should be showing their home games and away games
+// so that parents can go to one stop and see where they're supposed to go that day."
+//
+// The page matched on Source Club alone — the club that HOSTS. An away fixture is
+// stored under the home club, so it never appeared. Measured before the fix:
+//     Plainfield  65 shown, 42 missing
+//     NECONN     137 shown, 49 missing
+//     Canterbury  23 shown, 50 missing   <- two thirds of their season invisible
+//
+// away_club and home_club hold CENTRAL ASSIGN's name for a club, which is not the
+// name the page is opened with: a page for "Plainfield Youth Soccer" has to match
+// games recorded against "Plainfield Soccer Club". ca_clubs already maps the two,
+// so every alias is collected and all of them are matched.
+let CLUB_ALIASES = {};      // lowercased any-name -> [every name that club answers to]
+
+async function loadClubAliases(sb) {
+    if (Object.keys(CLUB_ALIASES).length) return;
+    const { data } = await sb.from('ca_clubs').select('name,aliases');
+    (data || []).forEach(c => {
+        const all = [c.name, ...(c.aliases || [])].filter(Boolean);
+        all.forEach(n => { CLUB_ALIASES[String(n).toLowerCase()] = all; });
+    });
+}
+
+function namesFor(clubLabel) {
+    const hit = CLUB_ALIASES[String(clubLabel || '').toLowerCase()];
+    return hit && hit.length ? [...new Set([clubLabel, ...hit])] : [clubLabel];
+}
+
+// Is this game AWAY from the club whose page we are on? Parents need to know they
+// are driving somewhere else, and it is the whole reason the away games belong here.
+function isAwayFor(g, clubLabel) {
+    const mine = namesFor(clubLabel).map(n => String(n).toLowerCase());
+    const src  = String(g['Source Club'] || '').toLowerCase();
+    if (mine.includes(src)) return false;
+    return mine.includes(String(g.away_club || '').toLowerCase());
+}
+
+// The pitch, by name. "Field ID" is Central Assign's id and what everything else
+// now uses; g.field is the older free-text column, kept as a fallback so the 82
+// games carrying only that still read correctly.
+function fieldName(g) {
+    return FIELDS[String(g['Field ID'])] || g.field || '';
+}
+
 function isCompGame(g) {
     return String(g['game_type'] || '').trim().toUpperCase() === 'COMP';
 }
@@ -209,6 +255,10 @@ function seasonOf(g) {
     return `Winter ${y}`;
 }
 let ACTIVE_SEASON = '';    // clubs.active_season — what the club says it is in
+// ⚠️ WHOSE PAGE THIS IS. Needed to answer "is this game away?", which is only
+// meaningful relative to a club. On the league page it is the active TAB's club,
+// which is why it is set at render time rather than once at load.
+let PAGE_CLUB = '';
 
 // The season the club is IN. `active_season` is set deliberately in superadmin,
 // and flipping it there has to carry this page with it — that flip IS the
@@ -323,9 +373,10 @@ function dayBlocksHTML(games) {
                 html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}" data-gid="${esc(g.id)}">
                     <div class="game-row">
                         <span class="game-chevron">▶</span>
-                        ${g.field ? `<span class="${fieldClass(g.field)}">${esc(g.field)}</span>` : ''}
+                        ${fieldName(g) ? `<span class="${fieldClass(fieldName(g))}">${esc(fieldName(g))}</span>` : ''}
                         ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
                         ${isCompGame(g) ? `<span class="comp-chip">Comp</span>` : ''}
+                        ${isAwayFor(g, PAGE_CLUB) ? `<span class="away-chip">Away</span>` : ''}
                         ${g['is_scrimmage'] ? `<span class="scrim-chip">Scrimmage</span>` : ''}
                         <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
                         <span class="vs">vs</span>
@@ -337,7 +388,7 @@ function dayBlocksHTML(games) {
                             <div><span class="gb-k">Division</span><span class="gb-v">${div ? esc(div) : '—'}</span></div>
                             <div><span class="gb-k">Home</span><span class="gb-v">${esc(g['Home Team'] || 'TBD')}</span></div>
                             <div><span class="gb-k">Away</span><span class="gb-v">${esc(g['Away Team'] || 'TBD')}</span></div>
-                            ${g.field ? `<div><span class="gb-k">Field</span><span class="gb-v">${esc(g.field)}</span></div>` : ''}
+                            ${fieldName(g) ? `<div><span class="gb-k">Field</span><span class="gb-v">${esc(fieldName(g))}</span></div>` : ''}
                             <div><span class="gb-k">Season</span><span class="gb-v">${esc(seasonOf(g) || '—')}</span></div>
                         </div>
                         ${href ? `<a class="gb-map" href="${href}" target="_blank" rel="noopener">`
@@ -771,9 +822,17 @@ function resetFilterBar() {
 }
 
 function leagueSelect(tab) {
-    const wanted = tab.clubs.map(norm);
+    // Every name each of this tab's clubs answers to, so an away game recorded
+    // under Central Assign's name for them is still picked up.
+    const wanted = [...new Set(tab.clubs.flatMap(c => namesFor(c)))].map(norm);
+    // ⚠️ A MULTI-CLUB TAB HAS NO "AWAY". On the Master tab, NECONN hosting
+    // Plainfield is a home game for one and an away game for the other, so the chip
+    // would be a lie either way. It is only meaningful on a single-club tab.
+    PAGE_CLUB = tab.clubs.length === 1 ? tab.clubs[0] : '';
     GAMES = ALL_GAMES.filter(g =>
-        wanted.includes(norm(g['Source Club'])) || wanted.includes(norm(g.club)));
+        wanted.includes(norm(g['Source Club']))
+        || wanted.includes(norm(g.club))
+        || wanted.includes(norm(g.away_club)));
     GAMES.sort((a, b) => (a.date || '').localeCompare(b.date || '')
                       || String(a.time || '').localeCompare(String(b.time || '')));
 
@@ -865,6 +924,7 @@ function drawLeagueTabs(tabs) {
                 `Nothing in the system matches: ${missing.join(', ')}`);
 
             const keys = [...new Set(Object.values(labels))];
+            await loadClubAliases(sb);
             let games = [], from = 0;
             for (;;) {
                 // ⚠️ QUOTE THE VALUES. This filter is built by string
@@ -875,7 +935,7 @@ function drawLeagueTabs(tabs) {
                 // one venue is literally "Manship Park(Canterbury)".
                 const orVal = k => `"${String(k).replace(/"/g, '')}"`;
                 const { data, error } = await sb.from('games').select(SAFE_COLUMNS)
-                    .or(keys.map(k => `"Source Club".eq.${orVal(k)},club.eq.${orVal(k)}`).join(','))
+                    .or(keys.flatMap(k => namesFor(k).map(n => `"Source Club".eq.${orVal(n)},club.eq.${orVal(n)},away_club.eq.${orVal(n)}`)).join(','))
                     .range(from, from + 999);
                 if (error) throw error;
                 if (!data || !data.length) break;
@@ -886,6 +946,13 @@ function drawLeagueTabs(tabs) {
 
             const { data: vens } = await sb.from('venues')
                 .select('"Venue ID","Venue Name",address,city,state,zip');
+            // ⚠️ THE PUBLIC PAGE WAS READING THE WRONG COLUMN. It rendered g.field, a
+            // free-text leftover present on 82 games, while every field assigned this
+            // week went into "Field ID" - 187 games. So Plainfield's page showed two
+            // games at Shepard Hill at 10:45 with nothing to separate them, the exact
+            // confusion the field work was meant to end.
+            const { data: flds } = await sb.from('fields').select('"Field ID","Field Name"');
+            (flds || []).forEach(f => { FIELDS[String(f['Field ID'])] = f['Field Name']; });
             (vens || []).forEach(v => { VENUES[String(v['Venue ID'])] = v; });
 
             ALL_GAMES = games.filter(g =>
@@ -949,6 +1016,7 @@ function drawLeagueTabs(tabs) {
         // The season flip in superadmin is what moves this page. Whatever the club
         // is set to is the season on top; everything else drops to the archive.
         ACTIVE_SEASON = match ? String(match.active_season || '').trim() : '';
+        PAGE_CLUB = clubLabel;
 
         document.getElementById('clubName').textContent = clubDisplay;
         document.getElementById('footClub').textContent = clubDisplay + ' · ';
@@ -958,10 +1026,17 @@ function drawLeagueTabs(tabs) {
 
         // Paginated. Supabase silently caps a request at 1000 rows — no error,
         // just a short array. See .claude-memory/FIXES_LOG.md, 2026-08-04.
+        await loadClubAliases(sb);
         let games = [], from = 0;
         for (;;) {
             const { data, error } = await sb.from('games').select(SAFE_COLUMNS)
-                .or(`"Source Club".eq.${clubLabel},club.eq.${clubLabel}`)
+                // Home games (Source Club) OR away games (this club named as the
+                // visiting side). Quoted, because PostgREST reads a bare comma as the
+                // separator between conditions and club names contain punctuation.
+                .or(namesFor(clubLabel)
+                        .flatMap(n => { const q = `"${String(n).replace(/"/g, '')}"`;
+                                        return [`"Source Club".eq.${q}`, `club.eq.${q}`, `away_club.eq.${q}`]; })
+                        .join(','))
                 .range(from, from + 999);
             if (error) throw error;
             if (!data || !data.length) break;
@@ -976,6 +1051,13 @@ function drawLeagueTabs(tabs) {
         // `address` is not optional here — without it the block header shows only
         // the town and the Maps link loses the street. That shipped once already.
         const { data: vens, error: vErr } = await sb.from('venues').select('"Venue ID","Venue Name",address,city,state,zip');
+        // ⚠️ THE PUBLIC PAGE WAS READING THE WRONG COLUMN. It rendered g.field, a
+        // free-text leftover present on 82 games, while every field assigned this
+        // week went into "Field ID" - 187 games. So Plainfield's page showed two
+        // games at Shepard Hill at 10:45 with nothing to separate them, the exact
+        // confusion the field work was meant to end.
+        const { data: flds } = await sb.from('fields').select('"Field ID","Field Name"');
+        (flds || []).forEach(f => { FIELDS[String(f['Field ID'])] = f['Field Name']; });
         if (vErr) console.error('venues failed to load:', vErr.message);
         (vens || []).forEach(v => { VENUES[String(v['Venue ID'])] = v; });
 
