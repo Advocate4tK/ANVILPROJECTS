@@ -531,9 +531,20 @@ function renderList() {
 
     if (played.length) {
         if (upcoming.length) {
-            // Mid-season: what's left is above, what's done sits under a rule.
-            html += `<div class="section-rule"><span>Already Played</span></div>`
-                  + played.map(block).join('');
+            // ⚠️ COLLAPSED. Tod, 2026-09-13: "already played can be collapsed."
+            // Mid-season this rendered every finished game expanded beneath the
+            // upcoming ones - on the master page that is a hundred-odd fixtures
+            // nobody came for, sitting between a parent and the bottom of the page.
+            // It is a records question, so it gets a panel rather than the main
+            // column. Same gesture as the week headers and the season archive.
+            const playedCount = played.reduce((sum, d) => sum + byDate[d].length, 0);
+            html += `<div class="archive played-block${DONE_OPEN ? ' open' : ''}">
+                <button class="archive-head" data-season="${esc(PRIMARY)}">
+                    <span>Already Played &nbsp;·&nbsp; ${playedCount} game${playedCount === 1 ? '' : 's'}</span>
+                    <span class="arch-chev">▶</span>
+                </button>
+                <div class="archive-body">${played.map(block).join('')}</div>
+            </div>`;
         } else {
             html += seasonBar(PRIMARY, played, DONE_OPEN);
         }
