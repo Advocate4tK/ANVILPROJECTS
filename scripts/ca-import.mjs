@@ -129,7 +129,7 @@ for (const [, group] of byCaId) if (group.length > 1) caDupes.push(group);
 // one referee and find him missing from a page with the same cap.
 // Repaired by scripts/dedupe-referees.mjs. Do not remove the pagination.
 async function loadOurs() {
-  const cols = 'id,name,email,phone,city,state,age,"Gender","Certification Level","Central Assign ID",registration_year';
+  const cols = 'id,name,email,phone,city,state,age,"Gender","Certification Level","Central Assign ID",registration_year,"Guardian Email","Guardian Phone"';
   let out = [], from = 0;
   for (;;) {
     const { data, error } = await db.from('referees').select(cols).range(from, from + 999);
@@ -182,6 +182,17 @@ for (const s of staged) {
   fill('age',   s.age);
   fill('Gender', s.gender);   // "Gender" Title Case — lowercase throws a schema error
   fill('Central Assign ID', s.ca_id);
+  // ⚠️ CA ADDED GUARDIAN EMAIL AND PHONE IN SEPTEMBER 2026. They appear as chips
+  // in the referee directory itself, not on a detail page, so an ordinary sweep
+  // captures them. Before that the columns did not exist, which is why 2,087
+  // minors on our roster have no guardian: there was nothing to harvest, not a
+  // miss on our side.
+  //
+  // fill() only writes into a BLANK, so a guardian collected through our own
+  // availability form — where the U18 gate makes it mandatory, and which has a
+  // perfect record: 51 of 51 — always wins over CA's copy.
+  fill('Guardian Email', s.guardian_email);
+  fill('Guardian Phone', normPhone(s.guardian_phone));
   if (s.registration_year && match.registration_year !== s.registration_year) {
     changes.registration_year = s.registration_year;
   }
@@ -300,6 +311,8 @@ for (const s of isNew) {
     // not exist.
     'Certification Level': certLevel(s),
     registration_year: s.registration_year ?? null,
+    'Guardian Email': s.guardian_email || null,
+    'Guardian Phone': normPhone(s.guardian_phone) || null,
   };
   const { error } = await db.from('referees').insert(row);
   if (error) console.log(`  insert ${s.name} FAILED: ${error.message}`);
