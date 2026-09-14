@@ -2414,6 +2414,19 @@
         const modifyFormHtml = canModify ? `
             <div class="modify-form" id="modForm_${r.id}">
                 <p style="font-size:0.82rem; font-weight:700; color:#1a5276; margin:0 0 8px;">Modify: <em>${f['Home Team'] || ''} vs ${f['Away Team'] || ''}</em></p>
+                <!-- ⚠️ THE TEAM NAMES WERE THE ONE THING YOU COULD NOT FIX.
+                     Tod, 2026-09-14: "we can modify everything, and yet one of the
+                     most meaningless pieces is the actual team name."
+                     The panel could move a game to another field but not correct
+                     "Pomfreet". The club's own sheet arrived carrying Brookyn,
+                     Plainfeild 3, Woodtock 1, and Plainfield2 alongside Plainfield 2 -
+                     and the team name is the single thing a family actually reads on
+                     the schedule. Everything downstream keys on ids, not these
+                     strings, so they are safe to correct at any time. -->
+                <label>Home Team</label>
+                <input type="text" id="modHome_${r.id}" value="${caEsc(f['Home Team'] || '')}" placeholder="Home team name">
+                <label>Away Team</label>
+                <input type="text" id="modAway_${r.id}" value="${caEsc(f['Away Team'] || '')}" placeholder="Visiting team name">
                 <label>Date</label>
                 <input type="date" id="modDate_${r.id}" value="${dateStr !== '—' ? dateStr : ''}">
                 <label>Time</label>
@@ -2981,6 +2994,8 @@
         const venueId = document.getElementById('modVenue_' + gameId).value;
         const age     = document.getElementById('modAge_' + gameId).value;
         const gender  = document.getElementById('modGender_' + gameId).value;
+        const homeTeam = (document.getElementById('modHome_' + gameId)?.value || '').trim();
+        const awayTeam = (document.getElementById('modAway_' + gameId)?.value || '').trim();
         const fieldId = document.getElementById('modField_' + gameId)?.value ?? '';
 
         if (!newDate) { msgEl.textContent = 'Date is required.'; msgEl.style.color = '#e74c3c'; msgEl.style.display = 'block'; return; }
@@ -2991,6 +3006,10 @@
         if (venueId)  updates['Venue ID']  = parseFloat(venueId);
         if (age)      updates['Age Group'] = age;
         if (gender)   updates['Gender']    = gender;
+        // Only when non-empty: clearing a team name leaves a game reading "vs" with
+        // nothing either side, which helps nobody.
+        if (homeTeam) updates['Home Team'] = homeTeam;
+        if (awayTeam) updates['Away Team'] = awayTeam;
         // ⚠️ Written even when EMPTY, unlike the fields above. Blank is a real answer
         // here - "we do not know which pitch yet" - and a club that picks the wrong one
         // must be able to take it back. The others cannot meaningfully be cleared.
