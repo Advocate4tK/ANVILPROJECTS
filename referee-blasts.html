@@ -915,7 +915,7 @@
 <script src="config.js?v=2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/ref-experience.js?v=1"></script>
-<script src="js/supabase-client.js?v=14"></script>
+<script src="js/supabase-client.js?v=15"></script>
 <script src="js/admin-auth.js?v=5"></script>
 <script src="js/ct-towns.js?v=1"></script>
 <script src="js/ct-regions.js?v=4"></script>
@@ -1043,12 +1043,18 @@
 
     async function loadReferees() {
         // Directory is SHARED across all assignors — show every referee.
-        // Multi-word columns are Title Case WITH SPACES → must be quoted.
-        const { data: refs, error } = await supabaseClient.client
-            .from('referees')
-            .select('*')
-            .order('name');
-        REFS = error ? [] : (refs || []);
+        //
+        // ⚠️ selectAll, not .select('*'). A plain select stops at 1000 rows with
+        // no error. Ordered by name, this page loaded A through D and nothing
+        // after — Tod searched for himself and for Eric Baughman on 2026-09-16
+        // and neither was on a roster of 3,456. The composer had been working
+        // off a third of the directory since the table crossed 1000.
+        try {
+            REFS = await supabaseClient.selectAll('referees', '*', q => q.order('name'));
+        } catch (e) {
+            console.error('[referees]', e);
+            REFS = [];
+        }
         // Derive experience from first_season where we have it, so this page can
         // never disagree with the workstation about who is a first-season
         // referee. A stored label froze the day it was typed.

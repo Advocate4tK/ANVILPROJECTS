@@ -519,6 +519,39 @@ class SupabaseClientWrapper {
             return false;
         }
     }
+
+    /**
+     * selectAll — every row of a table, through the 1000-row cap, for pages
+     * that talk to .client directly instead of getRecords().
+     *
+     * ⚠️ WHY THIS EXISTS. getRecords() has paged past the cap since 2026-08-04.
+     * But referee-blasts.html and blast-map.html never went through
+     * getRecords() — they call this.client.from('referees').select('*')
+     * themselves, and a plain select() stops at 1000 rows without an error.
+     * Ordered by name, that meant the blast composer loaded A through D and
+     * nothing after. Tod searched for himself and for Eric Baughman on
+     * 2026-09-16 and neither was there. Two S's and a B, on a roster of 3,456.
+     *
+     * The fix from August only fixed the callers that used the wrapper. This
+     * is the same fix, exposed for the ones that don't.
+     *
+     *   const refs = await supabaseClient.selectAll('referees', '*', q => q.order('name'));
+     *
+     * Returns rows or throws. Never returns a short array quietly.
+     */
+    async selectAll(table, columns = '*', shape = q => q) {
+        const PAGE = 1000;
+        let rows = [], from = 0;
+        for (;;) {
+            const { data, error } = await shape(this.client.from(table).select(columns)).range(from, from + PAGE - 1);
+            if (error) throw new Error(`${table}: ${error.message}`);
+            if (!data || !data.length) break;
+            rows = rows.concat(data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+        }
+        return rows;
+    }
 }
 
 // Initialize and expose globally

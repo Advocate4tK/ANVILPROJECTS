@@ -286,7 +286,7 @@
 
 <script src="config.js?v=2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="js/supabase-client.js?v=14"></script>
+<script src="js/supabase-client.js?v=15"></script>
 <script src="js/admin-auth.js?v=5"></script>
 <script src="js/ct-towns.js?v=1"></script>
 <script src="js/ct-regions.js?v=3"></script>
@@ -443,8 +443,11 @@
         if (!MY_UID) { window.location.href = 'admin.html'; return; }
         document.body.style.visibility = 'visible';
 
-        const [{ data: refs }, { data: pools }] = await Promise.all([
-            supabaseClient.client.from('referees').select('*').order('name'),
+        // ⚠️ selectAll for referees — a plain select() stops at 1000 rows with no
+        // error, and this map was drawing density from A–D only. Same bug as
+        // referee-blasts.html, fixed the same day (2026-09-16).
+        const [refs, { data: pools }] = await Promise.all([
+            supabaseClient.selectAll('referees', '*', q => q.order('name')).catch(e => { console.error('[referees]', e); return []; }),
             supabaseClient.client.from('referee_pools')
                 .select('id, name').eq('owner_uid', MY_UID).order('created_at', { ascending: true })
         ]);
