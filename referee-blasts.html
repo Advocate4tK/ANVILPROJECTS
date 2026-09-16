@@ -1087,6 +1087,25 @@
             .single();
         MY_ROLE = me?.role || null;
 
+        // Who replies will go to — and a warning if that's the admin mailbox.
+        // Tod, 2026-09-16: "the assignor Tod Smith should be nectassignor@ —
+        // admin should be dedicated to refassignor398@". Three blasts went out
+        // today as admin, so 390 people's replies point at the wrong inbox.
+        // The fix is not to redirect admin's mail; it's to blast as tsmith.
+        const { data: prof } = await supabaseClient.client
+            .from('assignor_profiles').select('username,email,reply_to_email').eq('id', MY_UID).maybeSingle();
+        MY_REPLY_TO = (prof?.reply_to_email || prof?.email || '').trim();
+        MY_USERNAME = prof?.username || '';
+        if (MY_USERNAME === 'admin') {
+            const bar = document.getElementById('draftBar');
+            bar.innerHTML = `⚠️ <b>You're signed in as <code>admin</code>.</b> Blasts sent from here reply to
+                             <b>${esc(MY_REPLY_TO)}</b> — the admin mailbox, not an assignor. Log out and back in as
+                             <b>tsmith</b> so referees reply to nectassignor@gmail.com.`;
+            bar.style.display = '';
+            bar.style.borderLeftColor = '#dc2626';
+            bar.style.background = '#fff3f3';
+        }
+
         document.body.style.visibility = 'visible';
 
         await Promise.all([loadPools(), loadReferees()]);
