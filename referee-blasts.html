@@ -747,6 +747,26 @@
         .cbtn.gh { background: #f0ece6; color: #09142a; border: 1px solid #ddd3c6; }
         .cbtn.gh:hover { background: #e6ded2; }
         .cbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* The Send button while a blast is in flight. Tod, 2026-09-16: "the
+           green 'send blast' button should change to another color and say
+           'sending' once its been clicked. I couldnt tell the thing was even
+           working... maybe a picture of a moving letter flying across". So:
+           amber, the live count in the label, and an envelope crossing it. */
+        .cbtn.sending, .cbtn.sending:disabled {
+            background: #f5a623; color: #1a1200; opacity: 1; cursor: progress;
+            position: relative; overflow: hidden; min-width: 200px;
+        }
+        .cbtn.sending .fly {
+            position: absolute; top: 50%; left: -28px; transform: translateY(-50%);
+            font-size: 1.1rem; line-height: 1; pointer-events: none; opacity: .9;
+            animation: fly 1.6s linear infinite;
+        }
+        @keyframes fly {
+            0%   { left: -28px; }
+            100% { left: calc(100% + 4px); }
+        }
+        .cbtn.sending .lbl { position: relative; z-index: 1; }
     </style>
 </head>
 <!-- Hidden until auth confirms an admin/assignor session (see gate script at bottom) -->
@@ -2114,11 +2134,27 @@
               }).join('')
             : '<span class="muted-dash">Everyone has been removed.</span>';
 
-        const btn = document.getElementById('cmpSend');
-        btn.disabled = cmpSending || good.length === 0;
-        btn.title = good.length ? '' : 'Nobody sendable';
-        btn.textContent = cmpSending ? 'Sending…' : `Send Blast${good.length ? ` (${good.length + gCount})` : ''}`;
+        setSendButton(cmpSending ? { sending: true } : { count: good.length ? good.length + gCount : 0 });
         renderPreview();
+    }
+
+    // One place owns the Send button's face. Idle: green "Send Blast (N)".
+    // In flight: amber, an envelope crossing it, and the live count — the
+    // button IS the progress indicator, because it is where the eye goes.
+    function setSendButton(o) {
+        const btn = document.getElementById('cmpSend');
+        if (o.sending) {
+            btn.classList.add('sending');
+            btn.disabled = true;
+            btn.title = 'Sending — you can close this window, it keeps going';
+            const done = o.done != null && o.total != null ? `${o.done} / ${o.total}` : '';
+            btn.innerHTML = `<span class="fly">✉</span><span class="lbl">Sending${done ? ' ' + done : '…'}</span>`;
+        } else {
+            btn.classList.remove('sending');
+            btn.disabled = !o.count;
+            btn.title = o.count ? '' : 'Nobody sendable';
+            btn.textContent = `Send Blast${o.count ? ` (${o.count})` : ''}`;
+        }
     }
 
     // ── the send ────────────────────────────────────────────────────────────
@@ -2240,6 +2276,7 @@
             const total = data.length;
             if (n.queued > 0) {
                 res.innerHTML = `<div class="cmp-progress"><b>${n.sent + n.failed} of ${total}</b> · ${n.sent} sent${n.failed ? ` · ${n.failed} failed` : ''} · ${n.queued} to go. You can close this — it keeps going.</div>`;
+                setSendButton({ sending: true, done: n.sent + n.failed, total });
                 return;
             }
             clearInterval(_watchT);
