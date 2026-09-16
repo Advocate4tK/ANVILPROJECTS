@@ -674,17 +674,49 @@
             background: #eef2f7; border-left: 4px solid #64748b; border-radius: 9px;
             padding: 12px 15px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: #3f4c5f;
         }
-        .cmp-done {
-            background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #00c853; border-radius: 9px;
-            padding: 14px 16px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif;
-        }
-        .cmp-done .big { font-family: 'Barlow Condensed', sans-serif; font-size: 1.3rem; font-weight: 800; color: #065f46; }
-        .cmp-done .sub { font-size: 0.84rem; color: #3f4c5f; margin-top: 3px; }
-        .cmp-done .fails { margin: 10px 0 0 18px; font-size: 0.82rem; color: #7f1d1d; }
         .cmp-fail {
             background: #fff3f3; border: 1px solid #fca5a5; border-left: 4px solid #dc2626; border-radius: 9px;
             padding: 12px 15px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: #7f1d1d; line-height: 1.5;
         }
+
+        /* ── Sent confirmation — replaces the composer once a blast lands ── */
+        .sent-back {
+            position: fixed; inset: 0; z-index: 71; display: none;
+            background: rgba(4,10,22,0.78); backdrop-filter: blur(3px);
+            align-items: center; justify-content: center; padding: 20px;
+        }
+        .sent-back.on { display: flex; }
+        .sent {
+            width: 100%; max-width: 560px; background: #f7f4ef;
+            border: 1px solid #e2d9ce; border-top: 6px solid #00c853; border-radius: 16px;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.6); padding: 30px 32px 26px; text-align: center;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .sent .ico { font-size: 3rem; line-height: 1; margin-bottom: 8px; }
+        .sent h2 {
+            font-family: 'Barlow Condensed', sans-serif; font-size: 2rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 1px; color: #09142a; margin: 0 0 4px;
+        }
+        .sent .subj { font-size: 0.95rem; color: #3f4c5f; margin-bottom: 22px; }
+        .sent .subj b { color: #09142a; }
+        .sent-nums { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
+        .sent-num { background: #fff; border: 1px solid #e2d9ce; border-radius: 12px; padding: 14px 22px; min-width: 130px; }
+        .sent-num .n { font-family: 'Barlow Condensed', sans-serif; font-size: 2.4rem; font-weight: 800; color: #00a844; line-height: 1; }
+        .sent-num.warn .n { color: #dc2626; }
+        .sent-num .k { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 1px; color: #6b7280; margin-top: 4px; }
+        .sent .meta { font-size: 0.83rem; color: #6b7280; line-height: 1.7; margin-bottom: 18px; }
+        .sent .meta b { color: #3f4c5f; }
+        .sent .fails {
+            text-align: left; background: #fff3f3; border: 1px solid #fca5a5; border-radius: 9px;
+            padding: 10px 14px 10px 30px; margin: 0 0 18px; font-size: 0.82rem; color: #7f1d1d;
+        }
+        .sent .fails li { margin: 3px 0; }
+        .sent .done {
+            font-family: 'Barlow Condensed', sans-serif; font-size: 1.05rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 1px; color: #06210f; background: #00c853;
+            border: none; border-radius: 10px; padding: 12px 36px; cursor: pointer;
+        }
+        .sent .done:hover { background: #00e060; }
 
         .cmp-ft {
             display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -891,6 +923,15 @@
         </div>
     </div>
   </div>
+</div>
+
+<!-- ── Sent — the confirmation that replaces the composer after a send ──
+     Tod, 2026-09-16: "once it sends... it just mutes the sent... instead it
+     should open to a confirmation window saying x number of referees messaged
+     along with anything else". Done closes it AND empties the basket, so the
+     same people cannot be sent to twice by accident. -->
+<div class="sent-back" id="sentBack">
+  <div class="sent" id="sentCard"></div>
 </div>
 
 <!-- Recipient tray — spans both tabs, always reflects what the filters actually left -->
@@ -2096,17 +2137,15 @@
             const j = await r.json().catch(() => ({}));
             if (!r.ok || !j.ok) throw new Error(j.error || `Server said ${r.status}`);
 
-            const failList = (j.failures || []).map(f => `<li><b>${esc(f.email)}</b> — ${esc(f.error)}</li>`).join('');
-            res.innerHTML = `
-                <div class="cmp-done">
-                    <div class="big">✅ Sent to ${j.sent}${j.failed ? ` · ${j.failed} failed` : ''}</div>
-                    <div class="sub">Blast #${j.blast_id} is logged. Replies go to ${esc(session?.user?.email || 'you')}.</div>
-                    ${failList ? `<ul class="fails">${failList}</ul>` : ''}
-                </div>`;
-            cmpFlash(`Blast #${j.blast_id} sent`);
             cmpSending = false;
-            document.getElementById('cmpSend').textContent = 'Sent';
-            document.getElementById('cmpSend').disabled = true;
+            closeCompose();
+            showSent({
+                subject, blastId: j.blast_id, sent: j.sent, failed: j.failed || 0,
+                failures: j.failures || [],
+                refs: refN, guardians: gN,
+                where: usingBasket() ? `${refN} hand-picked` : trayWhereText(),
+                replyTo: session?.user?.email || '',
+            });
         } catch (e) {
             console.error('[send-blast]', e);
             res.innerHTML = `<div class="cmp-fail"><b>Didn't send.</b> ${esc(e.message || e)}<br><span style="font-size:0.85em;opacity:.8">Nothing was charged to the log unless the number above says otherwise. Copy BCC List still works as a fallback.</span></div>`;
@@ -2116,6 +2155,39 @@
     }
     document.getElementById('cmpSend').addEventListener('click', sendBlast);
     document.getElementById('cmpGuardians').addEventListener('change', renderCompose);
+
+    // ── the confirmation ────────────────────────────────────────────────────
+    function showSent(o) {
+        const when = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        const failList = o.failures.map(f => `<li><b>${esc(f.email)}</b> — ${esc(f.error)}</li>`).join('');
+        document.getElementById('sentCard').innerHTML = `
+            <div class="ico">${o.failed ? '⚠️' : '✅'}</div>
+            <h2>${o.failed && !o.sent ? 'Nothing sent' : 'Blast sent'}</h2>
+            <div class="subj">“<b>${esc(o.subject)}</b>”</div>
+            <div class="sent-nums">
+                <div class="sent-num"><div class="n">${o.refs}</div><div class="k">referee${o.refs === 1 ? '' : 's'} messaged</div></div>
+                ${o.guardians ? `<div class="sent-num"><div class="n">${o.guardians}</div><div class="k">guardian${o.guardians === 1 ? '' : 's'} copied</div></div>` : ''}
+                ${o.failed ? `<div class="sent-num warn"><div class="n">${o.failed}</div><div class="k">failed</div></div>` : ''}
+            </div>
+            <div class="meta">
+                Went to <b>${esc(o.where)}</b><br>
+                Blast <b>#${o.blastId}</b> · logged ${when} · replies go to <b>${esc(o.replyTo || 'you')}</b>
+            </div>
+            ${failList ? `<ul class="fails">${failList}</ul>` : ''}
+            <button class="done" onclick="closeSent()">Done</button>`;
+        document.getElementById('sentBack').classList.add('on');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeSent() {
+        document.getElementById('sentBack').classList.remove('on');
+        document.body.style.overflow = '';
+        // The people just mailed come out of the basket so the next blast
+        // starts clean. The filters stay where they were.
+        if (BASKET.size) basketClear();
+        document.getElementById('cmpSubject').value = '';
+        document.getElementById('cmpBody').value = '';
+    }
+    document.getElementById('sentBack').addEventListener('click', e => { if (e.target.id === 'sentBack') closeSent(); });
 
     function dropRecipient(id) { cmpDropped.add(id); renderCompose(); }
 
