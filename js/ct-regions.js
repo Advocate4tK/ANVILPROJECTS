@@ -71,6 +71,7 @@ window.CT_TOWN_ALIASES = {
     'north woodstock': 'Woodstock',
     'abington': 'Pomfret',
     'elliott': 'Pomfret',
+    'pomfret center': 'Pomfret',   // 3 refs live here; was the only village on the roster with no alias (2026-09-16)
     'east killingly': 'Killingly',
     'south killingly': 'Killingly',
     'oneco': 'Sterling',
