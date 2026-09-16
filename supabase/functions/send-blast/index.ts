@@ -177,7 +177,18 @@ Deno.serve(async (req) => {
   try { p = await req.json(); } catch { return json({ error: "Bad JSON" }, 400); }
 
   const db = createClient(SUPABASE_URL, SERVICE_KEY);
-  const replyTo = p.reply_to || user.email || undefined;
+
+  // ── who replies go to ────────────────────────────────────────────────────
+  // The assignor's ASSIGNOR address — assignor_profiles.email — never the
+  // login. Tod logs in as tsmith but replies belong at nectassignor@gmail.com;
+  // Eric is ebaughman and replies belong at ct.ref.assignor@gmail.com. The
+  // page does not get to pass this in; it is looked up server-side from the
+  // verified caller, so it cannot be wrong or spoofed.
+  // Tod, 2026-09-16: "replies should NOT go to todlsmith@gmail.com but to
+  // whichever assignor sent the blast.... and their respective assignor email."
+  const { data: prof } = await db.from("assignor_profiles").select("username,email").eq("id", user.id).maybeSingle();
+  const senderName = prof?.username || user.email || user.id;
+  const replyTo    = (prof?.email && prof.email.trim()) || user.email || undefined;
 
   // ── MODE 2: retry the failed rows of an existing blast ──────────────────
   if (p.retry_blast_id) {
@@ -186,9 +197,14 @@ Deno.serve(async (req) => {
     if (!log) return json({ error: `Blast #${blastId} not found` }, 404);
     const { data: rows } = await db.from("blast_recipients").select("id,email,is_guardian,merge").eq("blast_id", blastId).eq("status", "failed");
     if (!rows?.length) return json({ ok: true, blast_id: blastId, queued: 0, message: "Nothing failed on that blast" });
-    await db.from("blast_recipients").update({ status: "queued", error: null }).in("id", rows.map(r => r.id));
+    // Flip to queued BEFORE answering, and only start the worker once the
+    // flip has landed — the page's watcher polls the moment it gets this
+    // response, and the first version let it see "0 queued" and call the
+    // retry finished before a single email had gone.
+    const { error: qErr } = await db.from("blast_recipients").update({ status: "queued", error: null }).in("id", rows.map(r => r.id));
+    if (qErr) return json({ error: "Could not requeue: " + qErr.message }, 500);
     EdgeRuntime.waitUntil(work(db, rows as Row[], log.subject, log.body, replyTo));
-    return json({ ok: true, blast_id: blastId, queued: rows.length });
+    return json({ ok: true, blast_id: blastId, queued: rows.length, reply_to: replyTo });
   }
 
   // ── MODE 1: a new blast ─────────────────────────────────────────────────
@@ -199,9 +215,6 @@ Deno.serve(async (req) => {
   if (!body)          return json({ error: "Message is empty" }, 400);
   if (!recips.length) return json({ error: "No recipients" }, 400);
   if (recips.length > 5000) return json({ error: "Too many recipients in one blast (max 5000)" }, 400);
-
-  const { data: prof } = await db.from("assignor_profiles").select("username").eq("id", user.id).maybeSingle();
-  const senderName = prof?.username || user.email || user.id;
 
   const { data: log, error: lErr } = await db.from("blast_log").insert({
     sent_by: user.id, sent_by_name: senderName, subject, body,
@@ -220,7 +233,7 @@ Deno.serve(async (req) => {
 
   // Answer NOW. The sending runs on after this response has gone out.
   EdgeRuntime.waitUntil(work(db, rows as Row[], subject, body, replyTo));
-  return json({ ok: true, blast_id: log.id, queued: rows.length });
+  return json({ ok: true, blast_id: log.id, queued: rows.length, reply_to: replyTo });
 });
 
 function json(obj: unknown, status = 200) {

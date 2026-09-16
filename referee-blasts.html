@@ -2196,7 +2196,6 @@
                 body: JSON.stringify({
                     subject, body,
                     where_text:   usingBasket() ? `basket (${refN} hand-picked)` : trayWhereText(),
-                    reply_to:     session?.user?.email || undefined,
                     recipients,
                 }),
             });
@@ -2213,7 +2212,7 @@
         watchBlast(j.blast_id, {
             subject, refs: refN, guardians: gN,
             where: usingBasket() ? `${refN} hand-picked` : trayWhereText(),
-            replyTo: session?.user?.email || '',
+            replyTo: j.reply_to || '',   // the assignor address the server looked up, not the login
         });
     }
 
@@ -2222,10 +2221,20 @@
     async function watchBlast(blastId, meta) {
         const res = document.getElementById('cmpResult');
         clearInterval(_watchT);
+        // blast_recipients is RLS'd to `authenticated`. The page's shared client
+        // was built with the anon key at load and does not carry the login JWT,
+        // so a read through it comes back short with no error — the first retry
+        // watched 202 rows and reported "1 delivered". Read AS THE USER.
+        const jwt = _getSupabaseSession()?.access_token;
+        const asUser = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY,
+            { global: { headers: { Authorization: `Bearer ${jwt}` } } });
+        let expected = null;   // the row count we should see; guards against a short read
         const tick = async () => {
-            const { data, error } = await supabaseClient.client
+            const { data, error } = await asUser
                 .from('blast_recipients').select('status,email,error').eq('blast_id', blastId);
             if (error || !data) return;
+            if (expected == null) expected = data.length;
+            if (data.length < expected) return;              // partial read — wait for the next tick
             const n = { queued: 0, sent: 0, failed: 0, skipped: 0 };
             data.forEach(r => { n[r.status] = (n[r.status] || 0) + 1; });
             const total = data.length;
@@ -2256,7 +2265,7 @@
             const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/send-blast`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${jwt}`, 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY },
-                body: JSON.stringify({ retry_blast_id: blastId, reply_to: session?.user?.email || undefined }),
+                body: JSON.stringify({ retry_blast_id: blastId }),
             });
             const j = await r.json().catch(() => ({}));
             if (!r.ok || !j.ok) throw new Error(j.error || `Server said ${r.status}`);
