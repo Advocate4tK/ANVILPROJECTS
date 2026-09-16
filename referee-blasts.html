@@ -906,10 +906,10 @@
             <div class="cmp-rcp" id="cmpRecipients"></div>
         </div>
 
-        <label class="cmp-check">
-            <input type="checkbox" id="cmpGuardians">
-            <span><b>Copy parents/guardians of minors.</b> Each parent on file gets their own copy of this message, with a footer saying whose parent they are.</span>
-        </label>
+        <!-- Not a choice. Tod, 2026-09-16: "if an email gets sent to a minor it
+             has to push to the guardian too". A minor with no guardian on file
+             is excluded, the same as a referee with no email. -->
+        <div class="cmp-check" id="cmpGuardianNote"></div>
 
         <div id="cmpResult"></div>
 
@@ -969,11 +969,15 @@
     // A referee is a MINOR when `age` is present and < 18. Minors are VISIBLE
     // (MINOR badge), FILTERABLE, and counted in the composer.
     //
-    // EMAIL: minors may be emailed. As of the Sept 2026 guardian backfill, 413
-    //   of them have a parent address on file ("Guardian Email"). The composer
-    //   has a "copy guardians" checkbox that defaults ON when more than half
-    //   the selection is under 18, and sends the parent their own copy with a
-    //   footer that says whose parent they are.
+    // EMAIL: a minor may be emailed ONLY with the guardian copied, every time.
+    //   Tod, 2026-09-16: "if an email gets sent to a minor it has to push to
+    //   the guardian too". Not a checkbox — it was one for about an hour, and
+    //   a default that can be unticked is exactly the thing that works until
+    //   the one time it doesn't. The parent gets their own copy with a footer
+    //   saying whose parent they are.
+    //   A minor with NO guardian on file is excluded from the send, the same
+    //   as a referee with no email. As of the Sept 2026 backfill 413 minors
+    //   have a guardian; the ones that don't are referees we cannot reach.
     //
     // TEXT: still NOT built, and the gate is not technical. Bulk SMS needs
     //   prior written consent (TCPA) and carrier registration (10DLC). For a
@@ -1984,22 +1988,22 @@
     function composeRecipients() {
         return traySet().filter(r => !cmpDropped.has(r.id));
     }
-    const hasEmail  = r => !!(r.email && String(r.email).trim());
-    const optedOut  = r => r.email_opt_in === false;
-    const sendable  = r => hasEmail(r) && !optedOut(r) && !isExpired(r);
+    const hasEmail    = r => !!(r.email && String(r.email).trim());
+    const optedOut    = r => r.email_opt_in === false;
     const hasGuardian = r => !!(r['Guardian Email'] && String(r['Guardian Email']).trim());
+    // A minor with no guardian on file cannot be emailed — not "gets it without
+    // the copy", cannot. Tod, 2026-09-16: "if an email gets sent to a minor it
+    // has to push to the guardian too". So no guardian = no send, shown as its
+    // own exclusion, same as no email. It is also the clearest reason to chase
+    // the missing ones: they are referees you literally cannot reach.
+    const noGuardian  = r => isMinor(r) && !hasGuardian(r);
+    const sendable    = r => hasEmail(r) && !optedOut(r) && !isExpired(r) && !noGuardian(r);
 
     function openCompose() {
         if (!traySet().length) { trayFlash('Nothing selected to email'); return; }
         cmpDropped.clear();
         cmpSending = false;
         document.getElementById('cmpResult').innerHTML = '';
-        // Guardian copy: default ON when the selection is mostly children. A
-        // scheduling blast to 70 thirteen-year-olds should reach their parents;
-        // the assignor can untick it for ref-only chatter.
-        const set = traySet().filter(sendable);
-        const minorShare = set.length ? set.filter(isMinor).length / set.length : 0;
-        document.getElementById('cmpGuardians').checked = minorShare > 0.5;
         document.getElementById('cmpBack').classList.add('on');
         document.body.style.overflow = 'hidden';
         renderCompose();
@@ -2022,10 +2026,9 @@
         const noEm = all.filter(r => !hasEmail(r));
         const out  = all.filter(r => hasEmail(r) && optedOut(r));
         const exp  = all.filter(r => hasEmail(r) && !optedOut(r) && isExpired(r));
-        const minors = good.filter(isMinor);
-        const ccG  = document.getElementById('cmpGuardians').checked;
-        const gCount = ccG ? minors.filter(hasGuardian).length : 0;
-        const gMissing = minors.filter(r => !hasGuardian(r)).length;
+        const noG  = all.filter(r => hasEmail(r) && !optedOut(r) && !isExpired(r) && noGuardian(r));
+        const minors = good.filter(isMinor);           // every one of these has a guardian, by construction
+        const gCount = minors.length;
 
         const where = usingBasket() ? `your basket` : trayWhereText();
         document.getElementById('cmpTo').textContent =
@@ -2036,21 +2039,24 @@
             <div class="cmp-stat${noEm.length ? ' bad' : ''}"><div class="n">${noEm.length}</div><div class="k">no email</div></div>
             <div class="cmp-stat${out.length ? ' bad' : ''}"><div class="n">${out.length}</div><div class="k">opted out</div></div>
             <div class="cmp-stat${exp.length ? ' bad' : ''}"><div class="n">${exp.length}</div><div class="k">expired</div></div>
-            <div class="cmp-stat"><div class="n">${minors.length}</div><div class="k">minors</div></div>
-            <div class="cmp-stat"><div class="n">${gCount}</div><div class="k">guardian copies</div></div>`;
+            <div class="cmp-stat${noG.length ? ' bad' : ''}"><div class="n">${noG.length}</div><div class="k">no guardian</div></div>
+            <div class="cmp-stat"><div class="n">${gCount}</div><div class="k">parents copied</div></div>`;
 
         let warn = '';
         if (noEm.length) warn += `<div class="cmp-warn">⚠ ${noEm.length} of these referees have no email address on file — shown in red below and skipped.</div>`;
         if (out.length)  warn += `<div class="cmp-warn">⚠ ${out.length} have opted out of email. Excluded, and cannot be re-added here.</div>`;
         if (exp.length)  warn += `<div class="cmp-warn">⚠ ${exp.length} have an expired registration and can't be assigned. Excluded — an openings blast to them is noise.</div>`;
-        if (minors.length && ccG) warn += `<div class="cmp-warn">ℹ ${minors.length} recipient${minors.length === 1 ? ' is a minor' : 's are minors'}. ${gCount} parent${gCount === 1 ? '' : 's'} will get their own copy.${gMissing ? ` <b>${gMissing} minor${gMissing === 1 ? ' has' : 's have'} no guardian on file</b> — they still receive it, the parent doesn't.` : ''}</div>`;
-        if (minors.length && !ccG) warn += `<div class="cmp-warn">ℹ ${minors.length} recipient${minors.length === 1 ? ' is a minor' : 's are minors'}. Guardians are <b>not</b> being copied on this one.</div>`;
+        if (noG.length)  warn += `<div class="cmp-warn">⚠ ${noG.length} ${noG.length === 1 ? 'is a minor' : 'are minors'} with <b>no parent or guardian on file</b>. A minor cannot be emailed without one, so ${noG.length === 1 ? 'this referee is' : 'these referees are'} excluded. Get the guardian into their record and they'll be reachable.</div>`;
         document.getElementById('cmpWarn').innerHTML = warn;
+
+        document.getElementById('cmpGuardianNote').innerHTML = minors.length
+            ? `<span>👨‍👩‍👦 <b>${minors.length} recipient${minors.length === 1 ? ' is a minor' : 's are minors'} — ${gCount === 1 ? 'their parent' : 'their parents'} will be copied.</b> Every parent on file gets their own copy of this message, with a footer saying whose parent they are. This is not optional.</span>`
+            : `<span>👨‍👩‍👦 No minors in this send.</span>`;
 
         document.getElementById('cmpRecipients').innerHTML = all.length
             ? all.map(r => {
                 const bad = !sendable(r);
-                const why = !hasEmail(r) ? 'no email' : optedOut(r) ? 'opted out' : isExpired(r) ? 'expired' : '';
+                const why = !hasEmail(r) ? 'no email' : optedOut(r) ? 'opted out' : isExpired(r) ? 'expired' : noGuardian(r) ? 'no guardian' : '';
                 return `<span class="rcp${bad ? ' no' : ''}" title="${esc(r.email || 'no email on file')}">
                           ${esc(r.name || '—')}${why ? ` <em style="font-style:normal;opacity:.75;">(${why})</em>` : ''}
                           <span class="rx" onclick="dropRecipient(${r.id})">✕</span>
@@ -2068,7 +2074,6 @@
     // ── the send ────────────────────────────────────────────────────────────
     function buildRecipients() {
         const refs = composeRecipients().filter(sendable);
-        const ccG  = document.getElementById('cmpGuardians').checked;
         const list = refs.map(r => ({
             referee_id: r.id,
             name:  r.name || '',
@@ -2076,23 +2081,23 @@
             town:  resolveTown(r.city) || r.city || '',
             token: r.unsubscribe_token || null,
         }));
-        if (ccG) {
-            for (const r of refs) {
-                if (!isMinor(r) || !hasGuardian(r)) continue;
-                // The parent gets the SAME message, merged with the CHILD's name
-                // and town — "Hi Ava" reads right on a copy to Ava's parent.
-                // Their own footer says whose parent they are. They carry the
-                // child's unsubscribe token: opting out stops both copies.
-                list.push({
-                    referee_id: r.id,
-                    name:  r.name || '',
-                    email: String(r['Guardian Email']).trim(),
-                    town:  resolveTown(r.city) || r.city || '',
-                    token: r.unsubscribe_token || null,
-                    is_guardian: true,
-                    minor_name:  r.name || '',
-                });
-            }
+        // Every minor in `refs` has a guardian — sendable() guarantees it — and
+        // every one of them gets the parent copied. Not a setting.
+        for (const r of refs) {
+            if (!isMinor(r)) continue;
+            // The parent gets the SAME message, merged with the CHILD's name
+            // and town — "Hi Ava" reads right on a copy to Ava's parent.
+            // Their own footer says whose parent they are. They carry the
+            // child's unsubscribe token: opting out stops both copies.
+            list.push({
+                referee_id: r.id,
+                name:  r.name || '',
+                email: String(r['Guardian Email']).trim(),
+                town:  resolveTown(r.city) || r.city || '',
+                token: r.unsubscribe_token || null,
+                is_guardian: true,
+                minor_name:  r.name || '',
+            });
         }
         // one address, one copy — a parent with two refs gets it once
         const seen = new Set();
@@ -2129,7 +2134,7 @@
                 body: JSON.stringify({
                     subject, body,
                     where_text:   usingBasket() ? `basket (${refN} hand-picked)` : trayWhereText(),
-                    guardians_cc: document.getElementById('cmpGuardians').checked,
+                    guardians_cc: true,   // always — see cmpGuardianNote
                     reply_to:     session?.user?.email || undefined,
                     recipients,
                 }),
@@ -2154,7 +2159,6 @@
         }
     }
     document.getElementById('cmpSend').addEventListener('click', sendBlast);
-    document.getElementById('cmpGuardians').addEventListener('change', renderCompose);
 
     // ── the confirmation ────────────────────────────────────────────────────
     function showSent(o) {
