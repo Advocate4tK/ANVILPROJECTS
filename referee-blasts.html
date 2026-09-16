@@ -679,6 +679,20 @@
             padding: 12px 15px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: #7f1d1d; line-height: 1.5;
         }
 
+        /* ── Draft handed over from the workstation ── */
+        .draft-bar {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            background: #fffbe6; border: 1px solid #f5c518; border-left: 5px solid #f5c518;
+            border-radius: 10px; padding: 12px 16px; margin-bottom: 18px;
+            font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: #3f3a1a; line-height: 1.5;
+        }
+        .draft-bar b { color: #09142a; }
+        .draft-bar button {
+            margin-left: auto; background: none; border: none; font-size: 1.1rem;
+            color: #9a8f82; cursor: pointer; padding: 0 4px;
+        }
+        .draft-bar button:hover { color: #c2564e; }
+
         /* ── Sent confirmation — replaces the composer once a blast lands ── */
         .sent-back {
             position: fixed; inset: 0; z-index: 71; display: none;
@@ -750,6 +764,9 @@
             <div style="margin-bottom:20px;">
                 <a href="admin.html" class="btn-back">← Back to Admin Portal</a>
             </div>
+
+            <!-- Shown only when the workstation handed over an email — see pickUpDraft() -->
+            <div class="draft-bar" id="draftBar" style="display:none;"></div>
 
             <!-- ── Primary tabs ── -->
             <div class="tabs">
@@ -1054,7 +1071,39 @@
 
         await Promise.all([loadPools(), loadReferees()]);
         renderAll();
+        pickUpDraft();
     })();
+
+    // ── A draft handed over from the workstation ──────────────────────────
+    // assignor-workstation.html → Generate Email Body → "Open in Referee
+    // Blasts" stashes {subject, body} in sessionStorage and opens this page
+    // with ?draft=1. The workstation knew the games; this page knows the
+    // people. So: hold the draft, tell the assignor to pick recipients, and
+    // the moment the composer opens it is pre-filled.
+    let PENDING_DRAFT = null;
+    function pickUpDraft() {
+        if (!/[?&]draft=1\b/.test(location.search)) return;
+        let d = null;
+        try { d = JSON.parse(sessionStorage.getItem('blastDraft') || 'null'); } catch (e) {}
+        if (!d || !d.body) return;
+        PENDING_DRAFT = d;
+        sessionStorage.removeItem('blastDraft');          // one use
+        history.replaceState(null, '', location.pathname); // so a refresh doesn't re-arm it
+        const bar = document.getElementById('draftBar');
+        bar.innerHTML = `✉ <b>Email from the workstation is ready</b> — “${esc(d.subject)}”. Pick who gets it (a pool, the map, a search + ＋ Basket), then <b>Email These Referees</b>.
+                         <button onclick="dropDraft()" title="Discard this draft">✕</button>`;
+        bar.style.display = '';
+    }
+    function dropDraft() {
+        PENDING_DRAFT = null;
+        document.getElementById('draftBar').style.display = 'none';
+    }
+    function applyDraftToComposer() {
+        if (!PENDING_DRAFT) return;
+        document.getElementById('cmpSubject').value = PENDING_DRAFT.subject || '';
+        document.getElementById('cmpBody').value    = PENDING_DRAFT.body || '';
+        dropDraft();
+    }
 
     // ── Data loads ────────────────────────────────────────────────────────────
     async function loadPools() {
@@ -2004,6 +2053,7 @@
         cmpDropped.clear();
         cmpSending = false;
         document.getElementById('cmpResult').innerHTML = '';
+        applyDraftToComposer();   // no-op unless the workstation handed one over
         document.getElementById('cmpBack').classList.add('on');
         document.body.style.overflow = 'hidden';
         renderCompose();

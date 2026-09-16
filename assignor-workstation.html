@@ -762,9 +762,15 @@
                         <button onclick="document.getElementById('emailBodyModal').style.display='none'" style="background:none; border:none; font-size:1.3rem; cursor:pointer; color:#888;">✕</button>
                     </div>
                     <textarea id="emailBodyText" style="flex:1; min-height:420px; font-family:'Courier New',monospace; font-size:0.82rem; border:1px solid #ddd; border-radius:8px; padding:12px; resize:vertical; line-height:1.5;"></textarea>
-                    <div style="display:flex; gap:10px; margin-top:14px;">
+                    <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center;">
                         <button onclick="navigator.clipboard.writeText(document.getElementById('emailBodyText').value).then(()=>{this.textContent='✓ Copied!'; setTimeout(()=>this.textContent='Copy to Clipboard',1800)})" style="background:#0f3460; color:white; border:none; border-radius:7px; padding:8px 18px; font-size:0.85rem; font-weight:700; cursor:pointer;">Copy to Clipboard</button>
-                        <span style="font-size:0.78rem; color:#aaa; align-self:center;">Edit week number before pasting into CA</span>
+                        <!-- Tod, 2026-09-16: "the generate email body button or next to it
+                             should have an option that opens the blast with the generated
+                             email... dont remove the button in there but make a new one --
+                             its still nice to copy and paste and send through CA once in a
+                             while". So: two ways out of this modal. Copy stays for CA. -->
+                        <button onclick="openInBlasts()" style="background:#00c853; color:#06210f; border:none; border-radius:7px; padding:8px 18px; font-size:0.85rem; font-weight:800; cursor:pointer;">✉ Open in Referee Blasts</button>
+                        <span style="font-size:0.78rem; color:#aaa;">Edit week number first — either way</span>
                     </div>
                 </div>
             </div>
@@ -6672,6 +6678,40 @@
             }
             const modal = document.getElementById('emailBodyModal');
             modal.style.display = 'flex';
+        }
+
+        // ── Hand the generated email to Referee Blasts ──────────────────────
+        // Takes whatever is in the textarea NOW — after the assignor has fixed
+        // the week number — not a regenerated copy. Stashes it in
+        // sessionStorage and opens the blast page, which reads it back, opens
+        // the composer pre-filled, and leaves the recipients to the assignor.
+        // The workstation knows the games; the blast page knows the people.
+        //
+        // Two edits on the way across, neither touching the CA copy-paste text:
+        //   * the week line ("Week 3  NECONN") becomes the SUBJECT, not the
+        //     first line of the body — it is a heading, and email has a slot for it
+        //   * "Hi {{first}}," goes in ahead of the intro, so each person gets
+        //     their own name once the blast page merges it
+        function openInBlasts() {
+            const raw = document.getElementById('emailBodyText').value.trim();
+            if (!raw) { alert('Nothing to send — generate the email body first.'); return; }
+
+            const lines = raw.split('\n');
+            const first = lines[0].trim();
+            const m = first.match(/^(Week\s+\S+)\s*[—-]?\s*(.+)$/i);
+            const subject = m ? `${m[1]} — ${m[2].trim()} referee openings` : 'Referee openings';
+
+            // Multi-club bodies repeat the week line per block; only the first is the heading.
+            const rest = m ? lines.slice(1).join('\n').replace(/^\n+/, '') : raw;
+            const body = `Hi {{first}},\n\n${rest}`;
+
+            try {
+                sessionStorage.setItem('blastDraft', JSON.stringify({ subject, body, from: 'workstation', at: Date.now() }));
+            } catch (e) {
+                alert('Could not hand off to Referee Blasts (browser storage blocked). Use Copy to Clipboard instead.');
+                return;
+            }
+            window.open('referee-blasts.html?draft=1', '_blank');
         }
 
         let _filtersPanelOpen = true;
