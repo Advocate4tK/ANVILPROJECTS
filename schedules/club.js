@@ -408,7 +408,7 @@ function dayBlocksHTML(games) {
                 // parent actually has, in that order.
                 html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}${isCancelled(g) ? ' cancelled' : ''}" data-gid="${esc(g.id)}">
                     <div class="game-row">
-                        ${isCancelled(g) ? '<div class="cancelled-stamp"><span>CANCELLED</span></div>' : ''}
+                        ${isCancelled(g) ? '<div class="cancelled-stamp"><span>' + 'CANCELLED'.split('').map(c => '<i>' + c + '</i>').join('') + '</span></div>' : ''}
                         <span class="game-chevron">▶</span>
                         ${fieldName(g) ? `<span class="${fieldClass(fieldName(g))}">${esc(fieldName(g))}</span>` : ''}
                         ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
