@@ -31,9 +31,15 @@ const CONFIG = {
     // Supabase credentials
     SUPABASE_URL: 'https://kaniccdqieyesezpousu.supabase.co',
     SUPABASE_ANON_KEY: 'sb_publishable_pJX6Fsg4YrSNEhfNTHbkLA_tzFJmEUb',
-    // Service role key — used ONLY in superadmin pages for admin API calls (password force-set)
-    // Get from: Supabase Dashboard → Project Settings → API → service_role (secret)
-    SUPABASE_SERVICE_KEY: 'sb_secret_TSkG7wNpUcgIxnlcCSMD-A_EmMdHKsS',
+    // ⚠️ NO SERVICE KEY HERE. EVER. This file is in a public repo; anyone who
+    //    views source has it, and that key bypasses every RLS policy. One sat
+    //    here for five months until Supabase invalidated it (2026-09-16).
+    //    Privileged work goes through Edge Functions, which hold the key as a
+    //    secret and check who is asking: admin-user (accounts), send-blast.
+    //    superadmin.html's backup/restore still reads this and is therefore
+    //    BROKEN until it gets the same treatment — it fails with a clear
+    //    "not configured" rather than a misleading API error.
+    SUPABASE_SERVICE_KEY: '',
 
 
     // Airtable — DEPRECATED. Migrated to Supabase 2026-03-24. Keys removed.

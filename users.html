@@ -297,8 +297,11 @@
         }
         .nu-field input:focus, .nu-field select:focus { border-color: #09142a; }
         .nu-clubs-wrap {
-            display: flex;
-            flex-wrap: wrap;
+            /* A grid, not flex-wrap: with flex the long names ("Canterbury
+               Athletic Association") wrapped to three lines beside one-line
+               neighbours and the checkboxes drifted out of column. */
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
             gap: 6px 14px;
             padding: 10px 12px;
             border: 1.5px solid #e2d9ce;
@@ -309,8 +312,9 @@
         }
         .nu-clubs-wrap label {
             display: flex;
-            align-items: center;
-            gap: 5px;
+            align-items: flex-start;
+            gap: 6px;
+            line-height: 1.3;
             font-family: 'DM Sans', sans-serif;
             font-size: 0.82rem;
             color: #09142a;
@@ -382,10 +386,7 @@
                 <a href="admin.html" style="background:#00c853; color:#09142a; font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; text-transform:uppercase; padding:8px 18px; border-radius:8px; text-decoration:none;">← Back to Admin Portal</a>
             </div>
 
-            <div id="noServiceKeyWarning" class="no-service-key">
-                ⚠️ <strong>Service key not configured.</strong> The "Change Password" and "Create User" features require <code>SUPABASE_SERVICE_KEY</code> in config.js.
-                Get it from: Supabase Dashboard → Project Settings → API → service_role (secret).
-            </div>
+
 
             <!-- New User button + form -->
             <div style="margin-bottom:16px;">
@@ -481,11 +482,23 @@
         document.body.style.visibility = 'visible';
     })();
     // Admin client — needed for force-setting passwords (service role bypasses auth restrictions)
-    let adminClient = null;
-    if (CONFIG.SUPABASE_SERVICE_KEY) {
-        adminClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_SERVICE_KEY);
-    } else {
-        document.getElementById('noServiceKeyWarning').style.display = 'block';
+    // ⚠️ There is NO service key on this page any more, and there must never be
+    // one again. It sat in config.js — a public repo — until 2026-09-16, when
+    // it stopped working ("Unregistered API key") and Tod couldn't add Dave
+    // Paquette. Every privileged action now goes through the admin-user Edge
+    // Function, which holds the key as a secret and checks the caller is an
+    // admin. The page sends the request; the server decides.
+    async function adminAction(payload) {
+        const jwt = _getSupabaseSession()?.access_token;
+        if (!jwt) throw new Error('Your login has expired — sign in again');
+        const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/admin-user`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${jwt}`, 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY },
+            body: JSON.stringify(payload),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || j.error) throw new Error(j.error || `Server said ${r.status}`);
+        return j;
     }
 
     function fmtLoginDate(iso) {
@@ -513,7 +526,7 @@
     async function loadUsers() {
         const [profilesRes, authRes, assignorsRes] = await Promise.all([
             supabaseClient.client.from('assignor_profiles').select('*').order('name'),
-            adminClient ? adminClient.auth.admin.listUsers({ perPage: 200 }) : Promise.resolve({ data: null }),
+            Promise.resolve({ data: null }),   // auth listing needed the service key; profiles carry the same fields
             supabaseClient.client.from('assignors').select('auth_user_id, permissions, last_login')
         ]);
 
@@ -672,10 +685,6 @@
     }
 
     async function changePassword(userId, btn) {
-        if (!adminClient) {
-            alert('Service key not configured. Add SUPABASE_SERVICE_KEY to config.js.');
-            return;
-        }
         const input = document.getElementById('new-pw-' + userId);
         const pw = input.value.trim();
         const msg = document.getElementById('pw-msg-' + userId);
@@ -691,7 +700,9 @@
         btn.textContent = 'Setting…';
         msg.style.display = 'none';
 
-        const { error } = await adminClient.auth.admin.updateUserById(userId, { password: pw });
+        let error = null;
+        try { await adminAction({ action: 'password', user_id: userId, password: pw }); }
+        catch (e) { error = e; }
 
         btn.disabled = false;
         btn.textContent = 'Set Password';
@@ -720,10 +731,12 @@
 
         btn.disabled = true;
 
-        const { error } = await supabaseClient.client
-            .from('assignor_profiles')
-            .update({ suspended: suspending })
-            .eq('id', userId);
+        // Through the function, so the auth account is banned as well as the
+        // profile flagged. Flipping the row alone left a suspended user able
+        // to log in; only the pages that checked the flag turned them away.
+        let error = null;
+        try { await adminAction({ action: 'suspend', user_id: userId, suspended: suspending }); }
+        catch (e) { error = e; }
 
         btn.disabled = false;
 
@@ -813,10 +826,6 @@
     }
 
     async function createUser() {
-        if (!adminClient) {
-            alert('Service key not configured. Add SUPABASE_SERVICE_KEY to config.js.');
-            return;
-        }
         const name     = document.getElementById('nu-name').value.trim();
         const username = document.getElementById('nu-username').value.trim().toLowerCase();
         const email    = document.getElementById('nu-email').value.trim().toLowerCase();
@@ -840,29 +849,11 @@
         msg.style.display = 'none';
 
         try {
-            // 1. Create Supabase auth user via service role
-            const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
-                email,
-                password,
-                email_confirm: true
-            });
-            if (authErr) throw new Error(authErr.message);
-
-            const uid = authData.user.id;
-
-            // 2. Insert assignor_profiles row
-            const { error: profErr } = await supabaseClient.client
-                .from('assignor_profiles')
-                .insert({
-                    id:       uid,
-                    name,
-                    username,
-                    email,
-                    tier:     role,
-                    clubs:    selectedClubs.length ? selectedClubs : null,
-                    suspended: false
-                });
-            if (profErr) throw new Error('Auth user created but profile insert failed: ' + profErr.message);
+            // The function creates the auth user AND both rows — assignor_profiles
+            // and assignors — keyed by the same id, the shape every existing
+            // assignor has. The old page only wrote the profile, so anyone it
+            // created had no permissions and no club scope on the workstation.
+            await adminAction({ action: 'create', name, username, email, password, role, clubs: selectedClubs });
 
             msg.textContent = `✓ ${name} created successfully.`;
             msg.style.color = '#00c853'; msg.style.display = 'inline';
