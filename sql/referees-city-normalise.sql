@@ -105,7 +105,7 @@ FROM   (VALUES
     ('willington', 'Willington'),  -- 1
     ('wilton', 'Wilton'),  -- 1
     ('windsor', 'Windsor'),  -- 1
-    ('woodbury', 'Woodbury'),  -- 1
+    ('woodbury', 'Woodbury')  -- 1
 ) AS v(from_city, to_city)
 WHERE  r.city = v.from_city;
 
