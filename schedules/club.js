@@ -174,6 +174,14 @@ function fieldName(g) {
     return FIELDS[String(g['Field ID'])] || g.field || '';
 }
 
+// A cancelled game STAYS on the page, stamped. Tod, 2026-09-16: "just like we
+// have 'filled' on the ref-openings page this should have 'cancelled' on the
+// schedule page." Until today it was filtered out — "not a game a family
+// should drive to" — and a parent who saw Brooklyn vs Pomfret on Tuesday found
+// it silently gone on Wednesday. Gone looks like a data error. CANCELLED
+// across it says what happened.
+function isCancelled(g) { return /cancel/i.test(String(g.status || '') + String(g['Game Status'] || '')); }
+
 function isCompGame(g) {
     return String(g['game_type'] || '').trim().toUpperCase() === 'COMP';
 }
@@ -386,7 +394,7 @@ function dayBlocksHTML(games) {
                     ? `<a class="venue-link" href="${href}" target="_blank" rel="noopener">📍 ${esc(vName)}`
                       + `<span class="dir-cta">Directions</span><span class="chev">›</span></a>`
                     : `<span>${esc(vName)}</span>`}
-                <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.length} game${list.length === 1 ? '' : 's'}</span>
+                <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.filter(g => !isCancelled(g)).length} game${list.filter(g => !isCancelled(g)).length === 1 ? '' : 's'}</span>
             </div>`;
         const byTime = {};
         list.forEach(g => { (byTime[g.time || ''] = byTime[g.time || ''] || []).push(g); });
@@ -398,8 +406,9 @@ function dayBlocksHTML(games) {
                 // Collapsed row answers "is this my kid's game". The body answers
                 // "where exactly am I going and who is home" — the two questions a
                 // parent actually has, in that order.
-                html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}" data-gid="${esc(g.id)}">
+                html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}${isCancelled(g) ? ' cancelled' : ''}" data-gid="${esc(g.id)}">
                     <div class="game-row">
+                        ${isCancelled(g) ? '<div class="cancelled-stamp"><span>CANCELLED</span></div>' : ''}
                         <span class="game-chevron">▶</span>
                         ${fieldName(g) ? `<span class="${fieldClass(fieldName(g))}">${esc(fieldName(g))}</span>` : ''}
                         ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
@@ -751,7 +760,7 @@ function openDay(iso, keepScroll) {
     document.getElementById('calDetail').innerHTML = `
         <div class="cal-detail-head">
             <h2>${esc(fmtDateHeading(iso))}${isToday ? ' <span class="today-pill">Today</span>' : ''}</h2>
-            <span class="count">${rows.length} game${rows.length === 1 ? '' : 's'} · ${new Set(rows.map(venueName)).size} location${new Set(rows.map(venueName)).size === 1 ? '' : 's'}</span>
+            <span class="count">${rows.filter(g => !isCancelled(g)).length} game${rows.filter(g => !isCancelled(g)).length === 1 ? '' : 's'} · ${new Set(rows.map(venueName)).size} location${new Set(rows.map(venueName)).size === 1 ? '' : 's'}</span>
             <button class="cal-close" id="calClose" aria-label="Close">✕</button>
         </div>` + dayBlocksHTML(rows);
 
@@ -1032,8 +1041,7 @@ function drawLeagueTabs(tabs) {
             (flds || []).forEach(f => { FIELDS[String(f['Field ID'])] = f['Field Name']; });
             (vens || []).forEach(v => { VENUES[String(v['Venue ID'])] = v; });
 
-            ALL_GAMES = games.filter(g =>
-                !/cancel/i.test(String(g.status || '') + String(g['Game Status'] || '')));
+            ALL_GAMES = games;   // cancelled games stay — see isCancelled()
 
             // Highest-ranked season across the tab's clubs — so one club left on an
             // old season can't drag the Master tab backwards.
@@ -1138,8 +1146,7 @@ function drawLeagueTabs(tabs) {
         if (vErr) console.error('venues failed to load:', vErr.message);
         (vens || []).forEach(v => { VENUES[String(v['Venue ID'])] = v; });
 
-        // A cancelled game is not a game a family should drive to.
-        GAMES = games.filter(g => !/cancel/i.test(String(g.status || '') + String(g['Game Status'] || '')));
+        GAMES = games;   // cancelled games stay, stamped — see isCancelled()
         GAMES.sort((a, b) => (a.date || '').localeCompare(b.date || '') || String(a.time || '').localeCompare(String(b.time || '')));
 
         if (!GAMES.length) return fail('No games posted yet.', 'Check back once the season schedule is released.');
