@@ -1,34 +1,39 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // send-blast — the pipe behind the Send button on referee-blasts.html
-// 2026-09-16
+// 2026-09-16, rebuilt the same afternoon
 //
 // WHY THIS IS A SERVER FUNCTION AND NOT PAGE CODE
 //   The Resend API key can never sit in the repo — the repo is public. It
 //   lives in a Supabase secret (RESEND_API_KEY) and only this function can
-//   read it. The page sends recipients + message; this function does the
-//   sending and writes the record.
+//   read it.
+//
+// WHY IT RETURNS BEFORE IT HAS FINISHED SENDING
+//   The first version sent every address inside the request and answered
+//   when done. For two people that is a second. The first real blast was 202
+//   addresses — two minutes at Resend's rate — and the gateway gave up at 60s
+//   with a 504. The function kept running and 146 went out, while the page
+//   told Tod "Didn't send". The worst possible message, and it was false.
+//
+//   Now: verify the caller, write blast_log + one blast_recipients row per
+//   address (all 'queued'), and RETURN the blast id immediately. The sending
+//   happens after the response, inside EdgeRuntime.waitUntil, updating each
+//   row as it lands. The page watches those rows. There is nothing left for
+//   a gateway to time out, and the number on screen is always the real one.
 //
 // WHY PER-RECIPIENT AND NOT ONE BCC
 //   The composer's merge tokens ({{first}}, {{name}}, {{town}}) only work if
 //   each person gets their own message. That is also what makes the
-//   unsubscribe link per-person. The old "Copy BCC List" button could never
-//   do either — that is why it warned the tokens go out raw.
+//   unsubscribe link per-person.
 //
-// WHO MAY CALL IT
-//   Anyone who sends a valid Supabase user JWT — i.e. a logged-in assignor.
-//   The JWT is verified against auth.getUser() before a single row is written.
-//   An anon key alone is refused. Guardians and referees never call this.
-//
-// WHAT IT WRITES
-//   blast_log        one row, up front, status of the whole send
-//   blast_recipients one row per address, updated as each send resolves
-//   Both with the service role, which bypasses RLS — the page could not
-//   write outcomes itself and should not be able to.
+// TWO MODES
+//   { recipients, subject, body, ... }   a new blast
+//   { retry_blast_id }                   re-send every 'failed' row of an
+//                                        existing blast, using the subject
+//                                        and body stored in blast_log
 //
 // RATE
-//   Resend's default is 2 requests/second. This sends one at a time with a
-//   ~550ms gap. A 300-person blast takes about three minutes. Slow is fine;
-//   a 429 mid-blast that strands half the pool at 'queued' is not.
+//   Resend allows 2 requests/second. ~550ms between sends. 202 addresses ≈
+//   two minutes. Slow is fine.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -38,9 +43,6 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ANON_KEY     = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-// Where the mail comes from. The domain is verified in Resend; the local part
-// is ours to choose. reply-to is the sending assignor so answers land with a
-// human, not in a mailbox nobody reads.
 const FROM_ADDRESS = "Referee Tool <blasts@referee-tool.com>";
 const SITE         = "https://referee-tool.com";
 const GAP_MS       = 550;
@@ -52,22 +54,21 @@ const CORS = {
 };
 
 type Recipient = {
-  referee_id:  number | null;
-  name:        string;
-  email:       string;
-  town?:       string;
-  token?:      string;      // unsubscribe_token
-  is_guardian?: boolean;    // a parent copy — no merge of the child's first name into "Hi {{first}}"
-  minor_name?:  string;     // for guardian copies: whose parent this is
+  referee_id:   number | null;
+  name:         string;
+  email:        string;
+  town?:        string;
+  token?:       string | null;
+  is_guardian?: boolean;
+  minor_name?:  string;
 };
 
-type Payload = {
-  subject:      string;
-  body:         string;
-  where_text?:  string;
-  guardians_cc: boolean;
-  recipients:   Recipient[];
-  reply_to?:    string;
+// What a blast_recipients row has to carry so a retry can rebuild the merge
+// without the page re-sending the list. name/town/token/minor_name live in
+// the row's `merge` json column.
+type Row = {
+  id: number; email: string; is_guardian: boolean;
+  merge: { name?: string; town?: string; token?: string | null; minor_name?: string } | null;
 };
 
 // ── merge tokens, identical to mergeFor() on the page ─────────────────────
@@ -84,7 +85,6 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// Plain text in, simple HTML out: paragraphs on blank lines, <br> on single.
 function toHtml(body: string, footer: string): string {
   const paras = esc(body).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:640px">
@@ -99,23 +99,26 @@ function footerFor(r: Recipient): { text: string; html: string } {
   const who   = r.is_guardian && r.minor_name
     ? `You are receiving this because you are listed as the parent or guardian of ${r.minor_name}, a registered referee.`
     : `You are receiving this because you are a registered referee in Connecticut.`;
-  const text = unsub
-    ? `${who}\nTo stop receiving these emails: ${unsub}`
-    : who;
-  const html = unsub
-    ? `${esc(who)}<br><a href="${unsub}" style="color:#777">Unsubscribe</a>`
-    : esc(who);
-  return { text, html };
+  return {
+    text: unsub ? `${who}\nTo stop receiving these emails: ${unsub}` : who,
+    html: unsub ? `${esc(who)}<br><a href="${unsub}" style="color:#777">Unsubscribe</a>` : esc(who),
+  };
 }
 
+// A bad address is the referee record's fault, not Resend's. Catch it here so
+// the error says so, instead of Resend's generic "Invalid `to` field".
+const EMAIL_OK = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
+
 async function sendOne(r: Recipient, subject: string, body: string, replyTo?: string) {
+  const to = (r.email || "").trim();
+  if (!EMAIL_OK.test(to)) throw new Error(`bad address on the referee record: "${to}"`);
   const foot = footerFor(r);
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       from:     FROM_ADDRESS,
-      to:       [r.email],
+      to:       [to],
       reply_to: replyTo || undefined,
       subject:  merge(subject, r),
       text:     merge(body, r) + "\n\n--\n" + foot.text,
@@ -130,81 +133,94 @@ async function sendOne(r: Recipient, subject: string, body: string, replyTo?: st
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+// ── the background worker ─────────────────────────────────────────────────
+// Walks every row handed to it, sends, and updates the row. If Resend says
+// the daily quota is gone, every remaining row is marked failed with that
+// reason at once — no point burning two minutes finding out 56 times.
+async function work(db: ReturnType<typeof createClient>, rows: Row[], subject: string, body: string, replyTo?: string) {
+  let quotaGone = false;
+  for (const row of rows) {
+    if (quotaGone) {
+      await db.from("blast_recipients").update({ status: "failed", error: "daily sending quota reached — retry after it resets" }).eq("id", row.id);
+      continue;
+    }
+    const r: Recipient = {
+      referee_id: null, email: row.email, is_guardian: row.is_guardian,
+      name: row.merge?.name || "", town: row.merge?.town || "",
+      token: row.merge?.token ?? null, minor_name: row.merge?.minor_name || "",
+    };
+    try {
+      const pid = await sendOne(r, subject, body, replyTo);
+      await db.from("blast_recipients").update({ status: "sent", provider_id: pid ?? null, error: null }).eq("id", row.id);
+    } catch (e) {
+      const msg = (e as Error).message || String(e);
+      if (/quota/i.test(msg)) quotaGone = true;
+      await db.from("blast_recipients").update({ status: "failed", error: msg }).eq("id", row.id);
+    }
+    await sleep(GAP_MS);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST")    return json({ error: "POST only" }, 405);
-
   if (!RESEND_KEY) return json({ error: "RESEND_API_KEY is not set on the server" }, 500);
 
   // ── who is calling ───────────────────────────────────────────────────────
-  const authHeader = req.headers.get("Authorization") || "";
-  const jwt = authHeader.replace(/^Bearer\s+/i, "");
+  const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!jwt) return json({ error: "Not signed in" }, 401);
-
   const asUser = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } } });
   const { data: { user }, error: uErr } = await asUser.auth.getUser();
   if (uErr || !user) return json({ error: "Not signed in" }, 401);
 
-  // ── the request ──────────────────────────────────────────────────────────
-  let p: Payload;
+  let p: any;
   try { p = await req.json(); } catch { return json({ error: "Bad JSON" }, 400); }
 
+  const db = createClient(SUPABASE_URL, SERVICE_KEY);
+  const replyTo = p.reply_to || user.email || undefined;
+
+  // ── MODE 2: retry the failed rows of an existing blast ──────────────────
+  if (p.retry_blast_id) {
+    const blastId = Number(p.retry_blast_id);
+    const { data: log } = await db.from("blast_log").select("id,subject,body").eq("id", blastId).maybeSingle();
+    if (!log) return json({ error: `Blast #${blastId} not found` }, 404);
+    const { data: rows } = await db.from("blast_recipients").select("id,email,is_guardian,merge").eq("blast_id", blastId).eq("status", "failed");
+    if (!rows?.length) return json({ ok: true, blast_id: blastId, queued: 0, message: "Nothing failed on that blast" });
+    await db.from("blast_recipients").update({ status: "queued", error: null }).in("id", rows.map(r => r.id));
+    EdgeRuntime.waitUntil(work(db, rows as Row[], log.subject, log.body, replyTo));
+    return json({ ok: true, blast_id: blastId, queued: rows.length });
+  }
+
+  // ── MODE 1: a new blast ─────────────────────────────────────────────────
   const subject = (p.subject || "").trim();
   const body    = (p.body    || "").trim();
-  const recips  = Array.isArray(p.recipients) ? p.recipients.filter(r => r && r.email) : [];
+  const recips: Recipient[] = Array.isArray(p.recipients) ? p.recipients.filter((r: Recipient) => r && r.email) : [];
   if (!subject)       return json({ error: "Subject is empty" }, 400);
   if (!body)          return json({ error: "Message is empty" }, 400);
   if (!recips.length) return json({ error: "No recipients" }, 400);
-  if (recips.length > 2000) return json({ error: "Too many recipients in one blast (max 2000)" }, 400);
-
-  // ── the record, before anything is sent ─────────────────────────────────
-  const db = createClient(SUPABASE_URL, SERVICE_KEY);
+  if (recips.length > 5000) return json({ error: "Too many recipients in one blast (max 5000)" }, 400);
 
   const { data: prof } = await db.from("assignor_profiles").select("username").eq("id", user.id).maybeSingle();
   const senderName = prof?.username || user.email || user.id;
 
   const { data: log, error: lErr } = await db.from("blast_log").insert({
-    sent_by:         user.id,
-    sent_by_name:    senderName,
-    subject, body,
-    where_text:      p.where_text || null,
-    recipient_count: recips.length,
-    guardians_cc:    !!p.guardians_cc,
+    sent_by: user.id, sent_by_name: senderName, subject, body,
+    where_text: p.where_text || null, recipient_count: recips.length, guardians_cc: true,
   }).select("id").single();
   if (lErr || !log) return json({ error: "Could not write blast_log: " + (lErr?.message || "?") }, 500);
 
   const { data: rows, error: rErr } = await db.from("blast_recipients").insert(
     recips.map(r => ({
-      blast_id:    log.id,
-      referee_id:  r.referee_id ?? null,
-      email:       r.email,
+      blast_id: log.id, referee_id: r.referee_id ?? null, email: r.email.trim(),
       is_guardian: !!r.is_guardian,
+      merge: { name: r.name || "", town: r.town || "", token: r.token ?? null, minor_name: r.minor_name || "" },
     }))
-  ).select("id,email");
+  ).select("id,email,is_guardian,merge");
   if (rErr || !rows) return json({ error: "Could not write blast_recipients: " + (rErr?.message || "?") }, 500);
 
-  const rowIdByEmail = new Map(rows.map(x => [x.email.toLowerCase(), x.id]));
-
-  // ── send, one at a time, recording each outcome as it lands ─────────────
-  let sent = 0, failed = 0;
-  const failures: { email: string; error: string }[] = [];
-
-  for (const r of recips) {
-    const rowId = rowIdByEmail.get(r.email.toLowerCase());
-    try {
-      const providerId = await sendOne(r, subject, body, p.reply_to || user.email || undefined);
-      await db.from("blast_recipients").update({ status: "sent", provider_id: providerId ?? null }).eq("id", rowId);
-      sent++;
-    } catch (e) {
-      const msg = (e as Error).message || String(e);
-      await db.from("blast_recipients").update({ status: "failed", error: msg }).eq("id", rowId);
-      failed++;
-      failures.push({ email: r.email, error: msg });
-    }
-    await sleep(GAP_MS);
-  }
-
-  return json({ ok: true, blast_id: log.id, sent, failed, failures });
+  // Answer NOW. The sending runs on after this response has gone out.
+  EdgeRuntime.waitUntil(work(db, rows as Row[], subject, body, replyTo));
+  return json({ ok: true, blast_id: log.id, queued: rows.length });
 });
 
 function json(obj: unknown, status = 200) {

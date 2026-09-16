@@ -2166,7 +2166,12 @@
 
         const refN = recipients.filter(x => !x.is_guardian).length;
         const gN   = recipients.length - refN;
-        if (!confirm(`Send "${subject}" to ${refN} referee${refN === 1 ? '' : 's'}${gN ? ` and ${gN} guardian${gN === 1 ? '' : 's'}` : ''}?\n\nThis goes out under blasts@referee-tool.com and cannot be recalled.`)) return;
+        // The confirm has to say the TOTAL, loud. 202 addresses went out on
+        // 2026-09-16 when the intent was a two-person test — the dialog said
+        // the number, but not in a way that stopped a hand already moving.
+        const total = recipients.length;
+        const big = total >= 50 ? `\n\n⚠️  THIS IS ${total} EMAILS.\n` : '';
+        if (!confirm(`Send "${subject}" to ${refN} referee${refN === 1 ? '' : 's'}${gN ? ` and ${gN} guardian${gN === 1 ? '' : 's'}` : ''} — ${total} address${total === 1 ? '' : 'es'} in all?${big}\nThis goes out under blasts@referee-tool.com and cannot be recalled.`)) return;
 
         const session = _getSupabaseSession();
         const jwt = session?.access_token;
@@ -2175,8 +2180,15 @@
         cmpSending = true;
         renderCompose();
         const res = document.getElementById('cmpResult');
-        res.innerHTML = `<div class="cmp-progress">Sending to ${recipients.length} address${recipients.length === 1 ? '' : 'es'}… about ${Math.max(1, Math.round(recipients.length * 0.6 / 60))} min. Leave this open.</div>`;
+        res.innerHTML = `<div class="cmp-progress">Handing ${recipients.length} address${recipients.length === 1 ? '' : 'es'} to the server…</div>`;
 
+        // The function answers in about a second with a blast id and starts
+        // sending in the background. Then we WATCH the log rows. The first
+        // version waited for the whole send inside one request; a 202-address
+        // blast outlived the gateway, the page said "Didn't send", and 146 had
+        // already gone out. Never again: the number on screen comes from the
+        // database, not from a response that may not arrive.
+        let j;
         try {
             const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/send-blast`, {
                 method: 'POST',
@@ -2184,51 +2196,110 @@
                 body: JSON.stringify({
                     subject, body,
                     where_text:   usingBasket() ? `basket (${refN} hand-picked)` : trayWhereText(),
-                    guardians_cc: true,   // always — see cmpGuardianNote
                     reply_to:     session?.user?.email || undefined,
                     recipients,
                 }),
             });
-            const j = await r.json().catch(() => ({}));
+            j = await r.json().catch(() => ({}));
             if (!r.ok || !j.ok) throw new Error(j.error || `Server said ${r.status}`);
+        } catch (e) {
+            console.error('[send-blast]', e);
+            res.innerHTML = `<div class="cmp-fail"><b>The server didn't accept the blast.</b> ${esc(e.message || e)}<br><span style="font-size:0.85em;opacity:.8">Nothing was sent. Fix and try again, or Copy BCC List as a fallback.</span></div>`;
+            cmpSending = false;
+            renderCompose();
+            return;
+        }
 
+        watchBlast(j.blast_id, {
+            subject, refs: refN, guardians: gN,
+            where: usingBasket() ? `${refN} hand-picked` : trayWhereText(),
+            replyTo: session?.user?.email || '',
+        });
+    }
+
+    // ── watch a blast until every row has left 'queued' ─────────────────────
+    let _watchT = null;
+    async function watchBlast(blastId, meta) {
+        const res = document.getElementById('cmpResult');
+        clearInterval(_watchT);
+        const tick = async () => {
+            const { data, error } = await supabaseClient.client
+                .from('blast_recipients').select('status,email,error').eq('blast_id', blastId);
+            if (error || !data) return;
+            const n = { queued: 0, sent: 0, failed: 0, skipped: 0 };
+            data.forEach(r => { n[r.status] = (n[r.status] || 0) + 1; });
+            const total = data.length;
+            if (n.queued > 0) {
+                res.innerHTML = `<div class="cmp-progress"><b>${n.sent + n.failed} of ${total}</b> · ${n.sent} sent${n.failed ? ` · ${n.failed} failed` : ''} · ${n.queued} to go. You can close this — it keeps going.</div>`;
+                return;
+            }
+            clearInterval(_watchT);
             cmpSending = false;
             closeCompose();
             showSent({
-                subject, blastId: j.blast_id, sent: j.sent, failed: j.failed || 0,
-                failures: j.failures || [],
-                refs: refN, guardians: gN,
-                where: usingBasket() ? `${refN} hand-picked` : trayWhereText(),
-                replyTo: session?.user?.email || '',
+                ...meta, blastId, sent: n.sent, failed: n.failed,
+                failures: data.filter(r => r.status === 'failed').map(r => ({ email: r.email, error: r.error || 'unknown' })),
             });
+        };
+        await tick();
+        _watchT = setInterval(tick, 3000);
+    }
+
+    // ── retry everything that failed on a blast ─────────────────────────────
+    async function retryBlast(blastId, meta) {
+        const session = _getSupabaseSession();
+        const jwt = session?.access_token;
+        if (!jwt) { alert('Your login has expired — sign in again'); return; }
+        const btn = document.getElementById('sentRetry');
+        if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
+        try {
+            const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/send-blast`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${jwt}`, 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY },
+                body: JSON.stringify({ retry_blast_id: blastId, reply_to: session?.user?.email || undefined }),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.ok) throw new Error(j.error || `Server said ${r.status}`);
+            document.getElementById('sentBack').classList.remove('on');
+            document.getElementById('cmpBack').classList.add('on');
+            cmpSending = true;
+            watchBlast(blastId, meta);
         } catch (e) {
-            console.error('[send-blast]', e);
-            res.innerHTML = `<div class="cmp-fail"><b>Didn't send.</b> ${esc(e.message || e)}<br><span style="font-size:0.85em;opacity:.8">Nothing was charged to the log unless the number above says otherwise. Copy BCC List still works as a fallback.</span></div>`;
-            cmpSending = false;
-            renderCompose();
+            alert('Retry failed: ' + (e.message || e));
+            if (btn) { btn.disabled = false; btn.textContent = 'Retry failed ones'; }
         }
     }
     document.getElementById('cmpSend').addEventListener('click', sendBlast);
 
     // ── the confirmation ────────────────────────────────────────────────────
+    let _lastSent = null;   // so Retry can find its blast
     function showSent(o) {
+        _lastSent = o;
         const when = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        const failList = o.failures.map(f => `<li><b>${esc(f.email)}</b> — ${esc(f.error)}</li>`).join('');
+        // Group failures by reason — 56 lines of "daily quota reached" is one fact, not 56.
+        const byWhy = {};
+        o.failures.forEach(f => { (byWhy[f.error] = byWhy[f.error] || []).push(f.email); });
+        const failList = Object.entries(byWhy).map(([why, emails]) =>
+            `<li><b>${emails.length}</b> — ${esc(why)}${emails.length <= 6 ? `<br><span style="opacity:.75">${emails.map(esc).join(', ')}</span>` : ''}</li>`).join('');
+        const total = o.sent + o.failed;
         document.getElementById('sentCard').innerHTML = `
-            <div class="ico">${o.failed ? '⚠️' : '✅'}</div>
-            <h2>${o.failed && !o.sent ? 'Nothing sent' : 'Blast sent'}</h2>
+            <div class="ico">${o.failed ? (o.sent ? '⚠️' : '❌') : '✅'}</div>
+            <h2>${!o.sent ? 'Nothing sent' : o.failed ? 'Partly sent' : 'Blast sent'}</h2>
             <div class="subj">“<b>${esc(o.subject)}</b>”</div>
             <div class="sent-nums">
-                <div class="sent-num"><div class="n">${o.refs}</div><div class="k">referee${o.refs === 1 ? '' : 's'} messaged</div></div>
-                ${o.guardians ? `<div class="sent-num"><div class="n">${o.guardians}</div><div class="k">guardian${o.guardians === 1 ? '' : 's'} copied</div></div>` : ''}
+                <div class="sent-num"><div class="n">${o.sent}</div><div class="k">delivered</div></div>
                 ${o.failed ? `<div class="sent-num warn"><div class="n">${o.failed}</div><div class="k">failed</div></div>` : ''}
+                <div class="sent-num" style="opacity:.75"><div class="n" style="color:#3f4c5f">${total}</div><div class="k">${o.refs} referee${o.refs === 1 ? '' : 's'}${o.guardians ? ` + ${o.guardians} parent${o.guardians === 1 ? '' : 's'}` : ''}</div></div>
             </div>
             <div class="meta">
                 Went to <b>${esc(o.where)}</b><br>
-                Blast <b>#${o.blastId}</b> · logged ${when} · replies go to <b>${esc(o.replyTo || 'you')}</b>
+                Blast <b>#${o.blastId}</b> · ${when} · replies go to <b>${esc(o.replyTo || 'you')}</b>
             </div>
             ${failList ? `<ul class="fails">${failList}</ul>` : ''}
-            <button class="done" onclick="closeSent()">Done</button>`;
+            <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+                ${o.failed ? `<button class="done" id="sentRetry" style="background:#dc2626; color:#fff;" onclick="retryBlast(${o.blastId}, _lastSent)">Retry failed ones</button>` : ''}
+                <button class="done" onclick="closeSent()">Done</button>
+            </div>`;
         document.getElementById('sentBack').classList.add('on');
         document.body.style.overflow = 'hidden';
     }
