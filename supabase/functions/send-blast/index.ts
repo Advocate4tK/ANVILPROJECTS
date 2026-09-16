@@ -186,9 +186,15 @@ Deno.serve(async (req) => {
   // verified caller, so it cannot be wrong or spoofed.
   // Tod, 2026-09-16: "replies should NOT go to todlsmith@gmail.com but to
   // whichever assignor sent the blast.... and their respective assignor email."
-  const { data: prof } = await db.from("assignor_profiles").select("username,email").eq("id", user.id).maybeSingle();
+  // reply_to_email wins when set; email otherwise. Tod blasts as `admin`,
+  // whose account address is refassignor398@ — but replies belong at
+  // nectassignor@. The two addresses are different things and coincided for
+  // everyone else by luck. See sql/assignor-reply-to.sql.
+  const { data: prof } = await db.from("assignor_profiles").select("username,email,reply_to_email").eq("id", user.id).maybeSingle();
   const senderName = prof?.username || user.email || user.id;
-  const replyTo    = (prof?.email && prof.email.trim()) || user.email || undefined;
+  const replyTo    = (prof?.reply_to_email && prof.reply_to_email.trim())
+                  || (prof?.email && prof.email.trim())
+                  || user.email || undefined;
 
   // ── MODE 2: retry the failed rows of an existing blast ──────────────────
   if (p.retry_blast_id) {
