@@ -330,6 +330,22 @@
             white-space: nowrap;
         }
         .btn-addpool:hover { background: #00e060; }
+
+        /* Basket — the per-row ＋ that feeds the composer. Ghost until added,
+           then solid navy so a scan down the column shows who's in. */
+        .btn-basket {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.74rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+            color: #09142a; background: #fff; border: 1.5px solid #09142a; border-radius: 6px;
+            padding: 4px 10px; cursor: pointer; white-space: nowrap; margin-right: 6px;
+        }
+        .btn-basket:hover { background: #eef2ff; }
+        .btn-basket.in { background: #09142a; color: #fff; }
+        .btn-basket.in:hover { background: #dc2626; border-color: #dc2626; }
+        tr.in-basket td { background: #f5f7ff; }
+        .email-cell { color: #2563eb; cursor: pointer; }
+        .email-cell:hover { text-decoration: underline; }
+
         .addpool-menu {
             display: none;
             position: absolute;
@@ -645,12 +661,30 @@
             border-radius: 9px; padding: 10px 14px; margin-bottom: 14px;
             font-family: 'DM Sans', sans-serif; font-size: 0.83rem; color: #7a5410;
         }
-        .cmp-blocked {
-            background: #eef2f7; border: 1px solid #d5dde8; border-left: 4px solid #64748b;
-            border-radius: 9px; padding: 12px 15px; margin-top: 4px;
-            font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: #3f4c5f;
+        /* Guardian-copy checkbox and the send result panel */
+        .cmp-check {
+            display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+            background: #f5f7ff; border: 1px solid #dfe4f5; border-left: 4px solid #09142a;
+            border-radius: 9px; padding: 11px 14px; margin: 4px 0 14px;
+            font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: #3f4c5f; line-height: 1.45;
         }
-        .cmp-blocked b { color: #09142a; }
+        .cmp-check input { margin-top: 3px; width: 16px; height: 16px; accent-color: #09142a; flex-shrink: 0; }
+        .cmp-check b { color: #09142a; }
+        .cmp-progress {
+            background: #eef2f7; border-left: 4px solid #64748b; border-radius: 9px;
+            padding: 12px 15px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: #3f4c5f;
+        }
+        .cmp-done {
+            background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #00c853; border-radius: 9px;
+            padding: 14px 16px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif;
+        }
+        .cmp-done .big { font-family: 'Barlow Condensed', sans-serif; font-size: 1.3rem; font-weight: 800; color: #065f46; }
+        .cmp-done .sub { font-size: 0.84rem; color: #3f4c5f; margin-top: 3px; }
+        .cmp-done .fails { margin: 10px 0 0 18px; font-size: 0.82rem; color: #7f1d1d; }
+        .cmp-fail {
+            background: #fff3f3; border: 1px solid #fca5a5; border-left: 4px solid #dc2626; border-radius: 9px;
+            padding: 12px 15px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: #7f1d1d; line-height: 1.5;
+        }
 
         .cmp-ft {
             display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -796,8 +830,8 @@
 <div class="tip" id="mapTip"></div>
 
 <!-- ── Compose ─────────────────────────────────────────────────────────────
-     Front end only. The Send button is deliberately inert until Mailgun DKIM
-     is verified and there is an Edge Function to hold the key — see cmpBlocked. -->
+     Send Blast posts to the send-blast Edge Function (Resend behind it).
+     See the COMPOSE + SEND block in the script for who is excluded and why. -->
 <div class="cmp-back" id="cmpBack">
   <div class="cmp">
     <div class="cmp-hd">
@@ -840,14 +874,19 @@
             <div class="cmp-rcp" id="cmpRecipients"></div>
         </div>
 
-        <div class="cmp-blocked" id="cmpBlocked"></div>
+        <label class="cmp-check">
+            <input type="checkbox" id="cmpGuardians">
+            <span><b>Copy parents/guardians of minors.</b> Each parent on file gets their own copy of this message, with a footer saying whose parent they are.</span>
+        </label>
+
+        <div id="cmpResult"></div>
 
         <div class="cmp-ft">
             <span class="msg" id="cmpMsg"></span>
             <div style="margin-left:auto; display:flex; gap:10px; flex-wrap:wrap;">
-                <button class="cbtn gh" onclick="copyBcc()">Copy BCC List</button>
+                <button class="cbtn gh" onclick="copyBcc()" title="Fallback only — no merge tokens, no unsubscribe link">Copy BCC List</button>
                 <button class="cbtn gh" onclick="copyBody()">Copy Message</button>
-                <button class="cbtn gr" id="cmpSend" disabled>Send Blast</button>
+                <button class="cbtn gr" id="cmpSend">Send Blast</button>
             </div>
         </div>
     </div>
@@ -859,12 +898,14 @@
     <div class="tray-in">
         <div>
             <div class="big" id="trayCount">0</div>
-            <div class="lbl">referees</div>
+            <div class="lbl" id="trayLbl">referees</div>
         </div>
         <div class="lbl">from <span class="where" id="trayWhere">—</span></div>
         <div style="margin-left:auto; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <span class="tray-msg" id="trayMsg"></span>
             <button class="tbtn gr" id="btnEmail" onclick="openCompose()">✉ Email These Referees</button>
+            <button class="tbtn gh" id="btnBasketAll" onclick="basketAddAllShown()" title="Put everyone shown into the basket, then keep adding from other filters">＋ Basket all shown</button>
+            <button class="tbtn gh" id="btnBasketClear" onclick="basketClear()" style="display:none;">Empty basket</button>
             <button class="tbtn gh" onclick="trayAddToPool()">Add to Active Pool</button>
             <button class="tbtn gh" onclick="trayCopyEmails()">Copy Emails</button>
         </div>
@@ -883,12 +924,20 @@
     checkAdminAccess();
 
     // ─────────────────────────────────────────────────────────────────────────
-    // MINOR HANDLING / COMPLIANCE NOTE:
-    // A referee is a MINOR when `age` is present and < 18. This page only makes
-    // minors clearly VISIBLE (MINOR badge) and FILTERABLE. The compose/send
-    // screen (v2, out of scope here) MUST enforce special handling for minors —
-    // especially SMS blasts, which require guardian consent. Do NOT blast minors
-    // by text without that gate. This v1 is pool-management only; no sending.
+    // MINOR HANDLING / COMPLIANCE NOTE  (updated 2026-09-16)
+    // A referee is a MINOR when `age` is present and < 18. Minors are VISIBLE
+    // (MINOR badge), FILTERABLE, and counted in the composer.
+    //
+    // EMAIL: minors may be emailed. As of the Sept 2026 guardian backfill, 413
+    //   of them have a parent address on file ("Guardian Email"). The composer
+    //   has a "copy guardians" checkbox that defaults ON when more than half
+    //   the selection is under 18, and sends the parent their own copy with a
+    //   footer that says whose parent they are.
+    //
+    // TEXT: still NOT built, and the gate is not technical. Bulk SMS needs
+    //   prior written consent (TCPA) and carrier registration (10DLC). For a
+    //   minor, the consent has to be the guardian's. The availability form
+    //   needs to collect that before any texting is wired. Do not shortcut it.
     // ─────────────────────────────────────────────────────────────────────────
 
     let MY_UID   = null;   // logged-in assignor's Supabase auth uid
@@ -900,6 +949,21 @@
     let PAGE_SIZE = 50;
     let shown     = PAGE_SIZE;
     let lastFiltered = [];
+
+    // ── The basket ──────────────────────────────────────────────────────────
+    // Tod, 2026-09-15: "an assignor can message a pool or a group of refs or a
+    // single referee". The filters handle the first two. The third had no path
+    // at all — the row's only action was + Pool, and the email was a mailto:
+    // link that left the system with no merge, no footer, no log.
+    //
+    // So: one basket. A ＋ on every row drops that referee in; "Add all shown"
+    // dumps the whole filtered set in. Compose works off the basket whether it
+    // holds one person or three hundred. Single ref, hand-picked group, and
+    // whole pool are the same motion, and all three go through the same sender.
+    //
+    // If the basket is EMPTY, the tray falls back to the filtered set, so the
+    // July behaviour — filter, then Email These Referees — still works untouched.
+    let BASKET = new Map();   // referee_id -> referee row
 
     // Stable color per pool (by index) for the chip dot / tags
     const POOL_COLORS = ['#00c853','#3498db','#9b59b6','#e67e22','#e74c3c','#16a085','#f39c12','#2c3e50'];
@@ -1198,19 +1262,27 @@
                </div>`
             : '<span class="muted-dash" style="font-size:0.76rem;">no pools</span>';
 
+        // The email used to be a mailto: link. That opened Gmail and left the
+        // system — no merge tokens, no unsubscribe footer, no record it was ever
+        // sent. Now it drops the person into the basket, which is the only route
+        // to the sender. Clicking a name's email means "I want to write to them".
+        const inBasket = BASKET.has(r.id);
+        const basketBtn = `<button class="btn-basket${inBasket ? ' in' : ''}" onclick="basketToggle(${r.id})"
+                              title="${inBasket ? 'Remove from basket' : 'Add to basket'}">${inBasket ? '✓ In basket' : '＋ Basket'}</button>`;
+
         return `
-        <tr>
+        <tr${inBasket ? ' class="in-basket"' : ''}>
             <td>
                 <span class="row-chevron" id="chev-${r.id}" onclick="toggleDetail(event, ${r.id})" title="Show details">▶</span>
                 <span class="ref-name"><span class="ref-id">#${r.id}</span>${esc(r.name) || '—'}${agePart}${minor ? '<span class="minor-badge">Minor</span>' : ''}</span>
             </td>
-            <td>${email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : '<span class="muted-dash">—</span>'}</td>
+            <td>${email ? `<span class="email-cell" onclick="basketAdd(${r.id})" title="Add to basket">${esc(email)}</span>` : '<span class="muted-dash">—</span>'}</td>
             <td>${phone ? `<a href="tel:${esc(phone)}">${esc(phone)}</a>` : '<span class="muted-dash">—</span>'}</td>
             <td>${town ? `${esc(town)}${r.state ? ` <span style="color:#9ca3af;font-size:0.82em;">${esc(r.state)}</span>` : ''}` : '<span class="muted-dash">—</span>'}</td>
             <td>${certCell}</td>
             <td>${statusCell}</td>
             <td>${poolTags}</td>
-            <td style="text-align:right;">${addMenu}</td>
+            <td style="text-align:right; white-space:nowrap;">${basketBtn} ${addMenu}</td>
         </tr>
         <tr class="detail-row" id="det-${r.id}" style="display:none;"><td colspan="8">${detailHtml(r)}</td></tr>`;
     }
@@ -1764,19 +1836,57 @@
         return parts.length ? parts.join(' + ') : 'the whole directory';
     }
 
+    // What the tray and composer actually work on. The basket wins when it has
+    // anyone in it; otherwise it is the filtered set, exactly as before.
+    function traySet()    { return BASKET.size ? [...BASKET.values()] : lastFiltered; }
+    function usingBasket(){ return BASKET.size > 0; }
+
+    function basketAdd(id) {
+        const r = REFS.find(x => x.id === id);
+        if (!r) return;
+        BASKET.set(id, r);
+        renderTray(); renderTable();
+        trayFlash(`${r.name || 'Referee'} added — ${BASKET.size} in basket`);
+    }
+    function basketRemove(id) {
+        BASKET.delete(id);
+        renderTray(); renderTable();
+    }
+    function basketToggle(id) { BASKET.has(id) ? basketRemove(id) : basketAdd(id); }
+    function basketAddAllShown() {
+        lastFiltered.forEach(r => BASKET.set(r.id, r));
+        renderTray(); renderTable();
+        trayFlash(`${lastFiltered.length} added — ${BASKET.size} in basket`);
+    }
+    function basketClear() {
+        BASKET.clear();
+        renderTray(); renderTable();
+        trayFlash('Basket emptied');
+    }
+
     function renderTray() {
         const tray = document.getElementById('tray');
         if (!tray) return;
-        const n = lastFiltered.length;
+        const set = traySet();
+        const n   = set.length;
         // Only surface the tray once the set is actually narrowed — showing it for
-        // all 578 refs would just be a bar that never goes away.
-        const narrowed = mapTowns.size > 0
+        // all 578 refs would just be a bar that never goes away. A non-empty
+        // basket is always "narrowed": someone chose those people by hand.
+        const narrowed = usingBasket()
+            || mapTowns.size > 0
             || !!document.getElementById('fPool').value
             || !!document.getElementById('fTown').value
             || !!document.getElementById('fSearch').value.trim();
         tray.classList.toggle('on', narrowed && n > 0);
         document.getElementById('trayCount').textContent = n;
-        document.getElementById('trayWhere').textContent = trayWhereText();
+        document.getElementById('trayWhere').textContent = usingBasket()
+            ? `your basket (${n} hand-picked)`
+            : trayWhereText();
+        document.getElementById('trayLbl').textContent = n === 1 ? 'referee' : 'referees';
+        const clr = document.getElementById('btnBasketClear');
+        if (clr) clr.style.display = usingBasket() ? '' : 'none';
+        const addAll = document.getElementById('btnBasketAll');
+        if (addAll) addAll.style.display = usingBasket() ? 'none' : '';
     }
 
     let _flashT = null;
@@ -1788,7 +1898,7 @@
     }
 
     function trayCopyEmails() {
-        const list = lastFiltered.map(r => r.email).filter(Boolean);
+        const list = traySet().map(r => r.email).filter(Boolean);
         navigator.clipboard.writeText(list.join(', '))
             .then(() => trayFlash(`${list.length} email${list.length === 1 ? '' : 's'} copied`))
             .catch(() => trayFlash('Copy failed'));
@@ -1801,26 +1911,48 @@
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    //  COMPOSE — front end only.
-    //  Everything here works today except the actual send. The Send button stays
-    //  disabled until Mailgun DKIM is verified AND there is a Supabase Edge
-    //  Function to hold the API key (it can never sit in this file — public repo).
-    //  Copy BCC List is the interim: paste into Gmail and send by hand.
+    //  COMPOSE + SEND   (sending wired 2026-09-16)
+    //
+    //  The page never touches a mail provider. Send Blast posts the recipient
+    //  list and the message to the send-blast Edge Function, which holds the
+    //  Resend key (a Supabase secret — it can never sit in this file, the repo
+    //  is public), merges the tokens per person, appends a per-person
+    //  unsubscribe footer, and writes blast_log + blast_recipients as it goes.
+    //  The function verifies the caller's JWT: no login, no send.
+    //
+    //  Who gets excluded, and why each one is shown rather than silently
+    //  dropped: no email on file (can't), opted out (mustn't — the unsubscribe
+    //  link sets this), expired registration (shouldn't — they can't be
+    //  assigned, so an openings blast to them is noise).
+    //
+    //  Copy BCC List and Copy Message stay as a fallback for when the function
+    //  is down. They cannot merge tokens and carry no unsubscribe link, so they
+    //  are the exception, not the path.
     // ═════════════════════════════════════════════════════════════════════════
 
     let cmpDropped = new Set();   // refs pulled out inside the composer
     let cmpChannel = 'email';
+    let cmpSending = false;
 
     function composeRecipients() {
-        return lastFiltered.filter(r => !cmpDropped.has(r.id));
+        return traySet().filter(r => !cmpDropped.has(r.id));
     }
     const hasEmail  = r => !!(r.email && String(r.email).trim());
     const optedOut  = r => r.email_opt_in === false;
-    const sendable  = r => hasEmail(r) && !optedOut(r);
+    const sendable  = r => hasEmail(r) && !optedOut(r) && !isExpired(r);
+    const hasGuardian = r => !!(r['Guardian Email'] && String(r['Guardian Email']).trim());
 
     function openCompose() {
-        if (!lastFiltered.length) { trayFlash('Nothing selected to email'); return; }
+        if (!traySet().length) { trayFlash('Nothing selected to email'); return; }
         cmpDropped.clear();
+        cmpSending = false;
+        document.getElementById('cmpResult').innerHTML = '';
+        // Guardian copy: default ON when the selection is mostly children. A
+        // scheduling blast to 70 thirteen-year-olds should reach their parents;
+        // the assignor can untick it for ref-only chatter.
+        const set = traySet().filter(sendable);
+        const minorShare = set.length ? set.filter(isMinor).length / set.length : 0;
+        document.getElementById('cmpGuardians').checked = minorShare > 0.5;
         document.getElementById('cmpBack').classList.add('on');
         document.body.style.overflow = 'hidden';
         renderCompose();
@@ -1842,27 +1974,36 @@
         const good = all.filter(sendable);
         const noEm = all.filter(r => !hasEmail(r));
         const out  = all.filter(r => hasEmail(r) && optedOut(r));
+        const exp  = all.filter(r => hasEmail(r) && !optedOut(r) && isExpired(r));
         const minors = good.filter(isMinor);
+        const ccG  = document.getElementById('cmpGuardians').checked;
+        const gCount = ccG ? minors.filter(hasGuardian).length : 0;
+        const gMissing = minors.filter(r => !hasGuardian(r)).length;
 
+        const where = usingBasket() ? `your basket` : trayWhereText();
         document.getElementById('cmpTo').textContent =
-            `${good.length} referee${good.length === 1 ? '' : 's'} · ${trayWhereText()}`;
+            `${good.length} referee${good.length === 1 ? '' : 's'}${gCount ? ` + ${gCount} guardian${gCount === 1 ? '' : 's'}` : ''} · ${where}`;
 
         document.getElementById('cmpStats').innerHTML = `
             <div class="cmp-stat"><div class="n">${good.length}</div><div class="k">will receive</div></div>
             <div class="cmp-stat${noEm.length ? ' bad' : ''}"><div class="n">${noEm.length}</div><div class="k">no email</div></div>
             <div class="cmp-stat${out.length ? ' bad' : ''}"><div class="n">${out.length}</div><div class="k">opted out</div></div>
-            <div class="cmp-stat"><div class="n">${minors.length}</div><div class="k">minors</div></div>`;
+            <div class="cmp-stat${exp.length ? ' bad' : ''}"><div class="n">${exp.length}</div><div class="k">expired</div></div>
+            <div class="cmp-stat"><div class="n">${minors.length}</div><div class="k">minors</div></div>
+            <div class="cmp-stat"><div class="n">${gCount}</div><div class="k">guardian copies</div></div>`;
 
         let warn = '';
-        if (noEm.length) warn += `<div class="cmp-warn">⚠ ${noEm.length} of these referees have no email address on file — they're shown in red below and will be skipped.</div>`;
-        if (out.length)  warn += `<div class="cmp-warn">⚠ ${out.length} have opted out of email. They are excluded and cannot be re-added here.</div>`;
-        if (minors.length) warn += `<div class="cmp-warn">ℹ ${minors.length} recipient${minors.length === 1 ? ' is a minor' : 's are minors'}. Fine for email. When texting is built, minors need guardian consent first.</div>`;
+        if (noEm.length) warn += `<div class="cmp-warn">⚠ ${noEm.length} of these referees have no email address on file — shown in red below and skipped.</div>`;
+        if (out.length)  warn += `<div class="cmp-warn">⚠ ${out.length} have opted out of email. Excluded, and cannot be re-added here.</div>`;
+        if (exp.length)  warn += `<div class="cmp-warn">⚠ ${exp.length} have an expired registration and can't be assigned. Excluded — an openings blast to them is noise.</div>`;
+        if (minors.length && ccG) warn += `<div class="cmp-warn">ℹ ${minors.length} recipient${minors.length === 1 ? ' is a minor' : 's are minors'}. ${gCount} parent${gCount === 1 ? '' : 's'} will get their own copy.${gMissing ? ` <b>${gMissing} minor${gMissing === 1 ? ' has' : 's have'} no guardian on file</b> — they still receive it, the parent doesn't.` : ''}</div>`;
+        if (minors.length && !ccG) warn += `<div class="cmp-warn">ℹ ${minors.length} recipient${minors.length === 1 ? ' is a minor' : 's are minors'}. Guardians are <b>not</b> being copied on this one.</div>`;
         document.getElementById('cmpWarn').innerHTML = warn;
 
         document.getElementById('cmpRecipients').innerHTML = all.length
             ? all.map(r => {
                 const bad = !sendable(r);
-                const why = !hasEmail(r) ? 'no email' : (optedOut(r) ? 'opted out' : '');
+                const why = !hasEmail(r) ? 'no email' : optedOut(r) ? 'opted out' : isExpired(r) ? 'expired' : '';
                 return `<span class="rcp${bad ? ' no' : ''}" title="${esc(r.email || 'no email on file')}">
                           ${esc(r.name || '—')}${why ? ` <em style="font-style:normal;opacity:.75;">(${why})</em>` : ''}
                           <span class="rx" onclick="dropRecipient(${r.id})">✕</span>
@@ -1870,17 +2011,105 @@
               }).join('')
             : '<span class="muted-dash">Everyone has been removed.</span>';
 
-        document.getElementById('cmpBlocked').innerHTML =
-            `<b>Sending isn't wired up yet.</b> The Mailgun key has to live server-side in a
-             Supabase Edge Function — it can't sit in this page, the repo is public. Two things
-             are outstanding: your DKIM record verified in GoDaddy, and confirmation you can
-             deploy an Edge Function. Until then, <b>Copy BCC List</b> puts all
-             ${good.length} address${good.length === 1 ? '' : 'es'} on your clipboard to paste into Gmail.`;
-
-        document.getElementById('cmpSend').disabled = true;
-        document.getElementById('cmpSend').title = 'Blocked on Mailgun DKIM + Edge Function';
+        const btn = document.getElementById('cmpSend');
+        btn.disabled = cmpSending || good.length === 0;
+        btn.title = good.length ? '' : 'Nobody sendable';
+        btn.textContent = cmpSending ? 'Sending…' : `Send Blast${good.length ? ` (${good.length + gCount})` : ''}`;
         renderPreview();
     }
+
+    // ── the send ────────────────────────────────────────────────────────────
+    function buildRecipients() {
+        const refs = composeRecipients().filter(sendable);
+        const ccG  = document.getElementById('cmpGuardians').checked;
+        const list = refs.map(r => ({
+            referee_id: r.id,
+            name:  r.name || '',
+            email: String(r.email).trim(),
+            town:  resolveTown(r.city) || r.city || '',
+            token: r.unsubscribe_token || null,
+        }));
+        if (ccG) {
+            for (const r of refs) {
+                if (!isMinor(r) || !hasGuardian(r)) continue;
+                // The parent gets the SAME message, merged with the CHILD's name
+                // and town — "Hi Ava" reads right on a copy to Ava's parent.
+                // Their own footer says whose parent they are. They carry the
+                // child's unsubscribe token: opting out stops both copies.
+                list.push({
+                    referee_id: r.id,
+                    name:  r.name || '',
+                    email: String(r['Guardian Email']).trim(),
+                    town:  resolveTown(r.city) || r.city || '',
+                    token: r.unsubscribe_token || null,
+                    is_guardian: true,
+                    minor_name:  r.name || '',
+                });
+            }
+        }
+        // one address, one copy — a parent with two refs gets it once
+        const seen = new Set();
+        return list.filter(x => { const k = x.email.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+    }
+
+    async function sendBlast() {
+        if (cmpSending) return;
+        const subject = document.getElementById('cmpSubject').value.trim();
+        const body    = document.getElementById('cmpBody').value.trim();
+        if (!subject) { cmpFlash('Add a subject first'); document.getElementById('cmpSubject').focus(); return; }
+        if (!body)    { cmpFlash('The message is empty');  document.getElementById('cmpBody').focus();    return; }
+
+        const recipients = buildRecipients();
+        if (!recipients.length) { cmpFlash('Nobody sendable'); return; }
+
+        const refN = recipients.filter(x => !x.is_guardian).length;
+        const gN   = recipients.length - refN;
+        if (!confirm(`Send "${subject}" to ${refN} referee${refN === 1 ? '' : 's'}${gN ? ` and ${gN} guardian${gN === 1 ? '' : 's'}` : ''}?\n\nThis goes out under blasts@referee-tool.com and cannot be recalled.`)) return;
+
+        const session = _getSupabaseSession();
+        const jwt = session?.access_token;
+        if (!jwt) { cmpFlash('Your login has expired — sign in again'); return; }
+
+        cmpSending = true;
+        renderCompose();
+        const res = document.getElementById('cmpResult');
+        res.innerHTML = `<div class="cmp-progress">Sending to ${recipients.length} address${recipients.length === 1 ? '' : 'es'}… about ${Math.max(1, Math.round(recipients.length * 0.6 / 60))} min. Leave this open.</div>`;
+
+        try {
+            const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/send-blast`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${jwt}`, 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY },
+                body: JSON.stringify({
+                    subject, body,
+                    where_text:   usingBasket() ? `basket (${refN} hand-picked)` : trayWhereText(),
+                    guardians_cc: document.getElementById('cmpGuardians').checked,
+                    reply_to:     session?.user?.email || undefined,
+                    recipients,
+                }),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.ok) throw new Error(j.error || `Server said ${r.status}`);
+
+            const failList = (j.failures || []).map(f => `<li><b>${esc(f.email)}</b> — ${esc(f.error)}</li>`).join('');
+            res.innerHTML = `
+                <div class="cmp-done">
+                    <div class="big">✅ Sent to ${j.sent}${j.failed ? ` · ${j.failed} failed` : ''}</div>
+                    <div class="sub">Blast #${j.blast_id} is logged. Replies go to ${esc(session?.user?.email || 'you')}.</div>
+                    ${failList ? `<ul class="fails">${failList}</ul>` : ''}
+                </div>`;
+            cmpFlash(`Blast #${j.blast_id} sent`);
+            cmpSending = false;
+            document.getElementById('cmpSend').textContent = 'Sent';
+            document.getElementById('cmpSend').disabled = true;
+        } catch (e) {
+            console.error('[send-blast]', e);
+            res.innerHTML = `<div class="cmp-fail"><b>Didn't send.</b> ${esc(e.message || e)}<br><span style="font-size:0.85em;opacity:.8">Nothing was charged to the log unless the number above says otherwise. Copy BCC List still works as a fallback.</span></div>`;
+            cmpSending = false;
+            renderCompose();
+        }
+    }
+    document.getElementById('cmpSend').addEventListener('click', sendBlast);
+    document.getElementById('cmpGuardians').addEventListener('change', renderCompose);
 
     function dropRecipient(id) { cmpDropped.add(id); renderCompose(); }
 
