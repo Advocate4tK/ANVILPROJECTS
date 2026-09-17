@@ -6460,9 +6460,18 @@
             const targetClubs = isAllClubs ? [...clubsList] : [...selectedClubs];
 
             // Only games with at least one open slot
-            const _crewSoloOnly = (source, age) => {
-                const ageBase = (age||'').replace(/\s+(Girls?|Boys?|Coed)$/i, '').trim();
-                const crew = window._crewRules?.[source]?.[ageBase];
+            // ⚠️ Must read the game's TYPE. Since the comp/rec split, rules are
+            // keyed "U10|Rec" / "U10|Comp". This helper looked up plain "U10",
+            // found nothing, and fell back to "only U8 is solo" — so every NECONN
+            // U10 rec game advertised AR | AR in the openings email. Tod,
+            // 2026-09-17: "the email blast for U10 neconn are advertising AR
+            // spots... take it off." Crew rules must reach EVERY consumer;
+            // this one was missed. Mirrors crewAllowed().
+            const _crewSoloOnly = (source, age, gameType) => {
+                const ageBase = (age||'').replace(/\s+(Girls?|Boys?|Coed)$/i, '').replace(/[BG]$/, '').trim();
+                const gt = String(gameType || '').trim().toUpperCase() === 'COMP' ? 'Comp' : 'Rec';
+                const forClub = window._crewRules?.[source] || {};
+                const crew = forClub[ageBase + '|' + gt] || forClub[ageBase];
                 return crew ? (!crew.ar1 && !crew.ar2) : (ageBase === 'U8');
             };
             const openGames = allGames.filter(g => {
@@ -6472,7 +6481,7 @@
                 const cr  = resolveRefName(f['Center Referee']);
                 const ar1 = resolveRefName(f['AR 1']);
                 const ar2 = resolveRefName(f['AR 2']);
-                const soloOnly = _crewSoloOnly(f['Source Club'] || '', age);
+                const soloOnly = _crewSoloOnly(f['Source Club'] || '', age, f['game_type']);
                 const fullyAssigned = crewSatisfied(f, cr, ar1, ar2, soloOnly);
                 if (fullyAssigned) return false;
                 if (!isAllClubs && !selectedClubs.has(f['Source Club'])) return false;
@@ -6597,7 +6606,7 @@
                             // Which positions are actually open, per the club's crew
                             // rules. NECONN's U8s and U10s have no ARs, so those read
                             // "CR" alone instead of advertising slots that do not exist.
-                            const soloOnly = _crewSoloOnly(f['Source Club'] || '', age);
+                            const soloOnly = _crewSoloOnly(f['Source Club'] || '', age, f['game_type']);
                             const openSlots = [];
                             if (!f['Center Referee']?.trim()) openSlots.push('CR');
                             if (!soloOnly && !f['AR 1']?.trim()) openSlots.push('AR');
@@ -6629,7 +6638,7 @@
                         const vName = venueObj ? venueObj.name : (f['Venue ID'] || '—');
                         const age = f['Age Group'] || '';
                         const gender = f['Gender'] || '';
-                        const soloOnly = _crewSoloOnly(f['Source Club'] || '', age);
+                        const soloOnly = _crewSoloOnly(f['Source Club'] || '', age, f['game_type']);
                         const displayGender = (!gender || age.toLowerCase().includes(gender.toLowerCase())) ? '' : (' ' + gender);
                         const openSlots = [];
                         if (!f['Center Referee']?.trim()) openSlots.push('CR');
