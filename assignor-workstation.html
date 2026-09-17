@@ -6653,16 +6653,15 @@
 
                     // Pay lines labelled COMP / REC, so "U9-U10 AR $25" and
                     // "U10 (no AR)" stop sitting side by side unexplained.
-                    // Comp reads the BAND key (U9-U10); rec reads the exact age
-                    // (U10) — that is how the pay lookup already works. The row
-                    // SHAPE is the only reliable signal: pay_rates.game_type
-                    // reads "rec" on every NECONN row, comp bands included.
-                    // Tod, 2026-09-17: "so the U9-U10".
+                    // Reads pay_rates.game_type — correct since
+                    // sql/pay-rates-tag-comp.sql (2026-09-17). The shape check
+                    // stays as a fallback for a row that was never tagged.
                     const isBand = ag => /^U\d+\s*-\s*U\d+$/i.test(String(ag).trim());
+                    const isComp = r => String(r.game_type || '').toLowerCase() === 'comp' || (!r.game_type && isBand(r.age_group));
                     const rateLines = rates.length
-                        ? rates.sort((a,b) => parseInt(a.age_group.replace(/^U/i,'')) - parseInt(b.age_group.replace(/^U/i,'')) || (isBand(a.age_group) ? -1 : 1))
+                        ? rates.sort((a,b) => parseInt(a.age_group.replace(/^U/i,'')) - parseInt(b.age_group.replace(/^U/i,'')) || (isComp(a) ? -1 : 1))
                                .map(r => {
-                                   const band  = isBand(r.age_group);
+                                   const band  = isComp(r);
                                    const label = band ? 'COMP' : 'REC ';
                                    const crew  = window._crewRules?.[club]?.[r.age_group + '|' + (band ? 'Comp' : 'Rec')] || window._crewRules?.[club]?.[r.age_group];
                                    const showAR = r.ar && (crew ? (crew.ar1 || crew.ar2) : true);
