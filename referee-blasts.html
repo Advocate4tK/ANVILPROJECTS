@@ -906,7 +906,7 @@
     <div class="cmp-hd">
         <h2>Compose Blast</h2>
         <span class="to">to <b id="cmpTo">—</b></span>
-        <button class="cmp-x" onclick="closeCompose()" title="Close">✕</button>
+        <button class="cmp-x" onclick="requestClose()" title="Close">✕</button>
     </div>
 
     <div class="cmp-chan">
@@ -2442,12 +2442,35 @@
             .catch(() => cmpFlash('Copy failed'));
     }
 
-    document.getElementById('cmpBack').addEventListener('click', e => {
-        if (e.target.id === 'cmpBack') closeCompose();
+    // ── Closing the composer ────────────────────────────────────────────────
+    // Tod, 2026-09-17: "the email creation window when I'm editing the email
+    // occasionally falls back into the background and I have to hit the green
+    // 'email these referees' button to get it back up."
+    //
+    // A `click` fires on MOUSEUP, wherever it lands. Start selecting text in
+    // the message box, drag past the modal's edge, let go — the browser calls
+    // that a click on the backdrop, and the composer closed on a half-written
+    // email. Two guards:
+    //   1. the press AND the release must both be on the backdrop (a real
+    //      click on the dark area, not the tail of a drag)
+    //   2. if there's text in the message, ask before throwing it away
+    let _backPress = false;
+    const cmpBackEl = document.getElementById('cmpBack');
+    cmpBackEl.addEventListener('mousedown', e => { _backPress = (e.target === cmpBackEl); });
+    cmpBackEl.addEventListener('click', e => {
+        const onBackdrop = (e.target === cmpBackEl) && _backPress;
+        _backPress = false;
+        if (onBackdrop) requestClose();
     });
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && document.getElementById('cmpBack').classList.contains('on')) closeCompose();
+        if (e.key === 'Escape' && cmpBackEl.classList.contains('on')) requestClose();
     });
+    function requestClose() {
+        if (cmpSending) return;   // never close on a blast in flight — the counter lives here
+        const hasDraft = document.getElementById('cmpBody').value.trim() || document.getElementById('cmpSubject').value.trim();
+        if (hasDraft && !confirm('Close the composer? Your message will be kept for when you reopen it.')) return;
+        closeCompose();   // the fields are NOT cleared — reopen and it's still there
+    }
 </script>
 </body>
 </html>
