@@ -165,6 +165,25 @@
         .btn-note:hover { background:#0f2a52; }
         .btn-preset-note { background:#f0f4ff; border:1px solid #c7d4f0; color:#1a3a6b; border-radius:6px; padding:4px 10px; font-size:0.74rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:background 0.15s; white-space:nowrap; }
         .btn-preset-note:hover { background:#dce6ff; }
+        /* ── Season bar ── */
+        #seasonBar {
+            display: flex; align-items: center; gap: 14px;
+            background: #fff7ed; border: 1px solid #fed7aa; border-left: 5px solid #ea580c;
+            border-radius: 10px; padding: 12px 16px; margin-bottom: 14px;
+        }
+        #seasonBar.archive { background: #f3f4f6; border-color: #d1d5db; border-left-color: #6b7280; }
+        #seasonBar .sb-icon { font-size: 1.9rem; line-height: 1; }
+        #seasonBar .sb-title { font-family: 'Barlow Condensed', sans-serif; font-size: 1.35rem; font-weight: 800; color: #09142a; letter-spacing: .5px; text-transform: uppercase; }
+        #seasonBar .sb-live { font-size: .68rem; font-weight: 700; background: #00c853; color: #06210f; border-radius: 20px; padding: 2px 9px; letter-spacing: .6px; vertical-align: middle; margin-left: 6px; }
+        #seasonBar.archive .sb-live { background: #6b7280; color: #fff; }
+        #seasonBar .sb-sub { font-size: .82rem; color: #6b7280; margin-top: 2px; }
+        #seasonBar .sb-archive {
+            margin-left: auto; font-family: 'Barlow Condensed', sans-serif; font-size: .9rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: .6px; color: #09142a; background: #fff;
+            border: 1.5px solid #09142a; border-radius: 8px; padding: 7px 14px; cursor: pointer; white-space: nowrap;
+        }
+        #seasonBar .sb-archive:hover { background: #eef2ff; }
+        #seasonBar.archive .sb-archive { background: #09142a; color: #fff; }
     </style>
 </head>
 <body>
@@ -175,6 +194,19 @@
         </header>
 
         <main>
+            <!-- Which season this page is showing. Tod, 2026-09-17: "It should
+                 show at the top our fall leaf or something, showing that it's
+                 recognizing the current season we're in." Everything from an
+                 earlier season is archived behind the button on the right. -->
+            <div id="seasonBar">
+                <span class="sb-icon" id="seasonIcon">🍂</span>
+                <div>
+                    <div class="sb-title"><span id="seasonName">Fall 2026</span> <span class="sb-live">current season</span></div>
+                    <div class="sb-sub" id="seasonSub">Showing this season's requests. Earlier seasons are archived.</div>
+                </div>
+                <button class="sb-archive" id="archiveBtn" onclick="toggleArchive()">📦 Archive <span id="archiveCount"></span></button>
+            </div>
+
             <div id="filterRow">
                 <a href="admin.html" class="btn-back">← Admin Portal</a>
                 <a href="assignor-workstation.html" class="btn btn-outline" style="font-size:0.85rem; padding:8px 16px;">📋 Assignor Workstation</a>
@@ -463,6 +495,40 @@
     }
 
     // ── Season (date-derived) — same math as presidents-portal.html so the two agree ──
+    // ── Season view ───────────────────────────────────────────────────────────
+    // CURRENT_SEASON is the calendar season today. showingArchive flips the
+    // page to everything BEFORE it. There is no third state.
+    let showingArchive = false;
+    const CURRENT_SEASON = (() => { const d = new Date(); const m = d.getMonth() + 1, y = d.getFullYear();
+        return m >= 3 && m <= 6 ? `Spring ${y}` : m >= 7 && m <= 8 ? `Summer ${y}` : m >= 9 && m <= 11 ? `Fall ${y}` : `Winter ${y}`; })();
+    const seasonIcon = s => /spring/i.test(s) ? '🌱' : /summer/i.test(s) ? '☀️' : /fall/i.test(s) ? '🍂' : '❄️';
+    function seasonRank(s) {
+        const m = String(s || '').match(/(Spring|Summer|Fall|Winter)\s+(\d{4})/i); if (!m) return -1;
+        return Number(m[2]) * 4 + ({ winter: 0, spring: 1, summer: 2, fall: 3 })[m[1].toLowerCase()];
+    }
+    function isPastSeason(r) {
+        const gs = seasonOfDate(r.fields['date'] || r.fields['Date'] || '');
+        return !!gs && seasonRank(gs) < seasonRank(CURRENT_SEASON);
+    }
+    function toggleArchive() {
+        showingArchive = !showingArchive;
+        renderSeasonBar();
+        renderChanges();
+    }
+    function renderSeasonBar(archivedCount) {
+        const bar = document.getElementById('seasonBar'); if (!bar) return;
+        bar.classList.toggle('archive', showingArchive);
+        document.getElementById('seasonIcon').textContent = showingArchive ? '📦' : seasonIcon(CURRENT_SEASON);
+        document.getElementById('seasonName').textContent = showingArchive ? 'Archive' : CURRENT_SEASON;
+        document.querySelector('#seasonBar .sb-live').textContent = showingArchive ? 'earlier seasons' : 'current season';
+        document.getElementById('seasonSub').textContent = showingArchive
+            ? `Requests from before ${CURRENT_SEASON}. Nothing here is live.`
+            : `Showing this season's requests. Earlier seasons are archived.`;
+        document.getElementById('archiveBtn').innerHTML = showingArchive
+            ? `🍂 Back to ${CURRENT_SEASON}`
+            : `📦 Archive${archivedCount != null ? ` <span id="archiveCount">(${archivedCount})</span>` : ''}`;
+    }
+
     function seasonOfDate(dateStr) {
         if (!dateStr) return null;
         const p = String(dateStr).slice(0, 10).split('-').map(Number);
@@ -497,27 +563,15 @@
                     const src = r.fields['Source Club'];
                     if (!src || !myChangeClubs.includes(src)) return false;
                 }
-                // Season scope. Tod, 2026-09-17: "make sure that this is flipped to
-                // fall. And all the other ones are archived."
-                //
-                // The old rule looked the club up in clubs.active_season and failed
-                // OPEN when there was no entry. The summer leagues — Girls Summer
-                // League, Ellis Tech — are EVENTS, not clubs, so they had no entry,
-                // so their July cancels sailed through onto a September page.
-                //
-                // Now: a game whose date falls in a season BEFORE the current one is
-                // archived. Full stop. It comes back only under Show Resolved, which
-                // is the deliberate look-back. A club's own flip still applies when
-                // it exists; the calendar is the floor beneath it.
-                {
-                    const gameSeason = seasonOfDate(r.fields['date'] || r.fields['Date'] || '');
-                    const nowSeason  = seasonOfDate(new Date().toISOString().slice(0, 10));
-                    const src        = r.fields['Source Club'];
-                    const clubSeason = (activeSeasonByClub && src) ? activeSeasonByClub[src] : null;
-                    const current    = clubSeason || nowSeason;
-                    if (gameSeason && current && gameSeason !== current && !isShowingResolved()) return false;
-                }
-                if (isShowingResolved()) return s === 'change requested' || s === 'change resolved' || s === 'cancelled';
+                // Season: two states, no leaks. Current season on the page;
+                // everything earlier behind the Archive button. Not per-club —
+                // the summer leagues are events with no club row, and a
+                // per-club rule that failed open let thirteen July cancels onto
+                // a September page. The calendar decides.
+                if (showingArchive ? !isPastSeason(r) : isPastSeason(r)) return false;
+                // The archive shows everything in it — nothing from a past season
+                // is 'open', so the Show Resolved toggle has no meaning there.
+                if (showingArchive || isShowingResolved()) return s === 'change requested' || s === 'change resolved' || s === 'cancelled';
                 return s === 'change requested';
             });
 
@@ -527,6 +581,11 @@
             const airtableClubNames = clubs.map(c => c.fields['Club Name'] || c.fields['Name'] || '').filter(Boolean);
             const clubsWithRecords = new Set(changeGames.map(r => getClubName(r)).filter(Boolean));
             const allClubOptions = [...new Set([...airtableClubNames, ...clubsWithRecords])].sort();
+            renderSeasonBar(showingArchive ? null : games.filter(r => {
+                const st = (r.fields['Game Status'] || '').toLowerCase();
+                return ['change requested','change resolved','cancelled'].includes(st) && isPastSeason(r);
+            }).length);
+
             const clubSel = document.getElementById('clubFilterSelect');
             const prevVal = clubSel.value;
             clubSel.innerHTML = '<option value="">All Clubs</option>' +
