@@ -559,7 +559,7 @@
             const changeGames = games.filter(r => {
                 const s = (r.fields['Game Status'] || '').toLowerCase();
                 // Per-assignor scope — admin (myChangeClubs=null) sees all; each assignor sees only their own clubs
-                if (myChangeClubs) {
+                if (myChangeClubs !== null) {   // null is Admin; [] shows nothing
                     const src = r.fields['Source Club'];
                     if (!src || !myChangeClubs.includes(src)) return false;
                 }
@@ -876,21 +876,33 @@
     }
 
     // ── Per-assignor scope: admin sees ALL change requests; each assignor sees only their own clubs ──
-    let myChangeClubs = null; // null = unrestricted (Admin sees everything)
+    // ⚠️ FAILS CLOSED. Tod, 2026-09-17: "Make sure that this works for each
+    // assignor and they have their own separate schedule change request page...
+    // when they get their own schedule changes, it shouldn't be showing for
+    // NECONN. And NECONN shouldn't be showing on theirs."
+    //
+    // The previous version started at null (= see everything) and only
+    // narrowed if the lookup succeeded. No login, no row, a slow network, any
+    // error — and Dave Paquette saw NECONN's requests. Now it starts at []
+    // (= see nothing) and only WIDENS when the row proves who you are. Admin
+    // is proven by role, never assumed by absence.
+    let myChangeClubs = []; // [] = nothing until proven; null = Admin, proven
     async function buildChangeScope() {
-        try {
-            const uid = (typeof currentUserId === 'function') ? currentUserId() : null;
-            if (!uid) return;
-            const { data: myRow } = await supabaseClient.client
-                .from('assignors')
-                .select('name, role, clubs')
-                .eq('auth_user_id', uid)
-                .maybeSingle();
-            if (!myRow) return;
-            if ((myRow.role || 'Assignor').trim() === 'Admin') { myChangeClubs = null; return; } // admin = see all
-            const c = myRow.clubs;
-            myChangeClubs = !c ? [] : (Array.isArray(c) ? c.filter(Boolean) : [c]);
-        } catch(e) { /* on error, leave null (fail open, matches admin.html behavior) */ }
+        const uid = (typeof currentUserId === 'function') ? currentUserId() : null;
+        if (!uid) { window.location.href = 'admin.html'; return; }
+        const { data: myRow, error } = await supabaseClient.client
+            .from('assignors')
+            .select('name, role, clubs')
+            .eq('auth_user_id', uid)
+            .maybeSingle();
+        if (error || !myRow) {
+            console.error('[changes] could not load assignor row — showing nothing', error?.message);
+            myChangeClubs = [];
+            return;
+        }
+        if ((myRow.role || '').trim() === 'Admin') { myChangeClubs = null; return; }
+        const c = myRow.clubs;
+        myChangeClubs = !c ? [] : (Array.isArray(c) ? c.filter(Boolean) : [c]);
     }
 
     // ── Season scope: map each club → its current season (active_season) so change requests obey the flip ──
