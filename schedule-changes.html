@@ -174,6 +174,12 @@
             border-bottom: 2px solid #e2d9ce; padding: 6px 2px; margin-bottom: 10px;
         }
         .season-head .season-n { margin-left: auto; font-size: .78rem; font-weight: 700; color: #6b7280; letter-spacing: .4px; text-transform: none; }
+        .season-head { cursor: pointer; user-select: none; }
+        .season-head:hover { background: #faf8f4; }
+        .season-tri { color: #00c853; font-size: .8rem; transition: transform .16s ease; display: inline-block; }
+        .season-section.open .season-tri { transform: rotate(90deg); }
+        .season-body { display: none; }
+        .season-section.open .season-body { display: block; }
 
         /* ── Season bar ── */
         #seasonBar {
@@ -509,6 +515,7 @@
     // CURRENT_SEASON is the calendar season today. showingArchive flips the
     // page to everything BEFORE it. There is no third state.
     let showingArchive = false;
+    const openSeasons = new Set();    // which archive seasons are expanded
     const CURRENT_SEASON = (() => { const d = new Date(); const m = d.getMonth() + 1, y = d.getFullYear();
         return m >= 3 && m <= 6 ? `Spring ${y}` : m >= 7 && m <= 8 ? `Summer ${y}` : m >= 9 && m <= 11 ? `Fall ${y}` : `Winter ${y}`; })();
     const seasonIcon = s => /spring/i.test(s) ? '🌱' : /summer/i.test(s) ? '☀️' : /fall/i.test(s) ? '🍂' : '❄️';
@@ -522,8 +529,13 @@
     }
     function toggleArchive() {
         showingArchive = !showingArchive;
-        renderSeasonBar();
-        renderChanges();
+        openSeasons.clear();          // every season starts collapsed
+        loadChanges();                // re-filters, re-renders the bar with the right count
+    }
+    function toggleSeason(sn) {
+        openSeasons.has(sn) ? openSeasons.delete(sn) : openSeasons.add(sn);
+        const sec = document.querySelector(`.season-section[data-season="${CSS.escape(sn)}"]`);
+        if (sec) sec.classList.toggle('open', openSeasons.has(sn));
     }
     function renderSeasonBar(archivedCount) {
         const bar = document.getElementById('seasonBar'); if (!bar) return;
@@ -685,10 +697,17 @@
             });
             container.innerHTML = Object.entries(bySeason)
                 .sort((a, b) => seasonRank(b[0]) - seasonRank(a[0]))
+                // Collapsed by default. Tod, 2026-09-17: "summer and spring
+                // should be collapsed. Once you expand it, it should show all of
+                // the individual games that were changed."
                 .map(([sn, recs]) => `
-                    <div class="season-section">
-                        <div class="season-head"><span>${seasonIcon(sn)}</span> ${sn} <span class="season-n">${recs.length} request${recs.length === 1 ? '' : 's'}</span></div>
-                        ${renderClubGroups(recs)}
+                    <div class="season-section${openSeasons.has(sn) ? ' open' : ''}" data-season="${sn.replace(/"/g, '&quot;')}">
+                        <div class="season-head" onclick="toggleSeason('${sn.replace(/'/g, "\\'")}')">
+                            <span class="season-tri">▶</span>
+                            <span>${seasonIcon(sn)}</span> ${sn}
+                            <span class="season-n">${recs.length} request${recs.length === 1 ? '' : 's'}</span>
+                        </div>
+                        <div class="season-body">${renderClubGroups(recs)}</div>
                     </div>`).join('');
             return;
         }
