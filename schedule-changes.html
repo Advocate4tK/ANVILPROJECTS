@@ -431,7 +431,7 @@
 
     // ── Export CSV ────────────────────────────────────────────────────────────
     function exportCSV() {
-        const resolved = allLoadedRecords.filter(r => (r.fields['Game Status']||'').toLowerCase() === 'change resolved');
+        const resolved = allLoadedRecords.filter(r => ['change resolved','cancelled'].includes((r.fields['Game Status']||'').toLowerCase()));
         if (!resolved.length) { alert('No resolved records to export.'); return; }
         const rows = [['Game ID','Home Team','Away Team','Date','Time','Age Group','Resolved At','Avg Resolution Time']];
         resolved.forEach(r => {
@@ -497,15 +497,25 @@
                     const src = r.fields['Source Club'];
                     if (!src || !myChangeClubs.includes(src)) return false;
                 }
-                // Season scope — a request shows only if its game is in that club's CURRENT season (its flip);
-                // prior-season requests drop out of the live view when a club flips. Fail open if unset.
-                if (activeSeasonByClub) {
-                    const src = r.fields['Source Club'];
-                    const clubSeason = src ? activeSeasonByClub[src] : null;
-                    if (clubSeason) {
-                        const gameSeason = seasonOfDate(r.fields['date'] || r.fields['Date'] || '');
-                        if (gameSeason && gameSeason !== clubSeason) return false;
-                    }
+                // Season scope. Tod, 2026-09-17: "make sure that this is flipped to
+                // fall. And all the other ones are archived."
+                //
+                // The old rule looked the club up in clubs.active_season and failed
+                // OPEN when there was no entry. The summer leagues — Girls Summer
+                // League, Ellis Tech — are EVENTS, not clubs, so they had no entry,
+                // so their July cancels sailed through onto a September page.
+                //
+                // Now: a game whose date falls in a season BEFORE the current one is
+                // archived. Full stop. It comes back only under Show Resolved, which
+                // is the deliberate look-back. A club's own flip still applies when
+                // it exists; the calendar is the floor beneath it.
+                {
+                    const gameSeason = seasonOfDate(r.fields['date'] || r.fields['Date'] || '');
+                    const nowSeason  = seasonOfDate(new Date().toISOString().slice(0, 10));
+                    const src        = r.fields['Source Club'];
+                    const clubSeason = (activeSeasonByClub && src) ? activeSeasonByClub[src] : null;
+                    const current    = clubSeason || nowSeason;
+                    if (gameSeason && current && gameSeason !== current && !isShowingResolved()) return false;
                 }
                 if (isShowingResolved()) return s === 'change requested' || s === 'change resolved' || s === 'cancelled';
                 return s === 'change requested';
@@ -523,7 +533,8 @@
                 allClubOptions.map(c => `<option value="${c}" ${c === prevVal ? 'selected' : ''}>${c}</option>`).join('');
 
             // Resolved stats
-            const allResolved = changeGames.filter(r => (r.fields['Game Status']||'').toLowerCase() === 'change resolved');
+            // A cancel IS a resolution. Tod, 2026-09-17: "That overview isn't working" — 0/0/1 with twenty cancelled cards on the page.
+            const allResolved = changeGames.filter(r => ['change resolved','cancelled'].includes((r.fields['Game Status']||'').toLowerCase()));
             const now = new Date();
             const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0,0,0,0);
             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
