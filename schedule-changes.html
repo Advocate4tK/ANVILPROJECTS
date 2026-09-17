@@ -279,9 +279,21 @@
     }
 
     // ── Timestamp helpers ─────────────────────────────────────────────────────
+    // When it was resolved. The RESOLVED tag in Notes is what the resolve
+    // button writes; a cancel from the workstation writes cancelled_at instead.
+    // Until 2026-09-17 only the tag was read, so every workstation cancel came
+    // back as epoch zero and sorted as the OLDEST thing on the page while
+    // being the newest — Tod: "it's showing the most recent at the bottom".
     function getResolvedTs(r) {
         const matches = [...(r.fields['Notes'] || '').matchAll(/\[RESOLVED\s*[–-]\s*([^\]]+)\]/gi)];
-        return matches.length ? new Date(matches[matches.length - 1][1].trim()) : new Date(0);
+        if (matches.length) return new Date(matches[matches.length - 1][1].trim());
+        if (r.fields['cancelled_at']) return new Date(r.fields['cancelled_at']);
+        return new Date(0);
+    }
+    function fmtResolvedTs(r) {
+        const d = getResolvedTs(r);
+        if (!d || d.getTime() === 0) return '';
+        return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
     }
 
     function getRequestTs(r) {
@@ -590,7 +602,16 @@
             byClub[club].push(r);
         });
 
-        container.innerHTML = Object.entries(byClub).sort().map(([club, records]) => {
+        // Club groups ordered by their most recent activity, not alphabetically —
+        // "Most Recent" with A→Z groups put August's Ellis Tech cancels above
+        // yesterday's NECONN ones, every time.
+        const groupTs = ([, recs]) => Math.max(...recs.map(r => {
+            const st = (r.fields['Game Status'] || '').toLowerCase();
+            return ['change resolved','cancelled'].includes(st) ? getResolvedTs(r).getTime() : (getRequestTs(r)?.getTime() || Date.now());
+        }));
+        container.innerHTML = Object.entries(byClub)
+            .sort((a, b) => sortDir === 'asc' ? groupTs(a) - groupTs(b) : groupTs(b) - groupTs(a))
+            .map(([club, records]) => {
             const clubColor = getClubColor(club);
             const cards = records
                 .sort((a, b) => {
@@ -644,8 +665,8 @@
 
                     if (isResolved) {
                         const gameNum = buildGameNum(f);
-                        const resolvedMatches = [...(f['Notes']||'').matchAll(/\[RESOLVED\s*[–-]\s*([^\]]+)\]/gi)];
-                        const resolvedTs = resolvedMatches.length ? resolvedMatches[resolvedMatches.length - 1][1].trim() : '';
+                        // Tod, 2026-09-17: "They should show the dates of these... unexpanded badges."
+                        const resolvedTs = fmtResolvedTs(r);
                         return `<div class="change-card resolved" id="card_${r.id}" style="border-left-color:${clubColor};">
                             <div class="resolved-header" onclick="toggleCollapse('${r.id}')">
                                 <span class="toggle-arrow">▶</span>

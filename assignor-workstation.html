@@ -9601,11 +9601,25 @@
             const type = document.querySelector('input[name="ctmType"]:checked')?.value;
             if (!type) { alert('Please select a cancellation reason.'); return; }
             const gameId      = _cancelPendingId;
+            const gameLabel   = _cancelPendingLabel;   // closeCancelModal() nulls it — read first
             const cancelledAt = new Date().toISOString();
             closeCancelModal();
 
             const game = allGames.find(g => String(g.id) === String(gameId));
             cancelledGameIds.add(gameId);
+
+            // A cancel that answers an open change request IS the resolution.
+            // Tod, 2026-09-17: cancelled #3166 from the request, and "it
+            // doesn't bring me back to the Change Control page, and it doesn't
+            // suppress the red need for the Change Recall control". The
+            // resolve button stamps [RESOLVED – ts] into Notes and returns to
+            // the changes page; a cancel did neither, so the changes page
+            // sorted it as epoch zero and the badge kept counting it.
+            const wasChangeRequest = (game?.fields['Game Status'] || '').toLowerCase() === 'change requested';
+            const nowLabel = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+            const prevNotes = game?.fields['Notes'] || '';
+            const stampedNotes = wasChangeRequest ? `${prevNotes}\n[RESOLVED – ${nowLabel}] Cancelled (${type === 'weather' ? 'weather' : 'non-weather'})` : prevNotes;
+
             if (game) {
                 // Remove from conflict detection — refs stay assigned, just remove from conflict map
                 const dt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
@@ -9617,16 +9631,29 @@
                 game.fields['Game Status']       = 'Cancelled';
                 game.fields['cancellation_type'] = type;
                 game.fields['cancelled_at']      = cancelledAt;
+                if (wasChangeRequest) game.fields['Notes'] = stampedNotes;
                 // ⚠️ Refs preserved — do NOT clear Center Referee / AR 1 / AR 2
             }
             renderGames();
             try {
                 const _cTable = window.tournamentMode ? 'tournament_games' : 'games';
-                await supabaseClient.client.from(_cTable).update({
-                    'Game Status':     'Cancelled',
-                    cancellation_type: type,
-                    cancelled_at:      cancelledAt
-                }).eq('id', gameId);
+                const patch = { 'Game Status': 'Cancelled', cancellation_type: type, cancelled_at: cancelledAt };
+                if (wasChangeRequest) patch['Notes'] = stampedNotes;
+                await supabaseClient.client.from(_cTable).update(patch).eq('id', gameId);
+
+                // Badge: one fewer open request, right now, not after a reload.
+                if (wasChangeRequest) {
+                    const stillOpen = allGames.filter(g => (g.fields['Game Status'] || '').toLowerCase() === 'change requested').length;
+                    const link = document.getElementById('changeRequestsLink');
+                    if (link) {
+                        if (stillOpen > 0) document.getElementById('changeRequestsCount').textContent = `(${stillOpen})`;
+                        else link.style.display = 'none';
+                    }
+                    // Came in from the changes page (?game=N) → go back there, same as resolve.
+                    if (new URLSearchParams(window.location.search).get('game')) {
+                        showChangeCompleteModal(gameLabel || `${game?.fields['Home Team']} vs ${game?.fields['Away Team']}`, game?.fields['Date'], null, 'Cancelled');
+                    }
+                }
             } catch(e) {
                 cancelledGameIds.delete(gameId);
                 if (game) {
@@ -9850,11 +9877,13 @@
             } catch(e) { alert('Could not copy link: ' + e.message); }
         }
 
-        function showChangeCompleteModal(matchup, newDate, newTime) {
+        function showChangeCompleteModal(matchup, newDate, newTime, outcome) {
             const fmtDate = new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
             const fmtTime = newTime ? (' @ ' + formatTime(newTime)) : '';
             document.getElementById('changeCompleteMatchup').textContent  = matchup;
-            document.getElementById('changeCompleteDetail').textContent   = `Rescheduled to ${fmtDate}${fmtTime}`;
+            document.getElementById('changeCompleteDetail').textContent   = outcome === 'Cancelled'
+                ? `Cancelled — was ${fmtDate}`
+                : `Rescheduled to ${fmtDate}${fmtTime}`;
             document.getElementById('changeCompleteOverlay').classList.add('show');
             let secs = 4;
             const cdEl = document.getElementById('changeCompleteCountdown');
