@@ -165,6 +165,16 @@
         .btn-note:hover { background:#0f2a52; }
         .btn-preset-note { background:#f0f4ff; border:1px solid #c7d4f0; color:#1a3a6b; border-radius:6px; padding:4px 10px; font-size:0.74rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:background 0.15s; white-space:nowrap; }
         .btn-preset-note:hover { background:#dce6ff; }
+        /* ── Archive: season sections ── */
+        .season-section { margin: 0 0 22px; }
+        .season-head {
+            display: flex; align-items: center; gap: 8px;
+            font-family: 'Barlow Condensed', sans-serif; font-size: 1.15rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 1px; color: #09142a;
+            border-bottom: 2px solid #e2d9ce; padding: 6px 2px; margin-bottom: 10px;
+        }
+        .season-head .season-n { margin-left: auto; font-size: .78rem; font-weight: 700; color: #6b7280; letter-spacing: .4px; text-transform: none; }
+
         /* ── Season bar ── */
         #seasonBar {
             display: flex; align-items: center; gap: 14px;
@@ -664,6 +674,28 @@
             return;
         }
 
+        // Archive: one section per season, newest season first, each with its
+        // own heading and count. Tod, 2026-09-17: "Those need to be broken down
+        // into their respective seasons." Live view: one flat set, as before.
+        if (showingArchive) {
+            const bySeason = {};
+            filtered.forEach(r => {
+                const sn = seasonOfDate(r.fields['date'] || r.fields['Date'] || '') || 'Undated';
+                (bySeason[sn] = bySeason[sn] || []).push(r);
+            });
+            container.innerHTML = Object.entries(bySeason)
+                .sort((a, b) => seasonRank(b[0]) - seasonRank(a[0]))
+                .map(([sn, recs]) => `
+                    <div class="season-section">
+                        <div class="season-head"><span>${seasonIcon(sn)}</span> ${sn} <span class="season-n">${recs.length} request${recs.length === 1 ? '' : 's'}</span></div>
+                        ${renderClubGroups(recs)}
+                    </div>`).join('');
+            return;
+        }
+        container.innerHTML = renderClubGroups(filtered);
+    }
+
+    function renderClubGroups(filtered) {
         // Group by club
         const byClub = {};
         filtered.forEach(r => {
@@ -679,7 +711,7 @@
             const st = (r.fields['Game Status'] || '').toLowerCase();
             return ['change resolved','cancelled'].includes(st) ? getResolvedTs(r).getTime() : (getRequestTs(r)?.getTime() || Date.now());
         }));
-        container.innerHTML = Object.entries(byClub)
+        return Object.entries(byClub)
             .sort((a, b) => sortDir === 'asc' ? groupTs(a) - groupTs(b) : groupTs(b) - groupTs(a))
             .map(([club, records]) => {
             const clubColor = getClubColor(club);
