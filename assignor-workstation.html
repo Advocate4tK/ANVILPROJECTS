@@ -6651,12 +6651,22 @@
                     const openCount = games.length;
                     const intro = `We have ${openCount === 1 ? '1 opening' : `${openCount} openings`}.  LMK if you wanna work!`;
 
+                    // Pay lines labelled COMP / REC, so "U9-U10 AR $25" and
+                    // "U10 (no AR)" stop sitting side by side unexplained.
+                    // Comp reads the BAND key (U9-U10); rec reads the exact age
+                    // (U10) — that is how the pay lookup already works. The row
+                    // SHAPE is the only reliable signal: pay_rates.game_type
+                    // reads "rec" on every NECONN row, comp bands included.
+                    // Tod, 2026-09-17: "so the U9-U10".
+                    const isBand = ag => /^U\d+\s*-\s*U\d+$/i.test(String(ag).trim());
                     const rateLines = rates.length
-                        ? rates.sort((a,b) => parseInt(a.age_group.replace(/^U/i,'')) - parseInt(b.age_group.replace(/^U/i,'')))
+                        ? rates.sort((a,b) => parseInt(a.age_group.replace(/^U/i,'')) - parseInt(b.age_group.replace(/^U/i,'')) || (isBand(a.age_group) ? -1 : 1))
                                .map(r => {
-                                   const crew = window._crewRules?.[club]?.[r.age_group];
+                                   const band  = isBand(r.age_group);
+                                   const label = band ? 'COMP' : 'REC ';
+                                   const crew  = window._crewRules?.[club]?.[r.age_group + '|' + (band ? 'Comp' : 'Rec')] || window._crewRules?.[club]?.[r.age_group];
                                    const showAR = r.ar && (crew ? (crew.ar1 || crew.ar2) : true);
-                                   return showAR ? `${r.age_group} | C $${r.center} | AR $${r.ar} |` : `${r.age_group} | C $${r.center} |`;
+                                   return showAR ? `${label} ${r.age_group} | C $${r.center} | AR $${r.ar} |` : `${label} ${r.age_group} | C $${r.center} |`;
                                })
                                .join('\n')
                         : '(no pay rates on file for this club)';
