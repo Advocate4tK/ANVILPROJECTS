@@ -2207,11 +2207,13 @@
                 const gameList = submittedGames
                     .map((g, i) => `${i + 1}. ${g.date || ''} ${g.time || ''} — ${g.home || ''} vs ${g.away || ''} (${g.age || ''})`)
                     .join('\n');
-                emailjs.send(CONFIG.EMAILJS.SERVICE_ID, 'template_e6za6ab', {
-                    club_name:  clubDisplay,
-                    game_count: successCount,
-                    game_list:  gameList || `${successCount} game(s) submitted`,
-                });
+                // notify-assignor, not EmailJS: the template had ONE address
+                // baked in, so a Canterbury upload went to Tod instead of Dave.
+                fetch(`${CONFIG.SUPABASE_URL}/functions/v1/notify-assignor`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}` },
+                    body: JSON.stringify({ event: 'games_uploaded', club: clubDisplay, count: successCount, game_list: gameList || `${successCount} game(s) submitted` }),
+                }).then(r => r.json()).then(j => console.log('[notify-assignor]', j)).catch(e => console.warn('[notify-assignor]', e));
             } catch(e) { console.warn('Upload notification failed:', e); }
         }
     });
@@ -3096,6 +3098,19 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
             } catch(statusErr) {
                 console.warn('Could not update Game Status:', statusErr.message);
             }
+
+            // Tell the assignor who actually covers this club. Until 2026-09-17
+            // this line promised "the assignor will be in touch" and nobody was
+            // told — they found out when they happened to open the workstation.
+            // notify-assignor looks the assignor up from the game's club, server
+            // side, and mails THEM. Fire-and-forget: the request is already saved.
+            try {
+                fetch(`${CONFIG.SUPABASE_URL}/functions/v1/notify-assignor`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}` },
+                    body: JSON.stringify({ event: isCancelling ? 'cancellation_request' : 'change_request', game_id: Number(gameId) }),   // club comes from the game row, server-side
+                }).then(r => r.json()).then(j => console.log('[notify-assignor]', j)).catch(e => console.warn('[notify-assignor]', e));
+            } catch (e) { console.warn('[notify-assignor]', e); }
 
             msgEl.textContent = '✅ Change request submitted. The assignor will be in touch.';
             msgEl.style.color = '#1e8449';
