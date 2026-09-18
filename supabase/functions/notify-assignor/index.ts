@@ -270,16 +270,26 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
 <p style="color:#555">— ${esc(assignorName)}</p>
 </div>`;
 
+    // Logged like everything else, so "did Sylas get his confirmation" has an
+    // answer in blast_log/blast_recipients: where_text = "assignment → <name> · <pos> · game N".
+    const { data: alog } = await db.from("blast_log").insert({
+      sent_by: null, sent_by_name: assignorName, subject, body: bodyText(false),
+      where_text: `assignment → ${ref.name} · ${posLabel} · game ${gid}`, recipient_count: 1, guardians_cc: true,
+    }).select("id").single();
+    const logRow = async (email: string, isG: boolean, ok: boolean, err?: string) => {
+      if (alog) await db.from("blast_recipients").insert({ blast_id: alog.id, referee_id: ref.id, email, is_guardian: isG, status: ok ? "sent" : "failed", error: ok ? null : (err || "?") });
+    };
+
     const results: Record<string, string> = {};
-    try { await sendWithReply(ref.email, subject, bodyText(false), bodyHtml(false), replyTo); results.referee = "sent"; }
-    catch (e) { results.referee = "failed: " + (e as Error).message; }
+    try { await sendWithReply(ref.email, subject, bodyText(false), bodyHtml(false), replyTo); results.referee = "sent"; await logRow(ref.email, false, true); }
+    catch (e) { results.referee = "failed: " + (e as Error).message; await logRow(ref.email, false, false, (e as Error).message); }
 
     const isMinor = ref.age != null && Number(ref.age) < 18;
     const gEmail  = String(ref["Guardian Email"] || "").trim();
     if (isMinor) {
       if (gEmail) {
-        try { await sendWithReply(gEmail, subject, bodyText(true), bodyHtml(true), replyTo); results.guardian = "sent"; }
-        catch (e) { results.guardian = "failed: " + (e as Error).message; }
+        try { await sendWithReply(gEmail, subject, bodyText(true), bodyHtml(true), replyTo); results.guardian = "sent"; await logRow(gEmail, true, true); }
+        catch (e) { results.guardian = "failed: " + (e as Error).message; await logRow(gEmail, true, false, (e as Error).message); }
       } else {
         results.guardian = "no guardian on file";
       }
