@@ -1123,7 +1123,7 @@
     <script src="js/supabase-client.js?v=15"></script>
     <script>var airtableClient = supabaseClient;</script>
     <script src="js/admin-auth.js"></script>
-    <script src="js/workstation-tabs.js?v=3"></script>
+    <script src="js/workstation-tabs.js?v=4"></script>
     <script>
         checkAdminAccess();
 
@@ -2510,6 +2510,11 @@
                     onmouseover="this.style.outline='2px solid #1a3a6b';" onmouseout="this.style.outline='';"></span>`).join('');
             menu.innerHTML = `
                 <div style="padding:6px 0;">
+                    <div onclick="openRefMessageByName(document.getElementById('s2${field}-${gid}')?.textContent || '', '${gid}'); sheet2HideOptMenu();"
+                         style="padding:7px 16px; cursor:pointer; color:#0f3460; font-weight:600;"
+                         onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
+                        ✉ Message ref
+                    </div>
                     <div onclick="sheet2ClearAssignedCell('${gid}','${field}'); sheet2HideOptMenu();"
                          style="padding:7px 16px; cursor:pointer; color:#cf222e;"
                          onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
@@ -8160,6 +8165,25 @@
             setTimeout(() => document.getElementById('refMsgSubject').focus(), 50);
         }
         function closeRefMessage() { document.getElementById('refMsgOverlay').style.display = 'none'; }
+
+        // From a game slot — Standard 2's ✉ or Sheet 3's right-click. Resolves
+        // the name in the slot to the roster record, opens the composer, and
+        // pre-fills the subject with the game so the ref knows which one.
+        function openRefMessageByName(name, gameId) {
+            const key = String(name || '').trim().toLowerCase();
+            if (!key || key === '—') return;
+            const r = refLookupByName[key] || allRefs.find(x => (x.fields['Name'] || '').trim().toLowerCase() === key);
+            if (!r || String(r.id).startsWith('ghost_')) { showToast(`⚠ ${name} isn't on the roster — can't message`, true); return; }
+            if (!r.fields['Email']) { showToast(`⚠ ${r.fields['Name']} has no email on file`, true); return; }
+            openRefMessage(r.id);
+            const g = allGames.find(x => String(x.id) === String(gameId));
+            if (g) {
+                const f = g.fields;
+                const d = f['Date'] ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '';
+                document.getElementById('refMsgSubject').value = `${f['Home Team'] || ''} vs ${f['Away Team'] || ''} — ${d}${f['Time'] ? ' ' + formatTime(f['Time']) : ''}`;
+                setTimeout(() => document.getElementById('refMsgBody').focus(), 60);
+            }
+        }
         async function sendRefMessage() {
             const rid = document.getElementById('refMsgId').value;
             const subject = document.getElementById('refMsgSubject').value.trim();
@@ -8633,6 +8657,7 @@
                     ${availWarn}
                     <button class="unassign-btn" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
                     <button id="cmi_${gameId}_${position}" onclick="event.stopPropagation(); copyCantMakeItLink('${gameId}','${position}','${safeName}')" title="Copy can't-make-it link for ref" style="position:absolute;bottom:4px;right:28px;background:none;border:none;font-size:0.75rem;cursor:pointer;opacity:0.45;padding:0;line-height:1;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.45'">🔗</button>
+                    <button onclick="event.stopPropagation(); openRefMessageByName('${safeName}','${gameId}')" onmousedown="event.stopPropagation();" title="Message ${safeName} about this game" style="position:absolute;bottom:4px;right:48px;background:none;border:none;font-size:0.75rem;cursor:pointer;opacity:0.45;padding:0;line-height:1;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.45'">✉</button>
                 </div>`;
             }
             return `<div class="slot" data-game-id="${gameId}" data-position="${position}">
