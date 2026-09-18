@@ -8141,6 +8141,55 @@
             clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, isWarn ? 7000 : 4500);
         }
 
+        function openRefMessage(rid) {
+            const r = allRefs.find(x => String(x.id) === String(rid));
+            if (!r) return;
+            const minor = r.fields['Age'] != null && Number(r.fields['Age']) < 18;
+            const g = (r.fields['Guardian Email'] || '').trim();
+            document.getElementById('refMsgId').value = rid;
+            document.getElementById('refMsgTo').textContent = `to ${r.fields['Name']} <${r.fields['Email']}>`;
+            document.getElementById('refMsgNote').innerHTML = minor
+                ? (g ? `${r.fields['Name']} is a minor — <b>their parent (${g}) gets a copy.</b> Replies come to you.`
+                     : `⚠ ${r.fields['Name']} is a minor with <b>no parent on file</b> — only the referee will get this. Replies come to you.`)
+                : `Replies come to you.`;
+            document.getElementById('refMsgSubject').value = '';
+            document.getElementById('refMsgBody').value = '';
+            document.getElementById('refMsgResult').innerHTML = '';
+            const btn = document.getElementById('refMsgSend'); btn.disabled = false; btn.textContent = 'Send';
+            document.getElementById('refMsgOverlay').style.display = 'flex';
+            setTimeout(() => document.getElementById('refMsgSubject').focus(), 50);
+        }
+        function closeRefMessage() { document.getElementById('refMsgOverlay').style.display = 'none'; }
+        async function sendRefMessage() {
+            const rid = document.getElementById('refMsgId').value;
+            const subject = document.getElementById('refMsgSubject').value.trim();
+            const body = document.getElementById('refMsgBody').value.trim();
+            const res = document.getElementById('refMsgResult');
+            if (!subject) { res.innerHTML = '<span style="color:#dc2626;">Add a subject.</span>'; return; }
+            if (!body)    { res.innerHTML = '<span style="color:#dc2626;">Write the message.</span>'; return; }
+            const jwt = _getSupabaseSession()?.access_token;
+            if (!jwt) { res.innerHTML = '<span style="color:#dc2626;">Your login has expired — sign in again.</span>'; return; }
+            const btn = document.getElementById('refMsgSend'); btn.disabled = true; btn.textContent = 'Sending…';
+            try {
+                const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/notify-assignor`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${jwt}` },
+                    body: JSON.stringify({ event: 'message_referee', referee_id: Number(rid), subject, body }),
+                });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok || !j.ok) throw new Error(j.error || j.reason || `Server said ${r.status}`);
+                const g = j.minor ? (j.results?.guardian === 'sent' ? ' + parent' : '') : '';
+                res.innerHTML = `<span style="color:#065f46; font-weight:700;">✅ Sent to ${j.referee}${g}. Replies to ${j.reply_to || 'you'}.</span>`;
+                btn.textContent = 'Sent';
+                showToast(`✉ Message sent to ${j.referee}${g}`);
+                setTimeout(closeRefMessage, 1800);
+            } catch (e) {
+                res.innerHTML = `<span style="color:#dc2626;">Didn't send: ${e.message}</span>`;
+                btn.disabled = false; btn.textContent = 'Send';
+            }
+        }
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('refMsgOverlay').style.display === 'flex') closeRefMessage(); });
+
         async function sendAssignmentConfirmation(gameId, position) {
             const game = allGames.find(g => String(g.id) === String(gameId));
             const who  = game ? resolveRefName(game.fields[position]) : '';
@@ -9075,7 +9124,8 @@
                         ${assignedBadge ? `<div class="ref-meta" style="margin-top:2px;">${assignedBadge}</div>` : ''}
                         ${status        ? `<div class="ref-meta" style="margin-top:2px;">${status}</div>` : ''}
                         ${r.fields['Phone'] ? `<div class="ref-meta" style="margin-top:2px;">📱 <a href="tel:${r.fields['Phone']}" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" style="color:#0f3460;text-decoration:none;user-select:text;-webkit-user-select:text;">${r.fields['Phone']}</a></div>` : ''}
-                        ${r.fields['Email'] ? `<div class="ref-meta" style="margin-top:2px;">✉ <a href="mailto:${r.fields['Email']}" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" style="color:#0f3460;text-decoration:none;user-select:text;-webkit-user-select:text;">${r.fields['Email']}</a></div>` : ''}
+                        ${r.fields['Email'] ? `<div class="ref-meta" style="margin-top:2px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">✉ <a href="mailto:${r.fields['Email']}" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" style="color:#0f3460;text-decoration:none;user-select:text;-webkit-user-select:text;">${r.fields['Email']}</a>
+                            <button onclick="event.stopPropagation(); openRefMessage('${rid}')" onmousedown="event.stopPropagation();" title="Email this referee from Referee Tool — logged, replies come to you" style="background:#0f3460;color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:inherit;">✉ Message</button></div>` : ''}
 
                         <!-- Assignor rating & notes -->
                         <div style="margin-top:8px; padding-top:7px; border-top:1px dashed #dde3f0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -9966,6 +10016,34 @@
             }, 1000);
         }
     </script>
+
+    <!-- Message one referee — a window INSIDE the page, not Gmail.
+         Tod, 2026-09-18: "where is the email functionality on the assignor
+         workstation to send an email to a ref?" ... "should open a window
+         inside the page". Sends through Referee Tool: reply-to is you, a
+         minor's parent is copied, it's logged. -->
+    <div id="refMsgOverlay" style="display:none; position:fixed; inset:0; background:rgba(4,10,22,0.7); z-index:9998; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:#fff; border-radius:14px; width:100%; max-width:560px; box-shadow:0 30px 80px rgba(0,0,0,0.5); overflow:hidden;">
+            <div style="background:#0f3460; color:#fff; padding:14px 18px; display:flex; align-items:center; gap:10px;">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.2rem; font-weight:800; text-transform:uppercase; letter-spacing:0.6px;">✉ Message referee</div>
+                <div id="refMsgTo" style="font-size:0.85rem; opacity:0.85;"></div>
+                <button onclick="closeRefMessage()" style="margin-left:auto; background:none; border:none; color:#fff; font-size:1.3rem; cursor:pointer;">✕</button>
+            </div>
+            <div style="padding:18px;">
+                <div id="refMsgNote" style="font-size:0.8rem; color:#555; background:#f5f7ff; border-left:4px solid #0f3460; border-radius:6px; padding:8px 12px; margin-bottom:12px;"></div>
+                <input type="hidden" id="refMsgId">
+                <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Subject</label>
+                <input id="refMsgSubject" type="text" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem; margin-bottom:12px;" placeholder="Saturday's U12 game">
+                <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Message</label>
+                <textarea id="refMsgBody" rows="7" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem; resize:vertical;" placeholder="Hi — "></textarea>
+                <div id="refMsgResult" style="margin-top:10px; font-size:0.85rem;"></div>
+                <div style="display:flex; gap:10px; margin-top:14px; justify-content:flex-end;">
+                    <button onclick="closeRefMessage()" style="background:#f0ece6; color:#09142a; border:1px solid #ddd3c6; border-radius:8px; padding:9px 18px; font-weight:700; cursor:pointer; font-family:inherit;">Cancel</button>
+                    <button id="refMsgSend" onclick="sendRefMessage()" style="background:#00c853; color:#06210f; border:none; border-radius:8px; padding:9px 22px; font-weight:800; cursor:pointer; font-family:inherit;">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div id="changeCompleteOverlay">
         <div id="changeCompleteBox">
