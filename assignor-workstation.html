@@ -709,6 +709,7 @@
             cursor: pointer;
             align-self: center;
         }
+        .s2-conf-btn.s2-conf-sent { background:#1e8449 !important; color:#fff !important; border-color:#1e8449 !important; }
     </style>
 </head>
 <body>
@@ -7232,6 +7233,7 @@
                     allGames = allGames.filter(g => allowed.has(g.fields['Source Club']));
                 }
                 buildCAConfirmedMap();
+                await loadCAEmailSent();
 
                 // Load crew rules for all clubs in loaded games — must run before renderGames()
                 window._crewRules = {};
@@ -8092,6 +8094,35 @@
                 letter-spacing:0.6px;padding:1px 6px;border-radius:4px;">${cfg.label}</span>`;
         }
 
+        // Which slots have had a confirmation email actually SENT — read from
+        // blast_log (where_text = "assignment → <name> · <pos> · game N").
+        // A green chip means "I clicked"; this means "the referee was told".
+        // Tod, 2026-09-18: "just color coding this for other assigners isn't
+        // enough. It needs to be more transparent... If you hover over that
+        // button, it should say, confirmed in central assign and message the
+        // referee."
+        let caEmailSent = {};   // "gid|position" → { at: ISO, guardian: bool }
+        async function loadCAEmailSent() {
+            caEmailSent = {};
+            try {
+                const ids = allGames.map(g => g.id);
+                if (!ids.length) return;
+                const { data } = await supabaseClient.client
+                    .from('blast_log')
+                    .select('id,sent_at,where_text')
+                    .like('where_text', 'assignment → %')
+                    .order('id', { ascending: false })
+                    .limit(2000);
+                const posOf = { 'Center Referee': 'Center Referee', 'Assistant Referee 1': 'AR 1', 'Assistant Referee 2': 'AR 2' };
+                (data || []).forEach(row => {
+                    const m = String(row.where_text || '').match(/· (Center Referee|Assistant Referee [12]) · game (\d+)$/);
+                    if (!m) return;
+                    const key = `${m[2]}|${posOf[m[1]]}`;
+                    if (!caEmailSent[key]) caEmailSent[key] = { at: row.sent_at };
+                });
+            } catch (e) { console.warn('[caEmailSent]', e.message); }
+        }
+
         function buildCAConfirmedMap() {
             caConfirmedMap = {};
             allGames.forEach(g => {
@@ -8226,6 +8257,8 @@
                 const j = await r.json().catch(() => ({}));
                 console.log('[assignment_confirmed]', j);
                 if (j.ok) {
+                    caEmailSent[`${gameId}|${position}`] = { at: new Date().toISOString() };
+                    renderGames();
                     const g = j.minor ? (j.results?.guardian === 'sent' ? ' + parent' : j.results?.guardian === 'no guardian on file' ? ' (minor — NO parent on file)' : ' (parent failed)') : '';
                     // Text status rides along. "no consent" is the common case until
                     // people tick the box on the availability form; "not configured"
@@ -8323,8 +8356,14 @@
                 const labelColor  = `color:${borderColor};`;
                 const confirmBg   = confirmed ? 'background:#e8f8ef;' : '';
                 const confirmBtn  = confirmed
-                    ? `<button class="s2-conf-btn s2-conf-done" onclick="toggleCAConfirmed('${gameId}','${position}',event)" title="Mark as NOT in CA">✓ CA</button>`
-                    : `<button class="s2-conf-btn" onclick="toggleCAConfirmed('${gameId}','${position}',event)" title="Mark as entered in CA">○ CA</button>`;
+                    ? (() => {
+                        const sent = caEmailSent[`${gameId}|${position}`];
+                        const when = sent?.at ? new Date(sent.at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+                        return sent
+                            ? `<button class="s2-conf-btn s2-conf-done s2-conf-sent" onclick="toggleCAConfirmed('${gameId}','${position}',event)" title="Confirmed in Central Assign, and ${refName} was emailed the assignment${when ? ' on ' + when : ''}. Click to un-confirm (sends nothing).">✓ CA · ✉ sent</button>`
+                            : `<button class="s2-conf-btn s2-conf-done" onclick="toggleCAConfirmed('${gameId}','${position}',event)" title="Confirmed in Central Assign. No confirmation email is on record for this slot. Click to un-confirm (sends nothing).">✓ CA</button>`;
+                      })()
+                    : `<button class="s2-conf-btn" onclick="toggleCAConfirmed('${gameId}','${position}',event)" title="Click to mark this slot confirmed in Central Assign AND email ${refName} the assignment (parent copied if under 18).">○ CA</button>`;
                 return `<div class="slot occupied s2-slot" draggable="true" data-game-id="${gameId}" data-position="${position}"
                     style="${borderStyle} ${confirmBg}"
                     ondragstart="onSlotDragStart(event, '${gameId}', '${position}', '${refId}', '${safeName}')"
@@ -8503,7 +8542,7 @@
                     ...(ar2 && !hideARs ? ['AR 2'] : [])
                 ];
                 const allInCABtn = occupiedPositions.length > 0
-                    ? `<button onclick="confirmAllCA('${gid}',[${occupiedPositions.map(p=>`'${p}'`).join(',')}],event)"
+                    ? `<button title="Mark every assigned slot on this game confirmed in Central Assign AND email each referee their assignment (parents copied for minors)." onclick="confirmAllCA('${gid}',[${occupiedPositions.map(p=>`'${p}'`).join(',')}],event)"
                         style="background:#1e8449;color:white;border:none;border-radius:6px;padding:2px 9px;font-size:0.75rem;
                         cursor:pointer;font-weight:700;line-height:1.5;white-space:nowrap;">✓ Refs in CA</button>`
                     : '';
