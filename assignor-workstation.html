@@ -8249,9 +8249,17 @@
             if (event) event.stopPropagation();
             const gid = String(gameId);
             if (!caConfirmedMap[gid]) caConfirmedMap[gid] = new Set();
+            // Only NEWLY confirmed slots get an email; a slot already ✓ was
+            // already told. This is the card-level "✓ Refs in CA" button — the
+            // one Tod actually clicks — and it was never hooked; only the
+            // per-slot chip was. "again if I hit the CA button it needs to
+            // alert that message was sent." — 2026-09-18, third time asked.
+            const newly = occupiedPositions.filter(p => !caConfirmedMap[gid].has(p));
             occupiedPositions.forEach(p => caConfirmedMap[gid].add(p));
             await saveCAConfirmed(gid);
             renderGames();
+            for (const p of newly) await sendAssignmentConfirmation(gid, p);
+            if (!newly.length) showToast('Already confirmed — nothing new to send');
         }
 
         async function unconfirmAllCA(gameId, event) {
