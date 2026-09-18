@@ -674,6 +674,9 @@
             background: #eef2f7; border-left: 4px solid #64748b; border-radius: 9px;
             padding: 12px 15px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: #3f4c5f;
         }
+        .cmp-done { background:#f0fdf4; border:1px solid #bbf7d0; border-left:4px solid #00c853; border-radius:9px; padding:14px 16px; margin-bottom:14px; font-family:'DM Sans',sans-serif; }
+        .cmp-done .big { font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#065f46; }
+        .cmp-done .sub { font-size:.84rem; color:#3f4c5f; margin-top:3px; }
         .cmp-fail {
             background: #fff3f3; border: 1px solid #fca5a5; border-left: 4px solid #dc2626; border-radius: 9px;
             padding: 12px 15px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: #7f1d1d; line-height: 1.5;
@@ -911,10 +914,36 @@
 
     <div class="cmp-chan">
         <button id="chanEmail" class="on" onclick="setChannel('email')">✉ Email</button>
-        <button id="chanText" disabled title="Needs a texting provider, and guardian consent for minors">💬 Text</button>
+        <button id="chanText" onclick="setChannel('text')">💬 Text</button>
     </div>
 
-    <div class="cmp-body">
+    <!-- ── TEXT panel ──────────────────────────────────────────────────────
+         Same recipients as email; a different gate. A text goes only to a
+         phone whose owner ticked the consent box on the availability form
+         (referees.sms_consent_at). For a minor, the GUARDIAN's box and the
+         guardian's phone. Nothing else. sms_opt_in defaulted true for all
+         3,456 in July and is never read. Tod, 2026-09-18. -->
+    <div class="cmp-body" id="cmpTextBody" style="display:none;">
+        <div class="cmp-stats" id="txtStats"></div>
+        <div id="txtWarn"></div>
+        <div class="cmp-row">
+            <label for="txtBody">Message <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#6b7280;font-family:'DM Sans',sans-serif;font-size:0.78rem;">— one text, no merge tokens. <span id="txtCount">0</span>/160</span></label>
+            <textarea id="txtBody" maxlength="320" rows="4" placeholder="Referee Tool: openings this weekend near you — see referee-tool.com/ref-openings.html" oninput="renderText()"></textarea>
+        </div>
+        <div class="cmp-row">
+            <label>Will receive <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#6b7280;font-family:'DM Sans',sans-serif;font-size:0.78rem;">— consent on file</span></label>
+            <div class="cmp-rcp" id="txtRecipients"></div>
+        </div>
+        <div id="txtResult"></div>
+        <div class="cmp-ft">
+            <span class="msg" id="txtMsg"></span>
+            <div style="margin-left:auto; display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="cbtn gr" id="txtSend">Send Text</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="cmp-body" id="cmpEmailBody">
         <div class="cmp-stats" id="cmpStats"></div>
         <div id="cmpWarn"></div>
 
@@ -2108,8 +2137,83 @@
     function setChannel(c) {
         cmpChannel = c;
         document.getElementById('chanEmail').classList.toggle('on', c === 'email');
-        renderCompose();
+        document.getElementById('chanText').classList.toggle('on', c === 'text');
+        document.getElementById('cmpEmailBody').style.display = c === 'email' ? '' : 'none';
+        document.getElementById('cmpTextBody').style.display  = c === 'text'  ? '' : 'none';
+        if (c === 'text') renderText(); else renderCompose();
     }
+
+    // ── TEXT channel ────────────────────────────────────────────────────────
+    // Who can be texted: the referee's own phone with sms_consent_at; for a
+    // minor, the guardian's phone with guardian_sms_consent_at. The two are
+    // independent — a 16-year-old whose parent consented gets the parent
+    // texted, and gets texted themselves only if THEY also ticked the box.
+    function textTargets(r) {
+        const out = [];
+        const minor = isMinor(r);
+        if (r.sms_consent_at && String(r.phone || '').replace(/\D/g, '').length >= 10)
+            out.push({ referee_id: r.id, name: r.name, phone: r.phone, is_guardian: false });
+        if (minor && r.guardian_sms_consent_at && String(r['Guardian Phone'] || '').replace(/\D/g, '').length >= 10)
+            out.push({ referee_id: r.id, name: r.name, phone: r['Guardian Phone'], is_guardian: true, minor_name: r.name });
+        return out;
+    }
+    function renderText() {
+        const all = composeRecipients().filter(r => !isExpired(r));
+        const targets = all.flatMap(textTargets);
+        const refsTexted = new Set(targets.filter(t => !t.is_guardian).map(t => t.referee_id));
+        const parentsTexted = targets.filter(t => t.is_guardian).length;
+        const noConsent = all.filter(r => !textTargets(r).length);
+        const body = document.getElementById('txtBody').value;
+        document.getElementById('txtCount').textContent = body.length;
+        document.getElementById('txtCount').style.color = body.length > 160 ? '#dc2626' : '';
+
+        document.getElementById('txtStats').innerHTML = `
+            <div class="cmp-stat"><div class="n">${refsTexted.size}</div><div class="k">referees</div></div>
+            <div class="cmp-stat"><div class="n">${parentsTexted}</div><div class="k">parents</div></div>
+            <div class="cmp-stat${noConsent.length ? ' bad' : ''}"><div class="n">${noConsent.length}</div><div class="k">no consent</div></div>
+            <div class="cmp-stat"><div class="n">${targets.length}</div><div class="k">texts total</div></div>`;
+
+        let warn = '';
+        if (!targets.length) warn += `<div class="cmp-warn">⚠ <b>Nobody here has consented to texts yet.</b> Consent is collected on the availability form — a referee (or, for a minor, their parent) ticks "text me about assignments". Until someone does, this list is empty. That is the law working, not a bug.</div>`;
+        else if (noConsent.length) warn += `<div class="cmp-warn">ℹ ${noConsent.length} of ${all.length} have not consented to texts and will not be sent one. Email reaches them.</div>`;
+        if (body.length > 160) warn += `<div class="cmp-warn">⚠ Over 160 characters — this will go as two texts per person.</div>`;
+        document.getElementById('txtWarn').innerHTML = warn;
+
+        document.getElementById('txtRecipients').innerHTML = targets.length
+            ? targets.map(t => `<span class="rcp" title="${esc(t.phone)}">${esc(t.name)}${t.is_guardian ? ' <em style="font-style:normal;opacity:.75;">(parent)</em>' : ''}</span>`).join('')
+            : '<span class="muted-dash">No one with consent on file in this selection.</span>';
+
+        const btn = document.getElementById('txtSend');
+        btn.disabled = !targets.length || !body.trim();
+        btn.textContent = targets.length ? `Send Text (${targets.length})` : 'Send Text';
+    }
+
+    async function sendText() {
+        const body = document.getElementById('txtBody').value.trim();
+        const targets = composeRecipients().filter(r => !isExpired(r)).flatMap(textTargets);
+        if (!body || !targets.length) return;
+        const refN = new Set(targets.filter(t => !t.is_guardian).map(t => t.referee_id)).size;
+        const gN = targets.filter(t => t.is_guardian).length;
+        if (!confirm(`Send this text to ${refN} referee${refN === 1 ? '' : 's'}${gN ? ` and ${gN} parent${gN === 1 ? '' : 's'}` : ''} — ${targets.length} text${targets.length === 1 ? '' : 's'}?\n\n"${body}"\n\nTexts cannot be recalled.`)) return;
+        const jwt = _getSupabaseSession()?.access_token;
+        if (!jwt) { alert('Your login has expired — sign in again'); return; }
+        const btn = document.getElementById('txtSend'); btn.disabled = true; btn.textContent = 'Sending…';
+        const res = document.getElementById('txtResult');
+        try {
+            const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/send-blast`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${jwt}`, 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY },
+                body: JSON.stringify({ channel: 'sms', body, where_text: usingBasket() ? `basket (${refN} hand-picked)` : trayWhereText(), recipients: targets }),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.ok) throw new Error(j.error || `Server said ${r.status}`);
+            res.innerHTML = `<div class="cmp-done"><div class="big">💬 ${j.sent} sent${j.failed ? ` · ${j.failed} failed` : ''}${j.skipped ? ` · ${j.skipped} skipped` : ''}</div><div class="sub">${j.note || ''}</div></div>`;
+            if (BASKET.size) basketClear();
+        } catch (e) {
+            res.innerHTML = `<div class="cmp-fail"><b>Didn't send.</b> ${esc(e.message || e)}</div>`;
+        } finally { renderText(); }
+    }
+    document.getElementById('txtSend').addEventListener('click', sendText);
 
     function renderCompose() {
         const all  = composeRecipients();

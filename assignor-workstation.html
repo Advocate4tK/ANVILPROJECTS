@@ -8154,7 +8154,16 @@
                 console.log('[assignment_confirmed]', j);
                 if (j.ok) {
                     const g = j.minor ? (j.results?.guardian === 'sent' ? ' + parent' : j.results?.guardian === 'no guardian on file' ? ' (minor — NO parent on file)' : ' (parent failed)') : '';
-                    showToast(`✉ Confirmation sent to ${j.referee}${g}`);
+                    // Text status rides along. "no consent" is the common case until
+                    // people tick the box on the availability form; "not configured"
+                    // until Twilio's secrets exist. Neither is an error.
+                    const rs = j.results?.referee_sms, gs = j.results?.guardian_sms;
+                    const txt = rs === 'sent' || gs === 'sent'
+                        ? ` · 💬 text${rs === 'sent' && gs === 'sent' ? 's' : ''} sent`
+                        : (rs || gs || '').includes('not configured') ? ' · 💬 text skipped (Twilio not set up)'
+                        : rs === 'no consent' && (!j.minor || gs === 'no consent') ? ' · 💬 no text consent'
+                        : '';
+                    showToast(`✉ Confirmation sent to ${j.referee}${g}${txt}`);
                 } else {
                     showToast(`⚠ No confirmation sent${who ? ' to ' + who : ''}: ${j.reason || j.error || 'unknown'}`, true);
                 }

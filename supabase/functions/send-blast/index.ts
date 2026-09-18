@@ -47,6 +47,24 @@ const FROM_ADDRESS = "Referee Tool <blasts@referee-tool.com>";
 const SITE         = "https://referee-tool.com";
 const GAP_MS       = 550;
 
+// ── SMS via Twilio — same gate and same helper shape as notify-assignor ────
+const TW_SID  = Deno.env.get("TWILIO_ACCOUNT_SID") ?? "";
+const TW_TOK  = Deno.env.get("TWILIO_AUTH_TOKEN") ?? "";
+const TW_FROM = Deno.env.get("TWILIO_FROM") ?? "";
+const smsReady = () => !!(TW_SID && TW_TOK && TW_FROM);
+const e164 = (p: unknown) => { const d = String(p ?? "").replace(/\D/g, ""); return d.length === 10 ? "+1" + d : (d.length === 11 && d.startsWith("1")) ? "+" + d : ""; };
+async function sendSms(to: string, body: string): Promise<{ ok: boolean; sid?: string; error?: string }> {
+  if (!smsReady()) return { ok: false, error: "SMS not configured (Twilio secrets missing)" };
+  const num = e164(to); if (!num) return { ok: false, error: `bad phone "${to}"` };
+  const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TW_SID}/Messages.json`, {
+    method: "POST",
+    headers: { "Authorization": "Basic " + btoa(`${TW_SID}:${TW_TOK}`), "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ From: TW_FROM, To: num, Body: body }),
+  });
+  const j = await r.json().catch(() => ({}));
+  return r.ok ? { ok: true, sid: j?.sid } : { ok: false, error: j?.message || `Twilio ${r.status}` };
+}
+
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -211,6 +229,52 @@ Deno.serve(async (req) => {
     if (qErr) return json({ error: "Could not requeue: " + qErr.message }, 500);
     EdgeRuntime.waitUntil(work(db, rows as Row[], log.subject, log.body, replyTo));
     return json({ ok: true, blast_id: blastId, queued: rows.length, reply_to: replyTo });
+  }
+
+  // ── MODE 3: an SMS blast ────────────────────────────────────────────────
+  // { channel: "sms", body, recipients: [{referee_id, name, phone, is_guardian}] }
+  // The page only hands over people whose consent is on file, but the
+  // server checks again — a page is not a gate. Every attempt is logged to
+  // sms_log. Without Twilio secrets every row is 'skipped' with the reason,
+  // and the response says so plainly: nothing pretends to have texted.
+  if (p.channel === "sms") {
+    const body = String(p.body || "").trim();
+    const recips = Array.isArray(p.recipients) ? p.recipients.filter((r: any) => r && r.phone) : [];
+    if (!body)          return json({ error: "Message is empty" }, 400);
+    if (!recips.length) return json({ error: "No recipients" }, 400);
+    if (recips.length > 2000) return json({ error: "Too many (max 2000)" }, 400);
+
+    // Re-verify consent server-side against the referee rows.
+    const ids = [...new Set(recips.map((r: any) => Number(r.referee_id)).filter(Boolean))];
+    const { data: rows } = await db.from("referees").select('id,age,phone,"Guardian Phone",sms_consent_at,guardian_sms_consent_at').in("id", ids);
+    const byId = new Map((rows || []).map(r => [r.id, r]));
+    const allowed = recips.filter((r: any) => {
+      const row = byId.get(Number(r.referee_id)); if (!row) return false;
+      return r.is_guardian ? !!(row.guardian_sms_consent_at && row.age != null && Number(row.age) < 18) : !!row.sms_consent_at;
+    });
+    const refused = recips.length - allowed.length;
+
+    const { data: prof } = await db.from("assignor_profiles").select("username").eq("id", user.id).maybeSingle();
+    const senderName = prof?.username || user.email || user.id;
+    const { data: log } = await db.from("blast_log").insert({
+      sent_by: user.id, sent_by_name: senderName, subject: "(text)", body,
+      where_text: (p.where_text ? p.where_text + " · " : "") + "SMS", recipient_count: allowed.length, guardians_cc: true,
+    }).select("id").single();
+
+    let sent = 0, failed = 0, skipped = 0; const failures: { phone: string; error: string }[] = [];
+    for (const r of allowed) {
+      const res = await sendSms(r.phone, body);
+      const status = res.ok ? "sent" : (res.error?.includes("not configured") ? "skipped" : "failed");
+      if (status === "sent") sent++; else if (status === "skipped") skipped++; else { failed++; failures.push({ phone: e164(r.phone) || r.phone, error: res.error || "?" }); }
+      await db.from("sms_log").insert({
+        sent_by: user.id, sent_by_name: senderName, kind: "blast", blast_id: log?.id ?? null, referee_id: r.referee_id ?? null,
+        to_phone: e164(r.phone) || String(r.phone), is_guardian: !!r.is_guardian, body, status, provider_id: res.sid ?? null, error: res.ok ? null : res.error,
+      });
+      await sleep(200);
+    }
+    const note = !smsReady() ? "Texting isn't switched on yet — Twilio isn't configured. Every message was logged as skipped; nothing was sent."
+               : refused ? `${refused} were refused by the server: no consent on file.` : "";
+    return json({ ok: true, blast_id: log?.id, channel: "sms", sent, failed, skipped, refused, failures, sms_ready: smsReady(), note });
   }
 
   // ── MODE 1: a new blast ─────────────────────────────────────────────────
