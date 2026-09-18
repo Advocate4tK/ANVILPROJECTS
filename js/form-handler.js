@@ -154,6 +154,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
 
+                // SMS consent — a TIMESTAMP when the box is ticked, cleared when it
+                // isn't. That timestamp is the only thing that ever permits a text.
+                // The referee's box covers their own phone; the guardian's box
+                // covers the guardian's phone and is the consent that counts for a
+                // minor. (referees.sms_opt_in defaulted true for everyone in July —
+                // it was never consent and is no longer read.)
+                {
+                    const smsBox = document.getElementById('smsConsent');
+                    const gBox   = document.getElementById('guardianSmsConsent');
+                    const gShown = document.getElementById('guardianSection')?.style.display !== 'none';
+                    if (smsBox) refUpdates['sms_consent_at'] = smsBox.checked ? new Date().toISOString() : null;
+                    if (gBox && gShown) refUpdates['guardian_sms_consent_at'] = gBox.checked ? new Date().toISOString() : null;
+                }
+
                 if (Object.keys(refUpdates).length > 0) {
                     try {
                         await airtableClient.updateRecord(

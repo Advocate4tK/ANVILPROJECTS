@@ -37,6 +37,48 @@ const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const FROM         = "Referee Tool <notify@referee-tool.com>";
 const SITE         = "https://referee-tool.com";
 
+// ── SMS via Twilio ─────────────────────────────────────────────────────────
+// Three secrets: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM (the
+// registered 10DLC number, E.164). Until all three exist, sendSms() returns
+// "not configured" and nothing pretends to have texted anyone.
+//
+// ⚠️ CONSENT IS THE GATE, NOT THE CREDENTIALS. A text goes to a referee only
+// if referees.sms_consent_at is set; to a guardian only if
+// guardian_sms_consent_at is set. Both are stamped by the availability form
+// when the person ticks the box. referees.sms_opt_in defaulted TRUE for
+// everyone in July and is NOT consent — it is never read here.
+const TW_SID  = Deno.env.get("TWILIO_ACCOUNT_SID") ?? "";
+const TW_TOK  = Deno.env.get("TWILIO_AUTH_TOKEN") ?? "";
+const TW_FROM = Deno.env.get("TWILIO_FROM") ?? "";
+const smsReady = () => !!(TW_SID && TW_TOK && TW_FROM);
+
+const e164 = (p: unknown) => {
+  const d = String(p ?? "").replace(/\D/g, "");
+  if (d.length === 10) return "+1" + d;
+  if (d.length === 11 && d.startsWith("1")) return "+" + d;
+  return "";
+};
+
+async function sendSms(to: string, body: string): Promise<{ ok: boolean; sid?: string; error?: string }> {
+  if (!smsReady()) return { ok: false, error: "SMS not configured (Twilio secrets missing)" };
+  const num = e164(to);
+  if (!num) return { ok: false, error: `bad phone "${to}"` };
+  const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TW_SID}/Messages.json`, {
+    method: "POST",
+    headers: { "Authorization": "Basic " + btoa(`${TW_SID}:${TW_TOK}`), "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ From: TW_FROM, To: num, Body: body }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, error: j?.message || `Twilio ${r.status}` };
+  return { ok: true, sid: j?.sid };
+}
+
+// Record every text attempt, sent or not — the same "did Ross get it" answer
+// the email log gives.
+async function logSms(db: ReturnType<typeof createClient>, row: Record<string, unknown>) {
+  try { await db.from("sms_log").insert(row); } catch (_) { /* never let logging break a send */ }
+}
+
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -166,10 +208,11 @@ Deno.serve(async (req) => {
     if (!refName || /^(EMPTY|FILLED|TBD)$/i.test(refName)) return json({ ok: false, reason: `no referee in ${pos}` });
 
     // The referee record — by exact name, then loosely.
-    let { data: ref } = await db.from("referees").select('id,name,email,age,"Guardian Email","Guardian Name"').ilike("name", refName).maybeSingle();
+    const REF_COLS = 'id,name,email,phone,age,"Guardian Email","Guardian Name","Guardian Phone",sms_consent_at,guardian_sms_consent_at';
+    let { data: ref } = await db.from("referees").select(REF_COLS).ilike("name", refName).maybeSingle();
     if (!ref) {
       const parts = refName.split(/\s+/);
-      const { data: cands } = await db.from("referees").select('id,name,email,age,"Guardian Email","Guardian Name"')
+      const { data: cands } = await db.from("referees").select(REF_COLS)
         .ilike("name", `%${parts[parts.length - 1]}%`).limit(10);
       ref = (cands || []).find(c => c.name.toLowerCase().replace(/[^a-z]/g, "") === refName.toLowerCase().replace(/[^a-z]/g, "")) || null;
     }
@@ -241,7 +284,29 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
         results.guardian = "no guardian on file";
       }
     }
-    return json({ ok: results.referee === "sent", referee: ref.name, email: ref.email, minor: isMinor, guardian_email: gEmail || null, results });
+    // ── texts, on top of the emails — only where consent exists ─────────────
+    // Short. A phone screen, not a letter. The email carries the detail.
+    const smsBody = `Referee Tool: you're assigned ${posLabel === "Center Referee" ? "CENTER" : posLabel.replace("Assistant Referee ", "AR")} — ${matchup}, ${fmtDate(g.date)} ${fmtTime(g.time)}, ${venueName || "venue TBD"}${fieldName ? " " + fieldName : ""}. Arrive 30 min early. Can't make it? Reply to the email from ${assignorName}.`;
+    const smsBase = { kind: "assignment", game_id: gid, referee_id: ref.id, body: smsBody };
+    if (ref.sms_consent_at && ref.phone) {
+      const r = await sendSms(ref.phone, smsBody);
+      results.referee_sms = r.ok ? "sent" : r.error || "failed";
+      await logSms(db, { ...smsBase, to_phone: e164(ref.phone) || String(ref.phone), is_guardian: false, status: r.ok ? "sent" : (r.error?.includes("not configured") ? "skipped" : "failed"), provider_id: r.sid ?? null, error: r.ok ? null : r.error });
+    } else {
+      results.referee_sms = ref.sms_consent_at ? "no phone" : "no consent";
+    }
+    if (isMinor) {
+      const gPhone = String(ref["Guardian Phone"] || "").trim();
+      if (ref.guardian_sms_consent_at && gPhone) {
+        const r = await sendSms(gPhone, smsBody.replace("you're assigned", `${ref.name} is assigned`));
+        results.guardian_sms = r.ok ? "sent" : r.error || "failed";
+        await logSms(db, { ...smsBase, to_phone: e164(gPhone) || gPhone, is_guardian: true, status: r.ok ? "sent" : (r.error?.includes("not configured") ? "skipped" : "failed"), provider_id: r.sid ?? null, error: r.ok ? null : r.error });
+      } else {
+        results.guardian_sms = ref.guardian_sms_consent_at ? "no phone" : "no consent";
+      }
+    }
+
+    return json({ ok: results.referee === "sent", referee: ref.name, email: ref.email, minor: isMinor, guardian_email: gEmail || null, sms_ready: smsReady(), results });
   }
 
   // ── games uploaded (replaces the one-inbox EmailJS template) ─────────────
