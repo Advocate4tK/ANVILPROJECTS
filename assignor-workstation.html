@@ -8184,14 +8184,58 @@
             const gid = String(gameId);
             if (!caConfirmedMap[gid]) caConfirmedMap[gid] = new Set();
             const s = caConfirmedMap[gid];
-            const confirming = !s.has(position);
-            if (confirming) s.add(position); else s.delete(position);
+            if (s.has(position)) {
+                // Un-confirming: just flip it. Nothing is sent.
+                s.delete(position);
+                await saveCAConfirmed(gid);
+                renderGames();
+                return;
+            }
+            // Confirming: ask which. Tod, 2026-09-18: "option when clicking
+            // 'send email or just confirm in CA' should be optioned". If the ref
+            // was already told by phone, or CA managed to send this time, "just
+            // confirm" is the right answer. A popover at the click, not a dialog.
+            const game = allGames.find(g => String(g.id) === gid);
+            const who = game ? resolveRefName(game.fields[position]) : '';
+            showCAChoice(event, `Confirm ${who || 'this slot'} in CA`,
+                `✉ Confirm &amp; email ${who ? who.split(' ')[0] : 'the referee'}`,
+                () => caChoose(gid, [position], true),
+                () => caChoose(gid, [position], false));
+        }
+
+        // One popover, two buttons. Used by the slot chip and the card button.
+        function showCAChoice(event, title, emailLabel, onEmail, onJust) {
+            let pop = document.getElementById('caChoicePop');
+            if (!pop) {
+                pop = document.createElement('div'); pop.id = 'caChoicePop';
+                pop.style.cssText = 'position:fixed;z-index:99998;background:#fff;border:1px solid #d0d7de;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:10px;font-family:"DM Sans",sans-serif;min-width:240px;';
+                document.body.appendChild(pop);
+                document.addEventListener('mousedown', e => { if (!pop.contains(e.target)) pop.style.display = 'none'; });
+            }
+            pop.innerHTML = '';
+            const h = document.createElement('div');
+            h.style.cssText = 'font-size:0.72rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:0 4px 8px;';
+            h.textContent = title;
+            const b1 = document.createElement('button');
+            b1.style.cssText = 'display:block;width:100%;text-align:left;background:#00c853;color:#06210f;border:none;border-radius:7px;padding:9px 12px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:6px;';
+            b1.innerHTML = emailLabel;
+            b1.onclick = () => { pop.style.display = 'none'; onEmail(); };
+            const b2 = document.createElement('button');
+            b2.style.cssText = 'display:block;width:100%;text-align:left;background:#f0ece6;color:#09142a;border:1px solid #ddd3c6;border-radius:7px;padding:9px 12px;font-weight:700;cursor:pointer;font-family:inherit;';
+            b2.textContent = '✓ Just confirm — no email';
+            b2.onclick = () => { pop.style.display = 'none'; onJust(); };
+            pop.append(h, b1, b2);
+            const x = Math.min((event?.clientX || 200), window.innerWidth - 260);
+            const y = Math.min((event?.clientY || 200), window.innerHeight - 130);
+            pop.style.left = x + 'px'; pop.style.top = y + 'px'; pop.style.display = 'block';
+        }
+        async function caChoose(gid, positions, sendEmail) {
+            if (!caConfirmedMap[gid]) caConfirmedMap[gid] = new Set();
+            positions.forEach(p => caConfirmedMap[gid].add(p));
             await saveCAConfirmed(gid);
             renderGames();
-            // Marking a slot ✓ CA now also TELLS the referee — and the parent,
-            // if they're a minor. Tod, 2026-09-18: Central Assign isn't sending
-            // its own confirmations. Un-confirming sends nothing.
-            if (confirming) sendAssignmentConfirmation(gid, position);
+            if (sendEmail) { for (const p of positions) await sendAssignmentConfirmation(gid, p); }
+            else showToast(`✓ ${positions.length === 1 ? 'Confirmed' : positions.length + ' slots confirmed'} in CA — no email sent`);
         }
 
         // Bottom-right toast — a sentence, a few seconds, gone. Used for the
@@ -8316,17 +8360,14 @@
             if (event) event.stopPropagation();
             const gid = String(gameId);
             if (!caConfirmedMap[gid]) caConfirmedMap[gid] = new Set();
-            // Only NEWLY confirmed slots get an email; a slot already ✓ was
-            // already told. This is the card-level "✓ Refs in CA" button — the
-            // one Tod actually clicks — and it was never hooked; only the
-            // per-slot chip was. "again if I hit the CA button it needs to
-            // alert that message was sent." — 2026-09-18, third time asked.
-            const newly = occupiedPositions.filter(p => !caConfirmedMap[gid].has(p));
-            occupiedPositions.forEach(p => caConfirmedMap[gid].add(p));
-            await saveCAConfirmed(gid);
-            renderGames();
-            for (const p of newly) await sendAssignmentConfirmation(gid, p);
-            if (!newly.length) showToast('Already confirmed — nothing new to send');
+            // Only NEWLY confirmed slots are offered; a slot already ✓ was
+            // already handled. This is the card-level "✓ Refs in CA" button.
+            const pending = occupiedPositions.filter(p => !caConfirmedMap[gid].has(p));
+            if (!pending.length) { showToast('Already confirmed — nothing new to send'); return; }
+            showCAChoice(event, `Confirm ${pending.length} slot${pending.length === 1 ? '' : 's'} in CA`,
+                `✉ Confirm &amp; email all ${pending.length}`,
+                () => caChoose(gid, pending, true),
+                () => caChoose(gid, pending, false));
         }
 
         async function unconfirmAllCA(gameId, event) {
