@@ -8114,9 +8114,53 @@
             const gid = String(gameId);
             if (!caConfirmedMap[gid]) caConfirmedMap[gid] = new Set();
             const s = caConfirmedMap[gid];
-            if (s.has(position)) s.delete(position); else s.add(position);
+            const confirming = !s.has(position);
+            if (confirming) s.add(position); else s.delete(position);
             await saveCAConfirmed(gid);
             renderGames();
+            // Marking a slot ✓ CA now also TELLS the referee — and the parent,
+            // if they're a minor. Tod, 2026-09-18: Central Assign isn't sending
+            // its own confirmations. Un-confirming sends nothing.
+            if (confirming) sendAssignmentConfirmation(gid, position);
+        }
+
+        // Bottom-right toast — a sentence, a few seconds, gone. Used for the
+        // confirmation-email result so the assignor sees it without F12.
+        function showToast(msg, isWarn) {
+            let el = document.getElementById('wsToast');
+            if (!el) {
+                el = document.createElement('div'); el.id = 'wsToast';
+                el.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:99999;max-width:420px;padding:12px 16px;border-radius:10px;font-family:"DM Sans",sans-serif;font-size:0.88rem;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.35);transition:opacity .25s;pointer-events:none;';
+                document.body.appendChild(el);
+            }
+            el.style.background = isWarn ? '#fff3f3' : '#f0fdf4';
+            el.style.color      = isWarn ? '#7f1d1d' : '#065f46';
+            el.style.border     = `1px solid ${isWarn ? '#fca5a5' : '#bbf7d0'}`;
+            el.style.borderLeft = `5px solid ${isWarn ? '#dc2626' : '#00c853'}`;
+            el.textContent = msg; el.style.opacity = '1';
+            clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, isWarn ? 7000 : 4500);
+        }
+
+        async function sendAssignmentConfirmation(gameId, position) {
+            const game = allGames.find(g => String(g.id) === String(gameId));
+            const who  = game ? resolveRefName(game.fields[position]) : '';
+            try {
+                const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/notify-assignor`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}` },
+                    body: JSON.stringify({ event: 'assignment_confirmed', game_id: Number(gameId), position }),
+                });
+                const j = await r.json().catch(() => ({}));
+                console.log('[assignment_confirmed]', j);
+                if (j.ok) {
+                    const g = j.minor ? (j.results?.guardian === 'sent' ? ' + parent' : j.results?.guardian === 'no guardian on file' ? ' (minor — NO parent on file)' : ' (parent failed)') : '';
+                    showToast(`✉ Confirmation sent to ${j.referee}${g}`);
+                } else {
+                    showToast(`⚠ No confirmation sent${who ? ' to ' + who : ''}: ${j.reason || j.error || 'unknown'}`, true);
+                }
+            } catch (e) {
+                showToast(`⚠ Confirmation email failed: ${e.message}`, true);
+            }
         }
 
         async function confirmAllCA(gameId, occupiedPositions, event) {

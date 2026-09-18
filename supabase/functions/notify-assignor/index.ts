@@ -74,10 +74,15 @@ async function assignorsFor(db: ReturnType<typeof createClient>, club: string) {
 }
 
 async function send(to: string, subject: string, text: string, html: string) {
+  return sendWithReply(to, subject, text, html, undefined);
+}
+// Assignment confirmations reply to the assignor, so "I can't make it" lands
+// with the person who can do something about it.
+async function sendWithReply(to: string, subject: string, text: string, html: string, replyTo?: string) {
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: FROM, to: [to], subject, text, html }),
+    body: JSON.stringify({ from: FROM, to: [to], subject, text, html, reply_to: replyTo || undefined }),
   });
   if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.message || `Resend ${r.status}`);
 }
@@ -131,6 +136,112 @@ Deno.serve(async (req) => {
     let sent = 0; const failures: string[] = [];
     for (const a of who) { try { await send(a.email, subject, text, html); sent++; } catch (e) { failures.push(`${a.email}: ${(e as Error).message}`); } }
     return json({ ok: sent > 0, sent, to: who.map(a => a.name), failures });
+  }
+
+  // ── assignment confirmed → tell the referee (and the parent) ─────────────
+  // Tod, 2026-09-18: "Central Assign isn't sending emails to confirm that
+  // they have been assigned — on either the parents or the kids... if I
+  // click that CA button can you wire this so it kicks out a confirmation
+  // email since CA isn't working?"
+  //
+  // Fires when the assignor marks a slot ✓ CA on the workstation. The
+  // referee gets date, time, venue, field, position, and who to reply to.
+  // A minor's guardian gets their own copy — same rule as blasts, not a
+  // setting. A minor with no guardian on file: the referee is still told
+  // (they have a game to get to) and the response says the parent wasn't.
+  //
+  //   { event: "assignment_confirmed", game_id, position }
+  //   position ∈ "Center Referee" | "AR 1" | "AR 2"
+  if (p.event === "assignment_confirmed") {
+    const gid = Number(p.game_id);
+    const pos = String(p.position || "");
+    if (!gid || !["Center Referee", "AR 1", "AR 2"].includes(pos)) return json({ error: "game_id and a valid position required" }, 400);
+
+    const { data: g } = await db.from("games")
+      .select('id,"Source Club","Home Team","Away Team",date,time,"Age Group","Gender",game_type,"Venue ID","Field ID",field,"Center Referee","AR 1","AR 2"')
+      .eq("id", gid).maybeSingle();
+    if (!g) return json({ error: `Game ${gid} not found` }, 404);
+
+    const refName = String(g[pos] || "").trim();
+    if (!refName || /^(EMPTY|FILLED|TBD)$/i.test(refName)) return json({ ok: false, reason: `no referee in ${pos}` });
+
+    // The referee record — by exact name, then loosely.
+    let { data: ref } = await db.from("referees").select('id,name,email,age,"Guardian Email","Guardian Name"').ilike("name", refName).maybeSingle();
+    if (!ref) {
+      const parts = refName.split(/\s+/);
+      const { data: cands } = await db.from("referees").select('id,name,email,age,"Guardian Email","Guardian Name"')
+        .ilike("name", `%${parts[parts.length - 1]}%`).limit(10);
+      ref = (cands || []).find(c => c.name.toLowerCase().replace(/[^a-z]/g, "") === refName.toLowerCase().replace(/[^a-z]/g, "")) || null;
+    }
+    if (!ref)        return json({ ok: false, reason: `referee "${refName}" not on roster` });
+    if (!ref.email)  return json({ ok: false, reason: `${ref.name} has no email on file` });
+
+    // Venue + field, by CA id
+    const [{ data: ven }, { data: fld }] = await Promise.all([
+      g["Venue ID"] ? db.from("venues").select('"Venue Name",address,city').eq('"Venue ID"', g["Venue ID"]).maybeSingle() : Promise.resolve({ data: null }),
+      g["Field ID"] ? db.from("fields").select('"Field Name"').eq('"Field ID"', g["Field ID"]).maybeSingle()             : Promise.resolve({ data: null }),
+    ]);
+    const venueName = ven?.["Venue Name"] || "";
+    const fieldName = fld?.["Field Name"] || g.field || "";
+    const where     = [venueName, fieldName].filter(Boolean).join(" · ");
+    const addr      = [ven?.address, ven?.city].filter(Boolean).join(", ");
+    const maps      = addr ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venueName + ", " + addr)}` : "";
+
+    // Who replies go to — the assignor for this club
+    const who = await assignorsFor(db, String(g["Source Club"] || ""));
+    const replyTo = who[0]?.email || undefined;
+    const assignorName = who[0]?.name || "your assignor";
+
+    const posLabel = pos === "Center Referee" ? "Center Referee" : pos === "AR 1" ? "Assistant Referee 1" : "Assistant Referee 2";
+    const matchup  = `${g["Home Team"] || "TBD"} vs ${g["Away Team"] || "TBD"}`;
+    const when     = `${fmtDate(g.date)} · ${fmtTime(g.time)}`;
+    const div      = [g["Age Group"], g["Gender"]].filter(Boolean).join(" ");
+    const club     = String(g["Source Club"] || "");
+    const first    = ref.name.split(/\s+/)[0];
+
+    const subject = `You're assigned: ${matchup} — ${fmtDate(g.date)} ${fmtTime(g.time)} (${posLabel})`;
+    const bodyText = (toParent: boolean) =>
+`${toParent ? `${ref.name} has been assigned` : `Hi ${first}, you're assigned`} to a game.
+
+${matchup}
+${when}
+${div}${g.game_type ? ` · ${g.game_type}` : ""} · ${club}
+Position: ${posLabel}
+Where: ${where || "TBD"}${addr ? `\n${addr}` : ""}${maps ? `\nMap: ${maps}` : ""}
+
+Please arrive 30 minutes before kickoff. If you can't make it, reply to this email right away so ${assignorName} can find cover.
+
+— ${assignorName}`;
+    const bodyHtml = (toParent: boolean) =>
+`<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:600px">
+<p>${toParent ? `<b>${esc(ref.name)}</b> has been assigned to a game.` : `Hi ${esc(first)}, you're assigned to a game.`}</p>
+<div style="background:#f6f6f6;border-left:4px solid #00c853;padding:12px 16px;margin:14px 0">
+<div style="font-size:18px;font-weight:700">${esc(matchup)}</div>
+<div style="font-size:16px;margin-top:4px">${esc(when)}</div>
+<div style="color:#555;margin-top:2px">${esc(div)}${g.game_type ? ` · ${esc(g.game_type)}` : ""} · ${esc(club)}</div>
+<div style="margin-top:10px"><b>Position:</b> ${esc(posLabel)}</div>
+<div><b>Where:</b> ${esc(where || "TBD")}${addr ? `<br><span style="color:#555">${esc(addr)}</span>` : ""}</div>
+${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Open in Google Maps</a></div>` : ""}
+</div>
+<p>Please arrive <b>30 minutes before kickoff</b>. If you can't make it, reply to this email right away so ${esc(assignorName)} can find cover.</p>
+<p style="color:#555">— ${esc(assignorName)}</p>
+</div>`;
+
+    const results: Record<string, string> = {};
+    try { await sendWithReply(ref.email, subject, bodyText(false), bodyHtml(false), replyTo); results.referee = "sent"; }
+    catch (e) { results.referee = "failed: " + (e as Error).message; }
+
+    const isMinor = ref.age != null && Number(ref.age) < 18;
+    const gEmail  = String(ref["Guardian Email"] || "").trim();
+    if (isMinor) {
+      if (gEmail) {
+        try { await sendWithReply(gEmail, subject, bodyText(true), bodyHtml(true), replyTo); results.guardian = "sent"; }
+        catch (e) { results.guardian = "failed: " + (e as Error).message; }
+      } else {
+        results.guardian = "no guardian on file";
+      }
+    }
+    return json({ ok: results.referee === "sent", referee: ref.name, email: ref.email, minor: isMinor, guardian_email: gEmail || null, results });
   }
 
   // ── games uploaded (replaces the one-inbox EmailJS template) ─────────────
