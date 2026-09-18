@@ -3505,13 +3505,28 @@
                             ? `oncontextmenu="sheet3ShowAssignedMenu(event,'${gid}','${field}'); event.stopPropagation(); return false;"`
                             : `oncontextmenu="sheet3ShowCellFilledMenu(event,'${gid}','${gcol}',''); return false;"`);
                     const badge     = hasRef ? refCountBadge(rawName) : '';
+                    let caChip = '';
+                    if (hasRef) {
+                        const confirmed = !!caConfirmedMap[String(gid)]?.has(posName);
+                        const sent = caEmailSent[`${gid}|${posName}`];
+                        const safe = rawName.replace(/'/g, "\\'");
+                        const base = 'font-size:0.62rem;font-weight:800;letter-spacing:0.4px;padding:1px 6px;border-radius:4px;margin-left:6px;cursor:pointer;border:1px solid;vertical-align:middle;white-space:nowrap;';
+                        if (!confirmed) {
+                            caChip = `<button onclick="event.stopPropagation(); toggleCAConfirmed('${gid}','${posName}',event)" onmousedown="event.stopPropagation();" title="Click to mark this slot confirmed in Central Assign AND email ${safe} the assignment (parent copied if under 18)." style="${base}background:#fff;color:#6b7280;border-color:#cbd5e1;">○ CA</button>`;
+                        } else if (sent) {
+                            const when = sent.at ? new Date(sent.at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+                            caChip = `<button onclick="event.stopPropagation(); toggleCAConfirmed('${gid}','${posName}',event)" onmousedown="event.stopPropagation();" title="Confirmed in Central Assign, and ${safe} was emailed the assignment${when ? ' on ' + when : ''}. Click to un-confirm (sends nothing)." style="${base}background:#1e8449;color:#fff;border-color:#1e8449;">✓ CA · ✉</button>`;
+                        } else {
+                            caChip = `<button onclick="event.stopPropagation(); toggleCAConfirmed('${gid}','${posName}',event)" onmousedown="event.stopPropagation();" title="Confirmed in Central Assign. No confirmation email on record for this slot. Click to un-confirm (sends nothing)." style="${base}background:#e8f5e9;color:#1e8449;border-color:#1e8449;">✓ CA</button>`;
+                        }
+                    }
                     const hoverIn  = hasRef ? `onmouseenter="showRefTooltip('${display.replace(/'/g,"\\'")}', this, event)"` : '';
                     const hoverOut   = hasRef ? `onmouseleave="hideRefTooltip()"` : '';
                     const cellClick = (!isFil && !isEmpty && !isCleared) ? `onclick="s3CellClick(event,'${gid}','${field}','${hasRef ? rawName.replace(/'/g,"\\'") : ''}')"` : '';
                     return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${!isCleared?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut} ${cellClick}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
-                        ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}</td>`;
+                        ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}${caChip}</td>`;
                 };
                 const optTd = n => {
                     const name = staged[n] || '';
@@ -4945,6 +4960,11 @@
                     onmouseover="this.style.outline='2px solid #1a3a6b';" onmouseout="this.style.outline='';"></span>`).join('');
             menu.innerHTML = `
                 <div style="padding:6px 0;">
+                    <div onclick="openRefMessageByName(document.getElementById('s3${field}-${gid}')?.innerText.replace(/[○✓·✉ CA0-9]+$/,'').trim() || '', '${gid}'); sheet3HideOptMenu();"
+                         style="padding:7px 16px; cursor:pointer; color:#0f3460; font-weight:600;"
+                         onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
+                        ✉ Message ref
+                    </div>
                     <div onclick="sheet3ClearAssignedCell('${gid}','${field}'); sheet3HideOptMenu();"
                          style="padding:7px 16px; cursor:pointer; color:#cf222e;"
                          onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
