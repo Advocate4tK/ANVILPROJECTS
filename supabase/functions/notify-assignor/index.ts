@@ -330,55 +330,86 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
   // guardian gets a copy — same rule as everything else. Logged to
   // blast_log/blast_recipients so it's answerable later.
   //
-  //   { event: "message_referee", referee_id, subject, body }
+  //   { event: "message_referee", referee_id | referee_ids[], subject, body, game_id?, date? }
   if (p.event === "message_referee") {
     const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     const asUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") ?? "", { global: { headers: { Authorization: `Bearer ${jwt}` } } });
     const { data: { user } } = await asUser.auth.getUser();
     if (!user) return json({ error: "Not signed in" }, 401);
 
-    const rid = Number(p.referee_id);
+    // One referee or several. Tod, 2026-09-18: "in Central Assign ... you
+    // could check one, two, or three of the refs, and say, please make sure
+    // you submit your availability, or please submit your game reports, or
+    // wish them a good game." Each checked referee gets their own copy under
+    // their own name; a minor's parent is copied; every send is logged.
+    const ids = [...new Set(
+      (Array.isArray(p.referee_ids) ? p.referee_ids : [p.referee_id]).map((x: unknown) => Number(x)).filter((n: number) => n > 0)
+    )] as number[];
     const subject = String(p.subject || "").trim();
     const body    = String(p.body || "").trim();
-    if (!rid)    return json({ error: "referee_id required" }, 400);
+    if (!ids.length) return json({ error: "referee_id(s) required" }, 400);
+    if (ids.length > 200) return json({ error: "Too many at once (max 200) — use Referee Blasts" }, 400);
     if (!subject || !body) return json({ error: "Subject and message are required" }, 400);
 
-    const { data: ref } = await db.from("referees").select('id,name,email,age,"Guardian Email","Guardian Name",unsubscribe_token').eq("id", rid).maybeSingle();
-    if (!ref)       return json({ error: "Referee not found" }, 404);
-    if (!ref.email) return json({ ok: false, reason: `${ref.name} has no email on file` });
+    const { data: refs } = await db.from("referees").select('id,name,email,age,"Guardian Email","Guardian Name",unsubscribe_token').in("id", ids);
+    const byId = new Map((refs || []).map(r => [Number(r.id), r]));
+    const targets = ids.map(id => byId.get(id)).filter(Boolean) as any[];
+    if (!targets.length) return json({ error: "Referee not found" }, 404);
 
     const { data: prof } = await db.from("assignor_profiles").select("username,name,email,reply_to_email").eq("id", user.id).maybeSingle();
     const replyTo  = (prof?.reply_to_email || prof?.email || user.email || "").trim() || undefined;
     const fromName = prof?.name || prof?.username || "your assignor";
 
-    const first = ref.name.split(/\s+/)[0];
-    const text  = (toParent: boolean) => `${toParent ? `A message from ${fromName} to ${ref.name}:` : `Hi ${first},`}\n\n${body}\n\n— ${fromName}${replyTo ? `\n${replyTo}` : ""}`;
-    const html  = (toParent: boolean) => `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:600px">
+    const where = targets.length === 1
+      ? `direct → ${targets[0].name}`
+      : `direct → ${targets.length} referees${p.game_id ? ` · game ${Number(p.game_id)}` : p.date ? ` · ${String(p.date)}` : ""}`;
+    const { data: log } = await db.from("blast_log").insert({
+      sent_by: user.id, sent_by_name: prof?.username || user.email, subject, body,
+      where_text: where, recipient_count: targets.length, guardians_cc: true,
+    }).select("id").single();
+
+    const sent: string[] = [], failed: { name: string; error: string }[] = [], noEmail: string[] = [];
+    let guardians = 0;
+    const results: Record<string, string> = {};   // kept for the single-referee response shape
+
+    for (const ref of targets) {
+      if (!ref.email) { noEmail.push(ref.name); results.referee = `${ref.name} has no email on file`; continue; }
+      const first = String(ref.name).split(/\s+/)[0];
+      const text  = (toParent: boolean) => `${toParent ? `A message from ${fromName} to ${ref.name}:` : `Hi ${first},`}\n\n${body}\n\n— ${fromName}${replyTo ? `\n${replyTo}` : ""}`;
+      const html  = (toParent: boolean) => `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:600px">
 <p>${toParent ? `A message from <b>${esc(fromName)}</b> to <b>${esc(ref.name)}</b>:` : `Hi ${esc(first)},`}</p>
 <div style="white-space:pre-wrap">${esc(body)}</div>
 <p style="color:#555;margin-top:18px">— ${esc(fromName)}${replyTo ? `<br><a href="mailto:${esc(replyTo)}" style="color:#0f3460">${esc(replyTo)}</a>` : ""}</p>
 </div>`;
 
-    const { data: log } = await db.from("blast_log").insert({
-      sent_by: user.id, sent_by_name: prof?.username || user.email, subject, body,
-      where_text: `direct → ${ref.name}`, recipient_count: 1, guardians_cc: true,
-    }).select("id").single();
+      let ok = false, err = "";
+      try { await sendWithReply(ref.email, subject, text(false), html(false), replyTo); ok = true; }
+      catch (e) { err = (e as Error).message; }
+      if (ok) sent.push(ref.name); else failed.push({ name: ref.name, error: err });
+      results.referee = ok ? "sent" : "failed: " + err;
+      if (log) await db.from("blast_recipients").insert({ blast_id: log.id, referee_id: ref.id, email: ref.email, is_guardian: false, status: ok ? "sent" : "failed", error: ok ? null : err });
 
-    const results: Record<string, string> = {};
-    try { await sendWithReply(ref.email, subject, text(false), html(false), replyTo); results.referee = "sent"; }
-    catch (e) { results.referee = "failed: " + (e as Error).message; }
-    if (log) await db.from("blast_recipients").insert({ blast_id: log.id, referee_id: ref.id, email: ref.email, is_guardian: false, status: results.referee === "sent" ? "sent" : "failed", error: results.referee === "sent" ? null : results.referee });
-
-    const isMinor = ref.age != null && Number(ref.age) < 18;
-    const gEmail  = String(ref["Guardian Email"] || "").trim();
-    if (isMinor && gEmail) {
-      try { await sendWithReply(gEmail, subject, text(true), html(true), replyTo); results.guardian = "sent"; }
-      catch (e) { results.guardian = "failed: " + (e as Error).message; }
-      if (log) await db.from("blast_recipients").insert({ blast_id: log.id, referee_id: ref.id, email: gEmail, is_guardian: true, status: results.guardian === "sent" ? "sent" : "failed", error: results.guardian === "sent" ? null : results.guardian });
-    } else if (isMinor) {
-      results.guardian = "no guardian on file";
+      const isMinor = ref.age != null && Number(ref.age) < 18;
+      const gEmail  = String(ref["Guardian Email"] || "").trim();
+      if (isMinor && gEmail) {
+        let gok = false, gerr = "";
+        try { await sendWithReply(gEmail, subject, text(true), html(true), replyTo); gok = true; guardians++; }
+        catch (e) { gerr = (e as Error).message; }
+        results.guardian = gok ? "sent" : "failed: " + gerr;
+        if (log) await db.from("blast_recipients").insert({ blast_id: log.id, referee_id: ref.id, email: gEmail, is_guardian: true, status: gok ? "sent" : "failed", error: gok ? null : gerr });
+      } else if (isMinor) {
+        results.guardian = "no guardian on file";
+      }
+      if (targets.length > 1) await new Promise(r => setTimeout(r, 550));   // Resend: 2 req/s
     }
-    return json({ ok: results.referee === "sent", referee: ref.name, email: ref.email, minor: isMinor, reply_to: replyTo, results });
+
+    const one = targets.length === 1 ? targets[0] : null;
+    return json({
+      ok: sent.length > 0,
+      sent, failed, no_email: noEmail, guardians, reply_to: replyTo, blast_id: log?.id ?? null,
+      // single-referee shape, as before
+      referee: one?.name, email: one?.email, minor: one ? (one.age != null && Number(one.age) < 18) : undefined, results,
+    });
   }
 
   // ── games uploaded (replaces the one-inbox EmailJS template) ─────────────

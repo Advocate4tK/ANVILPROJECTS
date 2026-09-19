@@ -3643,7 +3643,8 @@
                             const [,m,d] = curDate.split('-');
                             const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1];
                             const dn = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(curDate + 'T12:00:00').getDay()];
-                            dividers += `<tr><td colspan="${sheet3ColOrder.length + 1}" style="background:#1a3a6b;color:white;font-size:0.75rem;font-weight:800;letter-spacing:1.5px;padding:6px 10px;text-transform:uppercase;border-top:3px solid rgba(255,255,255,0.15);">${dn} &nbsp;·&nbsp; ${mo} ${parseInt(d)}</td></tr>`;
+                            dividers += `<tr><td colspan="${sheet3ColOrder.length + 1}" style="background:#1a3a6b;color:white;font-size:0.75rem;font-weight:800;letter-spacing:1.5px;padding:6px 10px;text-transform:uppercase;border-top:3px solid rgba(255,255,255,0.15);"><span style="display:flex;align-items:center;">${dn} &nbsp;·&nbsp; ${mo} ${parseInt(d)}
+                                <button onclick="openDayMessage('${curDate}',event)" title="Message everyone working ${dn} ${mo} ${parseInt(d)} — pick who" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,.45);border-radius:5px;color:#fff;font-size:0.68rem;font-weight:800;letter-spacing:.8px;padding:1px 8px;cursor:pointer;">✉ ${dn}'s refs</button></span></td></tr>`;
                         }
                     }
                     // Period divider: Morning / Afternoon within each day
@@ -5040,9 +5041,9 @@
                 document.body.appendChild(menu);
             }
             const item = (label, fn) => `<div style="padding:8px 16px; cursor:pointer;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''" onclick="${fn}">${label}</div>`;
-            menu.innerHTML = filled
+            menu.innerHTML = item('✉ Message crew', `openGameMessage('${gid}'); document.getElementById('s2CardMenu').style.display='none';`) + (filled
                 ? item('✅ Unmark as Filled', `setGameStatusFilled('${gid}',false); document.getElementById('s2CardMenu').style.display='none';`)
-                : item('🔒 Mark Game as Filled',   `setGameStatusFilled('${gid}',true);  document.getElementById('s2CardMenu').style.display='none';`);
+                : item('🔒 Mark Game as Filled',   `setGameStatusFilled('${gid}',true);  document.getElementById('s2CardMenu').style.display='none';`));
             menu.style.left    = e.clientX + 'px';
             menu.style.top     = e.clientY + 'px';
             menu.style.display = 'block';
@@ -5063,6 +5064,7 @@
             const item = (label, fn) => `<div style="padding:7px 16px; cursor:pointer;" onmouseover="this.style.background='#f6f8fa'" onmouseout="this.style.background=''" onclick="${fn}">${label}</div>`;
             menu.innerHTML = `<div style="padding:6px 0;">
                 ${item('✏️ Edit Game', `sheet3HideOptMenu(); sheet3OpenGameEditModal('${gid}');`)}
+                ${item('✉ Message crew', `sheet3HideOptMenu(); openGameMessage('${gid}');`)}
                 ${filled
                     ? item('✅ Unmark as Filled', `setGameStatusFilled('${gid}',false); document.getElementById('s3ContextMenu').style.display='none';`)
                     : item('🔒 Mark Game as Filled',   `setGameStatusFilled('${gid}',true);  document.getElementById('s3ContextMenu').style.display='none';`)}
@@ -8262,25 +8264,108 @@
             clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, isWarn ? 7000 : 4500);
         }
 
+        // ── The message window ─────────────────────────────────────────────
+        // One window for one referee, a crew, or a whole day. The people it
+        // can go to sit across the top as check-chips, all ticked; untick
+        // anyone. Central Assign had exactly this — Tod, 2026-09-18: "a little
+        // window I would open up, and you could check one, two, or three of
+        // the refs, and say, please make sure you submit your availability,
+        // or please submit your game reports, or wish them a good game."
+        // Each ticked referee gets their own copy under their own name; a
+        // minor's parent is copied; replies come to the assignor.
+        let refMsgCtx = { people: [], game_id: null, date: null };
+
+        function _refMsgPerson(r, role) {
+            const f = r.fields;
+            const minor = f['Age'] != null && Number(f['Age']) < 18;
+            return { id: r.id, name: f['Name'] || '?', email: (f['Email'] || '').trim(), role: role || '',
+                     minor, guardian: minor ? (f['Guardian Email'] || '').trim() : '', checked: true };
+        }
         function openRefMessage(rid) {
             const r = allRefs.find(x => String(x.id) === String(rid));
             if (!r) return;
-            const minor = r.fields['Age'] != null && Number(r.fields['Age']) < 18;
-            const g = (r.fields['Guardian Email'] || '').trim();
-            document.getElementById('refMsgId').value = rid;
-            document.getElementById('refMsgTo').textContent = `to ${r.fields['Name']} <${r.fields['Email']}>`;
-            document.getElementById('refMsgNote').innerHTML = minor
-                ? (g ? `${r.fields['Name']} is a minor — <b>their parent (${g}) gets a copy.</b> Replies come to you.`
-                     : `⚠ ${r.fields['Name']} is a minor with <b>no parent on file</b> — only the referee will get this. Replies come to you.`)
-                : `Replies come to you.`;
-            document.getElementById('refMsgSubject').value = '';
+            openRefComposer([_refMsgPerson(r)], {});
+        }
+        function openRefComposer(people, ctx) {
+            refMsgCtx = { people, game_id: ctx.game_id || null, date: ctx.date || null };
+            document.getElementById('refMsgTo').textContent = ctx.title || (people.length === 1 ? `to ${people[0].name}` : `${people.length} referees`);
+            document.getElementById('refMsgSubject').value = ctx.subject || '';
             document.getElementById('refMsgBody').value = '';
             document.getElementById('refMsgResult').innerHTML = '';
-            const btn = document.getElementById('refMsgSend'); btn.disabled = false; btn.textContent = 'Send';
+            const btn = document.getElementById('refMsgSend'); btn.disabled = false;
+            renderRefMsgChips();
             document.getElementById('refMsgOverlay').style.display = 'flex';
-            setTimeout(() => document.getElementById('refMsgSubject').focus(), 50);
+            setTimeout(() => document.getElementById(ctx.subject ? 'refMsgBody' : 'refMsgSubject').focus(), 50);
         }
+        function renderRefMsgChips() {
+            const ppl = refMsgCtx.people;
+            const wrap = document.getElementById('refMsgChips');
+            wrap.innerHTML = ppl.map((p, i) => {
+                const off = !p.email;
+                const tip = off ? `${p.name} has no email on file` : p.minor ? (p.guardian ? `Minor — parent (${p.guardian}) is copied` : 'Minor — no parent on file, only the referee gets this') : p.email;
+                return `<label class="rm-chip ${p.checked && !off ? 'on' : ''} ${off ? 'off' : ''}" title="${tip.replace(/"/g, '&quot;')}">
+                    <input type="checkbox" ${p.checked && !off ? 'checked' : ''} ${off ? 'disabled' : ''} onchange="refMsgCtx.people[${i}].checked = this.checked; renderRefMsgChips();">
+                    <span class="nm">${p.name}</span>${p.role ? `<span class="rl">${p.role}</span>` : ''}${p.minor ? `<span class="mn" title="minor — parent copied">👨‍👧</span>` : ''}${off ? '<span class="rl">no email</span>' : ''}
+                </label>`;
+            }).join('');
+            const on = ppl.filter(p => p.checked && p.email);
+            const minors = on.filter(p => p.minor), noG = minors.filter(p => !p.guardian);
+            const note = document.getElementById('refMsgNote');
+            const btn = document.getElementById('refMsgSend');
+            if (!on.length) { note.innerHTML = 'Nobody selected.'; btn.textContent = 'Send'; btn.disabled = true; return; }
+            btn.disabled = false;
+            btn.textContent = on.length === 1 ? 'Send' : `Send to ${on.length}`;
+            let n = on.length === 1 ? `Goes to <b>${on[0].name}</b>.` : `Goes to <b>${on.length} referees</b>, each under their own name.`;
+            if (minors.length) n += ` ${minors.length === 1 ? `${minors[0].name} is a minor — <b>their parent gets a copy.</b>` : `<b>${minors.length} are minors — their parents get a copy.</b>`}`;
+            if (noG.length)   n += ` ⚠ No parent on file for ${noG.map(p => p.name).join(', ')}.`;
+            n += ' Replies come to you.';
+            note.innerHTML = n;
+            if (ppl.length > 1) document.getElementById('refMsgTo').textContent = `${on.length} of ${ppl.length} selected`;
+        }
+        function refMsgAll(on) { refMsgCtx.people.forEach(p => { if (p.email) p.checked = on; }); renderRefMsgChips(); }
         function closeRefMessage() { document.getElementById('refMsgOverlay').style.display = 'none'; }
+
+        // The three slots of one game as check-chips. From the card header ✉
+        // on Standard 2 and the game row / right-click on Sheet 3.
+        function _gameCrew(g) {
+            const f = g.fields, out = [];
+            [['Center Referee', 'C'], ['AR 1', 'AR1'], ['AR 2', 'AR2']].forEach(([pos, role]) => {
+                const raw = f[pos]; if (!raw || ['FILLED', 'EMPTY'].includes(raw)) return;
+                const name = resolveRefName(raw); if (!name || name === '—') return;
+                const key = String(name).trim().toLowerCase();
+                const r = refLookupByName[key] || allRefs.find(x => (x.fields['Name'] || '').trim().toLowerCase() === key);
+                if (!r || String(r.id).startsWith('ghost_')) return;
+                if (out.some(p => String(p.id) === String(r.id))) return;
+                out.push(_refMsgPerson(r, role));
+            });
+            return out;
+        }
+        function _gameSubject(f) {
+            const d = f['Date'] ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '';
+            return `${f['Home Team'] || ''} vs ${f['Away Team'] || ''} — ${d}${f['Time'] ? ' ' + formatTime(f['Time']) : ''}`;
+        }
+        function openGameMessage(gameId, ev) {
+            if (ev) ev.stopPropagation();
+            const g = allGames.find(x => String(x.id) === String(gameId)); if (!g) return;
+            const crew = _gameCrew(g);
+            if (!crew.length) { showToast('⚠ Nobody assigned on this game yet', true); return; }
+            openRefComposer(crew, { game_id: g.id, subject: _gameSubject(g.fields), title: `crew · ${g.fields['Home Team'] || ''} vs ${g.fields['Away Team'] || ''}` });
+        }
+        // Everyone assigned on one day, across the games on screen, deduped.
+        // From the date bar. For "rain's coming — check your phone at 7" or
+        // the Friday-night good-game note.
+        function openDayMessage(date, ev) {
+            if (ev) ev.stopPropagation();
+            const games = allGames.filter(g => (g.fields['Date'] || '') === date
+                && !(cancelledGameIds.has(g.id) || g.fields['Game Status'] === 'Cancelled')
+                && (!visibleGameIds || visibleGameIds.has(String(g.id))));
+            const seen = new Set(), ppl = [];
+            games.forEach(g => _gameCrew(g).forEach(p => { if (seen.has(String(p.id))) return; seen.add(String(p.id)); ppl.push({ ...p, role: '' }); }));
+            if (!ppl.length) { showToast('⚠ Nobody assigned on ' + date + ' yet', true); return; }
+            ppl.sort((a, b) => a.name.localeCompare(b.name));
+            const dn = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
+            openRefComposer(ppl, { date, subject: `${dn} games`, title: `${dn} · ${ppl.length} referee${ppl.length === 1 ? '' : 's'} on ${games.length} game${games.length === 1 ? '' : 's'}` });
+        }
 
         // From a game slot — Standard 2's ✉ or Sheet 3's right-click. Resolves
         // the name in the slot to the roster record, opens the composer, and
@@ -8291,38 +8376,36 @@
             const r = refLookupByName[key] || allRefs.find(x => (x.fields['Name'] || '').trim().toLowerCase() === key);
             if (!r || String(r.id).startsWith('ghost_')) { showToast(`⚠ ${name} isn't on the roster — can't message`, true); return; }
             if (!r.fields['Email']) { showToast(`⚠ ${r.fields['Name']} has no email on file`, true); return; }
-            openRefMessage(r.id);
             const g = allGames.find(x => String(x.id) === String(gameId));
-            if (g) {
-                const f = g.fields;
-                const d = f['Date'] ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '';
-                document.getElementById('refMsgSubject').value = `${f['Home Team'] || ''} vs ${f['Away Team'] || ''} — ${d}${f['Time'] ? ' ' + formatTime(f['Time']) : ''}`;
-                setTimeout(() => document.getElementById('refMsgBody').focus(), 60);
-            }
+            openRefComposer([_refMsgPerson(r)], g ? { game_id: g.id, subject: _gameSubject(g.fields) } : {});
         }
         async function sendRefMessage() {
-            const rid = document.getElementById('refMsgId').value;
+            const ids = refMsgCtx.people.filter(p => p.checked && p.email).map(p => Number(p.id));
             const subject = document.getElementById('refMsgSubject').value.trim();
             const body = document.getElementById('refMsgBody').value.trim();
             const res = document.getElementById('refMsgResult');
             if (!subject) { res.innerHTML = '<span style="color:#dc2626;">Add a subject.</span>'; return; }
             if (!body)    { res.innerHTML = '<span style="color:#dc2626;">Write the message.</span>'; return; }
+            if (!ids.length) { res.innerHTML = '<span style="color:#dc2626;">Nobody selected.</span>'; return; }
             const jwt = _getSupabaseSession()?.access_token;
             if (!jwt) { res.innerHTML = '<span style="color:#dc2626;">Your login has expired — sign in again.</span>'; return; }
-            const btn = document.getElementById('refMsgSend'); btn.disabled = true; btn.textContent = 'Sending…';
+            const btn = document.getElementById('refMsgSend'); btn.disabled = true; btn.textContent = ids.length === 1 ? 'Sending…' : `Sending to ${ids.length}…`;
             try {
                 const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/notify-assignor`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${jwt}` },
-                    body: JSON.stringify({ event: 'message_referee', referee_id: Number(rid), subject, body }),
+                    body: JSON.stringify({ event: 'message_referee', referee_ids: ids, subject, body, game_id: refMsgCtx.game_id, date: refMsgCtx.date }),
                 });
                 const j = await r.json().catch(() => ({}));
-                if (!r.ok || !j.ok) throw new Error(j.error || j.reason || `Server said ${r.status}`);
-                const g = j.minor ? (j.results?.guardian === 'sent' ? ' + parent' : '') : '';
-                res.innerHTML = `<span style="color:#065f46; font-weight:700;">✅ Sent to ${j.referee}${g}. Replies to ${j.reply_to || 'you'}.</span>`;
+                if (!r.ok || !j.ok) throw new Error(j.error || j.reason || (j.failed?.[0] ? `${j.failed[0].name}: ${j.failed[0].error}` : `Server said ${r.status}`));
+                const sentN = (j.sent || []).length, gN = j.guardians || 0, fN = (j.failed || []).length;
+                const who = sentN <= 3 ? (j.sent || []).map(n => n.split(' ')[0]).join(', ') : `${sentN} referees`;
+                const g = gN ? ` + ${gN} parent${gN === 1 ? '' : 's'}` : '';
+                res.innerHTML = `<span style="color:#065f46; font-weight:700;">✅ Sent to ${who}${g}. Replies to ${j.reply_to || 'you'}.</span>`
+                    + (fN ? `<br><span style="color:#dc2626;">Didn't reach: ${j.failed.map(f => `${f.name} (${f.error})`).join('; ')}</span>` : '');
                 btn.textContent = 'Sent';
-                showToast(`✉ Message sent to ${j.referee}${g}`);
-                setTimeout(closeRefMessage, 1800);
+                showToast(`✉ Message sent to ${who}${g}`, false);
+                setTimeout(closeRefMessage, fN ? 5000 : 1800);
             } catch (e) {
                 res.innerHTML = `<span style="color:#dc2626;">Didn't send: ${e.message}</span>`;
                 btn.disabled = false; btn.textContent = 'Send';
@@ -8585,7 +8668,8 @@
                         const dn = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(date + 'T12:00:00').getDay()];
                         html += `<div style="background:#152d55;color:white;font-size:0.72rem;font-weight:800;
                             letter-spacing:1.5px;padding:6px 12px;border-radius:6px;margin:10px 0 6px;
-                            text-transform:uppercase;">${dn} &nbsp;·&nbsp; ${mo} ${parseInt(d)}</div>`;
+                            text-transform:uppercase;display:flex;align-items:center;">${dn} &nbsp;·&nbsp; ${mo} ${parseInt(d)}
+                            <button onclick="openDayMessage('${date}',event)" title="Message everyone working ${dn} ${mo} ${parseInt(d)} — pick who" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,.45);border-radius:5px;color:#fff;font-size:0.68rem;font-weight:800;letter-spacing:.8px;padding:1px 8px;cursor:pointer;">✉ ${dn}'s refs</button></div>`;
                     }
                 }
 
@@ -8648,6 +8732,7 @@
                             ${age ? `<span class="game-badge">${age}${f['Gender']==='Female'?' · F':f['Gender']==='Male'?' · M':''}</span>` : ''}
                             ${resolveGameClub(f) ? `<span class="game-badge" style="background:#f0f0f0;">${resolveGameClub(f)}</span>` : ''}
                             ${isFilled ? `<span style="background:#c0392b;color:white;font-size:0.62rem;font-weight:800;letter-spacing:1px;padding:1px 7px;border-radius:4px;text-transform:uppercase;">FILLED</span>` : ''}
+                            ${occupiedPositions.length ? `<button onclick="openGameMessage('${gid}',event)" title="Message the crew — pick one, two, or all of them" style="background:none;border:1px solid #0f3460;border-radius:6px;padding:2px 8px;font-size:0.75rem;cursor:pointer;color:#0f3460;font-weight:700;line-height:1.5;">✉ Crew</button>` : ''}
                             ${allInCABtn}
                             ${collapseBtn}
                             <button onclick="event.stopPropagation(); toggleGameEdit('${gid}')" style="background:none;border:1px solid #ccc;border-radius:6px;padding:2px 7px;font-size:0.78rem;cursor:pointer;color:#555;line-height:1.4;">✏️</button>
@@ -10176,16 +10261,30 @@
          workstation to send an email to a ref?" ... "should open a window
          inside the page". Sends through Referee Tool: reply-to is you, a
          minor's parent is copied, it's logged. -->
+    <style>
+        /* check-chips in the message window */
+        .rm-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; max-height:150px; overflow-y:auto; padding:2px; }
+        .rm-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px 4px 7px; border:1.5px solid #dde3f0; border-radius:20px; background:#f7f8fb; font-size:0.8rem; color:#555; cursor:pointer; user-select:none; }
+        .rm-chip input { margin:0; accent-color:#00c853; }
+        .rm-chip.on { background:#e8f8ef; border-color:#00c853; color:#06210f; font-weight:700; }
+        .rm-chip.off { opacity:.55; cursor:not-allowed; text-decoration:line-through; }
+        .rm-chip .rl { font-size:0.65rem; font-weight:800; letter-spacing:.5px; color:#2980b9; background:#eaf3ff; border-radius:4px; padding:0 5px; }
+        .rm-chip .mn { font-size:0.8rem; }
+    </style>
     <div id="refMsgOverlay" style="display:none; position:fixed; inset:0; background:rgba(4,10,22,0.7); z-index:9998; align-items:center; justify-content:center; padding:20px;">
-        <div style="background:#fff; border-radius:14px; width:100%; max-width:560px; box-shadow:0 30px 80px rgba(0,0,0,0.5); overflow:hidden;">
+        <div style="background:#fff; border-radius:14px; width:100%; max-width:620px; box-shadow:0 30px 80px rgba(0,0,0,0.5); overflow:hidden;">
             <div style="background:#0f3460; color:#fff; padding:14px 18px; display:flex; align-items:center; gap:10px;">
-                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.2rem; font-weight:800; text-transform:uppercase; letter-spacing:0.6px;">✉ Message referee</div>
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.2rem; font-weight:800; text-transform:uppercase; letter-spacing:0.6px;">✉ Message</div>
                 <div id="refMsgTo" style="font-size:0.85rem; opacity:0.85;"></div>
                 <button onclick="closeRefMessage()" style="margin-left:auto; background:none; border:none; color:#fff; font-size:1.3rem; cursor:pointer;">✕</button>
             </div>
             <div style="padding:18px;">
                 <div id="refMsgNote" style="font-size:0.8rem; color:#555; background:#f5f7ff; border-left:4px solid #0f3460; border-radius:6px; padding:8px 12px; margin-bottom:12px;"></div>
-                <input type="hidden" id="refMsgId">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                    <label style="font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px;">To</label>
+                    <span style="margin-left:auto; font-size:0.72rem; color:#888;"><a href="#" onclick="refMsgAll(true); return false;" style="color:#0f3460;">all</a> · <a href="#" onclick="refMsgAll(false); return false;" style="color:#0f3460;">none</a></span>
+                </div>
+                <div id="refMsgChips" class="rm-chips"></div>
                 <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Subject</label>
                 <input id="refMsgSubject" type="text" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem; margin-bottom:12px;" placeholder="Saturday's U12 game">
                 <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Message</label>
