@@ -84,7 +84,7 @@
         .resolved-header:hover { opacity: 0.85; }
         .toggle-arrow { font-size: 0.7rem; color: var(--accent-dark); flex-shrink: 0; transition: transform 0.2s; }
         .change-card.resolved.expanded .toggle-arrow { transform: rotate(90deg); }
-        .resolved-game-num { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; font-weight: 600; color: #bbb; letter-spacing: 0.5px; flex-shrink: 0; }
+        .resolved-game-num, .game-no { display:inline-block; font-family: 'JetBrains Mono','DM Mono',monospace; font-size: 0.7rem; font-weight: 800; color: #152d55; background:#e8eef8; border:1px solid #c9d6ee; border-radius:4px; padding:0 6px; letter-spacing: 0.5px; flex-shrink: 0; vertical-align:middle; }
         .resolved-matchup { font-family: 'Barlow Condensed', sans-serif; font-size: 1rem; font-weight: 800; color: var(--accent-dark); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .resolved-meta { font-size: 0.75rem; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
         .card-body { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -287,7 +287,7 @@
     <script src="js/admin-auth.js"></script>
     <script>checkAdminAccess();</script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase-client.js?v=15"></script>
+    <script src="js/supabase-client.js?v=16"></script>
     <script>
     // Wire supabaseClient into the airtableClient name used throughout this page
     const airtableClient = supabaseClient;
@@ -395,18 +395,9 @@
     }
 
     // ── Misc helpers ──────────────────────────────────────────────────────────
+    // RTCT10247 — games.game_no. See sql/game-numbers.sql.
     function buildGameNum(f) {
-        const skip = new Set(['sc','fc','soccer','club','boys','girls','united','youth','the','of']);
-        const sourceClub = f['Source Club'] || f['Home Team'] || '';
-        const words = sourceClub.split(/\s+/).filter(w => w.length > 1 && !skip.has(w.toLowerCase()));
-        const abbr = words.length === 0 ? '' : words.length === 1 ? words[0].substring(0,2).toUpperCase() : words.map(w => w[0].toUpperCase()).slice(0,2).join('');
-        const dateStr = f['Date'] || '';
-        const m = parseInt((dateStr).split('-')[1]);
-        const season = m >= 3 && m <= 6 ? 'SP' : m >= 7 && m <= 8 ? 'SU' : m >= 9 && m <= 11 ? 'FA' : 'WI';
-        const yr = (dateStr.split('-')[0] || '').slice(-2);
-        const seq  = String(f['Game Number'] || f['Auto Number'] || '').padStart(3, '0');
-        const type = (f['game_type'] || 'Rec').toUpperCase() === 'COMP' ? 'COMP' : 'REC';
-        return seq && seq !== '000' ? `${abbr}${season}${type}${seq}${yr}` : '';
+        return f['game_no'] ? RT_GAME_NO.fmt(f['game_no']) : '';
     }
 
     function toggleCollapse(id) {
@@ -812,7 +803,7 @@
                     return `<div class="change-card" id="card_${r.id}" style="border-left-color:${clubColor}; ${isUrgent ? 'border-left-width:5px;' : ''}">
                         <div class="change-card-header">
                             <div>
-                                <div class="game-title">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</div>
+                                <div class="game-title">${buildGameNum(f) ? `<span class="game-no" style="margin-right:8px;">${buildGameNum(f)}</span>` : ''}${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</div>
                                 <div class="game-meta">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
                                 ${timeSinceHtml}
                             </div>

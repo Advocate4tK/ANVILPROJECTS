@@ -570,3 +570,46 @@ if (typeof window !== 'undefined') {
     window.SupabaseClientWrapper = SupabaseClientWrapper;
     window.supabaseClient = supabaseClient;
 }
+
+// ── Game numbers ──────────────────────────────────────────────────────────
+// games.game_no / tournament_games.game_no — one shared sequence, so a
+// number names exactly one game across both tables. Rendered RTCT10247:
+// Referee Tool, Connecticut, then the number. The prefix is the only part
+// that carries meaning (which state's tool); the digits are digits. No
+// rec/comp letter, no club code, no year — those change, an identifier
+// can't. See sql/game-numbers.sql. Tod, 2026-09-19: "if it's on the
+// schedule, they go, oh, I can hear it, I can find it."
+const RT_GAME_NO = {
+    prefix: 'RTCT',
+    fmt(n)  { return n ? this.prefix + n : ''; },
+    // "RTCT10247", "rtct 10247", "#10247", "10247" → 10247. Anything else → null.
+    parse(s) {
+        const m = String(s || '').trim().toUpperCase().replace(/^#/, '').match(/^(?:[A-Z]{2,4}[\s-]*)?(\d{4,9})$/);
+        return m ? Number(m[1]) : null;
+    },
+    // Where a number lives. Resolves via find_game_no() so the caller need
+    // not know which table. → { kind:'game'|'tournament', id, ... } | null
+    async find(s) {
+        const n = this.parse(s);
+        if (!n || !window.supabaseClient?.client) return null;
+        const { data, error } = await window.supabaseClient.client.rpc('find_game_no', { n });
+        if (error) { console.warn('[find_game_no]', error.message); return null; }
+        return (data && data[0]) || null;
+    },
+    // The page that shows one game, by kind.
+    url(hit) {
+        if (!hit) return '';
+        return (hit.kind === 'tournament' ? 'event-assignor-workstation.html' : 'assignor-workstation.html') + '?game=' + hit.id;
+    },
+    // Type a number, land on the game. Used by every Find-game box.
+    async go(s, statusEl) {
+        const n = this.parse(s);
+        if (!n) { if (statusEl) statusEl.textContent = 'Type a game number — RTCT10247 or just 10247'; return false; }
+        if (statusEl) statusEl.textContent = 'Looking up ' + this.fmt(n) + '…';
+        const hit = await this.find(n);
+        if (!hit) { if (statusEl) statusEl.textContent = 'No game ' + this.fmt(n); return false; }
+        window.location.href = this.url(hit);
+        return true;
+    },
+};
+if (typeof window !== 'undefined') window.RT_GAME_NO = RT_GAME_NO;

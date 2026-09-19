@@ -108,7 +108,11 @@ const SHELL = `
 // something we do. The select list below is explicit for exactly that reason:
 // DO NOT change it to '*'.
 // ─────────────────────────────────────────────────────────────────────────────
-const SAFE_COLUMNS = 'id,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage,home_club,away_club,"Field ID"';
+const SAFE_COLUMNS = 'id,game_no,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage,home_club,away_club,"Field ID"';
+// game_no — 2026-09-19, sql/game-numbers.sql. RTCT10247: the number a
+// parent reads off this page and says to the assignor on the phone.
+const GAME_NO_PREFIX = 'RTCT';
+const gameNo = g => g && g.game_no ? GAME_NO_PREFIX + g.game_no : '';
 // ⚠️ EVERY COLUMN NAMED HERE MUST ALREADY EXIST IN THE DATABASE.
 // PostgREST rejects the ENTIRE select if one is missing — not that column, the
 // whole query — so adding a name here before its migration has run takes every
@@ -410,6 +414,7 @@ function dayBlocksHTML(games) {
                     <div class="game-row">
                         ${isCancelled(g) ? '<div class="cancelled-stamp"><span>' + 'CANCELLED'.split('').map(c => '<i>' + c + '</i>').join('') + '</span></div>' : ''}
                         <span class="game-chevron">▶</span>
+                        ${gameNo(g) ? `<span class="no-chip" title="Game number — quote this to your assignor">${gameNo(g)}</span>` : ''}
                         ${fieldName(g) ? `<span class="${fieldClass(fieldName(g))}">${esc(fieldName(g))}</span>` : ''}
                         ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
                         ${isCompGame(g) ? `<span class="comp-chip">Comp</span>` : ''}
@@ -421,6 +426,7 @@ function dayBlocksHTML(games) {
                     </div>
                     <div class="game-body">
                         <div class="gb-grid">
+                            ${gameNo(g) ? `<div><span class="gb-k">Game #</span><span class="gb-v" style="font-family:'DM Mono','Consolas',monospace;font-weight:800;">${gameNo(g)}</span></div>` : ''}
                             <div><span class="gb-k">Kickoff</span><span class="gb-v">${esc(fmtDateHeading(g.date))} · ${esc(fmtTime(g.time))}</span></div>
                             <div><span class="gb-k">Division</span><span class="gb-v">${div ? esc(div) : '—'}</span></div>
                             <div><span class="gb-k">Home</span><span class="gb-v">${esc(g['Home Team'] || 'TBD')}</span></div>

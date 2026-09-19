@@ -120,6 +120,9 @@ async function send(to: string, subject: string, text: string, html: string) {
 }
 // Assignment confirmations reply to the assignor, so "I can't make it" lands
 // with the person who can do something about it.
+// RTCT10247 — games.game_no. Prefix mirrors RT_GAME_NO.prefix on the pages.
+const gameNo = (g: any) => g?.game_no ? `RTCT${g.game_no}` : "";
+
 async function sendWithReply(to: string, subject: string, text: string, html: string, replyTo?: string) {
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -145,7 +148,7 @@ Deno.serve(async (req) => {
   if (p.event === "change_request" || p.event === "cancellation_request") {
     const gid = Number(p.game_id);
     if (!gid) return json({ error: "game_id required" }, 400);
-    const { data: g } = await db.from("games").select('id,"Source Club","Home Team","Away Team",date,time,"Age Group","Notes","Club Admin Email"').eq("id", gid).maybeSingle();
+    const { data: g } = await db.from("games").select('id,game_no,"Source Club","Home Team","Away Team",date,time,"Age Group","Notes","Club Admin Email"').eq("id", gid).maybeSingle();
     if (!g) return json({ error: `Game ${gid} not found` }, 404);
 
     const club = String(g["Source Club"] || "");
@@ -164,12 +167,13 @@ Deno.serve(async (req) => {
     const isCancel = p.event === "cancellation_request";
     const matchup  = `${g["Home Team"] || "TBD"} vs ${g["Away Team"] || "TBD"}`;
     const when     = `${fmtDate(g.date)} ${fmtTime(g.time)}`.trim();
-    const subject  = `${isCancel ? "Cancellation" : "Change"} request — ${club}: ${matchup}, ${when}`;
+    const no       = gameNo(g);
+    const subject  = `${isCancel ? "Cancellation" : "Change"} request — ${no ? no + " · " : ""}${club}: ${matchup}, ${when}`;
     const link     = `${SITE}/assignor-workstation.html?game=${gid}`;
-    const text = `${club} has asked to ${isCancel ? "cancel" : "change"} a game.\n\n${matchup}\n${when} · ${g["Age Group"] || ""}\n\n${ask || "(no details given)"}\n\nOpen it: ${link}\n\nAll requests: ${SITE}/schedule-changes.html`;
+    const text = `${club} has asked to ${isCancel ? "cancel" : "change"} a game.\n\n${no ? no + "\n" : ""}${matchup}\n${when} · ${g["Age Group"] || ""}\n\n${ask || "(no details given)"}\n\nOpen it: ${link}\n\nAll requests: ${SITE}/schedule-changes.html`;
     const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:600px">
 <p><b>${esc(club)}</b> has asked to <b>${isCancel ? "cancel" : "change"}</b> a game.</p>
-<p style="font-size:17px;margin:14px 0 4px"><b>${esc(matchup)}</b><br><span style="color:#555">${esc(when)} · ${esc(g["Age Group"] || "")}</span></p>
+<p style="font-size:17px;margin:14px 0 4px">${no ? `<span style="font-family:Consolas,monospace;font-size:13px;font-weight:700;color:#152d55;background:#e8eef8;border:1px solid #c9d6ee;border-radius:4px;padding:1px 7px;margin-right:8px">${no}</span>` : ""}<b>${esc(matchup)}</b><br><span style="color:#555">${esc(when)} · ${esc(g["Age Group"] || "")}</span></p>
 <pre style="background:#f6f6f6;border-left:4px solid #e94560;padding:10px 12px;white-space:pre-wrap;font-family:inherit;font-size:14px">${esc(ask || "(no details given)")}</pre>
 <p><a href="${link}" style="display:inline-block;background:#0f3460;color:#fff;padding:10px 18px;border-radius:7px;text-decoration:none;font-weight:700">Open in Workstation</a></p>
 <p style="font-size:12px;color:#888">All requests: <a href="${SITE}/schedule-changes.html">${SITE}/schedule-changes.html</a></p>
@@ -200,7 +204,7 @@ Deno.serve(async (req) => {
     if (!gid || !["Center Referee", "AR 1", "AR 2"].includes(pos)) return json({ error: "game_id and a valid position required" }, 400);
 
     const { data: g } = await db.from("games")
-      .select('id,"Source Club","Home Team","Away Team",date,time,"Age Group","Gender",game_type,"Venue ID","Field ID",field,"Center Referee","AR 1","AR 2"')
+      .select('id,game_no,"Source Club","Home Team","Away Team",date,time,"Age Group","Gender",game_type,"Venue ID","Field ID",field,"Center Referee","AR 1","AR 2"')
       .eq("id", gid).maybeSingle();
     if (!g) return json({ error: `Game ${gid} not found` }, 404);
 
@@ -242,11 +246,12 @@ Deno.serve(async (req) => {
     const club     = String(g["Source Club"] || "");
     const first    = ref.name.split(/\s+/)[0];
 
-    const subject = `You're assigned: ${matchup} — ${fmtDate(g.date)} ${fmtTime(g.time)} (${posLabel})`;
+    const gno     = gameNo(g);
+    const subject = `You're assigned: ${gno ? gno + " · " : ""}${matchup} — ${fmtDate(g.date)} ${fmtTime(g.time)} (${posLabel})`;
     const bodyText = (toParent: boolean) =>
 `${toParent ? `${ref.name} has been assigned` : `Hi ${first}, you're assigned`} to a game.
 
-${matchup}
+${gno ? `Game ${gno}\n` : ""}${matchup}
 ${when}
 ${div}${g.game_type ? ` · ${g.game_type}` : ""} · ${club}
 Position: ${posLabel}
@@ -259,7 +264,7 @@ Please arrive 30 minutes before kickoff. If you can't make it, reply to this ema
 `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:600px">
 <p>${toParent ? `<b>${esc(ref.name)}</b> has been assigned to a game.` : `Hi ${esc(first)}, you're assigned to a game.`}</p>
 <div style="background:#f6f6f6;border-left:4px solid #00c853;padding:12px 16px;margin:14px 0">
-<div style="font-size:18px;font-weight:700">${esc(matchup)}</div>
+${gno ? `<div style="font-family:Consolas,monospace;font-size:13px;font-weight:700;color:#152d55;margin-bottom:4px">Game ${gno}</div>` : ""}<div style="font-size:18px;font-weight:700">${esc(matchup)}</div>
 <div style="font-size:16px;margin-top:4px">${esc(when)}</div>
 <div style="color:#555;margin-top:2px">${esc(div)}${g.game_type ? ` · ${esc(g.game_type)}` : ""} · ${esc(club)}</div>
 <div style="margin-top:10px"><b>Position:</b> ${esc(posLabel)}</div>

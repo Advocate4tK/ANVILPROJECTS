@@ -118,6 +118,8 @@
         }
         .game-title { font-weight: 700; color: #0f3460; font-size: 0.95rem; }
         .game-meta { font-size: 0.78rem; color: #888; }
+        /* the game number — RTCT10247. The thing a referee says on the phone. */
+        .game-no { display:inline-block; font-family:'DM Mono','Consolas',monospace; font-size:0.7rem; font-weight:800; color:#152d55; background:#e8eef8; border:1px solid #c9d6ee; border-radius:4px; padding:0 6px; letter-spacing:.5px; line-height:1.5; vertical-align:middle; white-space:nowrap; }
         .game-badge {
             font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;
             background: #e8f0fe; color: #0f3460;
@@ -796,6 +798,10 @@
                     <span id="filtersSummary" style="color:rgba(255,255,255,0.9); font-weight:600;"></span>
                 </div>
                 <div style="display:flex; align-items:center; gap:10px;">
+                    <form onsubmit="event.preventDefault(); RT_GAME_NO.go(this.q.value, document.getElementById('findGameStatus'));" onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:6px; margin:0;" title="Type a game number and press Enter">
+                        <input name="q" placeholder="RTCT10247" style="width:110px; padding:3px 8px; border:1px solid rgba(255,255,255,.35); border-radius:6px; background:rgba(255,255,255,.08); color:#fff; font-family:'DM Mono','Consolas',monospace; font-size:0.72rem; letter-spacing:.5px;">
+                        <span id="findGameStatus" style="font-size:0.68rem; opacity:.8; white-space:nowrap;"></span>
+                    </form>
                     <button onclick="event.stopPropagation(); generateEmailBody();" style="background:#f5c518; border:none; color:#000; font-size:0.72rem; font-weight:700; padding:4px 12px; border-radius:6px; cursor:pointer; font-family:inherit; white-space:nowrap;">✉ Generate Email Body</button>
                     <span id="filterToggleArrow" onclick="toggleFiltersPanel()" style="font-size:0.75rem; opacity:0.7; cursor:pointer;">▼ expand</span>
                 </div>
@@ -1121,7 +1127,7 @@
     <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="js/ref-experience.js?v=1"></script>
-    <script src="js/supabase-client.js?v=15"></script>
+    <script src="js/supabase-client.js?v=16"></script>
     <script>var airtableClient = supabaseClient;</script>
     <script src="js/admin-auth.js"></script>
     <script src="js/workstation-tabs.js?v=4"></script>
@@ -2580,8 +2586,8 @@
         let sheet3SelectedGameId  = null; // game row selection for ref pane filtering
         let sheet3ShowConflicts   = false; // when game selected: show conflicted refs or hide them
 
-        const SHEET3_BASE_COLS  = ['date','time','club','ca','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
-        const SHEET3_COL_LABELS = { date:'Date', time:'Time', club:'Club', ca:'CA', ageGroup:'Age', gender:'Gender', homeTeam:'Home Team', awayTeam:'Away Team', venue:'Venue', field:'Field', center:'Center', ar1:'AR1', ar2:'AR2' };
+        const SHEET3_BASE_COLS  = ['no','date','time','club','ca','ageGroup','gender','homeTeam','awayTeam','venue','field','center','ar1','ar2'];
+        const SHEET3_COL_LABELS = { no:'No.', date:'Date', time:'Time', club:'Club', ca:'CA', ageGroup:'Age', gender:'Gender', homeTeam:'Home Team', awayTeam:'Away Team', venue:'Venue', field:'Field', center:'Center', ar1:'AR1', ar2:'AR2' };
         const SHEET3_COL_MINW   = { center:'120px', ar1:'120px', ar2:'120px' };
         let sheet3ColOrder      = [...SHEET3_BASE_COLS];
         let sheet3ColDragKey      = null;
@@ -2627,11 +2633,14 @@
                     const at = sheet3ColOrder.indexOf('club');
                     sheet3ColOrder.splice(at >= 0 ? at + 1 : sheet3ColOrder.length, 0, 'ca');
                 }
+                // game number column arrived 2026-09-19 — saved orders predate it
+                if (Array.isArray(sheet3ColOrder) && !sheet3ColOrder.includes('no')) sheet3ColOrder.unshift('no');
                 if (hiddenCols    && Array.isArray(hiddenCols))    sheet3HiddenCols    = hiddenCols;
                 if (refHiddenCols && Array.isArray(refHiddenCols)) sheet3RefHiddenCols = refHiddenCols;
                 if (seedOrder === 'exp-asc' || seedOrder === 'exp-desc') sheet3SeedOrder = seedOrder;
                 // Restore base col order (ignore legacy colOrder key)
                 const savedBase = baseColOrder || (colOrder ? colOrder.filter(k => SHEET3_BASE_COLS.includes(k)) : null);
+                if (savedBase && Array.isArray(savedBase) && !savedBase.includes('no')) savedBase.unshift('no');
                 if (savedBase && Array.isArray(savedBase) && SHEET3_BASE_COLS.every(k => savedBase.includes(k))) {
                     sheet3ColOrder = savedBase; // opt cols appended dynamically in renderSheet3View
                 }
@@ -3564,6 +3573,7 @@
                 const fmtGameTime = t => { if (!t) return '—'; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
                 const fmtGameDate = d => { if (!d) return '—'; const [,m,day] = d.split('-'); const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]; return `${mo} ${parseInt(day)}`; };
                 const colRenderers = {
+                    no:       () => `<td style="${cancelCell} white-space:nowrap;">${buildGameNumber(f) ? `<span class="game-no">${buildGameNumber(f)}</span>` : '—'}</td>`,
                     date:     () => `<td style="${cancelCell}">${fmtGameDate(f['Date'])}</td>`,
                     time:     () => `<td style="${cancelCell}">${fmtGameTime(f['Time'])}</td>`,
                     club:     () => `<td style="${cancelCell}">${f['Source Club'] || '—'}</td>`,
@@ -6639,7 +6649,8 @@
                             if (!f['Center Referee']?.trim()) openSlots.push('CR');
                             if (!soloOnly && !f['AR 1']?.trim()) openSlots.push('AR');
                             if (!soloOnly && !f['AR 2']?.trim()) openSlots.push('AR');
-                            return `${dateLabel}  ${fmtTime(f['Time'])}  ${vName}  ${age}${displayGender}  --  ${openSlots.join(' | ')}`;
+                            const no = buildGameNumber(f);
+                            return `${no ? no + '  ' : ''}${dateLabel}  ${fmtTime(f['Time'])}  ${vName}  ${age}${displayGender}  --  ${openSlots.join(' | ')}`;
                         }).join('\n');
                     }).join('\n\n');
 
@@ -7957,7 +7968,7 @@
                 ${isChangeReq ? '<div style="font-size:0.72rem;font-weight:700;color:#935116;background:#fdebd0;border-radius:4px;padding:2px 8px;margin-bottom:6px;display:inline-block;">⚠ Change Requested</div>' : ''}
                 <div class="game-header">
                     <div>
-                        ${gn ? `<span style="font-size:0.65rem;font-weight:700;color:#aaa;letter-spacing:0.5px;margin-right:6px;">${gn}</span>` : ''}
+                        ${gn ? `<span class="game-no" style="margin-right:6px;">${gn}</span>` : ''}
                         <span class="game-title">${home} vs ${away}</span>${f['is_scrimmage'] ? '<span class="scrim-badge">Scrim</span>' : ''}
                         <span class="game-meta">&nbsp;— ${date} ${time ? '@ ' + formatTime(time) : ''}</span>
                     </div>
@@ -8342,7 +8353,8 @@
         }
         function _gameSubject(f) {
             const d = f['Date'] ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '';
-            return `${f['Home Team'] || ''} vs ${f['Away Team'] || ''} — ${d}${f['Time'] ? ' ' + formatTime(f['Time']) : ''}`;
+            const no = buildGameNumber(f);
+            return `${no ? no + ' · ' : ''}${f['Home Team'] || ''} vs ${f['Away Team'] || ''} — ${d}${f['Time'] ? ' ' + formatTime(f['Time']) : ''}`;
         }
         function openGameMessage(gameId, ev) {
             if (ev) ev.stopPropagation();
@@ -8682,7 +8694,7 @@
                     const club = resolveGameClub(f);
                     html += `<div class="s2-compact-row" onclick="s2ToggleExpand('${gid}', event)" oncontextmenu="s2ShowCardMenu(event,'${gid}'); return false;">
                         <span style="color:#1e8449;font-weight:900;font-size:0.85rem;flex-shrink:0;">✓</span>
-                        ${gn ? `<span style="font-size:0.62rem;color:#aaa;letter-spacing:0.4px;flex-shrink:0;">${gn}</span>` : ''}
+                        ${gn ? `<span class="game-no" style="flex-shrink:0;">${gn}</span>` : ''}
                         <span style="font-weight:700;font-size:0.82rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${home} vs ${away}</span>
                         <span style="font-size:0.72rem;color:#666;flex-shrink:0;">${new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} ${time}</span>
                         ${caBadge(f)}
@@ -8724,7 +8736,7 @@
                     ${isChangeReq ? '<div style="font-size:0.72rem;font-weight:700;color:#935116;background:#fdebd0;border-radius:4px;padding:2px 8px;margin-bottom:6px;display:inline-block;">⚠ Change Requested</div>' : ''}
                     <div class="game-header">
                         <div>
-                            ${buildGameNumber(f) ? `<span style="font-size:0.65rem;font-weight:700;color:#aaa;letter-spacing:0.5px;margin-right:6px;">${buildGameNumber(f)}</span>` : ''}
+                            ${buildGameNumber(f) ? `<span class="game-no" style="margin-right:6px;">${buildGameNumber(f)}</span>` : ''}
                             <span class="game-title">${f['Home Team']||'?'} vs ${f['Away Team']||'?'}</span>${f['is_scrimmage'] ? '<span class="scrim-badge">Scrim</span>' : ''}
                             <span class="game-meta">&nbsp;— ${date ? new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) : '—'} ${f['Time'] ? '@ ' + formatTime(f['Time']) : ''}</span>
                         </div>
@@ -8905,15 +8917,11 @@
             if (m >= 9 && m <= 11) return 'FA';
             return 'WI';
         }
+        // RTCT10247 — games.game_no, one shared sequence with tournament_games.
+        // The EHFREC00126 scheme this replaced needed `Auto Number`, which was
+        // NULL on every game; it never rendered once. See sql/game-numbers.sql.
         function buildGameNumber(f) {
-            const autoNum = f['Auto Number'] || f['Game Number'];
-            if (!autoNum) return null;
-            const abbr   = clubAbbr(resolveGameClub(f) || f['Home Team'] || '');
-            const season = seasonCode(f['Date'] || '');
-            const year   = (f['Date'] || '').slice(2, 4);
-            const seq    = String(autoNum).padStart(3, '0');
-            const type   = (f['game_type'] || 'Rec').toUpperCase() === 'COMP' ? 'COMP' : 'REC';
-            return `${abbr}${season}${type}${seq}${year}`;
+            return f['game_no'] ? RT_GAME_NO.fmt(f['game_no']) : null;
         }
 
         function resolveRefName(linkedIds) {
