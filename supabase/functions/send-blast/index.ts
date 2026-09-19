@@ -34,6 +34,22 @@
 // RATE
 //   Resend allows 2 requests/second. ~550ms between sends. 202 addresses ≈
 //   two minutes. Slow is fine.
+//
+// WHY THE WORKER HANDS OFF TO ITSELF (2026-09-18)
+//   waitUntil keeps the isolate alive after the response, but not forever:
+//   Supabase kills an Edge Function at 400s of wall clock. A 493-address
+//   blast is ~7½ minutes. It died at 266 — the other 227 sat at 'queued'
+//   and the page said "Sending 266 / 493" for hours, because nothing on
+//   either side knew the worker was gone.
+//
+//   Now the worker watches its own clock. When it has used HOP_BUDGET_MS it
+//   stops, POSTs to its own URL with { resume_blast_id } (authenticated by
+//   the service key in x-blast-hop, so a login that expires mid-blast can't
+//   strand it), and exits. The fresh isolate picks up whatever is still
+//   'queued' on that blast and carries on. A blast of any size is a chain
+//   of short hops, and if a hop ever does die, the page notices the count
+//   stop moving and offers Resume — same resume path, only 'queued' and
+//   'failed' rows are touched, so nobody is ever sent twice.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -46,6 +62,7 @@ const ANON_KEY     = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const FROM_ADDRESS = "Referee Tool <blasts@referee-tool.com>";
 const SITE         = "https://referee-tool.com";
 const GAP_MS       = 550;
+const HOP_BUDGET_MS = 150_000;   // stop and hand off well inside the 400s wall clock
 
 // ── SMS via Twilio — same gate and same helper shape as notify-assignor ────
 const TW_SID  = Deno.env.get("TWILIO_ACCOUNT_SID") ?? "";
@@ -67,7 +84,7 @@ async function sendSms(to: string, body: string): Promise<{ ok: boolean; sid?: s
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-blast-hop",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -131,8 +148,11 @@ async function sendOne(r: Recipient, subject: string, body: string, replyTo?: st
   const to = (r.email || "").trim();
   if (!EMAIL_OK.test(to)) throw new Error(`bad address on the referee record: "${to}"`);
   const foot = footerFor(r);
+  // A send that hangs would pin the isolate until its wall clock kills it —
+  // and take the hop chain down with it. 20s is generous for Resend.
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
+    signal: AbortSignal.timeout(20000),
     headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       from:     FROM_ADDRESS,
@@ -155,9 +175,17 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 // Walks every row handed to it, sends, and updates the row. If Resend says
 // the daily quota is gone, every remaining row is marked failed with that
 // reason at once — no point burning two minutes finding out 56 times.
-async function work(db: ReturnType<typeof createClient>, rows: Row[], subject: string, body: string, replyTo?: string) {
+async function work(db: ReturnType<typeof createClient>, blastId: number, rows: Row[], subject: string, body: string, replyTo?: string) {
   let quotaGone = false;
+  const started = Date.now();
+  let done = 0;
   for (const row of rows) {
+    if (!quotaGone && done > 0 && Date.now() - started > HOP_BUDGET_MS) {
+      // Out of time for this isolate. Hand the rest to a fresh one.
+      await hop(blastId, done, rows.length);
+      return;
+    }
+    done++;
     if (quotaGone) {
       await db.from("blast_recipients").update({ status: "failed", error: "daily sending quota reached — retry after it resets" }).eq("id", row.id);
       continue;
@@ -179,10 +207,59 @@ async function work(db: ReturnType<typeof createClient>, rows: Row[], subject: s
   }
 }
 
+// Start a new invocation of this same function to continue a blast. The
+// service key in x-blast-hop is the credential — only this function has it.
+// The fetch is awaited so the request is actually on the wire before this
+// isolate exits; the callee answers in about a second (it starts its own
+// worker and returns), so this never comes near the wall clock.
+async function hop(blastId: number, done: number, of: number) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/send-blast`, {
+      method: "POST",
+      headers: { "x-blast-hop": SERVICE_KEY, "apikey": ANON_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ resume_blast_id: blastId, after: done, of }),
+    });
+    if (!r.ok) console.error(`[send-blast] hop for blast ${blastId} refused: ${r.status} ${await r.text().catch(() => "")}`);
+  } catch (e) {
+    console.error(`[send-blast] hop for blast ${blastId} failed:`, (e as Error).message || e);
+  }
+}
+
+// Reply-to for a blast: the sender's ASSIGNOR address, looked up server-side.
+async function replyToFor(db: ReturnType<typeof createClient>, userId: string, fallback?: string | null) {
+  const { data: prof } = await db.from("assignor_profiles").select("username,email,reply_to_email").eq("id", userId).maybeSingle();
+  return {
+    senderName: prof?.username || fallback || userId,
+    replyTo:    (prof?.reply_to_email && prof.reply_to_email.trim())
+             || (prof?.email && prof.email.trim())
+             || fallback || undefined,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST")    return json({ error: "POST only" }, 405);
   if (!RESEND_KEY) return json({ error: "RESEND_API_KEY is not set on the server" }, 500);
+
+  // ── MODE 0: a hop from a previous isolate of this function ──────────────
+  // No user JWT — the service key in x-blast-hop is the proof. Picks up
+  // every row still 'queued' on the blast and keeps going.
+  const hopKey = req.headers.get("x-blast-hop") || "";
+  if (hopKey) {
+    if (!SERVICE_KEY || hopKey !== SERVICE_KEY) return json({ error: "Bad hop key" }, 401);
+    let hp: any;
+    try { hp = await req.json(); } catch { return json({ error: "Bad JSON" }, 400); }
+    const blastId = Number(hp.resume_blast_id);
+    if (!blastId) return json({ error: "resume_blast_id required" }, 400);
+    const db = createClient(SUPABASE_URL, SERVICE_KEY);
+    const { data: log } = await db.from("blast_log").select("id,subject,body,sent_by").eq("id", blastId).maybeSingle();
+    if (!log) return json({ error: `Blast #${blastId} not found` }, 404);
+    const { data: rows } = await db.from("blast_recipients").select("id,email,is_guardian,merge").eq("blast_id", blastId).eq("status", "queued").order("id");
+    if (!rows?.length) return json({ ok: true, blast_id: blastId, queued: 0, message: "Nothing left to send" });
+    const { replyTo } = await replyToFor(db, log.sent_by);
+    EdgeRuntime.waitUntil(work(db, blastId, rows as Row[], log.subject, log.body, replyTo));
+    return json({ ok: true, blast_id: blastId, queued: rows.length, hop: true });
+  }
 
   // ── who is calling ───────────────────────────────────────────────────────
   const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
@@ -208,26 +285,25 @@ Deno.serve(async (req) => {
   // whose account address is refassignor398@ — but replies belong at
   // nectassignor@. The two addresses are different things and coincided for
   // everyone else by luck. See sql/assignor-reply-to.sql.
-  const { data: prof } = await db.from("assignor_profiles").select("username,email,reply_to_email").eq("id", user.id).maybeSingle();
-  const senderName = prof?.username || user.email || user.id;
-  const replyTo    = (prof?.reply_to_email && prof.reply_to_email.trim())
-                  || (prof?.email && prof.email.trim())
-                  || user.email || undefined;
+  const { senderName, replyTo } = await replyToFor(db, user.id, user.email);
 
-  // ── MODE 2: retry the failed rows of an existing blast ──────────────────
+  // ── MODE 2: retry / resume an existing blast ────────────────────────────
+  // 'failed' rows are re-sent. 'queued' rows are picked up too — that is
+  // what a dead worker leaves behind, and the page's Resume button lands
+  // here. 'sent' rows are never touched.
   if (p.retry_blast_id) {
     const blastId = Number(p.retry_blast_id);
     const { data: log } = await db.from("blast_log").select("id,subject,body").eq("id", blastId).maybeSingle();
     if (!log) return json({ error: `Blast #${blastId} not found` }, 404);
-    const { data: rows } = await db.from("blast_recipients").select("id,email,is_guardian,merge").eq("blast_id", blastId).eq("status", "failed");
-    if (!rows?.length) return json({ ok: true, blast_id: blastId, queued: 0, message: "Nothing failed on that blast" });
+    const { data: rows } = await db.from("blast_recipients").select("id,email,is_guardian,merge").eq("blast_id", blastId).in("status", ["failed", "queued"]).order("id");
+    if (!rows?.length) return json({ ok: true, blast_id: blastId, queued: 0, message: "Nothing failed or waiting on that blast" });
     // Flip to queued BEFORE answering, and only start the worker once the
     // flip has landed — the page's watcher polls the moment it gets this
     // response, and the first version let it see "0 queued" and call the
     // retry finished before a single email had gone.
     const { error: qErr } = await db.from("blast_recipients").update({ status: "queued", error: null }).in("id", rows.map(r => r.id));
     if (qErr) return json({ error: "Could not requeue: " + qErr.message }, 500);
-    EdgeRuntime.waitUntil(work(db, rows as Row[], log.subject, log.body, replyTo));
+    EdgeRuntime.waitUntil(work(db, blastId, rows as Row[], log.subject, log.body, replyTo));
     return json({ ok: true, blast_id: blastId, queued: rows.length, reply_to: replyTo });
   }
 
@@ -254,8 +330,6 @@ Deno.serve(async (req) => {
     });
     const refused = recips.length - allowed.length;
 
-    const { data: prof } = await db.from("assignor_profiles").select("username").eq("id", user.id).maybeSingle();
-    const senderName = prof?.username || user.email || user.id;
     const { data: log } = await db.from("blast_log").insert({
       sent_by: user.id, sent_by_name: senderName, subject: "(text)", body,
       where_text: (p.where_text ? p.where_text + " · " : "") + "SMS", recipient_count: allowed.length, guardians_cc: true,
@@ -302,7 +376,7 @@ Deno.serve(async (req) => {
   if (rErr || !rows) return json({ error: "Could not write blast_recipients: " + (rErr?.message || "?") }, 500);
 
   // Answer NOW. The sending runs on after this response has gone out.
-  EdgeRuntime.waitUntil(work(db, rows as Row[], subject, body, replyTo));
+  EdgeRuntime.waitUntil(work(db, log.id, rows as Row[], subject, body, replyTo));
   return json({ ok: true, blast_id: log.id, queued: rows.length, reply_to: replyTo });
 });
 

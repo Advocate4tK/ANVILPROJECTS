@@ -674,6 +674,14 @@
             background: #eef2f7; border-left: 4px solid #64748b; border-radius: 9px;
             padding: 12px 15px; margin-bottom: 14px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: #3f4c5f;
         }
+        .cmp-progress.stalled { background:#fff7e6; border-left-color:#f5a623; color:#5a3d00; }
+        .cmp-progress.stalled .resume {
+            margin-left: 10px; padding: 4px 12px; border: 0; border-radius: 6px; cursor: pointer;
+            background: #f5a623; color: #1a1200; font-family: 'Barlow Condensed', sans-serif; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+        }
+        .cmp-progress.stalled .resume:disabled { opacity: .6; cursor: progress; }
+        .cbtn.sending.stalled, .cbtn.sending.stalled:disabled { background:#dc2626; color:#fff; cursor:default; }
+        .cbtn.sending.stalled .fly { animation: none; left: 8px; opacity: .5; }
         .cmp-done { background:#f0fdf4; border:1px solid #bbf7d0; border-left:4px solid #00c853; border-radius:9px; padding:14px 16px; margin-bottom:14px; font-family:'DM Sans',sans-serif; }
         .cmp-done .big { font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#065f46; }
         .cmp-done .sub { font-size:.84rem; color:#3f4c5f; margin-top:3px; }
@@ -2270,12 +2278,13 @@
         const btn = document.getElementById('cmpSend');
         if (o.sending) {
             btn.classList.add('sending');
+            btn.classList.toggle('stalled', !!o.stalled);
             btn.disabled = true;
-            btn.title = 'Sending — you can close this window, it keeps going';
+            btn.title = o.stalled ? 'The server stopped mid-blast — use Resume above' : 'Sending — you can close this window, it keeps going';
             const done = o.done != null && o.total != null ? `${o.done} / ${o.total}` : '';
-            btn.innerHTML = `<span class="fly">✉</span><span class="lbl">Sending${done ? ' ' + done : '…'}</span>`;
+            btn.innerHTML = `<span class="fly">✉</span><span class="lbl">${o.stalled ? 'Stalled' : 'Sending'}${done ? ' ' + done : '…'}</span>`;
         } else {
-            btn.classList.remove('sending');
+            btn.classList.remove('sending', 'stalled');
             btn.disabled = !o.count;
             btn.title = o.count ? '' : 'Nobody sendable';
             btn.textContent = `Send Blast${o.count ? ` (${o.count})` : ''}`;
@@ -2380,9 +2389,33 @@
 
     // ── watch a blast until every row has left 'queued' ─────────────────────
     let _watchT = null;
+    let _watchMeta = null;   // meta of the blast being watched, for Resume
+
+    // Resume a stalled blast. The server re-sends only what is 'queued' or
+    // 'failed'; the watcher is already running and picks the movement up.
+    async function resumeBlast(blastId) {
+        const jwt = _getSupabaseSession()?.access_token;
+        if (!jwt) { alert('Your login has expired — sign in again'); return; }
+        const btn = document.querySelector('.cmp-progress.stalled .resume');
+        if (btn) { btn.disabled = true; btn.textContent = 'Resuming…'; }
+        try {
+            const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/send-blast`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${jwt}`, 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY },
+                body: JSON.stringify({ retry_blast_id: blastId }),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.ok) throw new Error(j.error || `Server said ${r.status}`);
+            watchBlast(blastId, _watchMeta || {});   // fresh stall clock
+        } catch (e) {
+            alert('Resume failed: ' + (e.message || e));
+            if (btn) { btn.disabled = false; btn.textContent = 'Resume'; }
+        }
+    }
     async function watchBlast(blastId, meta) {
         const res = document.getElementById('cmpResult');
         clearInterval(_watchT);
+        _watchMeta = meta;
         // blast_recipients is RLS'd to `authenticated`. The page's shared client
         // was built with the anon key at load and does not carry the login JWT,
         // so a read through it comes back short with no error — the first retry
@@ -2391,6 +2424,14 @@
         const asUser = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY,
             { global: { headers: { Authorization: `Bearer ${jwt}` } } });
         let expected = null;   // the row count we should see; guards against a short read
+        // Stall watch. The server hands a long blast from isolate to isolate
+        // (see send-blast: HOP_BUDGET_MS), so the count should never sit
+        // still for more than a few seconds. On 2026-09-18 it sat at
+        // 266 / 493 for hours: the isolate was killed at its 400s wall clock
+        // and nothing knew. If nothing has landed in STALL_MS, say so and
+        // offer Resume — the server only re-sends 'queued' and 'failed' rows.
+        const STALL_MS = 120000;
+        let lastDone = -1, lastMove = Date.now(), stalled = false;
         const tick = async () => {
             const { data, error } = await asUser
                 .from('blast_recipients').select('status,email,error').eq('blast_id', blastId);
@@ -2401,8 +2442,19 @@
             data.forEach(r => { n[r.status] = (n[r.status] || 0) + 1; });
             const total = data.length;
             if (n.queued > 0) {
-                res.innerHTML = `<div class="cmp-progress"><b>${n.sent + n.failed} of ${total}</b> · ${n.sent} sent${n.failed ? ` · ${n.failed} failed` : ''} · ${n.queued} to go. You can close this — it keeps going.</div>`;
-                setSendButton({ sending: true, done: n.sent + n.failed, total });
+                const done = n.sent + n.failed;
+                if (done !== lastDone) { lastDone = done; lastMove = Date.now(); stalled = false; }
+                else if (Date.now() - lastMove > STALL_MS) stalled = true;
+                if (stalled) {
+                    if (!res.querySelector('.cmp-progress.stalled')) {
+                        res.innerHTML = `<div class="cmp-progress stalled"><b>Stalled at ${done} of ${total}</b> · ${n.sent} sent${n.failed ? ` · ${n.failed} failed` : ''} · ${n.queued} never left the server. Nothing has moved in ${Math.round(STALL_MS / 60000)} minutes — the server stopped.
+                            <button class="resume" onclick="resumeBlast(${blastId})">Resume the ${n.queued}</button></div>`;
+                    }
+                    setSendButton({ sending: true, stalled: true, done, total });
+                    return;
+                }
+                res.innerHTML = `<div class="cmp-progress"><b>${done} of ${total}</b> · ${n.sent} sent${n.failed ? ` · ${n.failed} failed` : ''} · ${n.queued} to go. You can close this — it keeps going.</div>`;
+                setSendButton({ sending: true, done, total });
                 return;
             }
             clearInterval(_watchT);
