@@ -225,14 +225,23 @@ Deno.serve(async (req) => {
 
     // Venue + field, by CA id
     const [{ data: ven }, { data: fld }] = await Promise.all([
-      g["Venue ID"] ? db.from("venues").select('"Venue Name",address,city').eq('"Venue ID"', g["Venue ID"]).maybeSingle() : Promise.resolve({ data: null }),
+      g["Venue ID"] ? db.from("venues").select('"Venue Name",address,city,state').eq('"Venue ID"', g["Venue ID"]).maybeSingle() : Promise.resolve({ data: null }),
       g["Field ID"] ? db.from("fields").select('"Field Name"').eq('"Field ID"', g["Field ID"]).maybeSingle()             : Promise.resolve({ data: null }),
     ]);
     const venueName = ven?.["Venue Name"] || "";
     const fieldName = fld?.["Field Name"] || g.field || "";
     const where     = [venueName, fieldName].filter(Boolean).join(" · ");
     const addr      = [ven?.address, ven?.city].filter(Boolean).join(", ");
-    const maps      = addr ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venueName + ", " + addr)}` : "";
+    // A Maps link whenever there is a venue NAME. 60 of 549 venues carry no
+    // street address (the statewide CA import) and the link used to need
+    // one — those emails said "Where: Brooklyn Middle School" and stopped.
+    // Google resolves "Brooklyn Middle School, Brooklyn, CT" on its own.
+    // Tod, 2026-09-20: "some of them aren't getting on central assign and
+    // it's just stupid right now."
+    const mapsQuery = venueName
+      ? [venueName, addr || [ven?.city, ven?.state || "CT"].filter(Boolean).join(", ")].filter(Boolean).join(", ")
+      : "";
+    const maps      = mapsQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}` : "";
 
     // Who replies go to — the assignor for this club
     const who = await assignorsFor(db, String(g["Source Club"] || ""));
