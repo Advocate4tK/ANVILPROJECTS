@@ -4388,7 +4388,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 ? `venmo://paycharge?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`
                 : `https://venmo.com/?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`;
             const _clubId = currentClubRecord?.id || null;
-            const [rawGrisGames, ratesResult, refPayResult, clubResult, invoiceResult] = await Promise.all([
+            const [rawGrisGames, ratesResult, refPayResult, clubResult, invoiceResult, incidentResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', _sourceClub).limit(2000),
                 _clubId
                     ? supabaseClient.client.from('pay_rates').select('*').eq('club_id', _clubId).order('sort_order')
@@ -4399,8 +4399,17 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                     : Promise.resolve({ data: null }),
                 _clubId
                     ? supabaseClient.client.from('invoices').select('id, invoice_number, season, total_due, status').eq('club_id', _clubId).eq('status', 'sent').maybeSingle()
-                    : Promise.resolve({ data: null })
+                    : Promise.resolve({ data: null }),
+                // No-shows / late scratches — game_incident_slots is the anon-safe
+                // view (game, position, kind; no names). A no-show is $0 and can't be
+                // marked paid. sql/game-incidents-pay-view.sql
+                supabaseClient.client.from('game_incident_slots').select('game_id, position, kind')
             ]);
+            const _incidentSlots = {};   // `${game_id}|CR` → kind
+            (incidentResult?.data || []).forEach(i => {
+                const pos = i.position === 'Center Referee' ? 'CR' : i.position === 'AR 1' ? 'AR1' : 'AR2';
+                _incidentSlots[`${i.game_id}|${pos}`] = i.kind;
+            });
             const clubPayMethods = (clubResult.data?.payment_methods || 'venmo,check')
                 .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
@@ -4683,7 +4692,8 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                             const zipRaw  = String(rf['Zip Code'] || '');
                             const zip     = zipRaw && zipRaw.length === 4 ? '0' + zipRaw : zipRaw;
                             const address = [rf['address'], rf['city'], rf['state'], zip].filter(Boolean).join(', ');
-                            const rate      = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                            const incident  = _incidentSlots[`${r.id}|${slot.pos}`] || null;   // 'no_show' | 'late_scratch'
+                            const rate      = incident ? 0 : getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
                             gameTotal      += rate;
 
                             const venmoHandle = venmo.replace(/^@/, '');
@@ -4699,11 +4709,13 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                                 : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
 
                             const slotAlreadyPaid = !!(slotPaidMap[r.id] && slotPaidMap[r.id][slot.pos]);
-                            const slotRowBg = gameOutsourced ? 'background:#f3f4f6;' : slotAlreadyPaid ? 'background:#bbf7d0;' : rowBg;
+                            const slotRowBg = incident ? 'background:repeating-linear-gradient(135deg,#fff1f1,#fff1f1 6px,#ffe1e1 6px,#ffe1e1 12px);' : gameOutsourced ? 'background:#f3f4f6;' : slotAlreadyPaid ? 'background:#bbf7d0;' : rowBg;
                             const slotTs = slotAlreadyPaid
                                 ? new Date(slotPaidMap[r.id][slot.pos]).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
                                 : '';
-                            const cbHtml = gameOutsourced
+                            const cbHtml = incident
+                                ? `<span style="font-size:0.6rem; color:#b91c1c; font-weight:800; letter-spacing:0.4px; text-transform:uppercase;" title="${incident === 'no_show' ? 'Did not show — nothing to pay' : 'Scratched late — nothing to pay'}">${incident === 'no_show' ? 'no show' : 'scratch'}</span>`
+                                : gameOutsourced
                                 ? `<span style="font-size:0.6rem; color:#9ca3af; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;" title="Paid externally — district pays at the field">ext</span>`
                                 : allowPay
                                 ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
@@ -4740,7 +4752,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                                 <td>${idx === 0 ? age : ''}</td>
                                 <td>${refNameCell}</td>
                                 <td>${posBadge}</td>
-                                <td>${gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>`}</td>
+                                <td>${incident ? `<span style="color:#b91c1c; font-size:0.82rem; font-weight:800; white-space:nowrap;" title="${incident === 'no_show' ? 'Did not show' : 'Scratched late'}">$0 <span style="font-weight:600;">· ${incident === 'no_show' ? 'no show' : 'late scratch'}</span></span>` : gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>`}</td>
                                 <td>${venmoHtml}</td>
                                 <td style="text-align:center;">${cbHtml}</td>
                             </tr>
@@ -4765,7 +4777,9 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                         // Game footer row — Mark Paid lives here, not on individual ref rows
                         if (allowPay) {
                             // Treat as paid if game-level paid_at exists OR all payable slots are individually paid
-                            const allSlotsPaid = slots.length > 0 && slots.every(s => !!(slotPaidMap[r.id] && slotPaidMap[r.id][s.pos]));
+                            // a no-show slot has nothing to pay, so it never blocks "all paid"
+                            const payableSlots = slots.filter(s => !_incidentSlots[`${r.id}|${s.pos}`]);
+                            const allSlotsPaid = payableSlots.length > 0 && payableSlots.every(s => !!(slotPaidMap[r.id] && slotPaidMap[r.id][s.pos]));
                             const effectivelyPaid = isPaid || allSlotsPaid;
                             // For timestamp: use game-level paid_at if available, else latest slot paid_at
                             let effectivePaidAt = paidAt;
