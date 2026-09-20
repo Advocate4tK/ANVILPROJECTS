@@ -338,6 +338,7 @@
         .pay-header { display:flex; align-items:center; gap:14px; margin-bottom:18px; border-bottom:2px solid var(--deep); padding-bottom:12px; }
         .pay-header h2 { font-family:'Barlow Condensed',sans-serif; font-size:1.6rem; font-weight:800; color:var(--deep); text-transform:uppercase; letter-spacing:1px; margin:0; }
         .pay-week-group { margin-bottom:16px; }
+        .game-card.search-hit { box-shadow: 0 0 0 3px #00c853; }
         .pay-week-label { font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; padding:4px 0; border-bottom:1px solid var(--border); }
         .pay-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
         .pay-table th { background:var(--deep); color:rgba(255,255,255,0.85); padding:8px 10px; text-align:left; font-family:'DM Sans',sans-serif; font-weight:600; font-size:0.74rem; letter-spacing:0.3px; white-space:nowrap; }
@@ -2297,6 +2298,11 @@
         const timeRaw    = (f['Time'] || '').substring(0, 5);
         const timeDisp   = timeRaw ? formatTime(timeRaw) : '—';
         const gameNum    = buildGameNumber(f);
+        // Game Search matches against this — number (with and without the
+        // prefix), teams, date, venue, referees. Tod, 2026-09-20.
+        const searchKey  = [gameNum, f['game_no'], f['Home Team'], f['Away Team'], f['Date'], f['Age Group'], f['Venue'], f['field'],
+                            f['Center Referee'], f['AR 1'], f['AR 2']].filter(Boolean).join(' ').toLowerCase().replace(/"/g, '');
+        const searchAttr = `data-search="${searchKey}"`;
         const gameNumHtml = gameNum ? `<span style="display:inline-block; font-family:'DM Mono','Consolas',monospace; font-size:0.7rem; font-weight:800; color:#152d55; background:#e8eef8; border:1px solid #c9d6ee; border-radius:4px; padding:0 6px; letter-spacing:.5px; margin-right:8px; vertical-align:middle;">${gameNum}</span>` : '';
         const center     = resolveRef(f['Center Referee']);
         const ar1        = resolveRef(f['AR 1']);
@@ -2350,7 +2356,7 @@
             const reasonHtml = chgRes?.reason
                 ? `<div style="margin-top:4px; font-size:0.78rem; color:#1e5e33;"><strong>Reason:</strong> ${chgRes.reason}</div>`
                 : '';
-            return `<div class="game-card change-done${compCls}">
+            return `<div class="game-card change-done${compCls}" ${searchAttr}>
                 <div class="game-card-main">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:2px;">
                         <div class="game-matchup" style="margin:0;">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}</div>
@@ -2382,7 +2388,7 @@
             const hasNewNote = note && note.ts !== seenTs;
             const noteBadge = hasNewNote ? `<span style="display:inline-block; background:#dbeafe; border:1px solid #93c5fd; color:#1d4ed8; font-size:0.7rem; font-weight:800; padding:2px 9px; border-radius:20px; letter-spacing:0.4px; white-space:nowrap; animation:urgency-pulse 2s ease-in-out infinite;">🔔 New Message</span>` : '';
             const noteHtml = note ? `<div style="background:#eaf3ff; border-left:3px solid #1a3a6b; border-radius:6px; padding:10px 14px; margin-top:8px; font-size:0.82rem;"><div style="font-size:0.72rem; color:#1a3a6b; margin-bottom:4px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;">💬 Message from Assignor · ${note.ts}</div><div style="color:#333; line-height:1.5;">${note.message}</div></div>` : '';
-            return `<div class="game-card change-req${compCls}">
+            return `<div class="game-card change-req${compCls}" ${searchAttr}>
                 <div class="game-card-main">
                     <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}${scrimChip}</div>
                     <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${placeText}</div>
@@ -2399,7 +2405,7 @@
         }
 
         if (opts.cancelled) {
-            return `<div class="game-card cancelled-game${compCls}">
+            return `<div class="game-card cancelled-game${compCls}" ${searchAttr}>
                 <div class="game-card-main">
                     <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}${scrimChip}</div>
                     <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${placeText}</div>
@@ -2469,7 +2475,7 @@
                 <p id="modMsg_${r.id}" style="font-size:0.82rem; margin-top:8px; display:none;"></p>
             </div>` : '';
 
-        return `<div class="game-card${opts.currentWeek ? ' current-week-card' : ''}${compCls}">
+        return `<div class="game-card${opts.currentWeek ? ' current-week-card' : ''}${compCls}" ${searchAttr}>
             <div class="game-card-main">
                 <div class="game-matchup">${gameNumHtml}${f['Home Team'] || '—'} vs ${f['Away Team'] || '—'}${scrimChip}</div>
                 <div class="game-meta">${dateStr} &nbsp;·&nbsp; ${timeDisp} &nbsp;·&nbsp; ${f['Age Group'] || '—'} &nbsp;·&nbsp; ${f['Gender'] || '—'} &nbsp;·&nbsp; ${placeText}</div>
@@ -2834,7 +2840,7 @@
                         const cancelledInWeekHtml = wCancelled.length > 0
                             ? `<div style="margin-top:${wGames.length > 0 ? '6px' : '0'};">${wCancelled.map(r => buildGameCard(r, { cancelled: true })).join('')}</div>`
                             : '';
-                        return `<div style="${weekWrapStyle}">
+                        return `<div style="${weekWrapStyle}" class="week-block" id="weekBlock_${key}" data-week="${key}">
                             <div style="${hdrStyle}" onclick="window._toggleWeek('${key}')">${leftSide}</div>
                             <div id="weekCards_${key}" style="display:${collapsed ? 'none' : 'block'};">
                                 ${wGames.map(r => buildGameCard(r, { currentWeek: isCurrent })).join('')}
@@ -2861,9 +2867,69 @@
                             return liveSeason;
                         })()}</span>
                     </div>
-                    <p style="color:#6b7280; font-size:0.83rem; margin-bottom:14px;">Games on file with the assignor. Assigned referees appear once the assignor fills them in.</p>
-                    ${weekBlocks}
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+                        <p style="color:#6b7280; font-size:0.83rem; margin:0; flex:1; min-width:200px;">Games on file with the assignor. Assigned referees appear once the assignor fills them in.</p>
+                        <label style="display:flex; align-items:center; gap:8px; font-family:'Barlow Condensed',sans-serif; font-size:0.9rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; white-space:nowrap;">
+                            🔍 Game Search
+                            <input id="gameSearchBox" type="search" placeholder="RTCT10214 · team · referee" autocomplete="off" oninput="window._gameSearch(this.value)"
+                                   style="width:230px; padding:6px 10px; border:1.5px solid #c9d6ee; border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.85rem; font-weight:500; letter-spacing:0.2px; color:#09142a; background:#fff;">
+                            <span id="gameSearchCount" style="font-family:'DM Sans',sans-serif; font-size:0.75rem; font-weight:600; color:#6b7280; text-transform:none; letter-spacing:0; min-width:60px;"></span>
+                        </label>
+                    </div>
+                    <div id="submittedGamesWrap">${weekBlocks}</div>
                 </div>`;
+
+                // ── Game Search ─────────────────────────────────────────────
+                // Filters the cards already on the page. A number finds one
+                // game in any week, collapsed or not, or in the cancellations
+                // section; a word finds every card that mentions it. Clearing
+                // the box puts every week back exactly as it was.
+                window._gameSearch = function(raw) {
+                    const q = String(raw || '').trim().toLowerCase().replace(/^#/, '');
+                    const qNum = q.replace(/^rtct[\s-]*/, '');           // "rtct10214" → "10214"
+                    const cards = document.querySelectorAll('.game-card[data-search]');
+                    const countEl = document.getElementById('gameSearchCount');
+                    if (!q) {
+                        cards.forEach(c => { c.style.display = ''; c.classList.remove('search-hit'); });
+                        document.querySelectorAll('.week-block').forEach(w => {
+                            w.style.display = '';
+                            const key = w.dataset.week;
+                            const cont = document.getElementById('weekCards_' + key), arrow = document.getElementById('weekArrow_' + key);
+                            if (cont)  cont.style.display  = window._weekCollapsed[key] ? 'none' : 'block';
+                            if (arrow) arrow.style.transform = window._weekCollapsed[key] ? 'rotate(0deg)' : 'rotate(90deg)';
+                        });
+                        const cc = document.getElementById('cancelledCardsContainer'), ca = document.getElementById('cancelledArrow');
+                        if (cc) cc.style.display = window._cancelledCollapsed === false ? 'block' : 'none';
+                        if (ca) ca.textContent = window._cancelledCollapsed === false ? '▼' : '▶';
+                        if (countEl) countEl.textContent = '';
+                        return;
+                    }
+                    let hits = 0;
+                    cards.forEach(c => {
+                        const key = c.dataset.search || '';
+                        const hit = key.includes(q) || (qNum && /^\d+$/.test(qNum) && key.split(' ').includes(qNum));
+                        c.style.display = hit ? '' : 'none';
+                        c.classList.toggle('search-hit', hit);
+                        if (hit) hits++;
+                    });
+                    document.querySelectorAll('.week-block').forEach(w => {
+                        const key = w.dataset.week;
+                        const any = [...w.querySelectorAll('.game-card[data-search]')].some(c => c.style.display !== 'none');
+                        w.style.display = any ? '' : 'none';
+                        const cont = document.getElementById('weekCards_' + key), arrow = document.getElementById('weekArrow_' + key);
+                        if (cont)  cont.style.display  = any ? 'block' : 'none';
+                        if (arrow) arrow.style.transform = any ? 'rotate(90deg)' : 'rotate(0deg)';
+                    });
+                    const cc = document.getElementById('cancelledCardsContainer'), ca = document.getElementById('cancelledArrow');
+                    if (cc) {
+                        const any = [...cc.querySelectorAll('.game-card[data-search]')].some(c => c.style.display !== 'none');
+                        cc.style.display = any ? 'block' : 'none';
+                        if (ca) ca.textContent = any ? '▼' : '▶';
+                    }
+                    if (countEl) countEl.textContent = hits === 0 ? 'no match' : `${hits} game${hits === 1 ? '' : 's'}`;
+                    const first = document.querySelector('.game-card.search-hit');
+                    if (first && hits === 1) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                };
 
                 if (cancelledGames.length > 0) {
                     window._cancelledCollapsed = true;
