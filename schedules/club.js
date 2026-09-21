@@ -38,6 +38,11 @@ const SHELL = `
   <div class="info-bar" id="infoBar"></div>
 
   <div class="filter-bar" id="filterBar" style="display:none;">
+    <!-- Game Search. The Saturday-morning question is "which field is the U12
+         Girls on" — a word, not a dropdown. Number, team, age, field, date.
+         Tod, 2026-09-21. -->
+    <label for="searchFilter" class="search-label">🔍 Game Search</label>
+    <input id="searchFilter" type="search" placeholder="team, age, field, or game #" autocomplete="off">
     <label>Filter</label>
     <select id="seasonFilter" style="display:none;"><option value="">All seasons</option></select>
     <select id="divFilter"><option value="">All divisions</option></select>
@@ -363,16 +368,35 @@ function fieldClass(f) {
 // games return an empty set and take the finished spring season down with it:
 // a dead end reading "No games match that filter" with 63 games unreachable.
 // renderList() and calRows() each apply the season themselves.
+// What one game can be found by. "rtct10247" and "10247" both hit; so do a
+// team, a division, a field, a venue, a date, a weekday.
+function searchKey(g) {
+    return [gameNo(g), g.game_no, g['Home Team'], g['Away Team'], divisionLabel(g), g['Age Group'], g['Gender'],
+            venueName(g), fieldName(g), g.date, g.date ? fmtDateHeading(g.date) : '', gameTypeLabel(g)]
+        .filter(Boolean).join(' ').toLowerCase();
+}
+function searchQuery() {
+    return (document.getElementById('searchFilter')?.value || '').trim().toLowerCase().replace(/^#/, '');
+}
+function matchesSearch(g, q) {
+    if (!q) return true;
+    const key = searchKey(g);
+    if (key.includes(q)) return true;
+    const num = q.replace(/^rtct[\s-]*/, '');
+    return /^\d+$/.test(num) && String(g.game_no || '') === num;
+}
 function filtered() {
     const dv = document.getElementById('divFilter').value;
     const tm = document.getElementById('teamFilter').value;
     const vn = document.getElementById('venueFilter').value;
     const ty = document.getElementById('typeFilter')?.value || '';
+    const q  = searchQuery();
     return GAMES.filter(g =>
         (!dv || divisionLabel(g) === dv) &&
         (!tm || g['Home Team'] === tm || g['Away Team'] === tm) &&
         (!vn || venueName(g) === vn) &&
-        (!ty || gameTypeLabel(g) === ty));
+        (!ty || gameTypeLabel(g) === ty) &&
+        matchesSearch(g, q));
 }
 
 function render() {
@@ -456,7 +480,7 @@ function renderList() {
         // left the last render's numbers frozen on screen — the green bar read
         // "14 GAMES" six inches under a header saying "no games posted".
         updateInfoBar([], GAMES);
-        host.innerHTML = `<div class="state-msg">No games match that filter.</div>`;
+        host.innerHTML = `<div class="state-msg">No games match ${searchQuery() ? `"${esc(document.getElementById('searchFilter').value.trim())}"` : 'that filter'}.</div>`;
         return;
     }
 
@@ -507,7 +531,7 @@ function renderList() {
     // matches are spread across the season and hiding them behind closed weeks
     // makes the filter look broken. Any active filter expands everything.
     const filterOn = ['divFilter','teamFilter','venueFilter','typeFilter']
-        .some(id => (document.getElementById(id)?.value || '') !== '');
+        .some(id => (document.getElementById(id)?.value || '') !== '') || !!searchQuery();
 
     const weeks = [];
     upcoming.forEach(d => {
@@ -839,6 +863,8 @@ function fillFilters() {
     refillSeasonFilters();
     ['divFilter', 'teamFilter', 'venueFilter', 'typeFilter'].forEach(id =>
         document.getElementById(id).addEventListener('change', render));
+    const sf = document.getElementById('searchFilter');
+    if (sf) { sf.oninput = render; sf.onsearch = render; }
     document.getElementById('filterBar').style.display = '';
 }
 
