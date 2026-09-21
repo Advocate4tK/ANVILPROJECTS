@@ -9216,10 +9216,16 @@ Reason (optional):`);
             const timeFilter   = document.getElementById('timeFilter').value || gameTimeFilter;
             const genderFilter = document.getElementById('genderFilter').value;
 
+            // Why did the pane come up empty? On 2026-09-21 it hid ten NECONN
+            // referees who had submitted for the week and said "No refs have
+            // submitted availability" — which was false. Every gate below now
+            // tallies what it drops, and the empty state prints the tally, so
+            // the next time it happens the reason is on the screen.
+            const _why = { search: 0, club: 0, years: 0, age: 0, gender: 0, scope: 0, date: 0, time: 0, noAvail: 0 };
             const filtered = allRefs.filter(r => {
                 const name  = (r.fields['Name']  || '').trim().replace(/\s+/g, ' ').toLowerCase();
                 const email = (r.fields['Email'] || '').toLowerCase();
-                if (query && !name.includes(query) && !email.includes(query)) return false;
+                if (query && !name.includes(query) && !email.includes(query)) { _why.search++; return false; }
                 // Club preference gate: only show refs who listed a matching club.
                 // Refs with no preference set are hidden — use "Show all refs" to override.
                 // Also check what the ref put on their availability form (Preferred Locations).
@@ -9270,26 +9276,26 @@ Reason (optional):`);
                         .flatMap(d => _slotsByDate[d] || [])
                         .flatMap(s => s.clubs || []);
                     const merged = [...new Set([...prefs.map(p => p.toLowerCase()), ...availFormClubs])];
-                    if (!merged.some(p => focusClubs.includes(p))) return false;
+                    if (!merged.some(p => focusClubs.includes(p))) { _why.club++; return false; }
                 }
                 if (yearsFilter !== 'any') {
                     const yrs = parseYrs(r.fields['Years Reffing'], -1);
-                    if (yearsFilter === '0'    && yrs !== 0)             return false;
-                    if (yearsFilter === '1'    && yrs !== 1)             return false;
-                    if (yearsFilter === '2'    && yrs !== 2)             return false;
-                    if (yearsFilter === '3'    && yrs !== 3)             return false;
-                    if (yearsFilter === '4'    && yrs !== 4)             return false;
-                    if (yearsFilter === '5-10' && (yrs < 5 || yrs > 10)) return false;
-                    if (yearsFilter === '10+'  && yrs <= 10)             return false;
+                    if (yearsFilter === '0'    && yrs !== 0)             { _why.years++; return false; }
+                    if (yearsFilter === '1'    && yrs !== 1)             { _why.years++; return false; }
+                    if (yearsFilter === '2'    && yrs !== 2)             { _why.years++; return false; }
+                    if (yearsFilter === '3'    && yrs !== 3)             { _why.years++; return false; }
+                    if (yearsFilter === '4'    && yrs !== 4)             { _why.years++; return false; }
+                    if (yearsFilter === '5-10' && (yrs < 5 || yrs > 10)) { _why.years++; return false; }
+                    if (yearsFilter === '10+'  && yrs <= 10)             { _why.years++; return false; }
                 }
                 if (ageFilter !== 'any') {
                     const age = parseInt(r.fields['Age']) || 0;
-                    if (ageFilter === 'u18'   && age >= 18)             return false;
-                    if (ageFilter === '18-25' && (age < 18 || age > 25)) return false;
-                    if (ageFilter === '26-35' && (age < 26 || age > 35)) return false;
-                    if (ageFilter === '36+'   && age < 36)              return false;
+                    if (ageFilter === 'u18'   && age >= 18)             { _why.age++; return false; }
+                    if (ageFilter === '18-25' && (age < 18 || age > 25)) { _why.age++; return false; }
+                    if (ageFilter === '26-35' && (age < 26 || age > 35)) { _why.age++; return false; }
+                    if (ageFilter === '36+'   && age < 36)              { _why.age++; return false; }
                 }
-                if (genderFilter && r.fields['Gender'] !== genderFilter) return false;
+                if (genderFilter && r.fields['Gender'] !== genderFilter) { _why.gender++; return false; }
                 const refName = (r.fields['Name'] || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
                 // Club scoping: restricted assignors only see refs who (a) prefer their clubs AND (b) submitted availability for the loaded dates
@@ -9297,31 +9303,31 @@ Reason (optional):`);
                     const refPrefs = parsePreferences(r.fields['Club Preference'] || '');
                     if (refPrefs.length > 0) {
                         const matchesClub = refPrefs.some(p => assignorClubRestriction.some(c => c.toLowerCase() === p.toLowerCase()));
-                        if (!matchesClub) return false;
+                        if (!matchesClub) { _why.scope++; return false; }
                     }
                     const refDates = availByName[refName];
-                    if (!refDates) return false;
+                    if (!refDates) { _why.noAvail++; return false; }
                     const hasDateInRange = [...refDates].some(d => (!loadedDateFrom || d >= loadedDateFrom) && (!loadedDateTo || d <= loadedDateTo));
-                    if (!hasDateInRange) return false;
+                    if (!hasDateInRange) { _why.date++; return false; }
                 }
 
                 // When searching by name or Override is on, skip availability filters
                 if (!query && !showAllRefs) {
                     if (dateFilter) {
                         // Specific date filter active — ref must be available on that date
-                        if (!availByName[refName]?.has(dateFilter)) return false;
+                        if (!availByName[refName]?.has(dateFilter)) { _why.date++; return false; }
                         if (timeFilter) {
                             const slots = availTimeByName[refName]?.[dateFilter] || [];
                             const timed = slots.filter(s => s.start && s.end);
-                            if (timed.length && !timed.some(s => timeFilter >= s.start && timeFilter <= s.end)) return false;
+                            if (timed.length && !timed.some(s => timeFilter >= s.start && timeFilter <= s.end)) { _why.time++; return false; }
                         }
                     } else if (visibleGameDates.size > 0 && !gameDate) {
                         // Filter by the actual dates of games on screen —
                         // skip when a specific game is selected (classify() handles coloring)
                         const refDates = availByName[refName];
-                        if (!refDates || refDates.size === 0) return false;
+                        if (!refDates || refDates.size === 0) { _why.noAvail++; return false; }
                         const matchingDates = [...visibleGameDates].filter(d => refDates.has(d));
-                        if (matchingDates.length === 0) return false;
+                        if (matchingDates.length === 0) { _why.date++; return false; }
                         if (timeFilter) {
                             const hasTime = matchingDates.some(d => {
                                 const slots = availTimeByName[refName]?.[d] || [];
@@ -9329,7 +9335,7 @@ Reason (optional):`);
                                 if (!timed.length) return true;
                                 return timed.some(s => timeFilter >= s.start && timeFilter <= s.end);
                             });
-                            if (!hasTime) return false;
+                            if (!hasTime) { _why.time++; return false; }
                         }
                     }
                 }
@@ -9402,9 +9408,23 @@ Reason (optional):`);
                 });
 
             if (!displayRefs.length) {
+                // How many referees DO have availability on what's on screen? If
+                // that is more than zero, "nobody submitted" would be a lie.
+                const _dates = gameDate ? [gameDate] : (dateFilter ? [dateFilter] : [...visibleGameDates]);
+                const _haveAvail = Object.entries(availByName).filter(([n, ds]) => _dates.some(d => ds.has(d))).length;
+                const _hidden = filtered.length - displayRefs.length;   // passed the gates, hidden by classify (no avail on the date)
+                const _labels = { search: 'name search', club: 'club', years: 'experience filter', age: 'age filter', gender: 'gender filter', scope: 'assignor scope', date: 'date', time: 'time filter', noAvail: 'no availability' };
+                const _parts = Object.entries(_why).filter(([, n]) => n > 0).map(([k, n]) => `${_labels[k]} ${n}`);
+                if (_hidden > 0) _parts.push(`not on ${gameDate ? 'this date' : 'these dates'} ${_hidden}`);
+                const _why_line = _haveAvail > 0
+                    ? `<br><small style="color:#b45309;">${_haveAvail} referee${_haveAvail === 1 ? ' has' : 's have'} availability on ${gameDate ? 'this date' : 'these dates'}${_parts.length ? ' — hidden by: ' + _parts.join(' · ') : ''}. Tell Ralph.</small>`
+                    : '';
                 wrap.innerHTML = showAllRefs
                     ? '<p class="hint">No refs found.</p>'
-                    : '<p class="hint" style="text-align:center; padding:20px; color:#888;">No refs have submitted availability for this game.<br><small>Toggle <strong>Override</strong> to see all refs.</small></p>';
+                    : `<p class="hint" style="text-align:center; padding:20px; color:#888;">No refs have submitted availability for ${gameDate ? 'this game' : 'these dates'}.${_why_line}<br><small>Toggle <strong>Override</strong> to see all refs.</small></p>`;
+                if (_haveAvail > 0) console.warn('[refs pane] empty but', _haveAvail, 'have availability —', JSON.stringify(_why), 'classify-hidden:', _hidden, 'dates:', _dates.join(','), 'focus:', focusClubs.join(','), 'filters:', { yearsFilter, ageFilter, genderFilter, dateFilter, timeFilter, prefClub });
+                const titleEl0 = document.getElementById('refsPanelTitle');
+                if (titleEl0) titleEl0.textContent = '👤 Referees (0)';
                 return;
             }
 
