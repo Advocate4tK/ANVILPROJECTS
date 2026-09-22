@@ -252,6 +252,10 @@
            cancelled: those mean "act on this" and outrank a label. */
         .game-card.comp-game { background:#f8f5ff; border-left-color:#7c3aed; }
         .game-card.comp-game .game-matchup { color:#5b21b6; }
+        .cup-chip { display:inline-block; margin-left:8px; vertical-align:middle;
+            color:#7a5200; background:linear-gradient(180deg,#fff4cc,#ffe9a3); border:1px solid #d4a017;
+            font-size:0.64rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px;
+            border-radius:4px; padding:1px 7px; white-space:nowrap; }
         .scrim-chip { display:inline-block; margin-left:8px; vertical-align:middle;
                       font-size:0.62rem; font-weight:800; text-transform:uppercase;
                       letter-spacing:0.5px; color:#5b21b6; background:#f3ecff;
@@ -648,6 +652,16 @@
                         <!-- Scrimmage is NOT a game type. A scrimmage is still Rec or Comp
                              and crews and pays as that type — the checkbox sits beside the
                              selector, never inside it. -->
+                        <!-- A Cup Match is still Comp — it crews and pays as Comp.
+                             Like the scrimmage box, it rides beside the type
+                             selector, never inside it. Tod, 2026-09-22. -->
+                        <div class="field-group row-start">
+                            <label>Cup Match?</label>
+                            <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:0.88rem; color:#444; cursor:pointer; padding:8px 0;">
+                                <input type="checkbox" id="gCup" style="width:17px; height:17px; cursor:pointer; accent-color:#d4a017;">
+                                <span>🏆 Cup Match &mdash; a competitive cup fixture</span>
+                            </label>
+                        </div>
                         <div class="field-group row-start">
                             <label>Scrimmage?</label>
                             <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:0.88rem; color:#444; cursor:pointer; padding:8px 0;">
@@ -1905,6 +1919,7 @@
             gender:    document.getElementById('gGender').value,
             gameType:  document.getElementById('gGameType').value,
             scrimmage: document.getElementById('gScrimmage')?.checked || false,
+            cup:       document.getElementById('gCup')?.checked || false,
             venueId,   venueName,
             fieldId,   fieldName,
             notes:     document.getElementById('gNotes').value.trim(),
@@ -2111,7 +2126,8 @@
                     'Age Group':  g.age,
                     'Gender':     g.gender,
                     'game_type':  g.gameType || 'Rec',
-                    'is_scrimmage': !!g.scrimmage
+                    'is_scrimmage': !!g.scrimmage,
+                    'is_cup':        !!g.cup
                 };
 
                 // ── Stamp the season AT SUBMISSION ────────────────────────────────
@@ -2346,8 +2362,8 @@
         const compCls = (f['game_type'] || '').toUpperCase() === 'COMP' ? ' comp-game' : '';
         // Shown NEXT TO the comp treatment, never instead of it: a comp scrimmage
         // is both, and the club needs to see both.
-        const scrimChip = f['is_scrimmage']
-            ? `<span class="scrim-chip">Scrimmage</span>` : '';
+        const scrimChip = (f['is_cup'] ? `<span class="cup-chip" title="Cup Match">🏆 Cup Match</span>` : '')
+            + (f['is_scrimmage'] ? `<span class="scrim-chip">Scrimmage</span>` : '');
 
         if (opts.changeResolved) {
             // Green "resolved" card — notification that the change was handled
@@ -4345,6 +4361,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 // Optional CSV column. Absent on every existing template, so a club
                 // that has never heard of it uploads exactly as before.
                 scrimmage: /^(y|yes|true|1|scrim|scrimmage)$/i.test(String(row['Scrimmage'] || '').trim()),
+                cup:       /^(y|yes|true|1|cup)$/i.test(String(row['Cup Match'] || row['Cup'] || '').trim()),
                 venueId:   venueMatch ? venueMatch.id   : '',
                 venueName: venueMatch ? venueMatch.name : (row['Venue'] || ''),
                 fieldId:   fieldMatch ? fieldMatch.id   : '',

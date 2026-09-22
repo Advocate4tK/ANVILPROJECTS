@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
     if (!gid || !["Center Referee", "AR 1", "AR 2"].includes(pos)) return json({ error: "game_id and a valid position required" }, 400);
 
     const { data: g } = await db.from("games")
-      .select('id,game_no,"Source Club","Home Team","Away Team",date,time,"Age Group","Gender",game_type,"Venue ID","Field ID",field,"Center Referee","AR 1","AR 2"')
+      .select('id,game_no,is_cup,"Source Club","Home Team","Away Team",date,time,"Age Group","Gender",game_type,"Venue ID","Field ID",field,"Center Referee","AR 1","AR 2"')
       .eq("id", gid).maybeSingle();
     if (!g) return json({ error: `Game ${gid} not found` }, 404);
 
@@ -252,6 +252,9 @@ Deno.serve(async (req) => {
     const matchup  = `${g["Home Team"] || "TBD"} vs ${g["Away Team"] || "TBD"}`;
     const when     = `${fmtDate(g.date)} · ${fmtTime(g.time)}`;
     const div      = [g["Age Group"], g["Gender"]].filter(Boolean).join(" ");
+    // A Cup Match is a comp fixture that matters more — the referee should know
+    // before they walk on. Tod, 2026-09-22.
+    const cup      = g.is_cup ? " · 🏆 Cup Match" : "";
     const club     = String(g["Source Club"] || "");
     const first    = ref.name.split(/\s+/)[0];
 
@@ -262,7 +265,7 @@ Deno.serve(async (req) => {
 
 ${gno ? `Game ${gno}\n` : ""}${matchup}
 ${when}
-${div}${g.game_type ? ` · ${g.game_type}` : ""} · ${club}
+${div}${g.game_type ? ` · ${g.game_type}` : ""}${cup} · ${club}
 Position: ${posLabel}
 Where: ${where || "TBD"}${addr ? `\n${addr}` : ""}${maps ? `\nMap: ${maps}` : ""}
 
@@ -276,6 +279,7 @@ Please arrive 30 minutes before kickoff. If you can't make it, reply to this ema
 ${gno ? `<div style="font-family:Consolas,monospace;font-size:13px;font-weight:700;color:#152d55;margin-bottom:4px">Game ${gno}</div>` : ""}<div style="font-size:18px;font-weight:700">${esc(matchup)}</div>
 <div style="font-size:16px;margin-top:4px">${esc(when)}</div>
 <div style="color:#555;margin-top:2px">${esc(div)}${g.game_type ? ` · ${esc(g.game_type)}` : ""} · ${esc(club)}</div>
+${g.is_cup ? `<div style="margin-top:6px;display:inline-block;color:#7a5200;background:linear-gradient(180deg,#fff4cc,#ffe9a3);border:1px solid #d4a017;border-radius:4px;padding:2px 9px;font-weight:800;font-size:13px;letter-spacing:.5px">🏆 CUP MATCH</div>` : ""}
 <div style="margin-top:10px"><b>Position:</b> ${esc(posLabel)}</div>
 <div><b>Where:</b> ${esc(where || "TBD")}${addr ? `<br><span style="color:#555">${esc(addr)}</span>` : ""}</div>
 ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Open in Google Maps</a></div>` : ""}

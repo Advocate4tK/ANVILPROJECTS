@@ -100,6 +100,11 @@
            It is not a league game — it may not count, the crew can be smaller by
            agreement, and a referee arriving expecting a league fixture becomes the
            assignor's problem. Solid purple, not a dashed whisper. */
+        /* Cup Match — Comp that matters more. Gold beside the purple, never instead. */
+        .cup-badge { font-size:0.68rem; font-weight:900; text-transform:uppercase; letter-spacing:0.5px;
+            color:#7a5200; background:linear-gradient(180deg,#fff4cc,#ffe9a3); border:1px solid #d4a017;
+            border-radius:4px; padding:1px 7px; margin-left:6px; white-space:nowrap; vertical-align:middle; }
+        .game-card.cup-game { border-top:3px solid #d4a017; }
         .scrim-badge { font-size:0.68rem; font-weight:900; text-transform:uppercase;
             letter-spacing:0.6px; color:#ffffff; background:#7c3aed;
             border-radius:4px; padding:2px 7px;
@@ -2100,7 +2105,7 @@
                     date:     () => `<td style="${cell}">${fmtGameDate(f['Date'])}${isFilledGame ? ' <span style="font-size:0.65rem;background:#ef6c00;color:#fff;border-radius:3px;padding:1px 5px;font-weight:700;margin-left:4px;letter-spacing:0.03em;">FILLED</span>' : ''}</td>`,
                     time:     () => `<td style="${cell}">${fmtGameTime(f['Time'])}</td>`,
                     club:     () => `<td style="${cell}">${f['Source Club'] || '—'}</td>`,
-                    ageGroup: () => `<td style="${cell}">${f['Age Group'] || '—'}${f['is_scrimmage'] ? '<span class="scrim-chip">Scrim</span>' : ''}</td>`,
+                    ageGroup: () => `<td style="${cell}">${f['Age Group'] || '—'}${f['is_cup'] ? '<span class="cup-badge" title="Cup Match">🏆 Cup</span>' : ''}${f['is_scrimmage'] ? '<span class="scrim-chip">Scrim</span>' : ''}</td>`,
                     gender:   () => { const g = f['Gender'] || (((f['Age Group']||'').slice(-1).toUpperCase()==='G')?'Girls':(((f['Age Group']||'').slice(-1).toUpperCase()==='B')?'Boys':'')); return `<td style="${cell}">${g||'—'}</td>`; },
                     homeTeam: () => `<td style="${cell}">${f['Home Team'] || '—'}</td>`,
                     awayTeam: () => `<td style="${cell}">${f['Away Team'] || '—'}</td>`,
@@ -3587,7 +3592,7 @@
                     date:     () => `<td style="${cancelCell}">${fmtGameDate(f['Date'])}</td>`,
                     time:     () => `<td style="${cancelCell}">${fmtGameTime(f['Time'])}</td>`,
                     club:     () => `<td style="${cancelCell}">${f['Source Club'] || '—'}</td>`,
-                    ageGroup: () => `<td style="${cancelCell}">${f['Age Group'] || '—'}${f['is_scrimmage'] ? '<span class="scrim-chip">Scrim</span>' : ''}</td>`,
+                    ageGroup: () => `<td style="${cancelCell}">${f['Age Group'] || '—'}${f['is_cup'] ? '<span class="cup-badge" title="Cup Match">🏆 Cup</span>' : ''}${f['is_scrimmage'] ? '<span class="scrim-chip">Scrim</span>' : ''}</td>`,
                     gender:   () => { const _ag = f['Age Group'] || ''; const g = f['Gender'] || (_ag.includes('Girls') ? 'Girls' : _ag.includes('Boys') ? 'Boys' : ''); return `<td style="${cancelCell}">${g||'—'}</td>`; },
                     homeTeam: () => `<td style="${cancelCell}">${f['Home Team'] || '—'}</td>`,
                     awayTeam: () => `<td style="${cancelCell}">${f['Away Team'] || '—'}</td>`,
@@ -5121,6 +5126,7 @@
                             <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
                             <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
                         </select></div>
+                        <div><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>
                     </div>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
                         <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
@@ -7857,7 +7863,7 @@
                 const isCancelled   = cancelledGameIds.has(gid) || f['Game Status'] === 'Cancelled';
                 const isChangeReq   = (f['Game Status'] || '') === 'Change Requested';
 
-                html += `<div class="game-card ${(f['game_type']||'').toUpperCase()==='COMP' ? 'comp-game' : ''} ${fullyAssigned ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}" onclick="selectGame('${gid}')" id="card-${gid}">
+                html += `<div class="game-card ${f['is_cup'] ? 'cup-game ' : ''}${(f['game_type']||'').toUpperCase()==='COMP' ? 'comp-game' : ''} ${fullyAssigned ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}" onclick="selectGame('${gid}')" id="card-${gid}">
                     ${buildGameCardInner(g)}
                 </div>`;
             });
@@ -7981,7 +7987,7 @@
                 <div class="game-header">
                     <div>
                         ${gn ? `<span class="game-no" style="margin-right:6px;">${gn}</span>` : ''}
-                        <span class="game-title">${home} vs ${away}</span>${f['is_scrimmage'] ? '<span class="scrim-badge">Scrim</span>' : ''}
+                        <span class="game-title">${home} vs ${away}</span>${f['is_cup'] ? '<span class="cup-badge" title="Cup Match">🏆 Cup Match</span>' : ''}${f['is_scrimmage'] ? '<span class="scrim-badge">Scrim</span>' : ''}
                         <span class="game-meta">&nbsp;— ${date} ${time ? '@ ' + formatTime(time) : ''}</span>
                     </div>
                     <div style="display:flex;gap:6px;align-items:center;">
@@ -8017,6 +8023,7 @@
                             <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
                             <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
                         </select></div>
+                        <div><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>
                     </div>
                     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
                         <div><label>Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
@@ -8860,6 +8867,7 @@ Reason (optional):`);
                         <span style="font-weight:700;font-size:0.82rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${home} vs ${away}</span>
                         <span style="font-size:0.72rem;color:#666;flex-shrink:0;">${new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} ${time}</span>
                         ${caBadge(f)}
+                        ${f['is_cup'] ? '<span class="cup-badge" style="flex-shrink:0;margin-left:0;" title="Cup Match">🏆 Cup</span>' : ''}
                         ${age ? `<span class="game-badge" style="flex-shrink:0;font-size:0.68rem;">${age}${f['Gender']==='Female'?' · F':f['Gender']==='Male'?' · M':''}</span>` : ''}
                         ${club ? `<span class="game-badge" style="flex-shrink:0;font-size:0.68rem;">${club}</span>` : ''}
                         ${isFilled ? `<span style="background:#c0392b;color:white;font-size:0.62rem;font-weight:800;letter-spacing:1px;padding:1px 7px;border-radius:4px;text-transform:uppercase;flex-shrink:0;">FILLED</span>` : ''}
@@ -8892,14 +8900,14 @@ Reason (optional):`);
                     : '';
                 const confirmedBorder = allConf ? 'border-left:4px solid #1e8449;' : full ? 'border-left:4px solid #2980b9;' : '';
 
-                html += `<div class="game-card ${(f['game_type']||'').toUpperCase()==='COMP' ? 'comp-game' : ''} ${full ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}"
+                html += `<div class="game-card ${f['is_cup'] ? 'cup-game ' : ''}${(f['game_type']||'').toUpperCase()==='COMP' ? 'comp-game' : ''} ${full ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}"
                     onclick="selectGame('${gid}')" oncontextmenu="s2ShowCardMenu(event,'${gid}'); return false;" id="card-${gid}" style="${confirmedBorder}">
                     ${isCancelled ? '<div class="cancelled-stamp">CANCELLED</div>' : ''}
                     ${isChangeReq ? '<div style="font-size:0.72rem;font-weight:700;color:#935116;background:#fdebd0;border-radius:4px;padding:2px 8px;margin-bottom:6px;display:inline-block;">⚠ Change Requested</div>' : ''}
                     <div class="game-header">
                         <div>
                             ${buildGameNumber(f) ? `<span class="game-no" style="margin-right:6px;">${buildGameNumber(f)}</span>` : ''}
-                            <span class="game-title">${f['Home Team']||'?'} vs ${f['Away Team']||'?'}</span>${f['is_scrimmage'] ? '<span class="scrim-badge">Scrim</span>' : ''}
+                            <span class="game-title">${f['Home Team']||'?'} vs ${f['Away Team']||'?'}</span>${f['is_cup'] ? '<span class="cup-badge" title="Cup Match">🏆 Cup Match</span>' : ''}${f['is_scrimmage'] ? '<span class="scrim-badge">Scrim</span>' : ''}
                             <span class="game-meta">&nbsp;— ${date ? new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) : '—'} ${f['Time'] ? '@ ' + formatTime(f['Time']) : ''}</span>
                         </div>
                         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
@@ -10048,6 +10056,10 @@ Reason (optional):`);
                 updates['Age Group']  = newAge   || cur['Age Group']  || null;
                 updates['field']      = newField || cur['field']      || null;
                 updates['game_type']  = newType  || cur['game_type']  || null;
+                // Cup Match — a checkbox, so absent from the DOM means an older
+                // panel (leave it alone); present means take it at face value.
+                const cupBox = document.getElementById(`editCup-${gameId}`);
+                if (cupBox) updates['is_cup'] = !!cupBox.checked;
 
                 // Club pickers. Absent from the DOM (an older panel) means leave
                 // the stored value alone; present and empty means the assignor

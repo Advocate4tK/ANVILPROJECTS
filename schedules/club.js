@@ -113,7 +113,7 @@ const SHELL = `
 // something we do. The select list below is explicit for exactly that reason:
 // DO NOT change it to '*'.
 // ─────────────────────────────────────────────────────────────────────────────
-const SAFE_COLUMNS = 'id,game_no,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage,home_club,away_club,"Field ID"';
+const SAFE_COLUMNS = 'id,game_no,is_cup,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage,home_club,away_club,"Field ID"';
 // game_no — 2026-09-19, sql/game-numbers.sql. RTCT10247: the number a
 // parent reads off this page and says to the assignor on the phone.
 const GAME_NO_PREFIX = 'RTCT';
@@ -195,10 +195,15 @@ function isCompGame(g) {
     return String(g['game_type'] || '').trim().toUpperCase() === 'COMP';
 }
 
+// A Cup Match is a comp game of higher stakes — game_type is still 'Comp', so
+// crews and pay are unaffected; this only changes what a parent sees. The gold
+// chip sits BESIDE the purple Comp chip, never instead of it. sql/cup-match.sql
+function isCupGame(g) { return g['is_cup'] === true; }
+
 // The word families use. Anything not explicitly Comp reads as Rec — a blank
 // game_type on an old row must not become a third option in the filter.
 function gameTypeLabel(g) {
-    return isCompGame(g) ? 'Comp' : 'Rec';
+    return isCupGame(g) ? 'Cup Match' : isCompGame(g) ? 'Comp' : 'Rec';
 }
 
 function gameGender(g) {
@@ -371,7 +376,7 @@ function fieldClass(f) {
 // What one game can be found by. "rtct10247" and "10247" both hit; so do a
 // team, a division, a field, a venue, a date, a weekday.
 function searchKey(g) {
-    return [gameNo(g), g.game_no, g['Home Team'], g['Away Team'], divisionLabel(g), g['Age Group'], g['Gender'],
+    return [gameNo(g), g.game_no, isCupGame(g) ? 'cup match' : '', g['Home Team'], g['Away Team'], divisionLabel(g), g['Age Group'], g['Gender'],
             venueName(g), fieldName(g), g.date, g.date ? fmtDateHeading(g.date) : '', gameTypeLabel(g)]
         .filter(Boolean).join(' ').toLowerCase();
 }
@@ -434,7 +439,7 @@ function dayBlocksHTML(games) {
                 // Collapsed row answers "is this my kid's game". The body answers
                 // "where exactly am I going and who is home" — the two questions a
                 // parent actually has, in that order.
-                html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}${isCancelled(g) ? ' cancelled' : ''}" data-gid="${esc(g.id)}">
+                html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}${isCupGame(g) ? ' cup' : ''}${isCancelled(g) ? ' cancelled' : ''}" data-gid="${esc(g.id)}">
                     <div class="game-row">
                         ${isCancelled(g) ? '<div class="cancelled-stamp"><span>' + 'CANCELLED'.split('').map(c => '<i>' + c + '</i>').join('') + '</span></div>' : ''}
                         <span class="game-chevron">▶</span>
@@ -442,6 +447,7 @@ function dayBlocksHTML(games) {
                         ${fieldName(g) ? `<span class="${fieldClass(fieldName(g))}">${esc(fieldName(g))}</span>` : ''}
                         ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
                         ${isCompGame(g) ? `<span class="comp-chip">Comp</span>` : ''}
+                        ${isCupGame(g) ? `<span class="cup-chip" title="Cup Match">🏆 Cup Match</span>` : ''}
                         ${isAwayFor(g, PAGE_CLUB) ? `<span class="away-chip">Away</span>` : ''}
                         ${g['is_scrimmage'] ? `<span class="scrim-chip">Scrimmage</span>` : ''}
                         <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
@@ -453,6 +459,7 @@ function dayBlocksHTML(games) {
                             ${gameNo(g) ? `<div><span class="gb-k">Game #</span><span class="gb-v" style="font-family:'DM Mono','Consolas',monospace;font-weight:800;">${gameNo(g)}</span></div>` : ''}
                             <div><span class="gb-k">Kickoff</span><span class="gb-v">${esc(fmtDateHeading(g.date))} · ${esc(fmtTime(g.time))}</span></div>
                             <div><span class="gb-k">Division</span><span class="gb-v">${div ? esc(div) : '—'}</span></div>
+                            ${isCupGame(g) ? `<div><span class="gb-k">Competition</span><span class="gb-v" style="font-weight:800;">🏆 Cup Match</span></div>` : ''}
                             <div><span class="gb-k">Home</span><span class="gb-v">${esc(g['Home Team'] || 'TBD')}</span></div>
                             <div><span class="gb-k">Away</span><span class="gb-v">${esc(g['Away Team'] || 'TBD')}</span></div>
                             ${fieldName(g) ? `<div><span class="gb-k">Field</span><span class="gb-v">${esc(fieldName(g))}</span></div>` : ''}
