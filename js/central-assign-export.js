@@ -256,6 +256,7 @@ function caConfirmSomePrompt() {
         return `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:0.82rem;cursor:pointer;">
             <input type="checkbox" class="ca-imp-cb" data-idx="${i}" checked>
             <span style="color:#888;min-width:28px;">${i + 1}</span>
+            <span style="min-width:88px;font-family:'JetBrains Mono',Consolas,monospace;font-size:0.76rem;font-weight:800;color:#0f3460;">${f['game_no'] ? RT_GAME_NO.fmt(f['game_no']) : ''}</span>
             <span>${formatDate(f['Date'])} ${fmtTime(f['Time'])} \u2014 ${f['Home Team'] || '?'} vs ${f['Away Team'] || '?'}</span>
         </label>`;
     }).join('');
@@ -945,7 +946,7 @@ function renderGamesTable(records) {
 
     let html = `<thead><tr style="font-size:0.78rem;">
         <th style="width:24px;"><input type="checkbox" id="masterCheck"></th>
-        <th style="width:24px;">#</th>
+        <th style="width:92px;">Game #</th>
         ${sortHdr('date','Date','85px')}
         <th style="width:65px;">Time</th>
         <th style="width:10%;">Club</th>
@@ -987,7 +988,9 @@ function renderGamesTable(records) {
                 : (i % 2 === 0 ? 'background:rgba(15,52,96,0.28);' : '');
         html += `<tr style="font-size:0.78rem;${rowBg}">
             <td style="padding:5px 4px;"><input type="checkbox" class="game-check" data-index="${i}"${importedAt ? '' : ' checked'}></td>
-            <td style="color:#999;padding:5px 4px;">${i + 1}</td>
+            <td style="padding:5px 4px;white-space:nowrap;">${f['game_no']
+                ? `<span style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.72rem;font-weight:800;color:#cfe0ff;">${RT_GAME_NO.fmt(f['game_no'])}</span>`
+                : `<span style="color:#999;">${i + 1}</span>`}</td>
             <td style="white-space:nowrap;">${formatDate(f['Date'] || '')}</td>
             <td style="white-space:nowrap;">${fmtTime(f['Time'] || '')}</td>
             <td style="font-size:11px;color:#555;">${f['Source Club'] || ''}</td>
@@ -1279,7 +1282,11 @@ exportBtn.addEventListener('click', () => {
             assignorEmails.primary,
             assignorEmails.secondary,
             DEFAULTS.externalSys,
-            rec.id || '',            // our game id, so a re-import can be matched
+            // RTCT10247 — the number on the card, the schedule, the confirmation
+            // email and the referee's phone call. Putting it in CA's own record
+            // means one number names the game in both systems. Was rec.id, which
+            // meant nothing to anyone. sql/game-numbers.sql
+            f['game_no'] ? RT_GAME_NO.fmt(f['game_no']) : (rec.id || ''),
             refFee,
             arFee,
             fourthFee
@@ -1376,6 +1383,7 @@ async function loadAwaitingConfirmation() {
         const rows = _awaiting.map((g, i) => `
             <label style="display:flex;align-items:center;gap:10px;padding:4px 0;font-size:0.84rem;cursor:pointer;">
                 <input type="checkbox" class="ca-await-cb" data-idx="${i}" checked>
+                <span style="min-width:92px;font-family:'JetBrains Mono',Consolas,monospace;font-size:0.76rem;font-weight:800;color:#cfe0ff;">${g.game_no ? RT_GAME_NO.fmt(g.game_no) : ''}</span>
                 <span style="min-width:150px;color:#ffd479;">${g['Source Club'] || ''}</span>
                 <span style="min-width:88px;">${g.date || ''}</span>
                 <span style="min-width:74px;">${fmtTime(g['Time'] || g.time) || ''}</span>
