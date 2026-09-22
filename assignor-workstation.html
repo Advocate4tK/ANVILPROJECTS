@@ -5131,7 +5131,7 @@
                             <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
                             <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
                         </select></div>
-                        <div id="editCupWrap-${gid}" style="display:${String(f['game_type']||'').toLowerCase()==='comp'?'':'none'};"><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>${leagueEditControl(f, gid)}
+                        ${leagueEditControl(f, gid)}
                     </div>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
                         <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
@@ -8048,7 +8048,7 @@
                             <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
                             <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
                         </select></div>
-                        <div id="editCupWrap-${gid}" style="display:${String(f['game_type']||'').toLowerCase()==='comp'?'':'none'};"><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>${leagueEditControl(f, gid)}
+                        ${leagueEditControl(f, gid)}
                     </div>
                     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
                         <div><label>Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
@@ -9016,7 +9016,7 @@ Reason (optional):`);
                                 <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
                                 <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
                             </select></div>
-                            <div id="editCupWrap-${gid}" style="display:${String(f['game_type']||'').toLowerCase()==='comp'?'':'none'};"><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>
+                            
                             ${leagueEditControl(f, gid)}
                         </div>
                         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
@@ -10076,13 +10076,13 @@ Reason (optional):`);
 
         // Cup and League belong to comp games only. Switching Type in the panel
         // shows or hides them there and then, rather than waiting for a re-render.
+        // A cup competition names itself. CA's league list holds exactly two:
+        // "CJSA Connecticut Cup" and "CJSA State Cup".
+        function isCupLeague(l) { return /cup/i.test(String(l || '')); }
+
         function editTypeChanged(gid) {
             const isComp = (document.getElementById(`editType-${gid}`)?.value || '').toLowerCase() === 'comp';
-            const cw = document.getElementById(`editCupWrap-${gid}`);
-            const cb = document.getElementById(`editCup-${gid}`);
             const lw = document.getElementById(`editLeague-${gid}`)?.closest('div');
-            if (cw) cw.style.display = isComp ? '' : 'none';
-            if (!isComp && cb) cb.checked = false;
             if (lw) lw.style.display = isComp ? '' : 'none';
         }
 
@@ -10142,13 +10142,20 @@ Reason (optional):`);
                 updates['game_type']  = newType  || cur['game_type']  || null;
                 // Cup Match — a checkbox, so absent from the DOM means an older
                 // panel (leave it alone); present means take it at face value.
-                const cupBox = document.getElementById(`editCup-${gameId}`);
-                if (cupBox) updates['is_cup'] = !!cupBox.checked;
                 // Absent from the DOM means a rec game or an older panel — leave
                 // the stored value alone. Present and empty means "use the club
                 // default", which is a real choice.
+                //
+                // ⚠️ is_cup is DERIVED from the league, never asked. Tod,
+                // 2026-09-22: "if CJSA Connecticut Cup is selected it is the cup
+                // match.... we dont really need the 'cup match' check box." A
+                // separate tickbox let the two disagree. It is still stored
+                // because every page reads it for the gold treatment.
                 const lgSel = document.getElementById(`editLeague-${gameId}`);
-                if (lgSel) updates['league'] = lgSel.value || null;
+                if (lgSel) {
+                    updates['league'] = lgSel.value || null;
+                    updates['is_cup'] = isCupLeague(lgSel.value);
+                }
 
                 // Club pickers. Absent from the DOM (an older panel) means leave
                 // the stored value alone; present and empty means the assignor

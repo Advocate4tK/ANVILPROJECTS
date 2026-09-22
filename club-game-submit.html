@@ -687,16 +687,6 @@
                         <!-- Scrimmage is NOT a game type. A scrimmage is still Rec or Comp
                              and crews and pays as that type — the checkbox sits beside the
                              selector, never inside it. -->
-                        <!-- A Cup Match is still Comp — it crews and pays as Comp.
-                             Like the scrimmage box, it rides beside the type
-                             selector, never inside it. Tod, 2026-09-22. -->
-                        <div class="field-group row-start" id="gCupWrap" style="display:none;">
-                            <label>Cup Match?</label>
-                            <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:0.88rem; color:#444; cursor:pointer; padding:8px 0;">
-                                <input type="checkbox" id="gCup" style="width:17px; height:17px; cursor:pointer; accent-color:#d4a017;">
-                                <span>🏆 Cup Match &mdash; a competitive cup fixture</span>
-                            </label>
-                        </div>
                         <div class="field-group row-start">
                             <label>Scrimmage?</label>
                             <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:0.88rem; color:#444; cursor:pointer; padding:8px 0;">
@@ -1964,9 +1954,14 @@
             gender:    document.getElementById('gGender').value,
             gameType:  document.getElementById('gGameType').value,
             scrimmage: document.getElementById('gScrimmage')?.checked || false,
-            cup:       document.getElementById('gCup')?.checked || false,
+            // ⚠️ DERIVED, NOT ASKED. "If CJSA Connecticut Cup is selected it IS the
+            // cup match" — Tod, 2026-09-22. A checkbox beside the league let the
+            // two disagree: a game could claim to be a cup tie while sitting in a
+            // district league, or sit in the Connecticut Cup without the gold.
+            // The league is the fact; is_cup is stored because every page reads it.
             league:    (document.getElementById('gGameType')?.value === 'Comp'
                         && document.getElementById('gLeague')?.value) || null,
+            get cup()  { return isCupLeague(this.league); },
             venueId,   venueName,
             fieldId,   fieldName,
             notes:     document.getElementById('gNotes').value.trim(),
@@ -1994,6 +1989,10 @@
     // The club's own leagues, from clubs.ca_league. Mirrors parseClubLeagues()
     // in manage-clubs.html and js/central-assign-export.js — three copies now,
     // all on the same JSON-array-in-a-text-column shape.
+    // A cup competition names itself. CA's league list holds exactly two:
+    // "CJSA Connecticut Cup" and "CJSA State Cup".
+    function isCupLeague(l) { return /cup/i.test(String(l || '')); }
+
     function clubLeagueList() {
         const v = currentClubRecord?.fields?.['ca_league'] ?? currentClubRecord?.ca_league;
         if (!v) return [];
@@ -2010,10 +2009,6 @@
         const wrap = document.getElementById('gLeagueWrap');
         const sel  = document.getElementById('gLeague');
         const isComp = (document.getElementById('gGameType')?.value || '') === 'Comp';
-        const cupWrap = document.getElementById('gCupWrap');
-        const cupBox  = document.getElementById('gCup');
-        if (cupWrap) cupWrap.style.display = isComp ? '' : 'none';
-        if (!isComp && cupBox) cupBox.checked = false;   // leaving comp clears the claim
         if (!wrap || !sel) return;
         wrap.style.display = isComp ? '' : 'none';
         if (!isComp) { sel.value = ''; return; }
@@ -4476,8 +4471,8 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 // Optional CSV column. Absent on every existing template, so a club
                 // that has never heard of it uploads exactly as before.
                 scrimmage: /^(y|yes|true|1|scrim|scrimmage)$/i.test(String(row['Scrimmage'] || '').trim()),
-                cup:       /^(y|yes|true|1|cup)$/i.test(String(row['Cup Match'] || row['Cup'] || '').trim()),
                 league:    String(row['League'] || '').trim() || null,
+                get cup()  { return isCupLeague(this.league); },
                 venueId:   venueMatch ? venueMatch.id   : '',
                 venueName: venueMatch ? venueMatch.name : (row['Venue'] || ''),
                 fieldId:   fieldMatch ? fieldMatch.id   : '',
