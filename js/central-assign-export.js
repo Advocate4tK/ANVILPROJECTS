@@ -133,6 +133,14 @@ let clubLeagueMap      = {}; // club name → CA league ID (legacy numeric)
 let clubLeagueNameMap  = {}; // club name → CA league NAME (clubs.ca_league) — primary
 let clubIdMap          = {}; // club name → clubs.id (int PK)
 let payRateByClubId    = {}; // club_id → ageBand → {center, ar}
+// ⚠️ FEES THE COMPETITION SETS, NOT THE CLUB. A cup fee is mandated by CJSA:
+// every club pays it, and Central Assign LOCKS the fee fields after import —
+// Eric could move RTCT11570 into the right league but could not touch the
+// money. So the number has to be right in the file, and a club must not be
+// able to override one it was never allowed to choose.
+// Bands are the league's own: the cup splits U13-U14 from U15 and pays them
+// differently, while pay_rates bands U13-U15 as one. sql/league-pay-rates.sql
+let leagueRates        = []; // [{league, age_min, age_max, center, ar}]
 let eventLeagueMap     = {}; // event Club Name → CA league ID (from event age_groups)
 let eventDurationMap   = {}; // event Club Name → ageKey → {duration, durationTime}
 let eventCrewMap       = {}; // event Club Name → ageKey → crew size (1/2/3)
@@ -613,7 +621,7 @@ loadBtn.addEventListener('click', async () => {
               })()
             : Promise.resolve([]);
 
-        const [records, referees, venues, fieldRecs, clubRecs, payRatesResult, tournRaw, assignorRecs] = await Promise.all([
+        const [records, referees, venues, fieldRecs, clubRecs, payRatesResult, leagueRatesResult, tournRaw, assignorRecs] = await Promise.all([
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.GAMES,    options),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.REFEREES, { maxRecords: 1000 }),
             // ⚠️ 500 was BELOW the row count. There are 546+ venues and no ORDER BY,
@@ -626,6 +634,7 @@ loadBtn.addEventListener('click', async () => {
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.FIELDS,   { maxRecords: 3000 }),
             airtableClient.getRecords(CONFIG.AIRTABLE_TABLES.CLUBS,    { maxRecords: 200 }),
             supabaseClient.client.from('pay_rates').select('*').then(r => r.data || []),
+            supabaseClient.client.from('league_pay_rates').select('*').then(r => r.data || []),
             tournGamesPromise,
             supabaseClient.getRecords('Assignors', { maxRecords: 50 })
         ]);
@@ -781,6 +790,8 @@ loadBtn.addEventListener('click', async () => {
                 });
             });
         } catch(e) { /* event overrides optional */ }
+
+        leagueRates = leagueRatesResult || [];
 
         // Build pay rate lookup: club_id → age band → {center, ar}
         payRateByClubId = {};
@@ -1101,6 +1112,37 @@ exportBtn.addEventListener('click', () => {
         return;
     }
 
+    // ⚠️ FEE CHECK — a mandated rate we do not hold is a question, not a guess.
+    // A league that publishes its own schedule owns the money: Central Assign
+    // locks the fee fields after import, so a number we get wrong is a wrong
+    // PAYMENT that nobody downstream can correct. RTCT11570 went out at
+    // NECONN's 45/30 when the CJSA cup mandates 60/40 — $35 short across the
+    // crew — and the first anyone knew was Eric reading it in CA.
+    //
+    // Eric's sheet stops at U15 and starts at U11, so a cup tie at U10 or U16
+    // lands here. That is the point: it asks instead of quietly paying the
+    // club's rate. sql/league-pay-rates.sql
+    const feeGap = selected.filter(rec => {
+        const lg = resolveLeague(rec.fields);
+        return leagueHasSchedule(lg) && !leagueRateFor(rec.fields);
+    });
+    if (feeGap.length > 0) {
+        const rows = feeGap.slice(0, 8).map(r => {
+            const f = r.fields;
+            const no = f['game_no'] ? 'RTCT' + f['game_no'] : '(no number)';
+            return `  • ${no} — ${f['Age Group'] || '?'} — ${resolveLeague(f)}`;
+        });
+        alert(
+            `⛔ ${feeGap.length} game${feeGap.length > 1 ? 's are' : ' is'} in a league that sets its own fees, ` +
+            `but there is no rate on file for that age group:\n\n${rows.join('\n')}` +
+            (feeGap.length > 8 ? `\n  …and ${feeGap.length - 8} more` : '') +
+            `\n\nThese fees are mandated by the competition and Central Assign LOCKS them after import — ` +
+            `a wrong number here is a wrong payment nobody can fix afterwards.\n\n` +
+            `Ask the league for the rate at this age, then add it to league_pay_rates.`
+        );
+        return;
+    }
+
     // Duplicate check — warn before allowing re-export
     // -- Duplicate guard -----------------------------------------------------
     // Two very different situations used to raise the same alarm:
@@ -1238,8 +1280,19 @@ exportBtn.addEventListener('click', () => {
                       : clubSaysNoARs                       ? false
                       : true;
 
-        const refFee   = evRates?.center ?? clubRate?.center ?? DEFAULTS.refRate;
-        const arFee    = usesARs ? (evRates?.ar ?? clubRate?.ar ?? DEFAULTS.arRate) : 0;
+        // ⚠️ THE LEAGUE'S RATE WINS, AND NEVER FALLS BACK.
+        // RTCT11570 was a CJSA Connecticut Cup tie at U12. It exported at
+        // NECONN's own 45/30 when the cup mandates 60/40 — $35 short across the
+        // crew, on a fixture where the amount was not ours to choose. A league
+        // that publishes a schedule but has no row for this age is a question,
+        // not a licence to use the club's number: leagueGap says so and the
+        // export holds the game back rather than inventing a fee nobody can
+        // correct afterwards.
+        const lgRate   = leagueRateFor(f);
+        const refFee   = lgRate ? lgRate.center : (evRates?.center ?? clubRate?.center ?? DEFAULTS.refRate);
+        const arFee    = !usesARs ? 0
+                       : lgRate  ? (lgRate.ar ?? 0)
+                       : (evRates?.ar ?? clubRate?.ar ?? DEFAULTS.arRate);
         const fourthFee = DEFAULTS.fourthRate;
 
         return [
@@ -1571,6 +1624,23 @@ function resolveLeague(f) {
     const numeric = eventLeagueMap[src] ?? clubLeagueMap[src];
     if (numeric != null && CA_LEAGUE_NAMES[numeric]) return CA_LEAGUE_NAMES[numeric];
     return '';
+}
+
+// Does this competition publish its own fee schedule? If it does, its silence
+// about an age group means "ask", not "use the club's".
+function leagueHasSchedule(lg) {
+    const n = String(lg || '').trim();
+    return !!n && leagueRates.some(r => r.league === n);
+}
+// The league's rate for this game, or null. Matches on the age NUMBER so the
+// league's own banding applies — U12 is inside 11-12 whatever the label says.
+function leagueRateFor(f) {
+    const lg = resolveLeague(f);
+    if (!lg) return null;
+    const m = String(f['Age Group'] || '').match(/\d+/);
+    if (!m) return null;
+    const age = parseInt(m[0], 10);
+    return leagueRates.find(r => r.league === lg && age >= r.age_min && age <= r.age_max) || null;
 }
 
 // Extract the raw ref identifier from a Center Referee / AR field value.
