@@ -2805,6 +2805,22 @@
                     if (!weeks[key]) weeks[key] = { label, games: [] };
                 });
 
+                // ⚠️ A WEEK WITH NO GAMES MUST STILL APPEAR.
+                // The list is built from the games, so a week nobody submitted
+                // simply did not exist — Sep 28 ran straight into Oct 12 and the
+                // week of Oct 5 was invisible. That reads as a bug, and worse, it
+                // hides the one case that matters: a club that FORGOT to send a
+                // week looks identical to a club taking a bye. Now every week
+                // between the first and the last is rendered, empty ones included,
+                // saying so. Tod, 2026-09-22.
+                const _wkKeys = Object.keys(weeks).concat(Object.keys(cancelledByWeek)).sort();
+                if (_wkKeys.length > 1) {
+                    const step = k => { const d = new Date(k + 'T00:00:00'); d.setDate(d.getDate() + 7); return d.toISOString().split('T')[0]; };
+                    for (let k = _wkKeys[0]; k < _wkKeys[_wkKeys.length - 1]; k = step(k)) {
+                        if (!weeks[k]) weeks[k] = { label: getWeekLabel(k).label, games: [], empty: true };
+                    }
+                }
+
                 const currentWeekKey = getWeekLabel(new Date().toISOString().split('T')[0]).key;
 
                 // Track collapse state: past weeks start collapsed, current/future expanded
@@ -2838,7 +2854,17 @@
                         return aPast ? b[0].localeCompare(a[0])          // past: most recent first
                                      : a[0].localeCompare(b[0]);         // ahead: soonest first
                     })
-                    .map(([key, { label, games: wGames }]) => {
+                    .map(([key, { label, games: wGames, empty }]) => {
+                        const wCancelledCount = (cancelledByWeek[key] || []).length;
+                        if (empty && wCancelledCount === 0) {
+                            // No games on file. Say it plainly rather than skipping
+                            // the week — a bye and a missed submission look the same
+                            // from here, and only the club knows which.
+                            return `<div style="margin-bottom:5px; background:rgba(9,20,42,0.025); border:1px dashed rgba(9,20,42,0.14); border-radius:8px; padding:9px 14px; display:flex; align-items:center; gap:10px; font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; font-weight:800; color:#9ca3af; text-transform:uppercase; letter-spacing:0.8px;">
+                                <span style="white-space:nowrap;">${label}</span>
+                                <span style="font-family:'DM Sans',sans-serif; font-size:0.74rem; font-weight:600; letter-spacing:0; text-transform:none; color:#9ca3af;">No games on file &mdash; a bye week, or a week not sent yet</span>
+                            </div>`;
+                        }
                         const isCurrent = key === currentWeekKey;
                         const isPast = key < currentWeekKey;
                         const collapsed = window._weekCollapsed[key];
