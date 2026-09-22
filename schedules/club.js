@@ -547,10 +547,33 @@ function renderList() {
         if (last && last.start === ws) last.dates.push(d);
         else weeks.push({ start: ws, dates: [d] });
     });
+    // ⚠️ A WEEK WITH NO GAMES STILL GETS A LINE.
+    // weeks[] came from the dates that HAVE games, so a blank week simply was
+    // not there: Oct 3 ran into Oct 17 and the week between vanished. A parent
+    // reads that as "the schedule is broken" or, worse, misses that there is
+    // genuinely nothing on. Say it. Tod, 2026-09-22: "make it pretty Ralph".
+    for (let i = weeks.length - 1; i > 0; i--) {
+        const prev = new Date(weeks[i - 1].start + 'T12:00:00');
+        const cur  = new Date(weeks[i].start + 'T12:00:00');
+        const gap  = Math.round((cur - prev) / 604800000);   // whole weeks between
+        for (let g = gap - 1; g >= 1; g--) {
+            const d = new Date(prev); d.setDate(d.getDate() + 7 * g);
+            weeks.splice(i, 0, { start: d.toISOString().split('T')[0], dates: [], bye: true });
+        }
+    }
     // The nearest upcoming week opens by default; the rest stay shut until asked.
-    if (weeks.length && !OPEN_WEEKS.size) OPEN_WEEKS.add(weeks[0].start);
+    const _firstReal = weeks.find(w => !w.bye);
+    if (_firstReal && !OPEN_WEEKS.size) OPEN_WEEKS.add(_firstReal.start);
 
     let html = weeks.map(w => {
+        // A bye week. Not a button — there is nothing to open — so it reads as
+        // a quiet line in the run rather than a header that refuses to work.
+        if (w.bye) return `<div class="weekgroup byeweek">
+            <div class="week-head bye-head">
+                <span>${esc(weekLabel(w.start))}</span>
+                <span class="bye-note">No games this week</span>
+            </div>
+        </div>`;
         const n     = w.dates.reduce((sum, d) => sum + byDate[d].length, 0);
         const locs  = new Set(w.dates.flatMap(d => byDate[d].map(g => venueName(g)))).size;
         const open  = filterOn || OPEN_WEEKS.has(w.start);
