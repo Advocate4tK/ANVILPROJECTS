@@ -47,17 +47,32 @@
     // five.
     //
     // TWO exits, because they are different requests:
-    //   "Turn off tips for now"  quiets him for THIS visit; nothing is written,
-    //                            so he is back on the next load
-    //   "Never show tips again"  written down and honoured forever
-    // The default is repetition; permanence is a deliberate choice a referee has
-    // to make, not something they fall into by pressing the nearest button.
-    var KEY_OFF = 'rtTipsOff';
+    //   "Not now"                quiets him for THIS BROWSING SESSION — every
+    //                            page, every reload, until the browser closes
+    //   "Never show tips"        written down and honoured forever, per device
+    //
+    // ⚠️ "Not now" used to mean only "this page load". The flag lived in a
+    // module variable, so walking from the openings board to the availability
+    // form, or reloading, brought Pip straight back — and the comment here
+    // argued that was correct. It is not. Tod, 2026-09-22: "pip keeps popping
+    // up when I hit 'not now'.... that session should supress him once you hit
+    // 'not now'". A person who says not now and is asked again ninety seconds
+    // later on the next page has not been listened to. sessionStorage is
+    // exactly the right lifetime: it spans the visit and is gone by the next
+    // one, so a referee who comes back next week still meets him.
+    var KEY_OFF     = 'rtTipsOff';          // localStorage — forever, this device
+    var KEY_SESSION = 'rtTipsOffSession';   // sessionStorage — this visit
     function KEY_SEEN(id) { return 'rtTipSeen:' + id; }
 
     function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     function set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
     function del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+    // Private windows and locked-down browsers throw on access, so every one of
+    // these is wrapped: a storage failure must never take Pip down with it.
+    function sget(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+    function sset(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
+    function sdel(k) { try { sessionStorage.removeItem(k); } catch (e) {} }
+    function quieted() { return get(KEY_OFF) === '1' || sget(KEY_SESSION) === '1'; }
 
     // The mascot IS the logo mark - the red and yellow cards, with a face. A
     // character that is already the brand earns recognition rather than spending
@@ -320,7 +335,7 @@
             + '<span style="margin-left:auto;display:flex;gap:10px;align-items:center;">'
             + '<button type="button" data-rt="off" style="background:none;border:none;padding:0;'
             + 'font-size:0.76rem;color:#5a7a66;text-decoration:underline;cursor:pointer;" '
-            + 'title="Quiet for this visit — back next time">Not now</button>'
+            + 'title="Quiet for the rest of this visit — back next time you come">Not now</button>'
             + '<button type="button" data-rt="never" style="background:none;border:none;padding:0;'
             + 'font-size:0.76rem;color:#8a9aa3;text-decoration:underline;cursor:pointer;" '
             + 'title="Never show tips on this device again">Never show tips</button>'
@@ -355,9 +370,12 @@
             blowWhistle(0.45);
             idx++; render();
         });
-        // Quiets him for THIS visit only. Nothing is written down, so he is back
-        // on the next page load — which is the whole point.
-        el.querySelector('[data-rt="off"]').addEventListener('click', function () { finish(); });
+        // Quiets him for the whole visit — every page, every reload — and lets
+        // him back on the next one. See the KEY_SESSION note at the top.
+        el.querySelector('[data-rt="off"]').addEventListener('click', function () {
+            sset(KEY_SESSION, '1');
+            finish();
+        });
         // The permanent door. Deliberately the quieter of the two, and it asks —
         // a referee who taps it by accident and then never hears about a change
         // to the form is worse off than one who saw a tip twice.
@@ -594,7 +612,7 @@
                 // filter change and on its 60-second refresh, and each repaint
                 // called show() again and brought Tippy straight back.
                 if (done) return false;
-                if (get(KEY_OFF) === '1') return false;      // "never again", honoured
+                if (quieted()) return false;    // "never again", or "not now" earlier this visit
                 for (var i = 0; i < queue.length; i++) { if (queue[i].id === opts.id) return false; }
 
                 queue.push(opts);
@@ -628,7 +646,7 @@
             } catch (e) { console.warn('RTTips.show skipped', e); return false; }
         },
 
-        off:   function () { try { finish(); } catch (e) {} },          // this visit
+        off:   function () { try { sset(KEY_SESSION, '1'); finish(); } catch (e) {} },   // this visit
         never: function () { try { set(KEY_OFF, '1'); finish(); } catch (e) {} },
 
         // Kept for the ?tips=reset URL and for clearing anything an earlier
@@ -636,6 +654,7 @@
         reset: function () {
             try {
                 del(KEY_OFF);
+                sdel(KEY_SESSION);
                 Object.keys(localStorage)
                     .filter(function (k) { return k.indexOf('rtTipSeen:') === 0; })
                     .forEach(del);
