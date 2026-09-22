@@ -2033,10 +2033,18 @@
         sel.innerHTML = opts.length
             ? opts.map(l => `<option value="${l}">${l}</option>`).join('')
             : '<option value="">— no leagues set for this club —</option>';
-        // One league means there is nothing to decide; pre-pick it and let the
-        // club move on. More than one and they have to choose, because guessing
-        // is exactly what put a cup tie in a district league.
-        sel.value = (keep && opts.includes(keep)) ? keep : (opts.length === 1 ? opts[0] : (leagues[0] || ''));
+        // ⚠️ NEVER DEFAULT TO A CUP. The club's list is stored alphabetically, so
+        // leagues[0] for NECONN is "CJSA Connecticut Cup" — which meant every
+        // comp game opened as a cup tie and stayed one unless somebody noticed.
+        // Eric caught it; Tod agreed: "it is mandatory to pick the league but
+        // should default to the usual NE District Travel and not CUP."
+        //
+        // A cup is the exception and has to be chosen on purpose. The ordinary
+        // league is the one a club plays week in, week out, so that is the one
+        // sitting there when the form opens. General Non-League Games is an
+        // escape hatch, not a default, so it is skipped too.
+        const ordinary = opts.filter(l => !isCupLeague(l) && l !== 'General Non-League Games');
+        sel.value = (keep && opts.includes(keep)) ? keep : (ordinary[0] || opts[0] || '');
     }
 
     function renderStagedTable() {
