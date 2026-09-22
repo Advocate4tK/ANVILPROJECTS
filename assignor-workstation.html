@@ -100,6 +100,10 @@
            It is not a league game — it may not count, the crew can be smaller by
            agreement, and a referee arriving expecting a league fixture becomes the
            assignor's problem. Solid purple, not a dashed whisper. */
+        /* Not an error — a second thought. Amber, the same "stop and check"
+           colour the AR marker and the unsanctioned badge already use. */
+        .cup-warn { font-size:0.6rem; font-weight:800; letter-spacing:.3px; white-space:nowrap; vertical-align:middle;
+            color:#7a4a00; background:#fff3d6; border:1px solid #f0b000; border-radius:3px; padding:1px 6px; margin-left:5px; }
         /* Cup Match — Comp that matters more. Gold beside the purple, never instead. */
         .cup-badge { font-size:0.68rem; font-weight:900; text-transform:uppercase; letter-spacing:0.5px;
             color:#3d2a00; background:linear-gradient(180deg,#ffd447,#f0b000); border:1px solid #b8860b;
@@ -3551,7 +3555,7 @@
                     return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${!isCleared?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut} ${cellClick}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
-                        ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}${caChip}${hasRef ? incidentStamp(gid, posName) : ''}</td>`;
+                        ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}${caChip}${hasRef ? cupGreenWarn(gid, posName, rawName) : ''}${hasRef ? incidentStamp(gid, posName) : ''}</td>`;
                 };
                 const optTd = n => {
                     const name = staged[n] || '';
@@ -8180,6 +8184,28 @@
             } catch (e) { console.warn('[incidents]', e.message); }
         }
         function incidentFor(gid, position) { return incidentsByGame[`${gid}|${position}`] || null; }
+
+        // ── Cup match crew experience ──────────────────────────────────────
+        // A cup match is a level up from league comp: quicker, harder, a louder
+        // sideline. A first- or second-season referee in the middle of one is
+        // how a kid stops reffing. This does NOT block the assignment — the
+        // assignor knows things the tool does not, and Tod has said before that
+        // a warning which refuses is a warning that gets worked around. It just
+        // says so, on the slot, at the moment it happens. Tod, 2026-09-22.
+        const CUP_GREEN_SEASONS = 2;   // Seas 1 (0) and Seas 2 (1)
+        function cupGreenWarn(gameId, position, refName) {
+            const g = allGames.find(x => String(x.id) === String(gameId));
+            if (!g || !g.fields['is_cup']) return '';
+            const key = String(refName || '').trim().toLowerCase();
+            if (!key || key === '—') return '';
+            const r = refLookupByName[key] || allRefs.find(x => (x.fields['Name'] || '').trim().toLowerCase() === key);
+            if (!r) return '';
+            const yrs = parseYrs(r.fields['Years Reffing'], -1);
+            if (yrs < 0 || yrs >= CUP_GREEN_SEASONS) return '';
+            const label = yrs === 0 ? 'first season' : 'second season';
+            const tip = `${r.fields['Name']} is in their ${label} and this is a Cup Match — a level up from league comp. Not blocked; just worth a second thought, especially in the middle.`;
+            return `<span class="cup-warn" title="${tip.replace(/"/g, '&quot;')}">⚠ ${yrs === 0 ? 'Seas 1' : 'Seas 2'} on a cup</span>`;
+        }
         // The red stamp on a slot / cell. Same look on both templates.
         function incidentStamp(gid, position) {
             const i = incidentFor(gid, position);
@@ -8693,7 +8719,7 @@ Reason (optional):`);
                     onmouseenter="showRefTooltip('${safeName}', this, event)"
                     onmouseleave="hideRefTooltip()">
                     <span class="slot-label" style="${labelColor}">${label}</span>
-                    <span style="display:flex;align-items:center;gap:5px;font-size:0.8rem;">${assignedCountBadge(refId)}${refName}${incidentStamp(gameId, position)}</span>
+                    <span style="display:flex;align-items:center;gap:5px;font-size:0.8rem;">${assignedCountBadge(refId)}${refName}${cupGreenWarn(gameId, position, refName)}${incidentStamp(gameId, position)}</span>
                     ${confirmBtn}
                     <button class="unassign-btn s2-unassign" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
                 </div>`;
