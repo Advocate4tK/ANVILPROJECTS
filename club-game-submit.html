@@ -671,6 +671,19 @@
                                 <option value="Comp">Comp / Travel</option>
                             </select>
                         </div>
+                        <!-- WHICH COMPETITION, not which club. A travel game can leave
+                             the club's own district — a cup tie, a cross-district
+                             fixture — and Central Assign needs the real one. Eric had
+                             to move RTCT11570 out of NECONN's district league by hand.
+                             Shown only for Comp; rec games never leave their league.
+                             Options come from clubs.ca_league (set in manage-clubs →
+                             Entity Status), so a club only ever sees its own.
+                             Tod, 2026-09-22. -->
+                        <div class="field-group row-start" id="gLeagueWrap" style="display:none;">
+                            <label>League <span style="color:#e74c3c">*</span></label>
+                            <select id="gLeague"></select>
+                            <div style="font-size:0.72rem; color:#6b7280; margin-top:4px;">Which competition this game is played in. Defaults to your club's league.</div>
+                        </div>
                         <!-- Scrimmage is NOT a game type. A scrimmage is still Rec or Comp
                              and crews and pays as that type — the checkbox sits beside the
                              selector, never inside it. -->
@@ -1914,14 +1927,24 @@
             && document.getElementById('gAge').value
             && document.getElementById('gGender').value
             && document.getElementById('gGameType').value
-            && document.getElementById('gVenue').value;
+            && document.getElementById('gVenue').value
+            // A comp game must name its league. This is the one field where
+            // guessing costs real money — the fee columns ride with it in the
+            // CSV and Central Assign will not let anyone change them afterwards.
+            && (document.getElementById('gGameType').value !== 'Comp'
+                || !!document.getElementById('gLeague')?.value);
         document.getElementById('createGameBtn').disabled = !ok;
     }
 
-    ['clubSelect','gDate','gTime','gHome','gAwayClub','gAway','gAge','gDivision','gGender','gGameType','gVenue','gField'].forEach(id => {
-        document.getElementById(id).addEventListener('input', updateCreateBtn);
-        document.getElementById(id).addEventListener('change', updateCreateBtn);
+    ['clubSelect','gDate','gTime','gHome','gAwayClub','gAway','gAge','gDivision','gGender','gGameType','gVenue','gField','gLeague'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', updateCreateBtn);
+        el.addEventListener('change', updateCreateBtn);
     });
+    // Choosing Comp reveals the league picker and fills it from the club.
+    document.getElementById('gGameType')?.addEventListener('change', refreshLeagueField);
+    document.getElementById('clubSelect')?.addEventListener('change', () => setTimeout(refreshLeagueField, 250));
 
     // ── Create Game → add to staging table ───────────────────────────────────
     document.getElementById('createGameBtn').addEventListener('click', () => {
@@ -1942,6 +1965,8 @@
             gameType:  document.getElementById('gGameType').value,
             scrimmage: document.getElementById('gScrimmage')?.checked || false,
             cup:       document.getElementById('gCup')?.checked || false,
+            league:    (document.getElementById('gGameType')?.value === 'Comp'
+                        && document.getElementById('gLeague')?.value) || null,
             venueId,   venueName,
             fieldId,   fieldName,
             notes:     document.getElementById('gNotes').value.trim(),
@@ -1966,6 +1991,39 @@
     });
 
     // ── Render staging table ──────────────────────────────────────────────────
+    // The club's own leagues, from clubs.ca_league. Mirrors parseClubLeagues()
+    // in manage-clubs.html and js/central-assign-export.js — three copies now,
+    // all on the same JSON-array-in-a-text-column shape.
+    function clubLeagueList() {
+        const v = currentClubRecord?.fields?.['ca_league'] ?? currentClubRecord?.ca_league;
+        if (!v) return [];
+        if (Array.isArray(v)) return v;
+        const s = String(v).trim();
+        if (s.startsWith('[')) { try { return JSON.parse(s); } catch (e) { return []; } }
+        return [s];
+    }
+    function refreshLeagueField() {
+        const wrap = document.getElementById('gLeagueWrap');
+        const sel  = document.getElementById('gLeague');
+        if (!wrap || !sel) return;
+        const isComp = (document.getElementById('gGameType')?.value || '') === 'Comp';
+        wrap.style.display = isComp ? '' : 'none';
+        if (!isComp) { sel.value = ''; return; }
+        const leagues = clubLeagueList();
+        const keep = sel.value;
+        // "General Non-League Games" is Central Assign's own escape hatch and any
+        // club may use it — a friendly against a club in another district belongs
+        // to no league at all.
+        const opts = leagues.concat(leagues.includes('General Non-League Games') ? [] : ['General Non-League Games']);
+        sel.innerHTML = opts.length
+            ? opts.map(l => `<option value="${l}">${l}</option>`).join('')
+            : '<option value="">— no leagues set for this club —</option>';
+        // One league means there is nothing to decide; pre-pick it and let the
+        // club move on. More than one and they have to choose, because guessing
+        // is exactly what put a cup tie in a district league.
+        sel.value = (keep && opts.includes(keep)) ? keep : (opts.length === 1 ? opts[0] : (leagues[0] || ''));
+    }
+
     function renderStagedTable() {
         const section = document.getElementById('stagedSection');
         const tbody   = document.getElementById('stagedBody');
@@ -2149,7 +2207,8 @@
                     'Gender':     g.gender,
                     'game_type':  g.gameType || 'Rec',
                     'is_scrimmage': !!g.scrimmage,
-                    'is_cup':        !!g.cup
+                    'is_cup':        !!g.cup,
+                    'league':        g.league || null
                 };
 
                 // ── Stamp the season AT SUBMISSION ────────────────────────────────
@@ -4410,6 +4469,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 // that has never heard of it uploads exactly as before.
                 scrimmage: /^(y|yes|true|1|scrim|scrimmage)$/i.test(String(row['Scrimmage'] || '').trim()),
                 cup:       /^(y|yes|true|1|cup)$/i.test(String(row['Cup Match'] || row['Cup'] || '').trim()),
+                league:    String(row['League'] || '').trim() || null,
                 venueId:   venueMatch ? venueMatch.id   : '',
                 venueName: venueMatch ? venueMatch.name : (row['Venue'] || ''),
                 fieldId:   fieldMatch ? fieldMatch.id   : '',

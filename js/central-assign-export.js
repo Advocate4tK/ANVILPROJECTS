@@ -1555,6 +1555,15 @@ function halfLengthFromDuration(duration) {
 //   1. clubs.ca_league  (text, exactly as CA spells it)   ← preferred
 //   2. legacy numeric ca_league_id, translated
 function resolveLeague(f) {
+    // ⚠️ THE GAME ANSWERS FIRST. A club can be in several leagues and
+    // clubLeagueNameMap holds exactly one name per club, so every travel game
+    // a multi-league club played has been exporting under whichever one won —
+    // silently, for WAM, RHAMYS and Canterbury. And a cup tie belongs to no
+    // club league at all: Eric had to move RTCT11570 out of NECONN's district
+    // by hand. games.league is that answer when the club portal asked for it.
+    // sql/game-league.sql
+    const own = (f['league'] || '').trim();
+    if (own) return own;
     const src = f['Source Club'] || '';
     if (!src) return '';
     const byName = clubLeagueNameMap[src];
