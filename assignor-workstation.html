@@ -5712,6 +5712,7 @@
         // list, so both templates count the same thing. Null means nothing has
         // rendered yet, in which case fall back to the total rather than zero.
         let visibleGameIds = null;
+        let _refsRetried   = false;   // one-shot guard for the empty-pane re-render
 
         function getRefAssignedCount(refId) {
             if (!refId || !assignedAt[refId]) return 0;
@@ -9473,6 +9474,24 @@ Reason (optional):`);
                 const _labels = { search: 'name search', club: 'club', years: 'experience filter', age: 'age filter', gender: 'gender filter', scope: 'assignor scope', date: 'date', time: 'time filter', noAvail: 'no availability' };
                 const _parts = Object.entries(_why).filter(([, n]) => n > 0).map(([k, n]) => `${_labels[k]} ${n}`);
                 if (_hidden > 0) _parts.push(`not on ${gameDate ? 'this date' : 'these dates'} ${_hidden}`);
+                // ⚠️ DON'T BELIEVE AN EMPTY PANE THE FIRST TIME.
+                // 2026-09-22, Griswold: the pane said nobody had submitted while
+                // Emily Tessier, anna jagielo and Marcy Malerbi all had Griswold
+                // availability on the date. Replaying every gate by hand passed
+                // all three — because the message was STALE. It had been written
+                // by an earlier render, when only 5 names were indexed instead of
+                // 23, and nothing rendered the pane again.
+                //
+                // renderRefs has a dozen callers and several fire from timers
+                // during load, so rather than guess which one won the race: if
+                // the pane is empty but availability says otherwise, render once
+                // more on the next frame and believe the second answer. A real
+                // empty still lands, one tick later.
+                if (_haveAvail > 0 && !_refsRetried) {
+                    _refsRetried = true;
+                    setTimeout(() => { _refsRetried = false; renderRefs(query); }, 350);
+                    return;
+                }
                 const _why_line = _haveAvail > 0
                     ? `<br><small style="color:#b45309;">${_haveAvail} referee${_haveAvail === 1 ? ' has' : 's have'} availability on ${gameDate ? 'this date' : 'these dates'}${_parts.length ? ' — hidden by: ' + _parts.join(' · ') : ''}. Tell Ralph.</small>`
                     : '';
