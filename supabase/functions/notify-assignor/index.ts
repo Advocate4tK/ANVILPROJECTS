@@ -279,7 +279,7 @@ Please arrive 30 minutes before kickoff. If you can't make it, reply to this ema
 ${gno ? `<div style="font-family:Consolas,monospace;font-size:13px;font-weight:700;color:#152d55;margin-bottom:4px">Game ${gno}</div>` : ""}<div style="font-size:18px;font-weight:700">${esc(matchup)}</div>
 <div style="font-size:16px;margin-top:4px">${esc(when)}</div>
 <div style="color:#555;margin-top:2px">${esc(div)}${g.game_type ? ` · ${esc(g.game_type)}` : ""} · ${esc(club)}</div>
-${g.is_cup ? `<div style="margin-top:6px;display:inline-block;color:#7a5200;background:linear-gradient(180deg,#fff4cc,#ffe9a3);border:1px solid #d4a017;border-radius:4px;padding:2px 9px;font-weight:800;font-size:13px;letter-spacing:.5px">🏆 CUP MATCH</div>` : ""}
+${g.is_cup ? `<div style="margin-top:6px;display:inline-block;color:#3d2a00;background:#f0b000;border:1px solid #b8860b;border-radius:4px;padding:3px 11px;font-weight:900;font-size:13px;letter-spacing:.6px">🏆 CUP MATCH</div>` : ""}
 <div style="margin-top:10px"><b>Position:</b> ${esc(posLabel)}</div>
 <div><b>Where:</b> ${esc(where || "TBD")}${addr ? `<br><span style="color:#555">${esc(addr)}</span>` : ""}</div>
 ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Open in Google Maps</a></div>` : ""}
