@@ -447,7 +447,7 @@ function dayBlocksHTML(games) {
                         ${fieldName(g) ? `<span class="${fieldClass(fieldName(g))}">${esc(fieldName(g))}</span>` : ''}
                         ${div ? `<span class="div-chip">${esc(div)}</span>` : ''}
                         ${isCompGame(g) ? `<span class="comp-chip">Comp</span>` : ''}
-                        ${isCupGame(g) ? `<span class="cup-chip" title="Cup Match">🏆 Cup Match</span>` : ''}
+                        ${isCupGame(g) ? `<span class="cup-chip" title="Cup Match"><span class="cup-spin">🏆</span> Cup Match</span>` : ''}
                         ${isAwayFor(g, PAGE_CLUB) ? `<span class="away-chip">Away</span>` : ''}
                         ${g['is_scrimmage'] ? `<span class="scrim-chip">Scrimmage</span>` : ''}
                         <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
