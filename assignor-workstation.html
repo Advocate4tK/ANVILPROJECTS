@@ -5131,7 +5131,7 @@
                             <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
                             <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
                         </select></div>
-                        <div><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>
+                        <div><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>${leagueEditControl(f, gid)}
                     </div>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
                         <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
@@ -5733,6 +5733,7 @@
         // ── State ────────────────────────────────────────────────────────────
         let allGames      = [];
         let allRefs       = [];
+        let clubLeaguesByName = {};   // club name (lowercase) -> [league names]
         let allAvail      = [];
         let allVenues     = []; // { id, name } sorted by name
 
@@ -7137,6 +7138,25 @@
                     clubLookup[c.id] = c.fields['Name'] || c.fields['Club Name'] || c.fields['Club'] || c.id;
                 });
 
+                // Which leagues each club plays in — clubs.ca_league, a JSON array
+                // set in manage-clubs → Entity Status. A club can be in several
+                // (WAM, RHAMYS and Canterbury already are), so a travel game has to
+                // say which one it belongs to. sql/game-league.sql
+                clubLeaguesByName = {};
+                clubs.forEach(c => {
+                    const nm = (c.fields['Club Name'] || c.fields['Name'] || '').trim();
+                    if (!nm) return;
+                    const v = c.fields['ca_league'];
+                    let list = [];
+                    if (Array.isArray(v)) list = v;
+                    else if (v) {
+                        const t = String(v).trim();
+                        if (t.startsWith('[')) { try { list = JSON.parse(t); } catch (e) { list = []; } }
+                        else list = [t];
+                    }
+                    clubLeaguesByName[nm.toLowerCase()] = list;
+                });
+
                 // Build ref lookup by ID, name, email, and aliases
                 refLookup = {};
                 refLookupByName  = {};
@@ -8028,7 +8048,7 @@
                             <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
                             <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
                         </select></div>
-                        <div><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>
+                        <div><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>${leagueEditControl(f, gid)}
                     </div>
                     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
                         <div><label>Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
@@ -8996,6 +9016,8 @@ Reason (optional):`);
                                 <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
                                 <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
                             </select></div>
+                            <div><label>Cup</label><label style="display:flex;align-items:center;gap:6px;height:28px;font-size:0.82rem;cursor:pointer;white-space:nowrap;" title="Cup Match — still crews and pays as Comp"><input type="checkbox" id="editCup-${gid}"${f['is_cup']?' checked':''} style="width:15px;height:15px;accent-color:#d4a017;cursor:pointer;">🏆 Cup Match</label></div>
+                            ${leagueEditControl(f, gid)}
                         </div>
                         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
                             <div><label>Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
@@ -10052,6 +10074,29 @@ Reason (optional):`);
             }
         }
 
+        // The League control on the edit panel. Only meaningful for a comp game
+        // — rec games never leave their club's league — so it renders as a note
+        // for rec rather than an empty dropdown. Tod, 2026-09-22: "once comp is
+        // picked the option for cup league and every league that is in entity
+        // status".
+        function leagueEditControl(f, gid) {
+            const isComp = String(f['game_type'] || '').trim().toLowerCase() === 'comp';
+            if (!isComp) return '';
+            const club = (resolveGameClub(f) || '').trim().toLowerCase();
+            const list = (clubLeaguesByName[club] || []).slice();
+            if (!list.includes('General Non-League Games')) list.push('General Non-League Games');
+            const cur = f['league'] || '';
+            // A league already on the game that is NOT on the club's list stays
+            // offered — Eric may have set it in Central Assign before the club's
+            // Entity Status caught up, and dropping it would silently change the
+            // game on the next save.
+            if (cur && !list.includes(cur)) list.unshift(cur);
+            const opts = ['<option value="">— use club default —</option>']
+                .concat(list.map(l => `<option value="${l}"${cur === l ? ' selected' : ''}>${l}</option>`))
+                .join('');
+            return `<div style="min-width:230px;"><label>League</label><select id="editLeague-${gid}" style="height:28px;border:1px solid #ccc;border-radius:4px;padding:0 4px;font-size:0.82rem;max-width:230px;">${opts}</select></div>`;
+        }
+
         // ── Edit game (date / time / cancel) ─────────────────────────────────
         function toggleGameEdit(gameId) {
             const panel = document.getElementById(`editPanel-${gameId}`);
@@ -10087,6 +10132,11 @@ Reason (optional):`);
                 // panel (leave it alone); present means take it at face value.
                 const cupBox = document.getElementById(`editCup-${gameId}`);
                 if (cupBox) updates['is_cup'] = !!cupBox.checked;
+                // Absent from the DOM means a rec game or an older panel — leave
+                // the stored value alone. Present and empty means "use the club
+                // default", which is a real choice.
+                const lgSel = document.getElementById(`editLeague-${gameId}`);
+                if (lgSel) updates['league'] = lgSel.value || null;
 
                 // Club pickers. Absent from the DOM (an older panel) means leave
                 // the stored value alone; present and empty means the assignor
