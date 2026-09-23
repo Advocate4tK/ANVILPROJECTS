@@ -48,7 +48,10 @@ SET    notes = regexp_replace(
            '^\s*Interested in .+? vs .+? \(([^)]*)\)\s*[—–-]\s*([A-Za-z]{3})\s*·\s*([A-Za-z]{3}\s+[0-9]{1,2})\s*@\s*([0-9]{1,2}:[0-9]{2}\s*[AP]M)',
            '\1 · \2 · \3 · \4 · RTCT' || g.game_no, 'i')
 FROM   games g
-WHERE  g.id = a.game
+-- availability.game is TEXT and games.id is an integer, so compare as text.
+--   Casting the other way (a.game::int) would throw on any non-numeric value
+--   that ever landed in that column.
+WHERE  g.id::text = a.game
   AND  a.notes ~* '^\s*Interested in .+ vs .+ \('
   AND  a.notes !~* '^\s*Interested in RTCT';
 
