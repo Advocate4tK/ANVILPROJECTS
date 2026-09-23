@@ -8266,6 +8266,12 @@
         // Assign should those numbers be pushed." A file can export perfectly and
         // be rejected whole — it happened on 2026-09-03 — so an exported game is
         // AMBER, still outstanding, until CA is confirmed to hold it.
+        // ⚠️ THIS IS THE GAME'S CA STATE — "has the game been pushed to Central
+        // Assign". The per-SLOT one ("has this referee accepted") is
+        // caSlotState(gid, position). A second function called caState shadowed
+        // this one on 2026-09-22 and took the whole workstation down with
+        // "Cannot read properties of undefined (reading 'tip')". Keep the names
+        // apart.
         function caState(f) {
             if (!f) return 'none';
             if (f['ca_imported_at']) return 'in';
@@ -8474,7 +8480,7 @@ Reason (optional):`);
             // already assigned and who rejected the games." This row is what he
             // scans, so it says which of the four it is without expanding.
             const sent  = caEmailSent[`${gid}|${position}`];
-            const st    = caState(gid, position);
+            const st    = caSlotState(gid, position);
             const first = String(name).split(' ')[0];
             const mark  = { '': '', 'assigned': ' ◑', 'confirmed': sent ? ' ✓✉' : ' ✓', 'rejected': ' ✗' }[st];
             const paint = {
@@ -8527,7 +8533,7 @@ Reason (optional):`);
         // The chip, in whatever state it is in. One function so Standard 2 and
         // Sheet 3 can never drift — they did on the old two-state version.
         function caChipHtml(gid, position, refName, compact) {
-            const st   = caState(gid, position);
+            const st   = caSlotState(gid, position);
             const sent = caEmailSent[`${gid}|${position}`];
             const when = sent?.at ? new Date(sent.at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
             const who  = refName || 'the referee';
@@ -8550,7 +8556,7 @@ Reason (optional):`);
         }
 
         // '' | 'assigned' | 'confirmed' | 'rejected'
-        function caState(gid, position) {
+        function caSlotState(gid, position) {
             const k = String(gid);
             if (caRejectedMap[k]?.has(position))  return 'rejected';
             if (caConfirmedMap[k]?.has(position)) return 'confirmed';
@@ -8586,7 +8592,7 @@ Reason (optional):`);
             const game = allGames.find(g => String(g.id) === gid);
             const who  = game ? resolveRefName(game.fields[position]) : '';
             const firstName = who ? who.split(' ')[0] : 'the referee';
-            const here = caState(gid, position);
+            const here = caSlotState(gid, position);
 
             // Settled either way — one more click clears it back to ○. Nothing
             // is sent; this is the "I mis-clicked" exit.
@@ -8902,8 +8908,8 @@ Reason (optional):`);
         async function confirmAllCA(gameId, occupiedPositions, event) {
             if (event) event.stopPropagation();
             const gid = String(gameId);
-            const fresh   = occupiedPositions.filter(p => caState(gid, p) === '');
-            const waiting = occupiedPositions.filter(p => caState(gid, p) === 'assigned');
+            const fresh   = occupiedPositions.filter(p => caSlotState(gid, p) === '');
+            const waiting = occupiedPositions.filter(p => caSlotState(gid, p) === 'assigned');
 
             if (fresh.length) {
                 showCAChoice(event, `Put ${fresh.length} slot${fresh.length === 1 ? '' : 's'} into Central Assign`, [
@@ -8983,7 +8989,7 @@ Reason (optional):`);
                 const borderColor = confirmed ? '#1e8449' : expColor;
                 const borderStyle = `border-color:${borderColor};`;
                 const labelColor  = `color:${borderColor};`;
-                const _caSt       = caState(gameId, position);
+                const _caSt       = caSlotState(gameId, position);
                 const confirmBg   = _caSt === 'confirmed' ? 'background:#e8f8ef;'
                                   : _caSt === 'assigned'  ? 'background:#fffaf0;'
                                   : _caSt === 'rejected'  ? 'background:#fff5f5;' : '';
@@ -9109,7 +9115,7 @@ Reason (optional):`);
                 // waiting and one accepted is the normal case — so these count
                 // SLOTS. This is the "where did I get to" line.
                 ['Center Referee', 'AR 1', 'AR 2'].forEach(pos => {
-                    const st = caState(gid, pos);
+                    const st = caSlotState(gid, pos);
                     if (st === 'assigned') awaitingSlots++;
                     else if (st === 'rejected') declinedSlots++;
                 });
@@ -9210,8 +9216,8 @@ Reason (optional):`);
                 // Label follows where the crew actually is. "Refs in CA" on a
                 // game whose crew is already in CA waiting to accept was telling
                 // the assignor to do something they had done.
-                const _anyFresh   = occupiedPositions.some(p => caState(gid, p) === '');
-                const _anyWaiting = occupiedPositions.some(p => caState(gid, p) === 'assigned');
+                const _anyFresh   = occupiedPositions.some(p => caSlotState(gid, p) === '');
+                const _anyWaiting = occupiedPositions.some(p => caSlotState(gid, p) === 'assigned');
                 const allInCABtn = occupiedPositions.length === 0 ? ''
                     : _anyFresh
                     ? `<button title="Put every assigned slot into Central Assign — you'll be asked whether to email the referees to accept (parents copied for minors)." onclick="confirmAllCA('${gid}',[${occupiedPositions.map(p=>`'${p}'`).join(',')}],event)"
