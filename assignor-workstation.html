@@ -135,6 +135,10 @@
         .incident-badge { font-size:0.66rem; font-weight:800; color:#b91c1c; background:#fff1f1; border:1px solid #fca5a5; border-radius:10px; padding:0 6px; flex-shrink:0; white-space:nowrap; }
         .incident-badge.hot { color:#fff; background:#b91c1c; border-color:#7f1d1d; }
         /* the game number — RTCT10247. The thing a referee says on the phone. */
+        /* An RTCT number sitting inside an availability note — click to copy. */
+        .rt-copy { cursor:pointer; font-weight:800; color:#0f3460; background:#e8eef8; border:1px solid #c9d6ee; border-radius:3px; padding:0 4px; }
+        .rt-copy:hover { background:#d7e3f7; }
+        .rt-copy.is-copied { background:#00c853; border-color:#00a844; color:#06210f; }
         .game-no { display:inline-block; font-family:'DM Mono','Consolas',monospace; font-size:0.7rem; font-weight:800; color:#152d55; background:#e8eef8; border:1px solid #c9d6ee; border-radius:4px; padding:0 6px; letter-spacing:.5px; line-height:1.5; vertical-align:middle; white-space:nowrap; }
         .game-badge {
             font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;
@@ -1147,7 +1151,7 @@
     <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="js/ref-experience.js?v=1"></script>
-    <script src="js/supabase-client.js?v=16"></script>
+    <script src="js/supabase-client.js?v=17"></script>
     <script>var airtableClient = supabaseClient;</script>
     <script src="js/admin-auth.js"></script>
     <script src="js/workstation-tabs.js?v=4"></script>
@@ -4169,7 +4173,23 @@
                         ${sheet3RefHiddenCols.includes('clubClub')  ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubClub"  style="${cell} ${rcw('clubClub')}">${r.club}</td>`}
                         ${sheet3RefHiddenCols.includes('clubStart') ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubStart" style="${cell} ${rcw('clubStart')}">${fmt(r.start)}</td>`}
                         ${sheet3RefHiddenCols.includes('clubEnd')   ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubEnd"   style="${cell} ${rcw('clubEnd')}">${fmt(r.end)}</td>`}
-                        ${sheet3RefHiddenCols.includes('clubNotes') ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubNotes" style="${cell} ${rcw('clubNotes')} font-size:0.72rem; color:#856404; white-space:nowrap;">${r.notes && !shownNoteFor.has(r.name) ? (shownNoteFor.add(r.name), r.notes) : ''}</td>`}
+                        ${sheet3RefHiddenCols.includes('clubNotes') ? `<td style="${refStubTd}"></td>` : (() => {
+                            // ⚠️ THE ROW IS A DRAG SOURCE, SO THIS CELL HAD TO OPT OUT.
+                            // Notes is the one cell people want to READ and copy — a
+                            // referee's own words about which game they want — and a
+                            // mousedown anywhere on the row started a drag instead of a
+                            // text selection, so it could not be selected at all.
+                            // draggable="false" plus user-select gives the cell back to
+                            // the mouse; the rest of the row still drags into an opt cell.
+                            // Tod, 2026-09-22: "lets make the 'notes' section an area you
+                            // can copy... right now whole row is drag and drop."
+                            const _n = r.notes && !shownNoteFor.has(r.name) ? (shownNoteFor.add(r.name), r.notes) : '';
+                            // And the game number inside it becomes a button: click,
+                            // it is on the clipboard, paste into Game Search.
+                            const _html = String(_n).replace(/\bRTCT(\d{4,9})\b/g, (m) =>
+                                `<span class="rt-copy" data-no="${m}" title="Click to copy — paste into Game Search">${m}</span>`);
+                            return `<td data-rcol="clubNotes" draggable="false" onmousedown="event.stopPropagation();" onclick="rtCopyFromNote(event)" style="${cell} ${rcw('clubNotes')} font-size:0.72rem; color:#856404; white-space:nowrap; user-select:text; -webkit-user-select:text; cursor:text;">${_html}</td>`;
+                        })()}
                         ${sheet3RefHiddenCols.includes('clubAssignorNotes') ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubAssignorNotes" style="${cell} ${rcw('clubAssignorNotes')} font-size:0.72rem; color:#6c3483; white-space:nowrap; cursor:pointer;" onclick="sheet3EditAssignorNote(event,'${safeName}')" title="Click to edit assignor note">${s3refObj?.fields['Assignor Notes'] || '<span style=\'color:#ccc;font-style:italic;\'>add note…</span>'}</td>`}
                         <td style="${cell} width:28px; text-align:center; padding:2px 4px;">${s3refObj ? `<button onclick="event.stopPropagation(); refToggleUnavailable('${s3refObj.id}')" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:1rem;padding:2px 5px;border-radius:3px;line-height:1;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background=''" title="Mark unavailable">✕</button>` : ''}</td>
                     </tr>`;
@@ -10126,6 +10146,30 @@ Reason (optional):`);
                 .concat(list.map(l => `<option value="${l}"${cur === l ? ' selected' : ''}>${l}</option>`))
                 .join('');
             return `<div style="min-width:230px;"><label>League</label><select id="editLeague-${gid}" style="height:28px;border:1px solid #ccc;border-radius:4px;padding:0 4px;font-size:0.82rem;max-width:230px;">${opts}</select></div>`;
+        }
+
+        // Click an RTCT number inside a note to put it on the clipboard. The
+        // cell is a text field otherwise, so this only fires on the number
+        // itself and a plain drag-select still works around it.
+        function rtCopyFromNote(e) {
+            const el = e.target.closest('.rt-copy');
+            if (!el) return;
+            e.stopPropagation();
+            const no = el.dataset.no || el.textContent.trim();
+            const done = () => {
+                const old = el.textContent;
+                el.textContent = 'copied';
+                el.classList.add('is-copied');
+                setTimeout(() => { el.textContent = old; el.classList.remove('is-copied'); }, 900);
+            };
+            if (navigator.clipboard?.writeText) navigator.clipboard.writeText(no).then(done).catch(() => {});
+            else {
+                // http pages and older browsers have no clipboard API — select it
+                // so ctrl-C still works rather than doing nothing silently.
+                const r = document.createRange(); r.selectNodeContents(el);
+                const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+                try { document.execCommand('copy'); done(); } catch (err) {}
+            }
         }
 
         // ── Edit game (date / time / cancel) ─────────────────────────────────

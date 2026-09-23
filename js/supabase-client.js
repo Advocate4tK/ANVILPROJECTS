@@ -584,8 +584,17 @@ const RT_GAME_NO = {
     fmt(n)  { return n ? this.prefix + n : ''; },
     // "RTCT10247", "rtct 10247", "#10247", "10247" → 10247. Anything else → null.
     parse(s) {
-        const m = String(s || '').trim().toUpperCase().replace(/^#/, '').match(/^(?:[A-Z]{2,4}[\s-]*)?(\d{4,9})$/);
-        return m ? Number(m[1]) : null;
+        const t = String(s || '').trim().toUpperCase().replace(/^#/, '');
+        const exact = t.match(/^(?:[A-Z]{2,4}[\s-]*)?(\d{4,9})$/);
+        if (exact) return Number(exact[1]);
+        // ⚠️ TAKE WHATEVER IS PASTED. Tod, 2026-09-22: "if you could copy from
+        // the 'notes' section and paste to the game search... that would be
+        // kinda cool." So a whole availability note — "Interested in Killingly
+        // vs Canterbury (U10) — Fri · Sep 25 @ 7:15 PM · RTCT10235" — finds the
+        // game. Only a PREFIXED number is pulled out of free text: a bare run of
+        // digits in a sentence is as likely to be a date or a phone number.
+        const loose = t.match(/\bRT[A-Z]{2}[\s-]*(\d{4,9})\b/);
+        return loose ? Number(loose[1]) : null;
     },
     // Where a number lives. Resolves via find_game_no() so the caller need
     // not know which table. → { kind:'game'|'tournament', id, ... } | null
