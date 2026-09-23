@@ -8450,18 +8450,33 @@ Reason (optional):`);
             try {
                 const ids = allGames.map(g => g.id);
                 if (!ids.length) return;
+                // ⚠️ THREE KINDS OF ASSIGNMENT EMAIL NOW, and the badge has to
+                // say WHICH went. Tod, 2026-09-23: "nor do they say whether mail
+                // was sent or not on the badge... would be nice." An amber chip
+                // with no ✉ means the referee has not actually been asked yet —
+                // which is the single most useful thing that cell can tell him.
+                //   assignment →          the "you're on" confirmation
+                //   assignment:pending →  "log in and accept"
+                //   assignment:declined → "it's back on the board"
                 const { data } = await supabaseClient.client
                     .from('blast_log')
                     .select('id,sent_at,where_text')
-                    .like('where_text', 'assignment → %')
+                    .like('where_text', 'assignment%→ %')
                     .order('id', { ascending: false })
                     .limit(2000);
                 const posOf = { 'Center Referee': 'Center Referee', 'Assistant Referee 1': 'AR 1', 'Assistant Referee 2': 'AR 2' };
                 (data || []).forEach(row => {
-                    const m = String(row.where_text || '').match(/· (Center Referee|Assistant Referee [12]) · game (\d+)$/);
+                    const w = String(row.where_text || '');
+                    const m = w.match(/· (Center Referee|Assistant Referee [12]) · game (\d+)$/);
                     if (!m) return;
+                    const stage = w.startsWith('assignment:pending')  ? 'assigned'
+                                : w.startsWith('assignment:declined') ? 'rejected'
+                                : 'confirmed';
                     const key = `${m[2]}|${posOf[m[1]]}`;
-                    if (!caEmailSent[key]) caEmailSent[key] = { at: row.sent_at };
+                    // Newest first, so the first one seen for a stage is the latest.
+                    if (!caEmailSent[key]) caEmailSent[key] = {};
+                    if (!caEmailSent[key][stage]) caEmailSent[key][stage] = row.sent_at;
+                    if (!caEmailSent[key].at && stage === 'confirmed') caEmailSent[key].at = row.sent_at;
                 });
             } catch (e) { console.warn('[caEmailSent]', e.message); }
         }
@@ -8479,10 +8494,11 @@ Reason (optional):`);
             // of amber reads as done. Tod, 2026-09-22: "I keep forgetting who I
             // already assigned and who rejected the games." This row is what he
             // scans, so it says which of the four it is without expanding.
-            const sent  = caEmailSent[`${gid}|${position}`];
+            const sent  = caEmailSent[`${gid}|${position}`] || {};
             const st    = caSlotState(gid, position);
+            const _e    = st && sent[st] ? '✉' : '';
             const first = String(name).split(' ')[0];
-            const mark  = { '': '', 'assigned': ' ◑', 'confirmed': sent ? ' ✓✉' : ' ✓', 'rejected': ' ✗' }[st];
+            const mark  = { '': '', 'assigned': ' ◑', 'confirmed': ' ✓', 'rejected': ' ✗' }[st] + _e;
             const paint = {
                 '':          { fg: color,   bg: bg },
                 'assigned':  { fg: '#7a5200', bg: '#fff3cd' },
@@ -8491,8 +8507,8 @@ Reason (optional):`);
             }[st];
             const tip = {
                 '':          `${name} — not in Central Assign yet. Expand and click ○ CA.`,
-                'assigned':  `${name} — in Central Assign, WAITING for them to accept. Expand and click ◑ CA once they answer.`,
-                'confirmed': `${name} — accepted in Central Assign${sent && sent.at ? ', emailed ' + new Date(sent.at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : ''}.`,
+                'assigned':  `${name} — in Central Assign, WAITING for them to accept.${_e ? ' Asked by email.' : ' NOT emailed yet.'} Expand and click ◑ CA.`,
+                'confirmed': `${name} — accepted in Central Assign.${_e ? ' Emailed.' : ''}`,
                 'rejected':  `${name} — DECLINED this in Central Assign. The slot needs filling again.`,
             }[st];
             return `<span title="${tip.replace(/"/g, '&quot;')}" style="background:${paint.bg};color:${paint.fg};border:1px solid ${st ? paint.bg : color};border-radius:4px;padding:1px 6px;font-size:0.66rem;font-weight:800;flex-shrink:0;white-space:nowrap;">${label}: ${first}${mark}</span>`;
@@ -8534,8 +8550,12 @@ Reason (optional):`);
         // Sheet 3 can never drift — they did on the old two-state version.
         function caChipHtml(gid, position, refName, compact) {
             const st   = caSlotState(gid, position);
-            const sent = caEmailSent[`${gid}|${position}`];
-            const when = sent?.at ? new Date(sent.at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+            const sent = caEmailSent[`${gid}|${position}`] || {};
+            // Was the email for THIS state sent? An amber chip with no ✉ means
+            // the referee has not been asked yet.
+            const sentAt = sent[st];
+            const fmtWhen = t => t ? new Date(t).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+            const when = fmtWhen(sentAt);
             const who  = refName || 'the referee';
             const base = 'font-size:0.62rem;font-weight:800;letter-spacing:0.4px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid;vertical-align:middle;white-space:nowrap;' + (compact ? 'margin-left:6px;' : '');
             const look = {
@@ -8544,13 +8564,16 @@ Reason (optional):`);
                 'confirmed': 'background:#e8f8ef;color:#1e8449;border-color:#1e8449;',
                 'rejected':  'background:#fee2e2;color:#991b1b;border-color:#b91c1c;',
             }[st];
+            // ✉ = the email for this state went. ✉̶ is not a thing, so the
+            // absence of the mark is the signal: nothing sent yet.
             const label = { '': '○ CA', 'assigned': '◑ CA', 'confirmed': '✓ CA', 'rejected': '✗ CA' }[st]
-                        + (st === 'confirmed' && sent ? ' · ✉' : '');
+                        + (st && sentAt ? ' ✉' : '');
+            const mailBit = sentAt ? ` Emailed ${when}.` : ' No email sent for this step yet.';
             const tip = {
                 '':          `Not in Central Assign. Click to put ${who} in — you'll be asked whether to email them to accept.`,
-                'assigned':  `In Central Assign, waiting for ${who} to ACCEPT it. Click once they have answered — accepted or declined.`,
-                'confirmed': `${who} accepted this in Central Assign${sent ? `. Emailed ${when}` : ''}. Click to clear.`,
-                'rejected':  `${who} DECLINED this in Central Assign — the slot needs filling again. Click to clear.`,
+                'assigned':  `In Central Assign, waiting for ${who} to ACCEPT it.${mailBit} Click to answer, or to ask them again.`,
+                'confirmed': `${who} accepted this in Central Assign.${mailBit} Click to clear.`,
+                'rejected':  `${who} DECLINED this in Central Assign — the slot needs filling again.${mailBit} Click to clear.`,
             }[st];
             return `<button onclick="event.stopPropagation(); toggleCAConfirmed('${gid}','${position}',event)" onmousedown="event.stopPropagation();" title="${tip.replace(/"/g, '&quot;')}" style="${base}${look}">${label}</button>`;
         }
@@ -8901,7 +8924,10 @@ Reason (optional):`);
                 const j = await r.json().catch(() => ({}));
                 console.log('[' + _event + ']', j);
                 if (j.ok) {
-                    caEmailSent[`${gameId}|${position}`] = { at: new Date().toISOString() };
+                    const _k = `${gameId}|${position}`;
+                    if (!caEmailSent[_k]) caEmailSent[_k] = {};
+                    caEmailSent[_k][stage || 'assigned'] = new Date().toISOString();
+                    if ((stage || '') === 'confirmed') caEmailSent[_k].at = caEmailSent[_k].confirmed;
                     renderGames();
                     const g = j.minor ? (j.results?.guardian === 'sent' ? ' + parent' : j.results?.guardian === 'no guardian on file' ? ' (minor — NO parent on file)' : ' (parent failed)') : '';
                     // Text status rides along. "no consent" is the common case until
