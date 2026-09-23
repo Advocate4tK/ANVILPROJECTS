@@ -8794,7 +8794,7 @@ Reason (optional):`);
                     const asUser = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY,
                         { global: { headers: { Authorization: `Bearer ${jwt}` } } });
                     const { data: { user } } = await asUser.auth.getUser();
-                    await asUser.from('game_incidents').insert({
+                    const { error } = await asUser.from('game_incidents').insert({
                         game_id: Number(gid), game_no: game?.fields['game_no'] || null,
                         referee_id: Number(ref.id), referee_name: ref.fields['Name'] || name,
                         position, kind: 'ca_rejected',
@@ -8802,8 +8802,17 @@ Reason (optional):`);
                         marked_by: user?.id || null,
                         marked_by_name: document.getElementById('profileBadgeName')?.textContent || null,
                     });
+                    // ⚠️ SAY SO IF IT DID NOT SAVE. An hour went this morning on a
+                    // write that failed into a silent catch — the chip looked
+                    // right until a reload. A decline that is not recorded means
+                    // this referee gets offered the same game again next week and
+                    // nothing warns anybody.
+                    if (error) throw new Error(error.message);
                 }
-            } catch (e) { console.warn('[ca_rejected]', e.message); }
+            } catch (e) {
+                console.warn('[ca_rejected]', e.message);
+                showToast(`⚠ ${name} was taken off the game, but the decline did NOT save: ${e.message}`, true);
+            }
 
             // Off the game, and the slot's CA state goes with them.
             await unassignRef(gid, position);
