@@ -799,38 +799,39 @@
     }
 
     function renderClubGroups(filtered) {
-        // Group by club
-        const byClub = {};
-        filtered.forEach(r => {
-            const club = getClubName(r);
-            if (!byClub[club]) byClub[club] = [];
-            byClub[club].push(r);
-        });
-
-        // Club groups ordered by their most recent activity, not alphabetically —
-        // "Most Recent" with A→Z groups put August's Ellis Tech cancels above
-        // yesterday's NECONN ones, every time.
-        const groupTs = ([, recs]) => Math.max(...recs.map(r => {
-            const st = (r.fields['Game Status'] || '').toLowerCase();
-            return ['change resolved','cancelled'].includes(st) ? getResolvedTs(r).getTime() : (getRequestTs(r)?.getTime() || Date.now());
-        }));
-        return Object.entries(byClub)
-            .sort((a, b) => sortDir === 'asc' ? groupTs(a) - groupTs(b) : groupTs(b) - groupTs(a))
-            .map(([club, records]) => {
-            const clubColor = getClubColor(club);
-            const cards = records
+        // ⚠️ ONE FLAT LIST, IN THE ORDER THINGS WERE COMPLETED.
+        // Tod, 2026-09-22: "should be shown in order completed."
+        //
+        // This used to group by club and order the groups by their most recent
+        // activity. The grouping was real, but nothing on the page DREW it —
+        // no club headings — so the dates read as scrambled: Sep 22, Sep 17,
+        // Sep 16, Sep 22, Sep 20. Each block was ordered; you just could not
+        // see where one club stopped. And the SORT control says "Most Recent",
+        // which promised a flat list the page was not giving.
+        //
+        // The club is still legible on every card: the coloured left edge and
+        // the club filter dropdown both survive. What is gone is an invisible
+        // grouping that cost the sort its meaning.
+        const isDone = r => ['change resolved','cancelled'].includes((r.fields['Game Status']||'').toLowerCase());
+        // A request still open is not "completed" and has no place on that
+        // scale — it is outstanding work, so it sits at the top whichever way
+        // the completed ones are sorted.
+        const doneTs = r => { const t = getResolvedTs(r); const n = t ? t.getTime() : 0; return isNaN(n) ? 0 : n; };
+        {
+            const cards = filtered
+                .slice()
                 .sort((a, b) => {
-                    const isResA = ['change resolved','cancelled'].includes((a.fields['Game Status']||'').toLowerCase());
-                    const isResB = ['change resolved','cancelled'].includes((b.fields['Game Status']||'').toLowerCase());
-                    if (isResA && isResB) {
-                        const cmp = getResolvedTs(a) - getResolvedTs(b);
-                        return sortDir === 'asc' ? cmp : -cmp;
+                    const dA = isDone(a), dB = isDone(b);
+                    if (dA !== dB) return dA ? 1 : -1;           // open first, always
+                    if (!dA) {                                    // both open: newest request first
+                        const ra = getRequestTs(a)?.getTime() || 0, rb = getRequestTs(b)?.getTime() || 0;
+                        return rb - ra;
                     }
-                    if (!isResA && isResB) return -1;
-                    if (isResA && !isResB) return 1;
-                    return (a.fields['Date']||'').localeCompare(b.fields['Date']||'');
+                    const cmp = doneTs(a) - doneTs(b);            // both done: by completion
+                    return sortDir === 'asc' ? cmp : -cmp;
                 })
                 .map(r => {
+                    const clubColor = getClubColor(getClubName(r));
                     const f          = r.fields;
                     const isCancelled = (f['Game Status']||'').toLowerCase() === 'cancelled';
                     const isResolved = (f['Game Status']||'').toLowerCase() === 'change resolved' || isCancelled;
@@ -924,7 +925,7 @@
                 }).join('');
 
             return cards;
-        }).join('');
+        }
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────
