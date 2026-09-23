@@ -8710,6 +8710,20 @@ Reason (optional):`);
             const firstName = who ? who.split(' ')[0] : 'the referee';
             const here = caSlotState(gid, position);
 
+            // ⚠️ A RED CHIP WITH A REFEREE STILL IN THE SLOT IS UNFINISHED.
+            // Declines marked before the removal shipped left the referee sitting
+            // on a game they had turned down — Emily Tessier on RTCT11566. The
+            // openings board reads that slot as covered, so it is worse than
+            // wrong, it is quiet. Offer to finish it rather than silently
+            // clearing the only sign anything happened.
+            if (here === 'rejected' && who) {
+                showCAChoice(event, `${who} declined — still on the game`, [
+                    { label: `✗ Take ${firstName} off this game`, fn: () => recordCaDecline(gid, position), danger: true },
+                    { label: 'Clear the mark, leave them on',     fn: async () => { caSetState(gid, position, ''); await saveCAConfirmed(gid); renderGames(); }, quiet: true },
+                ]);
+                return;
+            }
+
             // Settled either way — one more click clears it back to ○. Nothing
             // is sent; this is the "I mis-clicked" exit.
             if (here === 'confirmed' || here === 'rejected') {
