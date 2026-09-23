@@ -137,9 +137,10 @@
         /* the game number — RTCT10247. The thing a referee says on the phone. */
         /* How many games this referee's window reaches. Quiet — it is context,
            not an instruction. */
-        .cov-chip { display:inline-block; font-size:0.62rem; font-weight:800; letter-spacing:.3px;
+        .cov-chip { cursor:pointer; display:inline-block; font-size:0.62rem; font-weight:800; letter-spacing:.3px;
             color:#1a5276; background:#e8f4fd; border:1px solid #aed6f1; border-radius:3px;
             padding:0 5px; margin-right:6px; vertical-align:middle; }
+        .cov-chip:hover { background:#d4e9fa; border-color:#7fb8e0; }
         /* An RTCT number sitting inside an availability note — click to copy. */
         .rt-copy { cursor:pointer; font-weight:800; color:#0f3460; background:#e8eef8; border:1px solid #c9d6ee; border-radius:3px; padding:0 4px; }
         .rt-copy:hover { background:#d7e3f7; }
@@ -2833,10 +2834,10 @@
         // falls inside the window. Tod, 2026-09-22: "this notes section should
         // specify that breadth."
         function windowCoverage(r) {
-            if (!r || !r.date || !r.start || !r.end) return 0;
+            if (!r || !r.date || !r.start || !r.end) return [];
             const hhmm = t => String(t || '').slice(0, 5);
             const from = hhmm(r.start), to = hhmm(r.end);
-            if (!from || !to) return 0;
+            if (!from || !to) return [];
             // Their clubs for this row — the availability form's Preferred
             // Locations, which is what the club gate reads elsewhere.
             const key   = String(r.name || '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -2853,7 +2854,50 @@
                 }
                 const t = hhmm(f['Time']);
                 return !!t && t >= from && t <= to;
-            }).length;
+            }).sort((a, b) => String(a.fields['Time'] || '').localeCompare(String(b.fields['Time'] || '')));
+        }
+
+        // WHICH games, not just how many. Tod, 2026-09-22: "whether it covers
+        // one game or the window covers five, it should show those games to
+        // Eric". A count tells an assignor there is something here; the list
+        // tells them whether it is the something they need.
+        let _covPop = null;
+        function showCoverage(ev, refName, date) {
+            ev.stopPropagation(); ev.preventDefault();
+            const rows = (sheet3CachedRefRows || []).filter(x => x.name === refName && x.date === date);
+            const games = rows.length ? windowCoverage(rows[0]) : [];
+            if (!_covPop) {
+                _covPop = document.createElement('div');
+                _covPop.id = 'covPop';
+                _covPop.style.cssText = 'position:fixed; z-index:10000; background:#fff; border:1px solid #aed6f1; border-radius:9px; box-shadow:0 10px 34px rgba(0,0,0,.28); font-family:"DM Sans",sans-serif; font-size:0.8rem; max-height:60vh; overflow:auto; min-width:290px; display:none;';
+                document.body.appendChild(_covPop);
+                document.addEventListener('click', () => { if (_covPop) _covPop.style.display = 'none'; });
+            }
+            const head = `<div style="background:#1a5276;color:#fff;padding:8px 12px;font-weight:800;font-size:0.76rem;letter-spacing:.4px;">${refName} — ${date} · ${games.length} game${games.length === 1 ? '' : 's'} in window</div>`;
+            const body = games.length
+                ? games.map(g => {
+                    const f = g.fields;
+                    const no = f['game_no'] ? RT_GAME_NO.fmt(f['game_no']) : '';
+                    const open = ['Center Referee', 'AR 1', 'AR 2'].filter(pos => {
+                        const v = String(f[pos] || '').trim().toUpperCase();
+                        return !v || v === 'EMPTY';
+                    }).length;
+                    return `<div onclick="selectGame('${g.id}'); document.getElementById('covPop').style.display='none';"
+                        style="padding:7px 12px; border-bottom:1px solid #eef2f7; cursor:pointer; white-space:nowrap;"
+                        onmouseover="this.style.background='#f3f8ff'" onmouseout="this.style.background=''">
+                        ${no ? `<span class="game-no" style="margin-right:6px;">${no}</span>` : ''}
+                        <b>${formatTime(f['Time'] || '')}</b> · ${f['Age Group'] || ''} ·
+                        <span style="color:#555;">${f['Home Team'] || '?'} vs ${f['Away Team'] || '?'}</span>
+                        ${open ? `<span style="color:#b91c1c;font-weight:800;margin-left:6px;">${open} open</span>` : '<span style="color:#1e8449;font-weight:800;margin-left:6px;">full</span>'}
+                    </div>`;
+                  }).join('')
+                : '<div style="padding:10px 12px;color:#888;">Nothing on the board inside this window.</div>';
+            _covPop.innerHTML = head + body + '<div style="padding:6px 12px;color:#888;font-size:0.72rem;">Click a game to select it.</div>';
+            _covPop.style.display = 'block';
+            const x = Math.min(ev.clientX, window.innerWidth  - _covPop.offsetWidth  - 14);
+            const y = Math.min(ev.clientY, window.innerHeight - _covPop.offsetHeight - 14);
+            _covPop.style.left = Math.max(8, x) + 'px';
+            _covPop.style.top  = Math.max(8, y) + 'px';
         }
 
         function availRequestsGame(availFields, game) {
@@ -4245,9 +4289,9 @@
                             // A referee who named games has already told you what they
                             // want; one who only gave a window is telling you something
                             // just as useful, and this is where it says so.
-                            const _cov = windowCoverage(r);
+                            const _cov = windowCoverage(r).length;
                             const _covChip = _cov > 0
-                                ? `<span class="cov-chip" title="This referee's window covers ${_cov} game${_cov === 1 ? '' : 's'} on screen">covers ${_cov}</span>`
+                                ? `<span class="cov-chip" onclick="showCoverage(event,'${String(r.name).replace(/'/g, "&#39;")}','${r.date}')" title="Click to see which ${_cov} game${_cov === 1 ? '' : 's'} this window reaches">covers ${_cov}</span>`
                                 : '';
                             // And the game number inside it becomes a button: click,
                             // it is on the clipboard, paste into Game Search.
