@@ -2819,6 +2819,14 @@
             if (availFields['game'] && String(availFields['game']) === gid) return true;
 
             const note = String(availFields['Notes'] || availFields['notes'] || '');
+
+            // ⚠️ THE GAME NUMBER IS AN EXACT MATCH — try it before any guessing.
+            // Notes written from 2026-09-22 carry RTCT<n> and nothing ambiguous.
+            // The team-name heuristic below stays only for the notes already on
+            // file, which have no number in them.
+            const noMatch = note.match(/\bRTCT(\d{4,9})\b/);
+            if (noMatch) return String(game.fields['game_no'] || '') === noMatch[1];
+
             if (!/interested in/i.test(note)) return false;
 
             const norm = v => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -4188,7 +4196,7 @@
                             // it is on the clipboard, paste into Game Search.
                             const _html = String(_n).replace(/\bRTCT(\d{4,9})\b/g, (m) =>
                                 `<span class="rt-copy" data-no="${m}" title="Click to copy — paste into Game Search">${m}</span>`);
-                            return `<td data-rcol="clubNotes" draggable="false" onmousedown="event.stopPropagation();" onclick="rtCopyFromNote(event)" style="${cell} ${rcw('clubNotes')} font-size:0.72rem; color:#856404; white-space:nowrap; user-select:text; -webkit-user-select:text; cursor:text;">${_html}</td>`;
+                            return `<td data-rcol="clubNotes" draggable="false" onmousedown="event.stopPropagation();" onclick="rtCopyFromNote(event)" style="${cell} ${rcw('clubNotes')} font-size:0.74rem; color:#4a3500; white-space:nowrap; user-select:text; -webkit-user-select:text; cursor:text;">${_html}</td>`;
                         })()}
                         ${sheet3RefHiddenCols.includes('clubAssignorNotes') ? `<td style="${refStubTd}"></td>` : `<td data-rcol="clubAssignorNotes" style="${cell} ${rcw('clubAssignorNotes')} font-size:0.72rem; color:#6c3483; white-space:nowrap; cursor:pointer;" onclick="sheet3EditAssignorNote(event,'${safeName}')" title="Click to edit assignor note">${s3refObj?.fields['Assignor Notes'] || '<span style=\'color:#ccc;font-style:italic;\'>add note…</span>'}</td>`}
                         <td style="${cell} width:28px; text-align:center; padding:2px 4px;">${s3refObj ? `<button onclick="event.stopPropagation(); refToggleUnavailable('${s3refObj.id}')" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:1rem;padding:2px 5px;border-radius:3px;line-height:1;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background=''" title="Mark unavailable">✕</button>` : ''}</td>
