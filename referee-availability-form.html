@@ -1366,6 +1366,23 @@
                     if (cb) cb.addEventListener('change', updateClubPaySection);
                 });
 
+                // ⚠️ ADD TO THE NOTE, DON'T REPLACE IT.
+                // Both prefill paths assigned straight over notesEl.value. A referee
+                // who lined up a second game — or who already had a note loaded from
+                // their own record — lost the first one without being told. Games
+                // are separated by " | " so several read as a list rather than
+                // running together in the assignor's grid. Tod, 2026-09-22.
+                function mergeNote(existing, incoming) {
+                    const cur = String(existing || '').trim();
+                    const add = String(incoming || '').trim();
+                    if (!add) return cur;
+                    if (!cur) return add;
+                    // The same game twice — a refresh, a back-button — must not double up.
+                    const parts = cur.split(/\s*\|\s*|\n+/).map(x => x.trim()).filter(Boolean);
+                    if (parts.some(p => p === add)) return cur;
+                    return [...parts, add].join(' | ');
+                }
+
                 // Pre-fill club + age + note from URL params (set by ref-openings.html).
                 // A referee who clicked a specific game should not have to re-enter what that
                 // game already knows.
@@ -1401,7 +1418,7 @@
                 }
                 if (urlNote) {
                     const notesEl = document.getElementById('notes');
-                    if (notesEl) notesEl.value = decodeURIComponent(urlNote);
+                    if (notesEl) notesEl.value = mergeNote(notesEl.value, decodeURIComponent(urlNote));
                 }
             }
 
@@ -1574,7 +1591,7 @@
                 // Apply note
                 if (urlNoteNow) {
                     const notesEl = document.getElementById('notes');
-                    if (notesEl) notesEl.value = urlNoteNow;
+                    if (notesEl) notesEl.value = mergeNote(notesEl.value, urlNoteNow);
                 }
 
                 loadUpcomingAvailability();
