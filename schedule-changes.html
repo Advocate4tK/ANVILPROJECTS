@@ -651,6 +651,14 @@
                 // The archive shows everything in it — nothing from a past season
                 // is 'open', so the Show Resolved toggle has no meaning there.
                 if (showingArchive || isShowingResolved()) return s === 'change requested' || s === 'change resolved' || s === 'cancelled';
+                // ⚠️ RESOLVED HERE IS NOT FINISHED. Tod, 2026-09-22: "key is not
+                // just changing in RT but CONFIRMING that CA got the change as
+                // well if it was already uploaded... has to be part of the
+                // workflow." A game Central Assign already holds still shows the
+                // old time until somebody changes it over there by hand, so the
+                // request is open work — it stays on the open list, behind no
+                // toggle, until that is confirmed.
+                if (caNeedsUpdate(r.fields)) return true;
                 return s === 'change requested';
             });
 
@@ -768,7 +776,26 @@
                     </div>`).join('');
             return;
         }
-        container.innerHTML = renderClubGroups(filtered);
+        // The count that keeps it honest. Not inside Resolved Overview —
+        // this is work outstanding, not work done.
+        const _pending = allLoadedRecords.filter(r => caNeedsUpdate(r.fields));
+        const _banner = _pending.length ? `
+                <div style="background:#fff8e6; border:1px solid #f5c518; border-left:5px solid #e0a800; border-radius:10px; padding:12px 16px; margin-bottom:14px;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; font-weight:800; color:#7a5200; letter-spacing:.5px; text-transform:uppercase;">
+                        ⚠ ${_pending.length} change${_pending.length === 1 ? '' : 's'} not yet in Central Assign
+                    </div>
+                    <div style="font-size:0.8rem; color:#7a5200; margin-top:4px;">
+                        ${_pending.map(r => {
+                            const f = r.fields;
+                            const no = buildGameNum(f);
+                            return `${no ? no + ' ' : ''}${f['Home Team'] || '?'} vs ${f['Away Team'] || '?'}`;
+                        }).join(' &nbsp;·&nbsp; ')}
+                    </div>
+                    <div style="font-size:0.76rem; color:#8a6a2a; margin-top:6px;">
+                        These are changed here but Central Assign still shows the old details. Update CA, then confirm on the card.
+                    </div>
+                </div>` : '';
+            container.innerHTML = _banner + renderClubGroups(filtered);
     }
 
     function renderClubGroups(filtered) {
@@ -845,7 +872,8 @@
                         const gameNum = buildGameNum(f);
                         // Tod, 2026-09-17: "They should show the dates of these... unexpanded badges."
                         const resolvedTs = fmtResolvedTs(r);
-                        return `<div class="change-card resolved" id="card_${r.id}" style="border-left-color:${clubColor};">
+                        const _caPending = caNeedsUpdate(f);
+                        return `<div class="change-card resolved${_caPending ? ' expanded' : ''}" id="card_${r.id}" style="border-left-color:${_caPending ? '#e0a800' : clubColor};${_caPending ? 'border-left-width:5px; background:#fffdf5;' : ''}">
                             <div class="resolved-header" onclick="toggleCollapse('${r.id}')">
                                 <span class="toggle-arrow">▶</span>
                                 ${gameNum ? `<span class="resolved-game-num">${gameNum}</span>` : ''}
