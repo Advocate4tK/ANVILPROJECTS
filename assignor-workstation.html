@@ -132,6 +132,8 @@
         .incident-stamp { display:inline-block; margin-left:6px; font-size:0.6rem; font-weight:900; letter-spacing:.6px; color:#fff; background:#b91c1c; border:1px solid #7f1d1d; border-radius:3px; padding:1px 6px; vertical-align:middle; white-space:nowrap; transform:rotate(-2deg); }
         .incident-stamp.late_scratch { background:#b45309; border-color:#78350f; }
         .slot.has-incident { background:repeating-linear-gradient(135deg,#fff1f1,#fff1f1 6px,#ffe1e1 6px,#ffe1e1 12px) !important; border-color:#b91c1c !important; }
+        .ca-declined { font-size:0.62rem; font-weight:900; letter-spacing:.4px; color:#fff; background:#b91c1c;
+            border:1px solid #7f1d1d; border-radius:3px; padding:0 5px; flex-shrink:0; white-space:nowrap; }
         .incident-badge { font-size:0.66rem; font-weight:800; color:#b91c1c; background:#fff1f1; border:1px solid #fca5a5; border-radius:10px; padding:0 6px; flex-shrink:0; white-space:nowrap; }
         .incident-badge.hot { color:#fff; background:#b91c1c; border-color:#7f1d1d; }
         /* the game number — RTCT10247. The thing a referee says on the phone. */
@@ -8312,18 +8314,30 @@
         // referee as a 'no show'?" — right-click on Sheet 3 and Standard 2.
         let incidentsByGame = {};   // `${gid}|${position}` → active incident row
         let incidentsByRef  = {};   // referee_id → { no_shows, late_scratches }
+        // ⚠️ KEYED BY REFEREE, NOT BY SLOT. A decline takes the referee OFF the
+        // game, so the slot cannot carry the memory — the next person dropped in
+        // would inherit a red mark that was never about them. Tod, 2026-09-23:
+        // "that ref should be taken off the game and marked on the side as
+        // (xCA) for that game if we try to place them back on."
+        let caDeclinedByRef = {};   // `${gid}|${lowercased referee name}` → row
         const INCIDENT_LABEL = { no_show: 'NO SHOW', late_scratch: 'LATE SCRATCH' };
         const INCIDENT_ICON  = { no_show: '🚫', late_scratch: '⏰' };
 
         async function loadIncidents() {
-            incidentsByGame = {}; incidentsByRef = {};
+            incidentsByGame = {}; incidentsByRef = {}; caDeclinedByRef = {};
             try {
                 const jwt = _getSupabaseSession()?.access_token;
                 const asUser = jwt ? supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } } }) : supabaseClient.client;
                 const ids = allGames.map(g => g.id);
                 if (ids.length) {
                     const { data } = await asUser.from('game_incidents').select('*').in('game_id', ids).is('retracted_at', null);
-                    (data || []).forEach(r => { incidentsByGame[`${r.game_id}|${r.position}`] = r; });
+                    (data || []).forEach(r => {
+                        if (r.kind === 'ca_rejected') {
+                            caDeclinedByRef[`${r.game_id}|${String(r.referee_name || '').trim().toLowerCase()}`] = r;
+                        } else {
+                            incidentsByGame[`${r.game_id}|${r.position}`] = r;
+                        }
+                    });
                 }
                 const { data: counts } = await asUser.from('referee_incident_counts').select('*');
                 (counts || []).forEach(c => { incidentsByRef[String(c.referee_id)] = c; });
@@ -8371,6 +8385,26 @@
             if (l) parts.push(`⏰ ${l}`);
             const tip = `This season: ${n} no-show${n === 1 ? '' : 's'}, ${l} late scratch${l === 1 ? '' : 'es'}`;
             return `<span class="incident-badge ${n >= 2 ? 'hot' : ''}" title="${tip}">${parts.join(' ')}</span>`;
+        }
+
+        // ✗ CA — this referee DECLINED the game currently selected. Only shown
+        // with a game selected, because it is a fact about a pairing, not about
+        // the person: Emily Tessier declining RTCT11566 says nothing about her
+        // Sunday. Tod, 2026-09-23: "marked on the side as (xCA) for that game
+        // if we try to place them back on."
+        function caDeclinedBadge(refName) {
+            const gid = selectedGame ? String(selectedGame.id)
+                      : (typeof sheet3SelectedGameId !== 'undefined' && sheet3SelectedGameId) ? String(sheet3SelectedGameId) : '';
+            if (!gid) return '';
+            const row = caDeclinedByRef[`${gid}|${String(refName || '').trim().toLowerCase()}`];
+            if (!row) return '';
+            const when = row.created_at ? new Date(row.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+            return `<span class="ca-declined" title="${String(refName)} DECLINED this game in Central Assign${when ? ' on ' + when : ''}. Putting them back on it will almost certainly bounce again.">✗ CA</span>`;
+        }
+        function hasDeclinedSelected(refName) {
+            const gid = selectedGame ? String(selectedGame.id)
+                      : (typeof sheet3SelectedGameId !== 'undefined' && sheet3SelectedGameId) ? String(sheet3SelectedGameId) : '';
+            return !!(gid && caDeclinedByRef[`${gid}|${String(refName || '').trim().toLowerCase()}`]);
         }
 
         // Right-click → 🚫 No show / ⏰ Late scratch. Opens a small window for
@@ -8735,8 +8769,48 @@ Reason (optional):`);
             const word = state === 'assigned' ? 'assigned in CA'
                        : state === 'confirmed' ? 'accepted'
                        : 'declined';
+            // The email goes FIRST while the referee is still in the slot —
+            // sendAssignmentConfirmation reads the name off the game.
             if (sendEmail) { for (const p of positions) await sendAssignmentConfirmation(gid, p, state); }
             else showToast(`${state === 'rejected' ? '✗' : '✓'} ${positions.length === 1 ? 'Marked' : positions.length + ' slots marked'} ${word} — no email sent`, state === 'rejected');
+
+            // ⚠️ A DECLINE OPENS THE SLOT. The referee said no, so leaving them
+            // sitting in the game is a lie the openings board would repeat. They
+            // come off, and the decline is written down against THEM so the pane
+            // can say "declined this one" if you go to place them back.
+            if (state === 'rejected') { for (const pos of positions) await recordCaDecline(gid, pos); }
+        }
+
+        async function recordCaDecline(gameId, position) {
+            const gid  = String(gameId);
+            const game = allGames.find(g => String(g.id) === gid);
+            const name = game ? resolveRefName(game.fields[position]) : '';
+            if (!name) return;
+            const key  = String(name).trim().toLowerCase();
+            const ref  = refLookupByName[key] || allRefs.find(x => (x.fields['Name'] || '').trim().toLowerCase() === key);
+            try {
+                const jwt = _getSupabaseSession()?.access_token;
+                if (jwt && ref && !String(ref.id).startsWith('ghost_')) {
+                    const asUser = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY,
+                        { global: { headers: { Authorization: `Bearer ${jwt}` } } });
+                    const { data: { user } } = await asUser.auth.getUser();
+                    await asUser.from('game_incidents').insert({
+                        game_id: Number(gid), game_no: game?.fields['game_no'] || null,
+                        referee_id: Number(ref.id), referee_name: ref.fields['Name'] || name,
+                        position, kind: 'ca_rejected',
+                        note: 'Declined the assignment in Central Assign',
+                        marked_by: user?.id || null,
+                        marked_by_name: document.getElementById('profileBadgeName')?.textContent || null,
+                    });
+                }
+            } catch (e) { console.warn('[ca_rejected]', e.message); }
+
+            // Off the game, and the slot's CA state goes with them.
+            await unassignRef(gid, position);
+            await loadIncidents();
+            renderGames();
+            renderRefs(document.getElementById('refSearch')?.value?.toLowerCase() || '');
+            showToast(`✗ ${name} declined — taken off the game, slot is open again`, true);
         }
 
         // Bottom-right toast — a sentence, a few seconds, gone. Used for the
@@ -9795,6 +9869,11 @@ Reason (optional):`);
             // Hide no-availability refs entirely unless override is on; sink struck refs to bottom
             const displayRefs = (showAllRefs || query ? filtered : filtered.filter(r => classify(r) !== 3))
                 .sort((a, b) => {
+                    // Someone who already said no to THIS game goes to the bottom.
+                    // Not hidden — the assignor may know something CA does not —
+                    // but out of the way of the people who have not answered.
+                    const ad = hasDeclinedSelected(a.fields['Name']), bd = hasDeclinedSelected(b.fields['Name']);
+                    if (ad !== bd) return ad ? 1 : -1;
                     const as = a.fields['unavailable'] === true, bs = b.fields['unavailable'] === true;
                     return as === bs ? 0 : as ? 1 : -1;
                 });
@@ -9953,7 +10032,7 @@ Reason (optional):`);
                     onmouseleave="hideAvailNotes()">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
                         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; min-width:0;">
-                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${genderDot}${years ? `<span style="font-size:0.68rem;font-weight:700;color:${expColor||'#aaa'};flex-shrink:0;">${years}</span>` : ''}${distBadge}${posBadge}${ghostBadge}${incidentBadge(rid)}</div>
+                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${genderDot}${years ? `<span style="font-size:0.68rem;font-weight:700;color:${expColor||'#aaa'};flex-shrink:0;">${years}</span>` : ''}${distBadge}${posBadge}${ghostBadge}${incidentBadge(rid)}${caDeclinedBadge(name)}</div>
                         </div>
                         <span id="rtri-${rid}" onclick="event.stopPropagation(); toggleRefCardWS('${rid}')" style="cursor:pointer; font-size:0.7rem; color:${cls === 2 ? '#e74c3c' : '#aaa'}; padding:2px 4px; flex-shrink:0; font-weight:${cls === 2 ? '900' : 'normal'};">▶</span>
                     </div>
