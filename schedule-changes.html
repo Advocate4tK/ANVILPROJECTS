@@ -400,6 +400,72 @@
         return f['game_no'] ? RT_GAME_NO.fmt(f['game_no']) : '';
     }
 
+    // ── Does Central Assign still show the old details? ───────────────────
+    // Tod, 2026-09-22: "I did two change controls and sure they show in our
+    // system but I need to pump them out to CA."
+    //
+    // ⚠️ THIS CANNOT BE AUTOMATED, AND THAT IS THE POINT.
+    // Central Assign's CSV importer ADDS games. It has no update path — a
+    // re-export of a fixture CA already holds creates a SECOND one beside the
+    // first at the old time, which is worse than the stale row. So a game CA
+    // already has must be changed by hand over there. This only records that
+    // somebody did.
+    //
+    // And it asks ONLY where it matters. Of the four recent changes, two were
+    // never imported to CA at all — their change rides out on the next export
+    // by itself. Asking about those would be noise, and noise is exactly how a
+    // real one gets ignored.
+    function caNeedsUpdate(f) {
+        if (!f['ca_imported_at']) return false;      // CA never had it
+        if (f['ca_change_synced_at']) return false;   // already done by hand
+        const status = String(f['Game Status'] || '');
+        return status === 'Change Resolved' || status === 'Cancelled' || !!f['cancelled_at'];
+    }
+
+    function caSyncBlock(r) {
+        const f = r.fields;
+        if (f['ca_change_synced_at']) {
+            const when = new Date(f['ca_change_synced_at']).toLocaleString('en-US',
+                { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+            return `<div style="margin-top:10px; padding:8px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-left:4px solid #00c853; border-radius:8px; font-size:0.82rem; color:#065f46; font-weight:600;">
+                ✓ Central Assign updated &nbsp;·&nbsp; <span style="font-weight:400;">${when}</span>
+            </div>`;
+        }
+        if (!caNeedsUpdate(f)) return '';
+        const isCancel = String(f['Game Status'] || '') === 'Cancelled' || !!f['cancelled_at'];
+        const what = isCancel
+            ? 'This game is cancelled here, but Central Assign still has it live.'
+            : 'Central Assign still shows the old date, time or venue.';
+        return `<div style="margin-top:10px; padding:10px 12px; background:#fff8e6; border:1px solid #f5c518; border-left:4px solid #e0a800; border-radius:8px;">
+            <div style="font-size:0.82rem; color:#7a5200; font-weight:700; margin-bottom:6px;">⚠ ${what}</div>
+            <div style="font-size:0.76rem; color:#7a5200; margin-bottom:8px;">
+                CA cannot be updated by export — re-sending would create a duplicate at the old time.
+                ${isCancel ? 'Remove it in Central Assign' : 'Change it in Central Assign'}, then confirm here.
+            </div>
+            <button onclick="markCaSynced('${r.id}', this)"
+                style="background:#e0a800; color:#2b1f00; border:none; border-radius:7px; padding:6px 14px; font-weight:800; font-size:0.8rem; cursor:pointer; font-family:inherit;">
+                ✓ I updated Central Assign
+            </button>
+            <span class="action-msg" id="casync_${r.id}" style="margin-left:8px;"></span>
+        </div>`;
+    }
+
+    async function markCaSynced(gameId, btn) {
+        const msg = document.getElementById('casync_' + gameId);
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+        try {
+            const { error } = await supabaseClient.client.from('games')
+                .update({ ca_change_synced_at: new Date().toISOString() })
+                .eq('id', gameId);
+            if (error) throw error;
+            if (msg) { msg.style.color = '#1a6b3a'; msg.textContent = '✓ Recorded'; }
+            loadChanges();
+        } catch (e) {
+            if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Could not save: ' + e.message; }
+            if (btn) { btn.disabled = false; btn.textContent = '✓ I updated Central Assign'; }
+        }
+    }
+
     function toggleCollapse(id) {
         document.getElementById('card_' + id)?.classList.toggle('expanded');
     }
@@ -785,12 +851,14 @@
                                 ${gameNum ? `<span class="resolved-game-num">${gameNum}</span>` : ''}
                                 <span class="resolved-matchup">${f['Home Team']||'—'} vs ${f['Away Team']||'—'}</span>
                                 ${resolvedTs ? `<span class="resolved-meta">${resolvedTs}</span>` : ''}
+                                ${caNeedsUpdate(f) ? '<span title="Central Assign has not been updated yet" style="flex-shrink:0; font-size:0.66rem; font-weight:800; letter-spacing:.3px; color:#7a5200; background:#fff3cd; border:1px solid #f5c518; border-radius:10px; padding:1px 9px;">CA PENDING</span>' : ''}
                                 <span class="status-pill pill-resolved" style="font-size:0.7rem; padding:2px 10px; ${isCancelled ? 'background:#fee2e2; color:#991b1b;' : ''}">${isCancelled ? '🚫 Cancelled' : '✅ Resolved'}</span>
                             </div>
                             <div class="card-body">
                                 <div class="game-meta" style="margin-bottom:10px;">${f['Date']||'—'} &nbsp;·&nbsp; ${formatTime(f['Time']||'')} &nbsp;·&nbsp; ${f['Age Group']||'—'} &nbsp;·&nbsp; ${f['Gender']||'—'}</div>
                                 <div class="current-refs"><strong>Current Refs:</strong> ${refsHtml}</div>
                                 ${requestHtml}
+                                ${caSyncBlock(r)}
                                 <div class="action-row">
                                     <button class="btn-reopen" onclick="reopenRequest('${r.id}')">↩ Re-open</button>
                                     ${contactBtn}
