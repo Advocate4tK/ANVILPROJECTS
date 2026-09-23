@@ -198,7 +198,23 @@ Deno.serve(async (req) => {
   //
   //   { event: "assignment_confirmed", game_id, position }
   //   position ∈ "Center Referee" | "AR 1" | "AR 2"
-  if (p.event === "assignment_confirmed") {
+  // ⚠️ THREE MOMENTS, THREE DIFFERENT TRUTHS.
+  // Central Assign makes the REFEREE accept. Until 2026-09-22 this fired the
+  // instant an assignor ticked our CA chip — i.e. saying "you're assigned,
+  // arrive 30 minutes early" to somebody who had not accepted anything, and
+  // sometimes to somebody who then declined. Tod: "Mark Drega I put in CA but
+  // he rejected his game. I had checked the CA button... but thats confusing."
+  //
+  //   stage "pending"   put into CA        → "please go and accept it"
+  //   stage "confirmed" referee accepted   → "you're on, arrive 30 min early"
+  //   stage "declined"  referee said no    → "it's back on the board; if your
+  //                                          availability changed, update it"
+  //
+  // Same game and referee lookup for all three; only the words differ.
+  if (p.event === "assignment_confirmed" || p.event === "assignment_pending" || p.event === "assignment_declined") {
+    const stage = p.event === "assignment_pending"  ? "pending"
+                : p.event === "assignment_declined" ? "declined"
+                : "confirmed";
     const gid = Number(p.game_id);
     const pos = String(p.position || "");
     if (!gid || !["Center Referee", "AR 1", "AR 2"].includes(pos)) return json({ error: "game_id and a valid position required" }, 400);
@@ -259,9 +275,33 @@ Deno.serve(async (req) => {
     const first    = ref.name.split(/\s+/)[0];
 
     const gno     = gameNo(g);
-    const subject = `You're assigned: ${gno ? gno + " · " : ""}${matchup} — ${fmtDate(g.date)} ${fmtTime(g.time)} (${posLabel})`;
+    const subject = stage === "pending"
+      ? `Please accept in Central Assign: ${gno ? gno + " · " : ""}${matchup} — ${fmtDate(g.date)} ${fmtTime(g.time)} (${posLabel})`
+      : stage === "declined"
+      ? `You declined: ${gno ? gno + " · " : ""}${matchup} — ${fmtDate(g.date)} ${fmtTime(g.time)}`
+      : `You're assigned: ${gno ? gno + " · " : ""}${matchup} — ${fmtDate(g.date)} ${fmtTime(g.time)} (${posLabel})`;
+
+    // The line that changes with the stage. Everything else about the game —
+    // where, when, which position — is identical and printed below.
+    const openLine = (toParent: boolean) =>
+        stage === "pending"
+          ? (toParent ? `${ref.name} has been put into Central Assign for a game. They need to ACCEPT it.`
+                      : `Hi ${first}, you've been put into Central Assign for this game. Please log in and ACCEPT it so it's locked in.`)
+          : stage === "declined"
+          ? (toParent ? `${ref.name} declined this game in Central Assign. It has gone back out to other referees.`
+                      : `Hi ${first}, you declined this game in Central Assign — no problem, it's back on the openings board for someone else.`)
+          : (toParent ? `${ref.name} has been assigned to a game.` : `Hi ${first}, you're assigned to a game.`);
+
+    const closeText =
+        stage === "pending"
+          ? `Log in to Central Assign and accept it. If you can't work it, decline there so it goes back out to other referees quickly.`
+          : stage === "declined"
+          ? `If your availability has changed, please update your availability form so you stop being offered games you can't work.`
+          : `Please arrive 30 minutes before kickoff. If you can't make it, reply to this email right away so ${assignorName} can find cover.`;
+
+    const accent = stage === "pending" ? "#e0a800" : stage === "declined" ? "#b91c1c" : "#00c853";
     const bodyText = (toParent: boolean) =>
-`${toParent ? `${ref.name} has been assigned` : `Hi ${first}, you're assigned`} to a game.
+`${openLine(toParent)}
 
 ${gno ? `Game ${gno}\n` : ""}${matchup}
 ${when}
@@ -269,13 +309,13 @@ ${div}${g.game_type ? ` · ${g.game_type}` : ""}${cup} · ${club}
 Position: ${posLabel}
 Where: ${where || "TBD"}${addr ? `\n${addr}` : ""}${maps ? `\nMap: ${maps}` : ""}
 
-Please arrive 30 minutes before kickoff. If you can't make it, reply to this email right away so ${assignorName} can find cover.
+${closeText}
 
 — ${assignorName}`;
     const bodyHtml = (toParent: boolean) =>
 `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:600px">
-<p>${toParent ? `<b>${esc(ref.name)}</b> has been assigned to a game.` : `Hi ${esc(first)}, you're assigned to a game.`}</p>
-<div style="background:#f6f6f6;border-left:4px solid #00c853;padding:12px 16px;margin:14px 0">
+<p>${esc(openLine(toParent))}</p>
+<div style="background:#f6f6f6;border-left:4px solid ${accent};padding:12px 16px;margin:14px 0">
 ${gno ? `<div style="font-family:Consolas,monospace;font-size:13px;font-weight:700;color:#152d55;margin-bottom:4px">Game ${gno}</div>` : ""}<div style="font-size:18px;font-weight:700">${esc(matchup)}</div>
 <div style="font-size:16px;margin-top:4px">${esc(when)}</div>
 <div style="color:#555;margin-top:2px">${esc(div)}${g.game_type ? ` · ${esc(g.game_type)}` : ""} · ${esc(club)}</div>
@@ -284,7 +324,9 @@ ${g.is_cup ? `<div style="margin-top:6px;display:inline-block;color:#3d2a00;back
 <div><b>Where:</b> ${esc(where || "TBD")}${addr ? `<br><span style="color:#555">${esc(addr)}</span>` : ""}</div>
 ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Open in Google Maps</a></div>` : ""}
 </div>
-<p>Please arrive <b>30 minutes before kickoff</b>. If you can't make it, reply to this email right away so ${esc(assignorName)} can find cover.</p>
+<p>${stage === "pending" ? `<b>Log in to Central Assign and accept it.</b> If you can't work it, decline there so it goes back out to other referees quickly.`
+   : stage === "declined" ? `If your availability has changed, please <b>update your availability form</b> so you stop being offered games you can't work.`
+   : `Please arrive <b>30 minutes before kickoff</b>. If you can't make it, reply to this email right away so ${esc(assignorName)} can find cover.`}</p>
 <p style="color:#555">— ${esc(assignorName)}</p>
 </div>`;
 
@@ -292,7 +334,7 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
     // answer in blast_log/blast_recipients: where_text = "assignment → <name> · <pos> · game N".
     const { data: alog } = await db.from("blast_log").insert({
       sent_by: null, sent_by_name: assignorName, subject, body: bodyText(false),
-      where_text: `assignment → ${ref.name} · ${posLabel} · game ${gid}`, recipient_count: 1, guardians_cc: true,
+      where_text: `assignment${stage === "confirmed" ? "" : ":" + stage} → ${ref.name} · ${posLabel} · game ${gid}`, recipient_count: 1, guardians_cc: true,
     }).select("id").single();
     const logRow = async (email: string, isG: boolean, ok: boolean, err?: string) => {
       if (alog) await db.from("blast_recipients").insert({ blast_id: alog.id, referee_id: ref.id, email, is_guardian: isG, status: ok ? "sent" : "failed", error: ok ? null : (err || "?") });
