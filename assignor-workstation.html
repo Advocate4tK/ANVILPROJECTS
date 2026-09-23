@@ -132,6 +132,10 @@
         .incident-stamp { display:inline-block; margin-left:6px; font-size:0.6rem; font-weight:900; letter-spacing:.6px; color:#fff; background:#b91c1c; border:1px solid #7f1d1d; border-radius:3px; padding:1px 6px; vertical-align:middle; white-space:nowrap; transform:rotate(-2deg); }
         .incident-stamp.late_scratch { background:#b45309; border-color:#78350f; }
         .slot.has-incident { background:repeating-linear-gradient(135deg,#fff1f1,#fff1f1 6px,#ffe1e1 6px,#ffe1e1 12px) !important; border-color:#b91c1c !important; }
+        /* Who has already said no to this game, shown on the empty slot where
+           the decision gets made. */
+        .slot-declined { display:block; margin-top:3px; font-size:0.6rem; font-weight:800; letter-spacing:.3px;
+            color:#991b1b; background:#fee2e2; border:1px solid #fca5a5; border-radius:3px; padding:0 5px; white-space:nowrap; }
         .ca-declined { font-size:0.62rem; font-weight:900; letter-spacing:.4px; color:#fff; background:#b91c1c;
             border:1px solid #7f1d1d; border-radius:3px; padding:0 5px; flex-shrink:0; white-space:nowrap; }
         .incident-badge { font-size:0.66rem; font-weight:800; color:#b91c1c; background:#fff1f1; border:1px solid #fca5a5; border-radius:10px; padding:0 6px; flex-shrink:0; white-space:nowrap; }
@@ -8401,6 +8405,33 @@
             const when = row.created_at ? new Date(row.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
             return `<span class="ca-declined" title="${String(refName)} DECLINED this game in Central Assign${when ? ' on ' + when : ''}. Putting them back on it will almost certainly bounce again.">✗ CA</span>`;
         }
+        // ⚠️ ON THE EMPTY SLOT, NOT JUST IN THE PANE. Tod, 2026-09-23: "once
+        // the badge is taken off to the side, there's no way for me to know...
+        // unless it says on the slot before the referee's in there."
+        //
+        // The warning has to live where the decision is made. An empty slot is
+        // where he looks when he is about to fill it, so that is where "Emily
+        // already said no to this one" belongs.
+        //
+        // GAME-LEVEL, not position-level. A referee declining in Central Assign
+        // is nearly always saying "that date and time does not work", not "I
+        // would have done AR2 but not AR1". Scoping it to the exact slot would
+        // let the same person be offered the same kickoff one line down.
+        function caDeclinedNames(gameId) {
+            const pre = `${String(gameId)}|`;
+            return Object.entries(caDeclinedByRef)
+                .filter(([k]) => k.startsWith(pre))
+                .map(([, row]) => row.referee_name)
+                .filter(Boolean);
+        }
+        function caDeclinedSlotNote(gameId, compact) {
+            const names = caDeclinedNames(gameId);
+            if (!names.length) return '';
+            const tip = `Already declined this game in Central Assign: ${names.join(', ')}. Putting them back on it will almost certainly bounce again.`;
+            const shown = names.length <= 2 ? names.map(n => n.split(' ')[0]).join(', ') : `${names.length} refs`;
+            return `<span class="slot-declined" title="${tip.replace(/"/g, '&quot;')}">✗ ${shown}</span>`;
+        }
+
         function hasDeclinedSelected(refName) {
             const gid = selectedGame ? String(selectedGame.id)
                       : (typeof sheet3SelectedGameId !== 'undefined' && sheet3SelectedGameId) ? String(sheet3SelectedGameId) : '';
@@ -9139,10 +9170,12 @@ Reason (optional):`);
                     <button class="unassign-btn s2-unassign" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
                 </div>`;
             }
+            const _declNote = caDeclinedSlotNote(gameId, false);
             return `<div class="slot s2-slot" data-game-id="${gameId}" data-position="${position}"
                 oncontextmenu="s2ShowCellFilledMenu(event,'${gameId}','${safePos}',''); return false;">
                 <span class="slot-label">${label}</span>
                 <span>Drop ref here</span>
+                ${_declNote}
             </div>`;
         }
 
@@ -10281,6 +10314,24 @@ Reason (optional):`);
                 const _r = refLookupByName[(refName || '').trim().toLowerCase()];
                 if (_r) refId = _r.id;
             }
+            // ⚠️ STOP HIM, DON'T JUST MARK IT. Tod, 2026-09-23: "I dont want to
+            // do it again by mistake once they rejected that game." A red badge
+            // in the pane only works if he happens to look at it — at 11pm on a
+            // Tuesday with seven games open, he will not. This is the same shape
+            // as the scheduling-conflict guard directly below: say what happened
+            // and let him overrule it deliberately.
+            const _decl = caDeclinedByRef[`${String(gameId)}|${String(refName || '').trim().toLowerCase()}`];
+            if (_decl) {
+                const _when = _decl.created_at
+                    ? new Date(_decl.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })
+                    : 'earlier';
+                if (!confirm(`✗ ${refName} DECLINED this game in Central Assign (${_when}).
+
+Putting them back on it will almost certainly bounce again.
+
+Assign anyway?`)) return;
+            }
+
             const targetGame = allGames.find(g => String(g.id) === String(gameId));
             if (targetGame) {
                 const gameDate = targetGame.fields['Date'];
