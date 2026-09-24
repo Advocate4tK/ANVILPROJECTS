@@ -354,6 +354,19 @@
                     <div id="clubStatusList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:20px;">
                         <p style="color:#aaa; font-size:0.85rem;">Loading…</p>
                     </div>
+                    <!-- ⚠️ A COMPETITION THAT SETS ITS OWN PAY IS AN ENTITY TOO.
+                         CJSA mandates the cup fee, Central Assign plugs it in on
+                         import, and no club may overrule it — so it belongs in no
+                         club's grid, and for months it lived only in a database
+                         table nothing on any screen could show. Tod, 2026-09-24:
+                         "when a game is uploaded as CUP to CA pay is automated...
+                         Our system needs to show that somewhere which is why I
+                         thought entity status as 'CT CUP' would be a good place...
+                         at least we would be able to populate visibly the pay."
+                         Created and edited through the wizard's League / Cup type.
+                         sql/leagues.sql, sql/league-pay-rates.sql -->
+                    <div id="leagueRatesWrap" style="margin:26px 0 20px;"></div>
+
                     <div style="display:flex; align-items:center; gap:14px;">
                         <button onclick="saveClubStatus()" style="background:#00c853; color:#09142a; border:none; padding:10px 28px; border-radius:8px; font-weight:800; font-size:1rem; text-transform:uppercase; cursor:pointer; font-family:'Barlow Condensed',sans-serif; letter-spacing:0.5px;">Save Status</button>
                         <span id="clubStatusMsg" style="display:none; font-size:0.82rem; color:#1a6b3a; font-weight:700; font-family:'DM Sans',sans-serif;">✓ Saved</span>
@@ -803,6 +816,11 @@
                     <label class="entity-type-btn active" id="etBtn-club"><input type="radio" name="entityType" value="club" checked onchange="setEntityType('club')"> 🏟 Club</label>
                     <label class="entity-type-btn" id="etBtn-tournament"><input type="radio" name="entityType" value="tournament" onchange="setEntityType('tournament')"> 🏆 Tournament / Event</label>
                     <label class="entity-type-btn" id="etBtn-recreation"><input type="radio" name="entityType" value="recreation" onchange="setEntityType('recreation')"> 🌳 Organization (Recreation)</label>
+                    <!-- ⚠️ "League" above is a SUMMER LEAGUE — a club by another name, with
+                         its own venues and portal. A COMPETITION is the opposite animal: the
+                         Connecticut Cup owns no ground and no children. Two words, two
+                         entities; do not merge them. -->
+                    <label class="entity-type-btn" id="etBtn-competition"><input type="radio" name="entityType" value="competition" onchange="setEntityType('competition')"> 🏆 League / Cup (Competition)</label>
                     <label class="entity-type-btn" id="etBtn-league"><input type="radio" name="entityType" value="league" onchange="setEntityType('league')"> ⚽ Summer League</label>
                 </div>
             </div>
@@ -863,8 +881,14 @@
 
                     <div class="fg">
                         <label id="clubNameLabel">Club Name <span style="color:#e74c3c">*</span></label>
-                        <input type="text" id="clubName" placeholder="e.g. Glastonbury">
+                        <input type="text" id="clubName" placeholder="e.g. Glastonbury" list="compNameList" onblur="if(window._entityType==='competition') onCompNameBlur();">
+                        <datalist id="compNameList"></datalist>
                         <div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Short operational name — used in URLs and system filters.</div>
+                        <!-- ⚠️ For a competition this name is not cosmetic: Central Assign
+                             matches it character for character and rejects the import
+                             silently if it differs. Hence the datalist of names CA
+                             already accepts. -->
+                        <div id="compExistsNote" style="display:none; font-size:0.78rem; color:#0369a1; background:#f0f9ff; border:1px solid #bae6fd; border-radius:6px; padding:7px 10px; margin-top:8px;"></div>
                     </div>
 
                     <div class="fg">
@@ -976,7 +1000,7 @@
                 <!-- Workstation Access — which assignor ACCOUNT(s) this club is scoped to. Writes each checked
                      assignor's `assignors.clubs` (the field the workstation actually reads). Different from the
                      contact block above (that's just names/emails on the club record). -->
-                <div style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #00c853; border-radius:8px; padding:14px 16px; margin-top:16px;">
+                <div id="wizScopeCard" style="background:#f8f6f2; border:1px solid #e2d9ce; border-left:4px solid #00c853; border-radius:8px; padding:14px 16px; margin-top:16px;">
                     <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;">Workstation Access</div>
                     <div style="font-size:0.72rem; color:#aaa; margin-bottom:10px;">Which assignor(s) can see &amp; assign this club in their workstation. Check all that apply — co-assignors are fine (e.g. NECONN = Eric + Tod).</div>
                     <div id="wizScopeAssignors" style="display:flex; flex-direction:column; gap:6px;"><span style="color:#aaa; font-size:0.82rem;">Loading assignors…</span></div>
@@ -984,13 +1008,13 @@
 
                 <div class="wizard-nav">
                     <span></span>
-                    <button onclick="goToStep2()" id="nextStep2Btn" class="btn btn-primary" style="background:#09142a; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Next: Venues &amp; Fields →</button>
+                    <button onclick="wizStep1Next()" id="nextStep2Btn" class="btn btn-primary" style="background:#09142a; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Next: Venues &amp; Fields →</button>
                 </div>
             </div>
 
-            <!-- Step 2: Venues & Fields -->
+            <!-- Step 2: Venues & Fields (Member Clubs for a competition) -->
             <div class="step-panel" id="step-2">
-                <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #09142a;">
+                <div id="venuesCard" style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #09142a;">
                     <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">Venues &amp; Fields</h2>
                     <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Each venue needs at least one field. Central Assign IDs are added later via CA Import.</p>
 
@@ -1013,9 +1037,27 @@
                     <button class="btn-add-venue" onclick="addVenue()">+ Add Another Venue</button>
                 </div>
 
+                <!-- ⚠️ MEMBERSHIP IS WRITTEN ON THE CLUB, NOT ON THE COMPETITION.
+                     clubs.ca_league is already the one place a club's leagues live,
+                     and the checkboxes in Entity Status edit the same field one club
+                     at a time. This screen is the same truth approached from the
+                     other end — useful because a new cup has 16 clubs to add and
+                     nobody wants to open 16 club cards. Storing it on both sides
+                     would guarantee they disagree by spring. -->
+                <div id="compMembersCard" style="display:none; background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #d4a017;">
+                    <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Member Clubs</h2>
+                    <p style="font-size:0.84rem; color:#888; margin-bottom:6px;">Which clubs play in this competition. Ticking a club adds it to that club's league list — the same list on its Entity Status card.</p>
+                    <p style="font-size:0.8rem; color:#b45309; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:8px 11px; margin-bottom:16px;">This does <b>not</b> change any club's <b>primary</b> league. A cup tie is the exception in a club's season, never its default — set the primary on the club itself.</p>
+                    <div style="display:flex; gap:10px; margin-bottom:12px;">
+                        <button type="button" onclick="document.querySelectorAll('.comp-club').forEach(c=>c.checked=true)" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:6px 14px; border-radius:7px; font-family:inherit; font-size:0.8rem; font-weight:700; cursor:pointer;">Select all</button>
+                        <button type="button" onclick="document.querySelectorAll('.comp-club').forEach(c=>c.checked=false)" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:6px 14px; border-radius:7px; font-family:inherit; font-size:0.8rem; font-weight:700; cursor:pointer;">Clear</button>
+                    </div>
+                    <div id="compMemberList" style="max-height:340px; overflow-y:auto; border:1px solid #e2d9ce; border-radius:8px; padding:10px 14px;"></div>
+                </div>
+
                 <div class="wizard-nav">
                     <button onclick="goToStep(1)" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:10px 22px; border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">← Back</button>
-                    <button onclick="goToStep3()" class="btn btn-primary" style="background:#09142a; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Next: Review →</button>
+                    <button onclick="wizStep2Next()" class="btn btn-primary" style="background:#09142a; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Next: Review →</button>
                 </div>
             </div>
 
@@ -1054,9 +1096,9 @@
                 </div>
             </div>
 
-            <!-- Step 4: Referee Pay -->
+            <!-- Step 4: Referee Pay (Pay & Crew for a competition) -->
             <div class="step-panel" id="step-4">
-                <div style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #f59e0b;">
+                <div id="clubPayCard" style="background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #f59e0b;">
                     <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px;">💰 Referee Pay</h2>
                     <p style="font-size:0.84rem; color:#888; margin-bottom:20px;">Set pay rates per age group. Leave blank for unpaid slots.</p>
                     <div style="display:grid; grid-template-columns:1.4fr 0.8fr 0.8fr 0.8fr; gap:8px; margin-bottom:6px; padding:0 2px;">
@@ -1067,6 +1109,58 @@
                     </div>
                     <div id="wizPayRows" style="margin-bottom:14px;"></div>
                 </div>
+
+                <!-- ⚠️ THIS GRID IS NOT THE CLUB'S. A club pay grid is what a club
+                     chose to pay. This is what the competition MANDATES — Tod,
+                     2026-09-23: "it's mandatory that it's these amounts", and Eric
+                     "was able to adjust the league, but he can't adjust the fees."
+                     CA plugs these in automatically on import, which is exactly why
+                     they have to be right here BEFORE the export, and why nothing in
+                     a club's own grid may overrule them. -->
+                <div id="compPayCard" style="display:none; background:white; border-radius:12px; padding:28px; box-shadow:0 4px 15px rgba(0,0,0,0.07); border-top:4px solid #d4a017;">
+                    <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:1.3rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Pay &amp; Crew</h2>
+                    <p style="font-size:0.84rem; color:#888; margin-bottom:18px;">Fees the competition sets, by age band. These beat any club's own grid for a game in this competition.</p>
+
+                    <div style="display:grid; grid-template-columns:70px 70px 1fr 1fr 32px; gap:8px; margin-bottom:6px; padding:0 2px;">
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa;">U from</div>
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#aaa;">U to</div>
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#00c853;">Center $</div>
+                        <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#3498db;">AR $ <span style="color:#aaa; text-transform:none; letter-spacing:0;">— blank = no ARs at this age</span></div>
+                        <div></div>
+                    </div>
+                    <div id="compPayRows" style="margin-bottom:12px;"></div>
+                    <button type="button" onclick="addCompPayRow()" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:8px 18px; border-radius:8px; font-family:inherit; font-size:0.85rem; font-weight:700; cursor:pointer;">+ Add Age Band</button>
+
+                    <div style="display:flex; gap:22px; flex-wrap:wrap; align-items:flex-end; margin-top:22px; padding-top:18px; border-top:1px solid #e2d9ce;">
+                        <div class="fg" style="margin-bottom:0;">
+                            <label>Competition type</label>
+                            <select id="compKind">
+                                <option value="cup">Cup</option>
+                                <option value="district" selected>District league</option>
+                                <option value="state">State league</option>
+                                <option value="academy">Academy</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="fg" style="margin-bottom:0;">
+                            <!-- A cup tie is 3 officials at every age. That is a rule of
+                                 the competition, not of the club, so it belongs here and
+                                 overrides the club's crew_rules for these games. -->
+                            <label>Officials per game</label>
+                            <select id="compCrew">
+                                <option value="">— use the club's crew rules —</option>
+                                <option value="3">3 (centre + 2 ARs)</option>
+                                <option value="2">2</option>
+                                <option value="1">1 (centre only)</option>
+                            </select>
+                        </div>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:0.86rem; cursor:pointer; padding-bottom:9px;">
+                            <input type="checkbox" id="compPayLocked" checked style="width:16px; height:16px; cursor:pointer;">
+                            <span><b>Pay is set by the competition</b><br><span style="font-size:0.75rem; color:#888;">Central Assign plugs these in on import; no club may overrule them.</span></span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="wizard-nav">
                     <button onclick="goToStep(3)" style="background:#f0ece6; border:1px solid #e2d9ce; color:#09142a; padding:10px 22px; border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">← Back</button>
                     <button onclick="goToStep5crew()" class="btn btn-primary" style="background:#09142a; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Next: Crew Rules →</button>
@@ -1425,6 +1519,19 @@
         'USL Youth'
     ];
 
+    // ⚠️ THE CONSTANT IS NOW THE FALLBACK, NOT THE SOURCE.
+    // sql/leagues.sql made a competition a real row, so a new one created in
+    // the wizard has to appear in these checkboxes without anybody editing
+    // an array in three files. CA_LEAGUES stays as the answer when the table
+    // is unreachable or has not been migrated yet — the list must never come
+    // back empty, because an empty list silently means "this club plays in no
+    // league" and every game it exports goes to CA with a blank League column.
+    // Populated by loadLeagueList(); until then the constant answers.
+    function leagueNames() {
+        const rows = (_leagueRows || []).filter(l => l.active !== false).map(l => l.name);
+        return rows.length ? rows : CA_LEAGUES;
+    }
+
     // clubs.ca_league is TEXT and holds a JSON array — a club can play in more than one
     // league (Tod, 2026-08-29), so a single value cannot represent it. Tolerates a bare
     // string from before this existed.
@@ -1474,7 +1581,7 @@
                         <span style="width:16px; text-align:center;" title="The league pre-selected when this club creates a comp game">★</span>
                         <span>League</span>
                     </div>
-                    ${CA_LEAGUES.map(lg => `
+                    ${leagueNames().map(lg => `
                         <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; cursor:pointer;">
                             <input type="checkbox" data-lpick="${c.id}" value="${lg.replace(/"/g,'&quot;')}" ${sel.includes(lg) ? 'checked' : ''} style="width:16px;height:16px;accent-color:#00c853;cursor:pointer;">
                             <input type="radio" name="lprim-${c.id}" data-lprim="${c.id}" value="${lg.replace(/"/g,'&quot;')}" ${prim === lg ? 'checked' : ''} title="Primary — pre-selected when this club creates a comp game" style="width:16px;height:16px;accent-color:#d4a017;cursor:pointer;">
@@ -1617,7 +1724,84 @@
         }
     }
 
+    // Competitions that mandate their own fees, and who plays in them.
+    //
+    // Read-only on purpose. These numbers come from CJSA and CA writes them
+    // itself on import; nobody at a club gets a vote, so there is no edit
+    // button here to suggest otherwise. Changing them is a deliberate trip
+    // through the wizard's League / Cup type, not something done in passing
+    // while looking at a club.
+    //
+    // Membership is DERIVED from clubs.ca_league — the checkboxes directly
+    // above — so it cannot drift out of step with them.
+    async function loadLeagueRates() {
+        const wrap = document.getElementById('leagueRatesWrap');
+        if (!wrap) return;
+        try {
+            const [rateRes, clubRes, lgRes] = await Promise.all([
+                supabaseClient.client.from('league_pay_rates').select('*').order('league').order('age_min'),
+                supabaseClient.client.from('clubs').select('name, "Club Name", ca_league').not('ca_league', 'is', null),
+                supabaseClient.client.from('leagues').select('*'),
+            ]);
+            const rates = rateRes.data || [];
+            if (!rates.length) { wrap.innerHTML = ''; return; }
+            const meta = {};
+            (lgRes.data || []).forEach(l => { meta[l.name] = l; });
+
+            const byLeague = {};
+            rates.forEach(r => (byLeague[r.league] = byLeague[r.league] || []).push(r));
+
+            const membersOf = lg => (clubRes.data || [])
+                .filter(c => parseClubLeagues(c.ca_league).some(x => x.toLowerCase() === lg.toLowerCase()))
+                .map(c => c['Club Name'] || c.name).filter(Boolean).sort();
+
+            const band = r => r.age_min === r.age_max ? `U${r.age_min}` : `U${r.age_min}–U${r.age_max}`;
+
+            wrap.innerHTML = `
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#09142a; margin-bottom:6px;">Competitions that set their own pay</div>
+                <p style="font-size:0.82rem; color:#888; margin:0 0 14px;">Central Assign plugs these fees in automatically when a game is uploaded, so they have to be right before the export — and no club can overrule them. Edit through the wizard's <b>League / Cup</b> type.</p>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                ${Object.entries(byLeague).map(([lg, rows]) => {
+                    const mem = membersOf(lg), m = meta[lg] || {};
+                    return `<div style="border:1px solid #e2d9ce; border-left:5px solid #d4a017; border-radius:10px; background:#fffdf6; padding:14px 16px;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                            <span style="font-size:1.1rem;">🏆</span>
+                            <b style="font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; letter-spacing:.5px; text-transform:uppercase;">${lg}</b>
+                            ${m.pay_locked !== false ? '<span style="font-size:0.74rem; color:#8a6a2a; background:#fff3cd; border:1px solid #f5c518; border-radius:10px; padding:1px 9px; font-weight:700;">Pay set by the competition</span>' : ''}
+                            ${m.crew_size ? `<span style="font-size:0.74rem; color:#3730a3; background:#e0e7ff; border:1px solid #a5b4fc; border-radius:10px; padding:1px 9px; font-weight:700;">${m.crew_size} officials</span>` : ''}
+                        </div>
+                        <table style="border-collapse:collapse; font-size:0.86rem; margin-bottom:10px;">
+                            <thead><tr style="color:#8a8a8a; font-size:0.7rem; text-transform:uppercase; letter-spacing:.6px;">
+                                <th style="text-align:left; padding:3px 24px 3px 0;">Age</th>
+                                <th style="text-align:left; padding:3px 24px 3px 0;">Center</th>
+                                <th style="text-align:left; padding:3px 0;">AR</th>
+                            </tr></thead>
+                            <tbody>${rows.map(r => `<tr>
+                                <td style="padding:3px 24px 3px 0; font-weight:700;">${band(r)}</td>
+                                <td style="padding:3px 24px 3px 0;">$${r.center}</td>
+                                <td style="padding:3px 0;">${r.ar == null ? '<span style="color:#888;">no ARs</span>' : '$' + r.ar}</td>
+                            </tr>`).join('')}</tbody>
+                        </table>
+                        <div style="font-size:0.78rem; color:#6b7280;">
+                            <b>Clubs in it:</b> ${mem.length ? mem.join(' · ') : '<span style="color:#b45309;">none yet — tick it on a club above</span>'}
+                        </div>
+                    </div>`;
+                }).join('')}
+                </div>`;
+        } catch (e) {
+            // Never take Entity Status down over a display extra.
+            console.warn('league rate cards unavailable', e);
+            wrap.innerHTML = '';
+        }
+    }
+
     async function loadClubStatus() {
+        try { loadLeagueRates(); } catch (e) { console.warn(e); }
+        // Awaited, not fired-and-forgotten: the league checkboxes are rendered
+        // further down this function and would otherwise paint from the
+        // constant on the first open and the table on every one after, which
+        // is the kind of difference nobody notices until it matters.
+        try { await loadLeagueList(); } catch (e) { console.warn(e); }
         const wrap = document.getElementById('clubStatusList');
         wrap.innerHTML = '<p style="color:#aaa; font-size:0.85rem;">Checking completeness…</p>';
         try {
@@ -1841,6 +2025,12 @@
             .forEach(el => {
                 snap.simple[el.id] = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
             });
+        // Pay bands and member ticks are built at runtime too. An existing
+        // competition reloads both from the database, but a brand-new one has
+        // them nowhere else — losing a draft's typed rates would be the exact
+        // silent data loss drafts exist to prevent.
+        snap.compBands = collectCompPayBands();
+        snap.compClubs = [...document.querySelectorAll('.comp-club:checked')].map(cb => cb.value);
         // Venue blocks are built at runtime, so they are captured structurally:
         // the hidden source-of-truth inputs the review and create steps read, plus
         // each field row.
@@ -1898,6 +2088,10 @@
         if (!d) return;
         if (d.entityType) window._entityType = d.entityType;
         if (d.clubTypeMode) _clubTypeMode = d.clubTypeMode;
+        // ⚠️ Reapply the chrome, or a restored competition draft comes back
+        // wearing the club wizard's face — Venues where Member Clubs belongs,
+        // and steps 3, 5 and 6 visible that it does not have.
+        if (d.entityType) { try { applyEntityChrome(d.entityType); } catch (e) { console.warn(e); } }
 
         Object.entries(d.simple || {}).forEach(([id, val]) => {
             const el = document.getElementById(id);
@@ -1948,6 +2142,22 @@
             });
         }
 
+        if (window._entityType === 'competition') {
+            const pWrap = document.getElementById('compPayRows');
+            if (pWrap && (d.compBands || []).length) {
+                pWrap.innerHTML = '';
+                d.compBands.forEach(b => addCompPayRow(b));
+            }
+            // Member ticks are restored after the club list renders, since the
+            // checkboxes do not exist until then.
+            if ((d.compClubs || []).length) {
+                renderCompMembers().then(() => {
+                    const want = new Set(d.compClubs);
+                    document.querySelectorAll('.comp-club').forEach(cb => { cb.checked = want.has(cb.value); });
+                });
+            }
+        }
+
         goToStep(d.step || 1);
     }
 
@@ -1973,8 +2183,15 @@
         document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
         document.getElementById('step-' + n).classList.add('active');
         const isTourney = window._entityType === 'tournament';
-        const isRef     = !isTourney && _clubTypeMode === 'reference';
-        const visSteps  = isRef ? [1,7] : isTourney ? [1,2,3,7] : [1,2,3,4,5,6,7];
+        const isComp    = window._entityType === 'competition';
+        const isRef     = !isTourney && !isComp && _clubTypeMode === 'reference';
+        // A competition skips Age Groups (its pay bands already say which ages
+        // it runs), Crew Rules (one league-wide number, asked on the pay step)
+        // and Billing (we bill clubs, never competitions).
+        const visSteps  = isComp ? [1,2,4,7]
+                        : isRef  ? [1,7]
+                        : isTourney ? [1,2,3,7]
+                        : [1,2,3,4,5,6,7];
         [1,2,3,4,5,6,7].forEach(i => {
             const ind = document.getElementById('step-ind-' + i);
             if (!ind) return;
@@ -1996,7 +2213,158 @@
         if (!skipScroll) document.getElementById('wizardContent').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // One router per step rather than a type test buried in each handler —
+    // the next entity type to arrive edits one line here.
+    function wizStep1Next() {
+        if (window._entityType === 'competition') { goToStep2comp(); return; }
+        goToStep2();
+    }
+    function wizStep2Next() {
+        if (window._entityType === 'competition') { goToStep4comp(); return; }
+        goToStep3();
+    }
+
+    function setStepLabel(n, text) {
+        const ind = document.getElementById('step-ind-' + n);
+        const sp  = ind && ind.querySelector('span');
+        if (sp) sp.textContent = text;
+    }
+
+    // ── Competition wizard ───────────────────────────────────────────────
+    // ⚠️ DEFENSIVE ON PURPOSE. This reads a table that may not exist yet —
+    // sql/leagues.sql is run by hand. Naming a missing relation makes
+    // PostgREST reject the request, and twice this week that took a whole
+    // page down with it. So a failure here falls back to the hardcoded
+    // CA_LEAGUES and says so, rather than breaking manage-clubs for everyone.
+    let _leagueRows = null;
+    async function loadLeagueList() {
+        if (_leagueRows) return _leagueRows;
+        try {
+            const { data, error } = await supabaseClient.client
+                .from('leagues').select('*').order('name');
+            if (error) throw new Error(error.message);
+            _leagueRows = data || [];
+        } catch (e) {
+            console.warn('leagues table unavailable — falling back to CA_LEAGUES', e);
+            _leagueRows = CA_LEAGUES.map(n => ({ name: n, _fallback: true }));
+        }
+        const dl = document.getElementById('compNameList');
+        if (dl) dl.innerHTML = _leagueRows.map(l => `<option value="${l.name}"></option>`).join('');
+        return _leagueRows;
+    }
+
+    // Typing the name of a competition that already exists loads it rather
+    // than colliding on it. The 14 CA accepts are seeded, so "add CT Cup"
+    // is in practice always an edit — and an edit that silently failed on a
+    // unique constraint would be the worst possible answer.
+    async function onCompNameBlur() {
+        const name = document.getElementById('clubName').value.trim();
+        const rows = await loadLeagueList();
+        const hit  = rows.find(l => l.name.toLowerCase() === name.toLowerCase());
+        const note = document.getElementById('compExistsNote');
+        if (!hit) {
+            if (note) { note.style.display = 'none'; }
+            return;
+        }
+        if (note) {
+            note.style.display = '';
+            note.innerHTML = `<b>${hit.name}</b> already exists — this will update it, not create a second one.`;
+        }
+        if (hit.kind)          document.getElementById('compKind').value = hit.kind;
+        if (hit.crew_size)     document.getElementById('compCrew').value = String(hit.crew_size);
+        document.getElementById('compPayLocked').checked = !!hit.pay_locked;
+        if (hit.director_name) {
+            const parts = String(hit.director_name).split(' ');
+            document.getElementById('presFirst').value = parts.shift() || '';
+            document.getElementById('presLast').value  = parts.join(' ');
+        }
+        await loadCompPayBands(hit.name);
+    }
+
+    // Existing rate card for this competition, so Tod sees what it already
+    // pays instead of retyping numbers Eric confirmed.
+    async function loadCompPayBands(league) {
+        let rows = [];
+        try {
+            const { data } = await supabaseClient.client
+                .from('league_pay_rates').select('*').eq('league', league).order('age_min');
+            rows = data || [];
+        } catch (e) { console.warn('league_pay_rates read failed', e); }
+        document.getElementById('compPayRows').innerHTML = '';
+        if (!rows.length) { addCompPayRow(); return; }
+        rows.forEach(r => addCompPayRow(r));
+    }
+
+    function addCompPayRow(r) {
+        const wrap = document.getElementById('compPayRows');
+        const div  = document.createElement('div');
+        div.className = 'comp-pay-row';
+        div.style.cssText = 'display:grid; grid-template-columns:70px 70px 1fr 1fr 32px; gap:8px; align-items:center; margin-bottom:8px;';
+        div.innerHTML = `
+            <input type="number" class="cp-min" min="4" max="19" placeholder="11" value="${r ? r.age_min : ''}">
+            <input type="number" class="cp-max" min="4" max="19" placeholder="12" value="${r ? r.age_max : ''}">
+            <input type="number" class="cp-center" step="1" placeholder="Center $" value="${r && r.center != null ? r.center : ''}">
+            <input type="number" class="cp-ar" step="1" placeholder="AR $" value="${r && r.ar != null ? r.ar : ''}">
+            <button type="button" onclick="this.parentNode.remove()" style="background:none; border:none; color:#c0392b; font-size:1.1rem; cursor:pointer;" title="Remove band">×</button>`;
+        wrap.appendChild(div);
+    }
+
+    // ⚠️ A BAND WITH NO AR IS NOT A BAND WITH AR 0. league_pay_rates.ar is
+    // nullable precisely so a competition can say "this age uses no ARs".
+    // Coercing blank to 0 would tell a referee they are working for nothing.
+    function collectCompPayBands() {
+        const out = [];
+        document.querySelectorAll('#compPayRows .comp-pay-row').forEach(row => {
+            const v = sel => row.querySelector(sel).value.trim();
+            const min = parseInt(v('.cp-min'), 10), max = parseInt(v('.cp-max'), 10);
+            const center = v('.cp-center'), ar = v('.cp-ar');
+            if (!Number.isFinite(min) || !Number.isFinite(max) || center === '') return;
+            out.push({ age_min: min, age_max: max, center: Number(center), ar: ar === '' ? null : Number(ar) });
+        });
+        return out;
+    }
+
+    // Member clubs. Pre-ticked from clubs.ca_league, which stays the one
+    // place membership is recorded — this screen only edits it in bulk.
+    async function renderCompMembers() {
+        const box  = document.getElementById('compMemberList');
+        const name = document.getElementById('clubName').value.trim();
+        box.innerHTML = '<span style="color:#aaa; font-size:0.85rem;">Loading clubs…</span>';
+        let clubs = [];
+        try {
+            const { data } = await supabaseClient.client
+                .from('clubs').select('id, name, "Club Name", ca_league, ca_league_primary').order('name');
+            clubs = data || [];
+        } catch (e) {
+            box.innerHTML = `<span style="color:#b45309; font-size:0.85rem;">Could not load clubs: ${e.message}</span>`;
+            return;
+        }
+        _compClubs = clubs;
+        box.innerHTML = clubs.map(c => {
+            const label = c['Club Name'] || c.name || `#${c.id}`;
+            const inIt  = name && parseClubLeagues(c.ca_league).some(l => l.toLowerCase() === name.toLowerCase());
+            const prim  = c.ca_league_primary ? ` <span style="color:#aaa; font-size:0.72rem;">★ ${c.ca_league_primary}</span>` : '';
+            return `<label style="display:flex; align-items:center; gap:8px; padding:3px 0; font-size:0.86rem; cursor:pointer;">
+                <input type="checkbox" class="comp-club" value="${c.id}" ${inIt ? 'checked' : ''}>
+                <span><b>${label}</b>${prim}</span></label>`;
+        }).join('') || '<span style="color:#aaa; font-size:0.85rem;">No clubs found.</span>';
+    }
+    let _compClubs = [];
+
+    function goToStep2comp() {
+        const name = document.getElementById('clubName').value.trim();
+        if (!name) { alert('Give the competition a name first — it has to match Central Assign exactly.'); return; }
+        renderCompMembers();
+        goToStep(2);
+    }
+    function goToStep4comp() {
+        const name = document.getElementById('clubName').value.trim();
+        if (!document.querySelectorAll('#compPayRows .comp-pay-row').length) loadCompPayBands(name);
+        goToStep(4);
+    }
+
     function goToStep3Next() {
+        if (window._entityType === 'competition') { goToStep4comp(); return; }
         if (window._entityType === 'tournament' || _clubTypeMode === 'reference') {
             goToStep7review(); return;
         }
@@ -2008,6 +2376,7 @@
     }
 
     function goToStep5crew() {
+        if (window._entityType === 'competition') { buildReview(); goToStep(7); return; }
         if (_completeSteps) { enterStep(nextMissingStep(4) || 7); return; }
         const ags = collectAgeGroups();
         renderWizCrewRows(ags);
@@ -2055,7 +2424,49 @@
         goToStep(7);
     }
 
+    function buildCompReview() {
+        const name   = document.getElementById('clubName').value.trim();
+        const kind   = document.getElementById('compKind').value;
+        const crew   = document.getElementById('compCrew').value;
+        const locked = document.getElementById('compPayLocked').checked;
+        const bands  = collectCompPayBands();
+        const picked = [...document.querySelectorAll('.comp-club:checked')].map(cb => {
+            const c = _compClubs.find(x => String(x.id) === cb.value);
+            return c ? (c['Club Name'] || c.name) : cb.value;
+        });
+        const existing = (_leagueRows || []).find(l => l.name.toLowerCase() === name.toLowerCase());
+        const band = b => b.age_min === b.age_max ? `U${b.age_min}` : `U${b.age_min}–U${b.age_max}`;
+
+        document.getElementById('reviewContent').innerHTML = `
+            <div style="background:#fffdf6; border:1px solid #e2d9ce; border-left:5px solid #d4a017; border-radius:10px; padding:18px 20px; margin-bottom:16px;">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.2rem; font-weight:800; letter-spacing:.6px; text-transform:uppercase; margin-bottom:4px;">🏆 ${name || '<span style="color:#c0392b;">No name</span>'}</div>
+                <div style="font-size:0.82rem; color:#8a6a2a;">${kind}${crew ? ` · ${crew} officials per game` : ' · crew from each club\u2019s rules'}${locked ? ' · pay locked by the competition' : ''}</div>
+                ${existing ? `<div style="margin-top:8px; font-size:0.8rem; color:#0369a1;">Updating the existing record — no duplicate will be created.</div>` : ''}
+            </div>
+
+            <div style="background:#fff; border:1px solid #e2d9ce; border-radius:10px; padding:16px 20px; margin-bottom:16px;">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; letter-spacing:.6px; text-transform:uppercase; margin-bottom:10px;">Referee pay</div>
+                ${bands.length ? `<table style="border-collapse:collapse; font-size:0.87rem;">
+                    <thead><tr style="color:#aaa; font-size:0.68rem; text-transform:uppercase; letter-spacing:.6px;">
+                        <th style="text-align:left; padding:3px 24px 3px 0;">Age</th>
+                        <th style="text-align:left; padding:3px 24px 3px 0;">Center</th>
+                        <th style="text-align:left; padding:3px 0;">AR</th></tr></thead>
+                    <tbody>${bands.map(b => `<tr>
+                        <td style="padding:3px 24px 3px 0; font-weight:700;">${band(b)}</td>
+                        <td style="padding:3px 24px 3px 0;">$${b.center}</td>
+                        <td style="padding:3px 0;">${b.ar == null ? '<span style="color:#888;">no ARs</span>' : '$' + b.ar}</td>
+                    </tr>`).join('')}</tbody></table>`
+                  : '<div style="font-size:0.85rem; color:#b45309;">No pay bands set — this competition will fall back to each club\u2019s own grid.</div>'}
+            </div>
+
+            <div style="background:#fff; border:1px solid #e2d9ce; border-radius:10px; padding:16px 20px;">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.95rem; font-weight:800; letter-spacing:.6px; text-transform:uppercase; margin-bottom:8px;">Member clubs <span style="color:#aaa; font-weight:600;">(${picked.length})</span></div>
+                <div style="font-size:0.86rem; color:#444;">${picked.length ? picked.join(' · ') : '<span style="color:#b45309;">None ticked — no club will be able to pick this competition on a game.</span>'}</div>
+            </div>`;
+    }
+
     function backFromReview() {
+        if (window._entityType === 'competition') { goToStep(4); return; }
         if (window._entityType === 'tournament') {
             goToStep(3);
         } else if (_clubTypeMode === 'reference') {
@@ -2340,23 +2751,46 @@
         club:        { name: 'Club Name',         pres: 'Club President',         admin: 'Organization Admin — Scheduling Contact', adminDesc: "This person logs into the club's scheduling page to submit games.",        createBtn: 'Create Club',         dates: false },
         tournament:  { name: 'Tournament Name',   pres: 'Tournament Director',    admin: 'Tournament Admin — Scheduling Contact',  adminDesc: 'This person logs into the tournament portal to submit games.',           createBtn: 'Create Tournament',   dates: true  },
         recreation:  { name: 'Organization Name', pres: 'Organization Director',  admin: 'Organization Admin — Scheduling Contact', adminDesc: "This person logs into the organization's scheduling page to submit games.", createBtn: 'Create Organization', dates: false },
+        // A competition has a director and an assignor but no portal login —
+        // nobody submits games AS the Connecticut Cup. The clubs do that.
+        competition: { name: 'Competition Name',  pres: 'Competition Director',   admin: 'Competition Contact',                    adminDesc: 'Who to ring about this competition. There is no portal login — clubs submit their own cup ties.', dates: false, createBtn: 'Create Competition' },
         league:      { name: 'League Name',       pres: 'League Director',        admin: 'League Admin — Scheduling Contact',      adminDesc: "This person logs into the league's scheduling page to submit games.",       createBtn: 'Create League',       dates: false },
     };
 
-    function setEntityType(type) {
-        window._entityType = type;
+    // The visual half of choosing a type — labels, which cards show, which
+    // steps exist. Split out because restoring a draft has to reapply all of
+    // it WITHOUT the resets in setEntityType: re-running that would wipe the
+    // assignors and age groups the draft had just put back.
+    function applyEntityChrome(type) {
         const cfg = _entityConfig[type] || _entityConfig.club;
 
         // Update selector button styles
-        ['club','tournament','recreation','league'].forEach(t => {
+        ['club','tournament','recreation','league','competition'].forEach(t => {
             const btn = document.getElementById('etBtn-' + t);
             if (btn) btn.classList.toggle('active', t === type);
         });
 
         // Show/hide Managed/Reference toggle (tournaments are always managed)
         const toggle = document.getElementById('clubTypeToggle');
-        if (toggle) toggle.style.display = (type === 'tournament') ? 'none' : '';
+        if (toggle) toggle.style.display = (type === 'tournament' || type === 'competition') ? 'none' : '';
         if (type === 'tournament') setClubType('managed');
+
+        // ── Competition: swap the two steps that mean something different ──
+        // Step 2 is Venues for everyone else. A competition has none — Tod,
+        // 2026-09-22: "it's not going to have its own venues, for instance,
+        // because they're going to be all over the place." What it DOES have
+        // is member clubs, which is the same question ("who is in this?")
+        // asked of a different noun, so it takes the same slot.
+        const isComp = (type === 'competition');
+        const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+        show('venuesCard',      !isComp);
+        show('compMembersCard',  isComp);
+        show('clubPayCard',     !isComp);
+        show('compPayCard',      isComp);
+        show('wizScopeCard',    !isComp);   // a competition is not scoped in anyone's workstation
+        setStepLabel(2, isComp ? 'Member Clubs' : 'Venues & Fields');
+        setStepLabel(4, isComp ? 'Pay & Crew'   : 'Referee Pay');
+        if (isComp) { loadLeagueList(); }
 
         // Update field labels
         const nameLabel = document.getElementById('clubNameLabel');
@@ -2376,6 +2810,11 @@
         const createBtn = document.getElementById('createBtn');
         if (createBtn) createBtn.textContent = cfg.createBtn;
 
+    }
+
+    function setEntityType(type) {
+        window._entityType = type;
+        applyEntityChrome(type);
         renderAgeGroupHeaders();
         renderWizAssignors([]);
         loadWizScopeAssignors('');   // Workstation Access picker — none pre-checked for a brand-new club
@@ -2815,6 +3254,7 @@
 
     // ── Review Builder ────────────────────────────────────────────────────────
     function buildReview() {
+        if (window._entityType === 'competition') { buildCompReview(); return; }
         const clubName   = document.getElementById('clubName').value.trim();
         const presNA     = document.getElementById('presNA')?.checked;
         const presFirst  = presNA ? '' : document.getElementById('presFirst').value.trim();
@@ -3069,6 +3509,107 @@
     }
 
     // ── Create Club ───────────────────────────────────────────────────────────
+    async function saveCompetition(name, log) {
+        if (!name) throw new Error('The competition needs a name.');
+        const kind   = document.getElementById('compKind').value;
+        const crewV  = document.getElementById('compCrew').value;
+        const locked = document.getElementById('compPayLocked').checked;
+        const bands  = collectCompPayBands();
+
+        // ⚠️ THE NAME IS THE KEY, AND CA IS THE ONE WHO CHOSE IT.
+        // leagues.name is what every game's League column has to read, so a
+        // rename is not cosmetic — league_pay_rates carries an ON UPDATE
+        // CASCADE for exactly that reason. Upsert on the name means "add CT
+        // Cup" and "fix CT Cup" are the same gesture, which is what they are.
+        const presNA = document.getElementById('presNA')?.checked;
+        const dir    = presNA ? null : [document.getElementById('presFirst').value.trim(),
+                                        document.getElementById('presLast').value.trim()].filter(Boolean).join(' ') || null;
+        const assignors = collectWizAssignors();
+        const lead = assignors.find(a => a.is_lead) || assignors[0] || {};
+
+        const row = {
+            name, kind, pay_locked: locked,
+            crew_size: crewV ? parseInt(crewV, 10) : null,
+            display_name:   document.getElementById('displayName').value.trim() || null,
+            director_name:  dir,
+            director_email: presNA ? null : (document.getElementById('presEmail').value.trim() || null),
+            director_phone: presNA ? null : (document.getElementById('presPhone').value.trim() || null),
+            admin_name:     [document.getElementById('adminFirst').value.trim(),
+                             document.getElementById('adminLast').value.trim()].filter(Boolean).join(' ') || null,
+            admin_email:    document.getElementById('adminEmail').value.trim() || null,
+            admin_phone:    document.getElementById('adminPhone').value.trim() || null,
+            assignor:       lead.name  || null,
+            assignor_email: lead.email || null,
+            assignor_phone: lead.phone || null,
+            assignors_json: assignors.length ? assignors : null,
+            updated_at:     new Date().toISOString(),
+        };
+
+        log('Saving competition record…', 'info');
+        const { error: lErr } = await supabaseClient.client
+            .from('leagues').upsert(row, { onConflict: 'name' });
+        if (lErr) {
+            if (/relation .*leagues.* does not exist|Could not find the table/i.test(lErr.message))
+                throw new Error('The leagues table does not exist yet — run sql/leagues.sql first.');
+            throw new Error(lErr.message);
+        }
+        log(`✅ ${name} saved.`, 'ok');
+
+        // Rate card: replace wholesale. A band that was deleted on screen has
+        // to disappear from the table, and matching them up one by one to work
+        // out which is which is more ways to be wrong than starting clean.
+        // The league row is written FIRST because league_pay_rates carries a
+        // foreign key to it.
+        const { error: dErr } = await supabaseClient.client
+            .from('league_pay_rates').delete().eq('league', name);
+        if (dErr) throw new Error('Clearing old rates: ' + dErr.message);
+        if (bands.length) {
+            const { error: rErr } = await supabaseClient.client
+                .from('league_pay_rates')
+                .insert(bands.map(b => ({ ...b, league: name, note: `manage-clubs wizard, ${new Date().toISOString().slice(0,10)}` })));
+            if (rErr) throw new Error('Saving rates: ' + rErr.message);
+            log(`💵 ${bands.length} pay band(s) saved.`, 'ok');
+        } else {
+            log('No pay bands set — clubs will use their own grids.', 'info');
+        }
+
+        // ── Membership ──────────────────────────────────────────────────────
+        // ⚠️ ONLY THE CLUBS THAT ACTUALLY CHANGED. A blanket write over every
+        // club would touch rows nobody asked about and bury the real edits.
+        // The before-image is stashed in localStorage first: this is a bulk
+        // update to clubs, and the rule on those is a backup, no exceptions.
+        const wanted = new Set([...document.querySelectorAll('.comp-club:checked')].map(cb => cb.value));
+        const changes = [];
+        _compClubs.forEach(c => {
+            const cur  = parseClubLeagues(c.ca_league);
+            const has  = cur.some(l => l.toLowerCase() === name.toLowerCase());
+            const want = wanted.has(String(c.id));
+            if (has === want) return;
+            const next = want ? cur.concat([name])
+                              : cur.filter(l => l.toLowerCase() !== name.toLowerCase());
+            changes.push({ id: c.id, label: c['Club Name'] || c.name, before: c.ca_league, after: JSON.stringify(next), added: want });
+        });
+
+        if (!changes.length) {
+            log('Membership unchanged.', 'info');
+        } else {
+            try {
+                localStorage.setItem('rt_competition_membership_backup_' + Date.now(),
+                    JSON.stringify({ league: name, at: new Date().toISOString(), changes }));
+            } catch {}
+            for (const ch of changes) {
+                const { error } = await supabaseClient.client
+                    .from('clubs').update({ ca_league: ch.after }).eq('id', ch.id);
+                if (error) { log(`⚠️ ${ch.label}: ${error.message}`, 'warn'); continue; }
+                log(`${ch.added ? '➕' : '➖'} ${ch.label}`, 'ok');
+            }
+            log(`🏟 ${changes.length} club league list(s) updated.`, 'ok');
+        }
+
+        log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        log(`✅ ${name} is live. Its pay now shows in Entity Status.`, 'ok');
+    }
+
     async function createClub() {
         const createBtn = document.getElementById('createBtn');
         const backBtn   = document.getElementById('backBtn2');
@@ -3086,6 +3627,18 @@
 
         try {
             const clubName   = document.getElementById('clubName').value.trim();
+
+            // ── Competition path — writes leagues + league_pay_rates, and the
+            //    membership onto each club. NO club row is created. ──────────
+            if (window._entityType === 'competition') {
+                await saveCompetition(clubName, log);
+                createBtn.textContent = '✓ Saved';
+                createBtn.style.background = '#00c853';
+                document.getElementById('backBtn2').style.display = 'none';
+                await loadClubsForRemove();
+                try { await loadLeagueRates(); } catch {}
+                return;
+            }
 
             // ── Tournament path — writes to tournaments table, not Airtable ──
             if (window._entityType === 'tournament') {
