@@ -4624,8 +4624,28 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 // marked paid. sql/game-incidents-pay-view.sql
                 supabaseClient.client.from('game_incident_slots').select('game_id, position, kind')
             ]);
+            // ⚠️ ONLY ATTENDANCE AFFECTS PAY. A no-show or a late scratch is a
+            // statement that somebody did not work, so $0 is right. A
+            // ca_rejected is a statement about OFFERING — it exists so the ref
+            // pane can warn you before handing a referee a game they already
+            // turned down — and it has no business touching money.
+            //
+            // It was reaching money anyway, because this map took any kind it
+            // found on a slot and applied it to whoever occupies that slot now.
+            // A slot that once went red and was then filled again carried the
+            // old decline forward onto the new occupant. On 2026-09-24 that had
+            // Harrison Durand — assigned, amber, working three U10 games on the
+            // Saturday — showing $0 on all three in Griswold's portal, and
+            // Garrett Chretien the same at East Haddam.
+            //
+            // Tod: "just because he hasnt accepted in CA doesnt mean he is
+            // 'scratched'." Amber means assigned and waiting on Central Assign.
+            // It must never read as scratched, and it must never cost a referee
+            // their fee.
+            const PAY_AFFECTING = new Set(['no_show', 'late_scratch']);
             const _incidentSlots = {};   // `${game_id}|CR` → kind
             (incidentResult?.data || []).forEach(i => {
+                if (!PAY_AFFECTING.has(i.kind)) return;
                 const pos = i.position === 'Center Referee' ? 'CR' : i.position === 'AR 1' ? 'AR1' : 'AR2';
                 _incidentSlots[`${i.game_id}|${pos}`] = i.kind;
             });
@@ -4971,7 +4991,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                                 <td>${idx === 0 ? age : ''}</td>
                                 <td>${refNameCell}</td>
                                 <td>${posBadge}</td>
-                                <td>${incident ? `<span style="color:#b91c1c; font-size:0.82rem; font-weight:800; white-space:nowrap;" title="${incident === 'no_show' ? 'Did not show' : 'Scratched late'}">$0 <span style="font-weight:600;">· ${incident === 'no_show' ? 'no show' : 'late scratch'}</span></span>` : gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>`}</td>
+                                <td>${incident ? `<span style="color:#b91c1c; font-size:0.82rem; font-weight:800; white-space:nowrap;" title="${incident === 'no_show' ? 'Did not show' : 'Bailed inside 24 hours'}">$0 <span style="font-weight:600;">· ${incident === 'no_show' ? 'no show' : 'late scratch'}</span></span>` : gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>`}</td>
                                 <td>${venmoHtml}</td>
                                 <td style="text-align:center;">${cbHtml}</td>
                             </tr>
