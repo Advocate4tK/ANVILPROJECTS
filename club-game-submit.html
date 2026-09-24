@@ -4916,13 +4916,30 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                         const paidAt   = paidAtById[r.id] ? new Date(paidAtById[r.id]).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
                         const rowBg    = gameOutsourced ? 'background:#f3f4f6;' : isPaid ? 'background:#bbf7d0;' : `background:${_gameColors[gameIdx % _gameColors.length]};`;
 
-                        const slots = [
+                        // ⚠️ "Filled" IS A MARKER, NOT A PERSON. It is set in the
+                        // workstation to stop the ref-openings page advertising a slot
+                        // somebody else is covering. Tod, 2026-09-24: "filled is 0 —
+                        // it's only a marker so that the referee openings page wont
+                        // display an opening." EMPTY was already filtered here; FILLED
+                        // was not, so each chip rendered as a payable row with a Venmo
+                        // column and nobody's name against it — $100 across three
+                        // Griswold U10 games for the Saturday of 26 Sep.
+                        //
+                        // ⚠️ BUT IT STILL COUNTS AS A BODY ON THE PITCH. isSolo asks
+                        // "was this referee alone?", and a covered AR means they were
+                        // not. Dropping the chips before that test would hand the
+                        // centre the solo bump — at U12 that is $80 instead of $50 for
+                        // a game that had a full crew. So solo is judged on every slot
+                        // that is not blank, and only then are the markers removed
+                        // from what gets billed.
+                        const _manned = [
                             { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
                             { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
                             { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
                         ].filter(s => s.name && s.name.toUpperCase() !== 'EMPTY');
 
-                        const isSolo = slots.length === 1 && slots[0].pos === 'CR';
+                        const isSolo = _manned.length === 1 && _manned[0].pos === 'CR';
+                        const slots  = _manned.filter(s => s.name.toUpperCase() !== 'FILLED');
                         let gameTotal = 0;
                         slots.forEach((slot, idx) => {
                             const rf        = resolveRef(slot.name);
@@ -5083,12 +5100,15 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                     const date = f['Date'] || '';
                     const dateDisplay = date ? new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '—';
                     const age = f['Age Group'] || '';
-                    const slots = [
+                    // Same rule as the table above: a "Filled" marker keeps the
+                    // centre off the solo rate, then drops out of what is billed.
+                    const _manned = [
                         { name: (f['Center Referee'] || '').trim(), pos: 'CR',  rateKey: 'CR' },
                         { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
                         { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
                     ].filter(s => s.name && s.name.toUpperCase() !== 'EMPTY');
-                    const isSolo = slots.length === 1 && slots[0].pos === 'CR';
+                    const isSolo = _manned.length === 1 && _manned[0].pos === 'CR';
+                    const slots  = _manned.filter(s => s.name.toUpperCase() !== 'FILLED');
                     slots.forEach(slot => {
                         const rf         = resolveRef(slot.name);
                         const venmo      = rf['venmo'] || '';
