@@ -792,9 +792,20 @@
 
     <main>
         <div class="blasts-wrap">
-            <div style="margin-bottom:20px;">
+            <div style="margin-bottom:20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                 <a href="admin.html" class="btn-back">← Back to Admin Portal</a>
+                <!-- ⚠️ THE OPT-OUT LIST BELONGS HERE. The compose screen already
+                     counts opted-outs for whoever is selected, but there was
+                     nowhere to see WHO has asked to be left alone across the
+                     whole roster — so the only way to check was to remember.
+                     Tod, 2026-09-24: "that would be handy to have somewhere in
+                     the email blasts section." -->
+                <button id="optOutBtn" onclick="toggleOptOuts()"
+                    style="background:none; border:1px solid rgba(255,255,255,0.35); color:rgba(255,255,255,0.85);
+                           border-radius:8px; padding:6px 14px; font-family:inherit; font-size:0.82rem;
+                           font-weight:700; cursor:pointer;">✉ Opt-outs</button>
             </div>
+            <div id="optOutPanel" style="display:none; margin-bottom:20px;"></div>
 
             <!-- Shown only when the workstation handed over an email — see pickUpDraft() -->
             <div class="draft-bar" id="draftBar" style="display:none;"></div>
@@ -2017,6 +2028,55 @@
     // What the tray and composer actually work on. The basket wins when it has
     // anyone in it; otherwise it is the filtered set, exactly as before.
     function traySet()    { return BASKET.size ? [...BASKET.values()] : lastFiltered; }
+    // Everyone who has asked to be left alone, and why. Reads the roster
+    // already in memory — no extra fetch.
+    function toggleOptOuts() {
+        const panel = document.getElementById('optOutPanel');
+        if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+
+        const rows = (REFS || [])
+            .filter(r => (r.email_pref && r.email_pref !== 'all') || r.email_opt_in === false)
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+        const label = { assignments: 'Assignments only', none: 'No email at all' };
+        const colour = { assignments: '#7eb8f7', none: '#ffb4b4' };
+
+        const body = rows.length ? rows.map(r => {
+            const pref = r.email_pref || 'assignments';
+            const when = r.email_pref_at
+                ? new Date(r.email_pref_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+                : '';
+            return `<tr style="border-top:1px solid rgba(255,255,255,0.08);">
+                <td style="padding:7px 10px; font-weight:700;">${esc(r.name || '—')}</td>
+                <td style="padding:7px 10px; color:rgba(255,255,255,0.55);">${esc(r.email || 'no email on file')}</td>
+                <td style="padding:7px 10px; white-space:nowrap; color:${colour[pref] || '#ccc'}; font-weight:700;">${label[pref] || pref}</td>
+                <td style="padding:7px 10px; color:rgba(255,255,255,0.6);">${esc(r.email_pref_note || '')}</td>
+                <td style="padding:7px 10px; white-space:nowrap; color:rgba(255,255,255,0.4); font-size:0.8rem;">${when}${r.email_pref_by ? ' · ' + esc(r.email_pref_by) : ''}</td>
+            </tr>`;
+        }).join('') : `<tr><td colspan="5" style="padding:14px 10px; color:rgba(255,255,255,0.5);">Nobody has opted out. Everyone on the roster gets email.</td></tr>`;
+
+        const nNone = rows.filter(r => r.email_pref === 'none').length;
+        panel.innerHTML = `
+            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); border-radius:10px; overflow:hidden;">
+                <div style="padding:12px 16px; background:rgba(255,255,255,0.05); display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <b style="font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; letter-spacing:.6px; text-transform:uppercase;">Opted out</b>
+                    <span style="color:rgba(255,255,255,0.6); font-size:0.85rem;">${rows.length} referee${rows.length === 1 ? '' : 's'}${nNone ? ` · ${nNone} on NO EMAIL AT ALL` : ''}</span>
+                    <span style="margin-left:auto; color:rgba(255,255,255,0.45); font-size:0.78rem;">Change any of these on their card in Referee Management.</span>
+                </div>
+                <table style="width:100%; border-collapse:collapse; font-size:0.86rem;">
+                    <thead><tr style="color:rgba(255,255,255,0.45); font-size:0.72rem; text-transform:uppercase; letter-spacing:.6px;">
+                        <th style="padding:6px 10px; text-align:left;">Name</th>
+                        <th style="padding:6px 10px; text-align:left;">Email</th>
+                        <th style="padding:6px 10px; text-align:left;">Setting</th>
+                        <th style="padding:6px 10px; text-align:left;">Why</th>
+                        <th style="padding:6px 10px; text-align:left;">Set</th>
+                    </tr></thead>
+                    <tbody>${body}</tbody>
+                </table>
+            </div>`;
+        panel.style.display = 'block';
+    }
+
     function usingBasket(){ return BASKET.size > 0; }
 
     function basketAdd(id) {
