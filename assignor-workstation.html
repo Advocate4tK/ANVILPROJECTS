@@ -138,6 +138,10 @@
             padding:0 3px; margin-left:4px; vertical-align:middle; letter-spacing:.2px; }
         .slot-declined { display:block; margin-top:3px; font-size:0.6rem; font-weight:800; letter-spacing:.3px;
             color:#991b1b; background:#fee2e2; border:1px solid #fca5a5; border-radius:3px; padding:0 5px; white-space:nowrap; }
+        /* Asked for no email at all. Loud on purpose: if the tool goes quiet
+           about somebody, the first anyone learns of it is an empty touchline. */
+        .no-email-badge { font-size:0.6rem; font-weight:900; letter-spacing:.3px; color:#fff; background:#7a5200;
+            border:1px solid #4a3200; border-radius:3px; padding:0 5px; flex-shrink:0; white-space:nowrap; }
         .ca-declined { font-size:0.62rem; font-weight:900; letter-spacing:.4px; color:#fff; background:#b91c1c;
             border:1px solid #7f1d1d; border-radius:3px; padding:0 5px; flex-shrink:0; white-space:nowrap; }
         .incident-badge { font-size:0.66rem; font-weight:800; color:#b91c1c; background:#fff1f1; border:1px solid #fca5a5; border-radius:10px; padding:0 6px; flex-shrink:0; white-space:nowrap; }
@@ -10107,7 +10111,7 @@ Reason (optional):`);
                     onmouseleave="hideAvailNotes()">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
                         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; min-width:0;">
-                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${genderDot}${years ? `<span style="font-size:0.68rem;font-weight:700;color:${expColor||'#aaa'};flex-shrink:0;">${years}</span>` : ''}${distBadge}${posBadge}${ghostBadge}${incidentBadge(rid)}${caDeclinedBadge(name)}</div>
+                            <div class="ref-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${assignedCount > 0 ? `<span title="${assignedCount} game${assignedCount > 1 ? 's' : ''} assigned ${badgeLabel}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#0f3460;color:white;font-size:0.7rem;font-weight:900;flex-shrink:0;">${assignedCount}</span>` : ''}${name}${genderDot}${years ? `<span style="font-size:0.68rem;font-weight:700;color:${expColor||'#aaa'};flex-shrink:0;">${years}</span>` : ''}${distBadge}${posBadge}${ghostBadge}${incidentBadge(rid)}${caDeclinedBadge(name)}${r.fields['email_pref'] === 'none' ? '<span class="no-email-badge" title="This referee has asked for NO EMAIL. Nothing is sent to them — assignments included. You have to contact them another way.">✉ OFF</span>' : ''}</div>
                         </div>
                         <span id="rtri-${rid}" onclick="event.stopPropagation(); toggleRefCardWS('${rid}')" style="cursor:pointer; font-size:0.7rem; color:${cls === 2 ? '#e74c3c' : '#aaa'}; padding:2px 4px; flex-shrink:0; font-weight:${cls === 2 ? '900' : 'normal'};">▶</span>
                     </div>
@@ -10363,6 +10367,19 @@ Reason (optional):`);
 Putting them back on it will almost certainly bounce again.
 
 Assign anyway?`)) return;
+            }
+
+            // A referee on 'none' gets nothing from the tool, so assigning them
+            // is a commitment to ring them yourself. Say so at the moment it is
+            // made, not afterwards.
+            const _refRec = refLookupByName[(refName || '').trim().toLowerCase()]
+                          || allRefs.find(x => (x.fields['Name'] || '').trim().toLowerCase() === (refName || '').trim().toLowerCase());
+            if (_refRec?.fields?.['email_pref'] === 'none') {
+                if (!confirm(`✉ ${refName} has asked for NO EMAIL.
+
+They will NOT be told about this game by the tool — no assignment notice, no reminder.
+
+You will need to contact them yourself. Assign anyway?`)) return;
             }
 
             const targetGame = allGames.find(g => String(g.id) === String(gameId));

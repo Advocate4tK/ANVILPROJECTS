@@ -171,6 +171,35 @@
                     </div>
 
                     <!-- Contact -->
+                    <!-- ⚠️ TWO KINDS OF EMAIL, AND THEY ARE NOT THE SAME PROMISE.
+                         Blasts are recruitment; assignment mail tells somebody
+                         they are working on Saturday. Silencing both because a
+                         parent asked about the first is how you get an empty
+                         touchline. Tod, 2026-09-24: "there needs to be an opt out
+                         and also a manual way of me to find and 'opt out' in the
+                         system myself for people who dont want to ref anymore or
+                         receive emails." sql/email-preference.sql -->
+                    <div class="card-section">
+                        <div class="card-section-title">Email preference</div>
+                        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+                            <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.86rem; cursor:pointer;">
+                                <input type="radio" name="emailPref" id="f_pref_all" value="all" style="margin-top:3px;">
+                                <span><b>All email</b><br><span style="font-size:0.76rem; color:#888;">Openings blasts and assignment notices.</span></span>
+                            </label>
+                            <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.86rem; cursor:pointer;">
+                                <input type="radio" name="emailPref" id="f_pref_assignments" value="assignments" style="margin-top:3px;">
+                                <span><b>Assignments only</b><br><span style="font-size:0.76rem; color:#888;">No openings blasts. Still told when they are given a game — which is usually what "take me off the list" means.</span></span>
+                            </label>
+                            <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.86rem; cursor:pointer;">
+                                <input type="radio" name="emailPref" id="f_pref_none" value="none" style="margin-top:3px;">
+                                <span><b>No email at all</b><br><span style="font-size:0.76rem; color:#b45309;">Nothing is sent, ever. You will have to contact them another way — the workstation will warn you before assigning them.</span></span>
+                            </label>
+                        </div>
+                        <div class="field-item"><label>Why (kept on the record)</label>
+                            <input type="text" id="f_prefNote" placeholder="e.g. mother rang 24 Sep — no longer reffing"></div>
+                        <div id="f_prefWho" style="font-size:0.74rem; color:#888; margin-top:4px;"></div>
+                    </div>
+
                     <div class="card-section">
                         <div class="card-section-title">Contact</div>
                         <div class="field-grid">
@@ -721,6 +750,16 @@
             renderCAFields(caName, caId);
 
             // Card header
+            {
+                const pref = f['email_pref'] || 'all';
+                const el = document.getElementById('f_pref_' + pref) || document.getElementById('f_pref_all');
+                if (el) el.checked = true;
+                document.getElementById('f_prefNote').value = f['email_pref_note'] || '';
+                const who = f['email_pref_by'], at = f['email_pref_at'];
+                document.getElementById('f_prefWho').textContent = (pref !== 'all' && (who || at))
+                    ? `Set ${at ? 'on ' + new Date(at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric' }) : ''}${who ? ' by ' + who : ''}`
+                    : '';
+            }
             document.getElementById('cardTitle').innerHTML = `${f['Name'] || '—'} <span style="font-size:0.72rem; font-weight:500; color:#aaa; background:#f5f5f5; border:1px solid #e0e0e0; border-radius:4px; padding:2px 7px; vertical-align:middle; user-select:all;">#${refId}</span>`;
             document.getElementById('cardSubtitle').textContent = f['Email'] || '';
 
@@ -928,6 +967,21 @@
             updates['Guardian Email']   = document.getElementById('f_guardianEmail').value.trim();
             updates['Guardian Phone']   = document.getElementById('f_guardianPhone').value.trim();
             updates['Club Preference']  = document.getElementById('f_clubPref').value.trim();
+            // Only stamp who/when when the setting actually CHANGES — otherwise
+            // every unrelated save rewrites the date and the record stops saying
+            // when the parent actually rang.
+            {
+                const picked = document.querySelector('input[name="emailPref"]:checked')?.value || 'all';
+                const _cur = allRefs.find(r => String(r.id) === String(currentId));
+                const wasPref = (_cur?.fields?.['email_pref']) || 'all';
+                const note = document.getElementById('f_prefNote').value.trim();
+                updates['email_pref'] = picked;
+                updates['email_pref_note'] = note || null;
+                if (picked !== wasPref) {
+                    updates['email_pref_at'] = new Date().toISOString();
+                    updates['email_pref_by'] = (document.getElementById('profileBadgeName')?.textContent || 'admin').trim();
+                }
+            }
             updates['Assignor Notes']   = document.getElementById('f_notes').value.trim();
 
             // CA fields

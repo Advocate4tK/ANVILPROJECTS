@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
     if (!refName || /^(EMPTY|FILLED|TBD)$/i.test(refName)) return json({ ok: false, reason: `no referee in ${pos}` });
 
     // The referee record — by exact name, then loosely.
-    const REF_COLS = 'id,name,email,phone,age,"Guardian Email","Guardian Name","Guardian Phone",sms_consent_at,guardian_sms_consent_at';
+    const REF_COLS = 'id,name,email,phone,age,"Guardian Email","Guardian Name","Guardian Phone",sms_consent_at,guardian_sms_consent_at,email_pref';
     let { data: ref } = await db.from("referees").select(REF_COLS).ilike("name", refName).maybeSingle();
     if (!ref) {
       const parts = refName.split(/\s+/);
@@ -238,6 +238,14 @@ Deno.serve(async (req) => {
     }
     if (!ref)        return json({ ok: false, reason: `referee "${refName}" not on roster` });
     if (!ref.email)  return json({ ok: false, reason: `${ref.name} has no email on file` });
+    // ⚠️ 'none' MEANS NONE — including this one. Assignment mail normally
+    // ignores the blast opt-out on purpose (somebody who does not want
+    // recruitment email still has to be told when they are working), but a
+    // referee set to 'none' has asked for silence and the assignor has taken
+    // on contacting them another way. sql/email-preference.sql
+    if (ref.email_pref === 'none') {
+      return json({ ok: false, reason: `${ref.name} is set to NO EMAIL — contact them directly`, email_pref: 'none' });
+    }
 
     // Venue + field, by CA id
     const [{ data: ven }, { data: fld }] = await Promise.all([
