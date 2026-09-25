@@ -1042,11 +1042,21 @@ function leagueSelect(tab) {
     // ⚠️ A MULTI-CLUB TAB HAS NO "AWAY". On the Master tab, NECONN hosting
     // Plainfield is a home game for one and an away game for the other, so the chip
     // would be a lie either way. It is only meaningful on a single-club tab.
-    PAGE_CLUB = tab.clubs.slice();   // the whole tab — see isAwayFor()
+    PAGE_CLUB = tab.clubs.length === 1 ? [tab.clubs[0]] : [];
+    // ⚠️ AND A MULTI-CLUB TAB HAS NO AWAY GAMES EITHER. Matching on away_club
+    // drags in fixtures hosted by clubs that are not in this league at all:
+    // Tod, 2026-09-25, "we have a Griswold game showing up in the NECON
+    // schedule" — RTCT11567, Canterbury travelling to Griswold Soccer Complex,
+    // pulled onto Northeast Corner United's page by the away_club clause alone.
+    // Griswold is not a member, the league does not run that game, and it is
+    // already on Griswold's own schedule.
+    //   A single-club tab still matches away_club, because a club's away games
+    //   ARE its own — that is the whole reason they are on its page.
+    const single = tab.clubs.length === 1;
     GAMES = ALL_GAMES.filter(g =>
         wanted.includes(norm(g['Source Club']))
         || wanted.includes(norm(g.club))
-        || wanted.includes(norm(g.away_club)));
+        || (single && wanted.includes(norm(g.away_club))));
     GAMES.sort((a, b) => (a.date || '').localeCompare(b.date || '')
                       || String(a.time || '').localeCompare(String(b.time || '')));
 
