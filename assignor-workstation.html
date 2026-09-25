@@ -10868,7 +10868,15 @@ You will need to contact them yourself. Assign anyway?`)) return;
             try {
                 const _cTable = window.tournamentMode ? 'tournament_games' : 'games';
                 const patch = { 'Game Status': 'Cancelled', cancellation_type: type, cancelled_at: cancelledAt };
-                if (wasChangeRequest) patch['Notes'] = stampedNotes;
+                // ⚠️ LOWERCASE. This is the RAW client, not airtableClient — so
+                // _col() never runs and 'Notes' reaches PostgREST as a column
+                // name that does not exist. The whole update is rejected, the
+                // catch below puts the row back, and the game returns to the
+                // board still flagged Change Requested. Only ever fired on the
+                // wasChangeRequest branch, which is why every other cancel on
+                // this page worked: Ed Conn's weather request on RTCT11563,
+                // 2026-09-25, could not be cancelled at all.
+                if (wasChangeRequest) patch['notes'] = stampedNotes;
                 await supabaseClient.client.from(_cTable).update(patch).eq('id', gameId);
 
                 // Badge: one fewer open request, right now, not after a reload.
