@@ -113,7 +113,7 @@ const SHELL = `
 // something we do. The select list below is explicit for exactly that reason:
 // DO NOT change it to '*'.
 // ─────────────────────────────────────────────────────────────────────────────
-const SAFE_COLUMNS = 'id,game_no,is_cup,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage,home_club,away_club,"Field ID",rescheduled_from';
+const SAFE_COLUMNS = 'id,game_no,is_cup,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage,home_club,away_club,"Field ID",rescheduled_from,postponed_at';
 // game_no — 2026-09-19, sql/game-numbers.sql. RTCT10247: the number a
 // parent reads off this page and says to the assignor on the phone.
 const GAME_NO_PREFIX = 'RTCT';
@@ -239,9 +239,17 @@ function isCancelled(g) { return /cancel/i.test(String(g.status || '') + String(
 // is a fixture.
 function isMoved(g) { return !!g.__movedTo; }
 
+// Off, and nobody knows when yet. Star Ems, East Haddam, the morning of the
+// nor'easter: four games moving to a weekend nobody had agreed on. Cancel would
+// have said they were not being played; a date would have been invented. This
+// is the state between the two, and it says so rather than guessing.
+//   Never on a ghost — once a real date exists the move takes over and the
+//   footprint speaks for it.
+function isPostponed(g) { return !!g.postponed_at && !isMoved(g); }
+
 // Not a game anyone can turn up to on the date it is sitting on — cancelled or
 // moved away. Every count on the page asks this, not isCancelled().
-function isOff(g) { return isCancelled(g) || isMoved(g); }
+function isOff(g) { return isCancelled(g) || isMoved(g) || isPostponed(g); }
 
 // ⚠️ The ghost carries a DIFFERENT id. data-gid is used as a handle in the DOM
 // and two rows answering to the same one is how a click lands on the wrong game.
@@ -488,7 +496,7 @@ function dayBlocksHTML(games) {
                     ? `<a class="venue-link" href="${href}" target="_blank" rel="noopener">📍 ${esc(vName)}`
                       + `<span class="dir-cta">Directions</span><span class="chev">›</span></a>`
                     : `<span>${esc(vName)}</span>`}
-                <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.filter(g => !isOff(g)).length} game${list.filter(g => !isOff(g)).length === 1 ? '' : 's'}${list.filter(isMoved).length ? ` · ${list.filter(isMoved).length} rescheduled` : ''}</span>
+                <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.filter(g => !isOff(g)).length} game${list.filter(g => !isOff(g)).length === 1 ? '' : 's'}${list.filter(isMoved).length ? ` · ${list.filter(isMoved).length} rescheduled` : ''}${list.filter(isPostponed).length ? ` · ${list.filter(isPostponed).length} postponed` : ''}</span>
             </div>`;
         const byTime = {};
         list.forEach(g => { (byTime[g.time || ''] = byTime[g.time || ''] || []).push(g); });
@@ -500,9 +508,9 @@ function dayBlocksHTML(games) {
                 // Collapsed row answers "is this my kid's game". The body answers
                 // "where exactly am I going and who is home" — the two questions a
                 // parent actually has, in that order.
-                html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}${isCupGame(g) ? ' cup' : ''}${isOff(g) ? ' cancelled' : ''}${isMoved(g) ? ' moved' : ''}" data-gid="${esc(g.id)}">
+                html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}${isCupGame(g) ? ' cup' : ''}${isOff(g) ? ' cancelled' : ''}${isMoved(g) ? ' moved' : ''}${isPostponed(g) ? ' postponed' : ''}" data-gid="${esc(g.id)}">
                     <div class="game-row">
-                        ${isCancelled(g) && !isMoved(g) ? '<div class="cancelled-stamp"><span>' + 'CANCELLED'.split('').map(c => '<i>' + c + '</i>').join('') + '</span></div>' : ''}
+                        ${isCancelled(g) && !isMoved(g) && !isPostponed(g) ? '<div class="cancelled-stamp"><span>' + 'CANCELLED'.split('').map(c => '<i>' + c + '</i>').join('') + '</span></div>' : ''}
                         <span class="game-chevron">▶</span>
                         ${gameNo(g) ? `<span class="no-chip" title="Game number — quote this to your assignor">${gameNo(g)}</span>` : ''}
                         ${fieldName(g) ? `<span class="${fieldClass(fieldName(g))}">${esc(fieldName(g))}</span>` : ''}
@@ -512,6 +520,7 @@ function dayBlocksHTML(games) {
                         ${isAwayFor(g, PAGE_CLUB) ? `<span class="away-chip">Away</span>` : ''}
                         ${g['is_scrimmage'] ? `<span class="scrim-chip">Scrimmage</span>` : ''}
                         ${isMoved(g) ? `<span class="moved-chip" title="This game was moved to another date">Rescheduled → ${esc(fmtShort(g.__movedTo))}</span>` : ''}
+                        ${isPostponed(g) ? `<span class="postponed-chip" title="Called off — a new date has not been set yet">Postponed · new date to come</span>` : ''}
                         <span class="team">${esc(teamLabel(g, 'home'))}</span>
                         <span class="vs">vs</span>
                         <span class="team-b">${esc(teamLabel(g, 'away'))}</span>
@@ -520,6 +529,7 @@ function dayBlocksHTML(games) {
                         <div class="gb-grid">
                             ${gameNo(g) ? `<div><span class="gb-k">Game #</span><span class="gb-v" style="font-family:'DM Mono','Consolas',monospace;font-weight:800;">${gameNo(g)}</span></div>` : ''}
                             <div><span class="gb-k">${isMoved(g) ? 'Was' : 'Kickoff'}</span><span class="gb-v">${esc(fmtDateHeading(g.date))} · ${esc(fmtTime(g.time))}</span></div>
+                            ${isPostponed(g) ? `<div><span class="gb-k">Status</span><span class="gb-v gb-postponed">Postponed — a new date has not been set yet</span></div>` : ''}
                             ${isMoved(g) ? `<div><span class="gb-k">Moved to</span><span class="gb-v gb-moved">${esc(fmtDateHeading(g.__movedTo))} · ${esc(fmtTime(g.__movedToTime))}</span></div>` : ''}
                             <div><span class="gb-k">Division</span><span class="gb-v">${div ? esc(div) : '—'}</span></div>
                             ${isCupGame(g) ? `<div><span class="gb-k">Competition</span><span class="gb-v" style="font-weight:800;">🏆 Cup Match</span></div>` : ''}
