@@ -169,8 +169,41 @@ function namesFor(clubLabel) {
 
 // Is this game AWAY from the club whose page we are on? Parents need to know they
 // are driving somewhere else, and it is the whole reason the away games belong here.
-function isAwayFor(g, clubLabel) {
-    const mine = namesFor(clubLabel).map(n => String(n).toLowerCase());
+// ⚠️ TAKES THE WHOLE TAB, NOT ONE CLUB. A league tab covers several clubs, and
+// this used to be handed a single label — empty whenever a tab had more than
+// one, which made the chip structurally impossible on the Master tab. Tod,
+// 2026-09-25: "we have a Griswold game showing up in the NECON schedule."
+// It was Canterbury's away fixture at Griswold Soccer Complex, correctly
+// present and completely unlabelled: a Griswold venue header, a COMP chip, and
+// "U12 Girls vs U12 Girls" for teams. Belonging to the page and looking like
+// you belong to the page are not the same thing.
+// Who is actually playing. Tod, 2026-09-25, looking at the league master
+// schedule: "its the U12 Girls vs U12 Girls."
+//
+// Some clubs name a side after the bracket alone — "U12 Girls" — which reads
+// fine on that club's own page and becomes nonsense the moment two clubs meet:
+// RTCT11567 rendered as "U12 Girls vs U12 Girls" with nothing to say which was
+// Griswold and which was Canterbury.
+//
+// ⚠️ ONLY WHEN THE TWO SIDES ARE INDISTINGUISHABLE. Qualifying every name would
+// be worse, not better: NECONN's teams are TOWNS — Putnam, Woodstock, Pomfret —
+// and "NECONN Putnam vs NECONN Woodstock" is noise dressed as precision.
+const CLUB_SUFFIX = /\s+(Soccer Club|Athletic Association|Youth Soccer|Soccer|SC|AA)$/i;
+function teamLabel(g, side) {
+    const name  = String(g[side === 'home' ? 'Home Team' : 'Away Team'] || '').trim();
+    const other = String(g[side === 'home' ? 'Away Team' : 'Home Team'] || '').trim();
+    if (!name) return 'TBD';
+    if (!other || name.toLowerCase() !== other.toLowerCase()) return name;
+    const club = String(g[side === 'home' ? 'home_club' : 'away_club'] || '').trim().replace(CLUB_SUFFIX, '').trim();
+    if (!club || new RegExp('\\b' + club.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(name)) return name;
+    return `${club} ${name}`;
+}
+
+function isAwayFor(g, clubLabels) {
+    const mine = [...new Set((Array.isArray(clubLabels) ? clubLabels : [clubLabels])
+                    .filter(Boolean).flatMap(l => namesFor(l)))]
+                 .map(n => String(n).toLowerCase());
+    if (!mine.length) return false;
     const src  = String(g['Source Club'] || '').toLowerCase();
     if (mine.includes(src)) return false;
     return mine.includes(String(g.away_club || '').toLowerCase());
@@ -308,7 +341,7 @@ let ACTIVE_SEASON = '';    // clubs.active_season — what the club says it is i
 // ⚠️ WHOSE PAGE THIS IS. Needed to answer "is this game away?", which is only
 // meaningful relative to a club. On the league page it is the active TAB's club,
 // which is why it is set at render time rather than once at load.
-let PAGE_CLUB = '';
+let PAGE_CLUB = [];   // the club(s) this tab covers, always an array
 
 // The season the club is IN. `active_season` is set deliberately in superadmin,
 // and flipping it there has to carry this page with it — that flip IS the
@@ -479,9 +512,9 @@ function dayBlocksHTML(games) {
                         ${isAwayFor(g, PAGE_CLUB) ? `<span class="away-chip">Away</span>` : ''}
                         ${g['is_scrimmage'] ? `<span class="scrim-chip">Scrimmage</span>` : ''}
                         ${isMoved(g) ? `<span class="moved-chip" title="This game was moved to another date">→ ${esc(fmtShort(g.__movedTo))}</span>` : ''}
-                        <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
+                        <span class="team">${esc(teamLabel(g, 'home'))}</span>
                         <span class="vs">vs</span>
-                        <span class="team-b">${esc(g['Away Team'] || 'TBD')}</span>
+                        <span class="team-b">${esc(teamLabel(g, 'away'))}</span>
                     </div>
                     <div class="game-body">
                         <div class="gb-grid">
@@ -490,8 +523,8 @@ function dayBlocksHTML(games) {
                             ${isMoved(g) ? `<div><span class="gb-k">Moved to</span><span class="gb-v gb-moved">${esc(fmtDateHeading(g.__movedTo))} · ${esc(fmtTime(g.__movedToTime))}</span></div>` : ''}
                             <div><span class="gb-k">Division</span><span class="gb-v">${div ? esc(div) : '—'}</span></div>
                             ${isCupGame(g) ? `<div><span class="gb-k">Competition</span><span class="gb-v" style="font-weight:800;">🏆 Cup Match</span></div>` : ''}
-                            <div><span class="gb-k">Home</span><span class="gb-v">${esc(g['Home Team'] || 'TBD')}</span></div>
-                            <div><span class="gb-k">Away</span><span class="gb-v">${esc(g['Away Team'] || 'TBD')}</span></div>
+                            <div><span class="gb-k">Home</span><span class="gb-v">${esc(teamLabel(g, 'home'))}</span></div>
+                            <div><span class="gb-k">Away</span><span class="gb-v">${esc(teamLabel(g, 'away'))}</span></div>
                             ${fieldName(g) ? `<div><span class="gb-k">Field</span><span class="gb-v">${esc(fieldName(g))}</span></div>` : ''}
                             <div><span class="gb-k">Season</span><span class="gb-v">${esc(seasonOf(g) || '—')}</span></div>
                         </div>
@@ -1009,7 +1042,7 @@ function leagueSelect(tab) {
     // ⚠️ A MULTI-CLUB TAB HAS NO "AWAY". On the Master tab, NECONN hosting
     // Plainfield is a home game for one and an away game for the other, so the chip
     // would be a lie either way. It is only meaningful on a single-club tab.
-    PAGE_CLUB = tab.clubs.length === 1 ? tab.clubs[0] : '';
+    PAGE_CLUB = tab.clubs.slice();   // the whole tab — see isAwayFor()
     GAMES = ALL_GAMES.filter(g =>
         wanted.includes(norm(g['Source Club']))
         || wanted.includes(norm(g.club))
@@ -1196,7 +1229,7 @@ function drawLeagueTabs(tabs) {
         // The season flip in superadmin is what moves this page. Whatever the club
         // is set to is the season on top; everything else drops to the archive.
         ACTIVE_SEASON = match ? String(match.active_season || '').trim() : '';
-        PAGE_CLUB = clubLabel;
+        PAGE_CLUB = [clubLabel];
 
         document.getElementById('clubName').textContent = clubDisplay;
         document.getElementById('footClub').textContent = clubDisplay + ' · ';
