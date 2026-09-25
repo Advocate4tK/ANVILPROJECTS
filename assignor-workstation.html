@@ -10877,7 +10877,18 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 // this page worked: Ed Conn's weather request on RTCT11563,
                 // 2026-09-25, could not be cancelled at all.
                 if (wasChangeRequest) patch['notes'] = stampedNotes;
-                await supabaseClient.client.from(_cTable).update(patch).eq('id', gameId);
+                // ⚠️ READ THE ERROR. supabase-js RESOLVES on a rejected write — it
+                // does not throw — so `await` alone sends every failure past the
+                // catch below in silence. The row went grey from the optimistic
+                // update above, came back on the next render, and nothing ever
+                // said why. That is how a bad column name survived in this patch
+                // long enough for Tod to spend a storm morning on it.
+                //   .select() matters as much: a write RLS filters out returns no
+                // error AND no rows. Zero rows back means nothing was saved.
+                const { data: _saved, error: _cErr } =
+                    await supabaseClient.client.from(_cTable).update(patch).eq('id', gameId).select('id');
+                if (_cErr) throw new Error(_cErr.message);
+                if (!_saved || !_saved.length) throw new Error('the database accepted the request but changed no rows — most likely this account is not permitted to edit this game.');
 
                 // Badge: one fewer open request, right now, not after a reload.
                 if (wasChangeRequest) {
