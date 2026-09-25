@@ -10735,6 +10735,25 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 const acEl = document.getElementById(`editAwayClub-${gameId}`);
                 if (hcEl) updates['home_club'] = hcEl.value || null;
                 if (acEl) updates['away_club'] = acEl.value || null;
+                // ── A MOVE LEAVES A FOOTPRINT ON THE DATE IT LEFT ──────────────
+                // Until today nothing remembered a previous date, so a called-off
+                // Saturday simply went blank on the public schedule — the same
+                // blank a parent reads as a broken page. games.rescheduled_from
+                // is what the club schedule hangs its RESCHEDULED row on.
+                //
+                // Only the ORIGINAL date is kept. A game that moves twice still
+                // answers the question the old date is actually being asked —
+                // "what happened to the Saturday I was driving to?" — rather than
+                // pointing at an intermediate date nobody ever turned up for.
+                //
+                // ⚠️ games only. tournament_games has no such column and naming it
+                // would have PostgREST reject the whole update, taking the date,
+                // the teams and the clubs down with it.
+                if (!window.tournamentMode && cur['Date'] && newDate !== cur['Date']
+                    && !cur['rescheduled_from']) {
+                    updates['rescheduled_from'] = cur['Date'];
+                }
+
                 const _gTable2 = window.tournamentMode ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
                 await airtableClient.updateRecord(_gTable2, gameId, updates);
 
@@ -10756,6 +10775,7 @@ You will need to contact them yourself. Assign anyway?`)) return;
                             }
                         }
                     });
+                    if (updates['rescheduled_from']) game.fields['rescheduled_from'] = updates['rescheduled_from'];
                     game.fields['Date']      = newDate;
                     game.fields['Time']      = newTime || '';
                     game.fields['Home Team'] = newHome;
