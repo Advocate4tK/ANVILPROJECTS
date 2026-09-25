@@ -113,7 +113,7 @@ const SHELL = `
 // something we do. The select list below is explicit for exactly that reason:
 // DO NOT change it to '*'.
 // ─────────────────────────────────────────────────────────────────────────────
-const SAFE_COLUMNS = 'id,game_no,is_cup,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage,home_club,away_club,"Field ID"';
+const SAFE_COLUMNS = 'id,game_no,is_cup,date,time,"Age Group","Gender","Home Team","Away Team",field,"Venue ID","Source Club",club,status,"Game Status",season,game_type,is_scrimmage,home_club,away_club,"Field ID",rescheduled_from';
 // game_no — 2026-09-19, sql/game-numbers.sql. RTCT10247: the number a
 // parent reads off this page and says to the assignor on the phone.
 const GAME_NO_PREFIX = 'RTCT';
@@ -190,6 +190,34 @@ function fieldName(g) {
 // it silently gone on Wednesday. Gone looks like a data error. CANCELLED
 // across it says what happened.
 function isCancelled(g) { return /cancel/i.test(String(g.status || '') + String(g['Game Status'] || '')); }
+
+// A game that MOVED leaves the same kind of mark, for the same reason. Tod,
+// 2026-09-25, the morning a nor'easter took all of Saturday off NECONN,
+// Plainfield and Canterbury: "we need the current outward facing schedule to
+// leave the finger print and say 'rescheduled' ... with the red watermark
+// saying 'RESCHEDULED' instead of cancelled."
+//
+// Nothing else in the system remembers a previous date — the portal's
+// reschedule is a toast on screen and there is no change-history table. So the
+// old date is reconstructed here from games.rescheduled_from: one ghost row per
+// moved game, sitting on the date it left, pointing at where it went. The real
+// row still renders normally on its new date. The game is deliberately in both
+// places — the old date is answering "what happened to Saturday?", the new one
+// is a fixture.
+function isMoved(g) { return !!g.__movedTo; }
+
+// Not a game anyone can turn up to on the date it is sitting on — cancelled or
+// moved away. Every count on the page asks this, not isCancelled().
+function isOff(g) { return isCancelled(g) || isMoved(g); }
+
+// ⚠️ The ghost carries a DIFFERENT id. data-gid is used as a handle in the DOM
+// and two rows answering to the same one is how a click lands on the wrong game.
+function withFootprints(games) {
+    return games.concat(
+        games.filter(g => g.rescheduled_from && g.rescheduled_from !== g.date)
+             .map(g => ({ ...g, id: `${g.id}-moved`, date: g.rescheduled_from,
+                          __movedTo: g.date, __movedToTime: g.time })));
+}
 
 function isCompGame(g) {
     return String(g['game_type'] || '').trim().toUpperCase() === 'COMP';
@@ -427,7 +455,7 @@ function dayBlocksHTML(games) {
                     ? `<a class="venue-link" href="${href}" target="_blank" rel="noopener">📍 ${esc(vName)}`
                       + `<span class="dir-cta">Directions</span><span class="chev">›</span></a>`
                     : `<span>${esc(vName)}</span>`}
-                <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.filter(g => !isCancelled(g)).length} game${list.filter(g => !isCancelled(g)).length === 1 ? '' : 's'}</span>
+                <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.filter(g => !isOff(g)).length} game${list.filter(g => !isOff(g)).length === 1 ? '' : 's'}</span>
             </div>`;
         const byTime = {};
         list.forEach(g => { (byTime[g.time || ''] = byTime[g.time || ''] || []).push(g); });
@@ -439,9 +467,9 @@ function dayBlocksHTML(games) {
                 // Collapsed row answers "is this my kid's game". The body answers
                 // "where exactly am I going and who is home" — the two questions a
                 // parent actually has, in that order.
-                html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}${isCupGame(g) ? ' cup' : ''}${isCancelled(g) ? ' cancelled' : ''}" data-gid="${esc(g.id)}">
+                html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}${isCupGame(g) ? ' cup' : ''}${isOff(g) ? ' cancelled' : ''}${isMoved(g) ? ' moved' : ''}" data-gid="${esc(g.id)}">
                     <div class="game-row">
-                        ${isCancelled(g) ? '<div class="cancelled-stamp"><span>' + 'CANCELLED'.split('').map(c => '<i>' + c + '</i>').join('') + '</span></div>' : ''}
+                        ${isOff(g) ? '<div class="cancelled-stamp"><span>' + (isMoved(g) ? 'RESCHEDULED' : 'CANCELLED').split('').map(c => '<i>' + c + '</i>').join('') + '</span></div>' : ''}
                         <span class="game-chevron">▶</span>
                         ${gameNo(g) ? `<span class="no-chip" title="Game number — quote this to your assignor">${gameNo(g)}</span>` : ''}
                         ${fieldName(g) ? `<span class="${fieldClass(fieldName(g))}">${esc(fieldName(g))}</span>` : ''}
@@ -450,6 +478,7 @@ function dayBlocksHTML(games) {
                         ${isCupGame(g) ? `<span class="cup-chip" title="Cup Match"><span class="cup-spin">🏆</span> Cup Match</span>` : ''}
                         ${isAwayFor(g, PAGE_CLUB) ? `<span class="away-chip">Away</span>` : ''}
                         ${g['is_scrimmage'] ? `<span class="scrim-chip">Scrimmage</span>` : ''}
+                        ${isMoved(g) ? `<span class="moved-chip" title="This game was moved to another date">→ ${esc(fmtShort(g.__movedTo))}</span>` : ''}
                         <span class="team">${esc(g['Home Team'] || 'TBD')}</span>
                         <span class="vs">vs</span>
                         <span class="team-b">${esc(g['Away Team'] || 'TBD')}</span>
@@ -457,7 +486,8 @@ function dayBlocksHTML(games) {
                     <div class="game-body">
                         <div class="gb-grid">
                             ${gameNo(g) ? `<div><span class="gb-k">Game #</span><span class="gb-v" style="font-family:'DM Mono','Consolas',monospace;font-weight:800;">${gameNo(g)}</span></div>` : ''}
-                            <div><span class="gb-k">Kickoff</span><span class="gb-v">${esc(fmtDateHeading(g.date))} · ${esc(fmtTime(g.time))}</span></div>
+                            <div><span class="gb-k">${isMoved(g) ? 'Was' : 'Kickoff'}</span><span class="gb-v">${esc(fmtDateHeading(g.date))} · ${esc(fmtTime(g.time))}</span></div>
+                            ${isMoved(g) ? `<div><span class="gb-k">Moved to</span><span class="gb-v gb-moved">${esc(fmtDateHeading(g.__movedTo))} · ${esc(fmtTime(g.__movedToTime))}</span></div>` : ''}
                             <div><span class="gb-k">Division</span><span class="gb-v">${div ? esc(div) : '—'}</span></div>
                             ${isCupGame(g) ? `<div><span class="gb-k">Competition</span><span class="gb-v" style="font-weight:800;">🏆 Cup Match</span></div>` : ''}
                             <div><span class="gb-k">Home</span><span class="gb-v">${esc(g['Home Team'] || 'TBD')}</span></div>
@@ -681,6 +711,9 @@ function updateInfoBar(rows, allRows) {
     const bar = document.getElementById('infoBar');
     if (!bar) return;
     const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    // Ghosts are not their own fixture — the same game is already counted on the
+    // date it moved TO. Leaving them in made a storm read like a busier season.
+    rows = rows.filter(g => !isMoved(g));
     const teams  = new Set(rows.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean));
     const days   = new Set(rows.map(g => g.date).filter(Boolean));
     // Venues came from allRows so the bar could still say how many grounds a club
@@ -820,7 +853,7 @@ function openDay(iso, keepScroll) {
     document.getElementById('calDetail').innerHTML = `
         <div class="cal-detail-head">
             <h2>${esc(fmtDateHeading(iso))}${isToday ? ' <span class="today-pill">Today</span>' : ''}</h2>
-            <span class="count">${rows.filter(g => !isCancelled(g)).length} game${rows.filter(g => !isCancelled(g)).length === 1 ? '' : 's'} · ${new Set(rows.map(venueName)).size} location${new Set(rows.map(venueName)).size === 1 ? '' : 's'}</span>
+            <span class="count">${rows.filter(g => !isOff(g)).length} game${rows.filter(g => !isOff(g)).length === 1 ? '' : 's'} · ${new Set(rows.map(venueName)).size} location${new Set(rows.map(venueName)).size === 1 ? '' : 's'}</span>
             <button class="cal-close" id="calClose" aria-label="Close">✕</button>
         </div>` + dayBlocksHTML(rows);
 
@@ -1103,7 +1136,7 @@ function drawLeagueTabs(tabs) {
             (flds || []).forEach(f => { FIELDS[String(f['Field ID'])] = f['Field Name']; });
             (vens || []).forEach(v => { VENUES[String(v['Venue ID'])] = v; });
 
-            ALL_GAMES = games;   // cancelled games stay — see isCancelled()
+            ALL_GAMES = withFootprints(games);   // cancelled games stay — see isCancelled(); moved ones leave a ghost — see isMoved()
 
             // Highest-ranked season across the tab's clubs — so one club left on an
             // old season can't drag the Master tab backwards.
@@ -1208,7 +1241,7 @@ function drawLeagueTabs(tabs) {
         if (vErr) console.error('venues failed to load:', vErr.message);
         (vens || []).forEach(v => { VENUES[String(v['Venue ID'])] = v; });
 
-        GAMES = games;   // cancelled games stay, stamped — see isCancelled()
+        GAMES = withFootprints(games);   // cancelled games stay, stamped — see isCancelled(); moved ones leave a ghost — see isMoved()
         GAMES.sort((a, b) => (a.date || '').localeCompare(b.date || '') || String(a.time || '').localeCompare(String(b.time || '')));
 
         if (!GAMES.length) return fail('No games posted yet.', 'Check back once the season schedule is released.');
@@ -1216,7 +1249,7 @@ function drawLeagueTabs(tabs) {
         const dates    = GAMES.map(g => g.date).filter(Boolean).sort();
         const teams    = new Set(GAMES.flatMap(g => [g['Home Team'], g['Away Team']]).filter(Boolean));
         const venues   = new Set(GAMES.map(venueName));
-        const upcoming = GAMES.filter(g => g.date >= TODAY).length;
+        const upcoming = GAMES.filter(g => g.date >= TODAY && !isMoved(g)).length;   // a ghost is the same game twice
 
         // Header describes the season the club is IN, not the whole year. "May 2
         // – Aug 5" spans two seasons and tells a parent nothing useful in August.

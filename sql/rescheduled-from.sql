@@ -55,10 +55,20 @@ FROM   games;
 
 
 -- ============================================================================
--- STEP 2 — run this ONLY AFTER the 25 games have been moved to 2026-11-14.
+-- STEP 2 — run this ONLY AFTER the games have been moved to 2026-11-14.
 -- Move them in the portal as usual; this just stamps where they came from,
 -- because the workstation did not know how to record it until today.
 -- Ids are from BACKUPS/sept26-storm-games-PRE-RESCHEDULE.csv.
+--
+-- ⚠️ 24 OF THE 25, NOT ALL OF THEM.
+--   Tod, 2026-09-25: "we should probably ask about the CUP match... I would NOT
+--   move that. nor the COMP matches... this was REC games alone I would think."
+--   The clubs called off their own rec Saturday. A cup fixture is not theirs to
+--   move — the date belongs to the competition.
+--
+--   id 3231 · RTCT11570 · NECONN · U12 · Gregorzek U12 v Sallam U12 · 10:00
+--   CJSA Connecticut Cup, flagged both is_cup and game_type COMP — the only
+--   one of the 25 that is either. It stays on 26 Sep until CJSA says otherwise.
 -- ============================================================================
 
 -- UPDATE games
@@ -66,11 +76,12 @@ FROM   games;
 -- WHERE  id IN (3022,3035,                                        -- Canterbury
 --               3043,3044,3057,3058,3076,3077,3078,                -- Plainfield
 --               3104,3105,3106,3107,3108,3140,3141,3142,3158,
---               3173,3174,3175,3176,3177,3178,3231)                -- NECONN
+--               3173,3174,3175,3176,3177,3178)                     -- NECONN rec
 --   AND  date = DATE '2026-11-14';
---  expected: UPDATE 25.  If it reports fewer, some games have not been moved
+--  expected: UPDATE 24.  If it reports fewer, some games have not been moved
 --  yet — the AND on the new date is there on purpose so this cannot stamp a
 --  game that is still sitting on Saturday.
+--  3231 is deliberately absent. See above.
 
 
 -- ROLLBACK
