@@ -488,7 +488,7 @@ function dayBlocksHTML(games) {
                     ? `<a class="venue-link" href="${href}" target="_blank" rel="noopener">📍 ${esc(vName)}`
                       + `<span class="dir-cta">Directions</span><span class="chev">›</span></a>`
                     : `<span>${esc(vName)}</span>`}
-                <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.filter(g => !isOff(g)).length} game${list.filter(g => !isOff(g)).length === 1 ? '' : 's'}</span>
+                <span class="sit-out">${esc(addr || town)}${(addr || town) ? ' · ' : ''}${list.filter(g => !isOff(g)).length} game${list.filter(g => !isOff(g)).length === 1 ? '' : 's'}${list.filter(isMoved).length ? ` · ${list.filter(isMoved).length} rescheduled` : ''}</span>
             </div>`;
         const byTime = {};
         list.forEach(g => { (byTime[g.time || ''] = byTime[g.time || ''] || []).push(g); });
@@ -502,7 +502,7 @@ function dayBlocksHTML(games) {
                 // parent actually has, in that order.
                 html += `<div class="game-item${isCompGame(g) ? ' comp' : ''}${isCupGame(g) ? ' cup' : ''}${isOff(g) ? ' cancelled' : ''}${isMoved(g) ? ' moved' : ''}" data-gid="${esc(g.id)}">
                     <div class="game-row">
-                        ${isOff(g) ? '<div class="cancelled-stamp"><span>' + (isMoved(g) ? 'RESCHEDULED' : 'CANCELLED').split('').map(c => '<i>' + c + '</i>').join('') + '</span></div>' : ''}
+                        ${isCancelled(g) && !isMoved(g) ? '<div class="cancelled-stamp"><span>' + 'CANCELLED'.split('').map(c => '<i>' + c + '</i>').join('') + '</span></div>' : ''}
                         <span class="game-chevron">▶</span>
                         ${gameNo(g) ? `<span class="no-chip" title="Game number — quote this to your assignor">${gameNo(g)}</span>` : ''}
                         ${fieldName(g) ? `<span class="${fieldClass(fieldName(g))}">${esc(fieldName(g))}</span>` : ''}
@@ -511,7 +511,7 @@ function dayBlocksHTML(games) {
                         ${isCupGame(g) ? `<span class="cup-chip" title="Cup Match"><span class="cup-spin">🏆</span> Cup Match</span>` : ''}
                         ${isAwayFor(g, PAGE_CLUB) ? `<span class="away-chip">Away</span>` : ''}
                         ${g['is_scrimmage'] ? `<span class="scrim-chip">Scrimmage</span>` : ''}
-                        ${isMoved(g) ? `<span class="moved-chip" title="This game was moved to another date">→ ${esc(fmtShort(g.__movedTo))}</span>` : ''}
+                        ${isMoved(g) ? `<span class="moved-chip" title="This game was moved to another date">Rescheduled → ${esc(fmtShort(g.__movedTo))}</span>` : ''}
                         <span class="team">${esc(teamLabel(g, 'home'))}</span>
                         <span class="vs">vs</span>
                         <span class="team-b">${esc(teamLabel(g, 'away'))}</span>
