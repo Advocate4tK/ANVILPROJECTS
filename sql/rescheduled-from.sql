@@ -55,33 +55,72 @@ FROM   games;
 
 
 -- ============================================================================
--- STEP 2 — run this ONLY AFTER the games have been moved to 2026-11-14.
--- Move them in the portal as usual; this just stamps where they came from,
--- because the workstation did not know how to record it until today.
--- Ids are from BACKUPS/sept26-storm-games-PRE-RESCHEDULE.csv.
+-- STEP 2 — THE MOVE ITSELF. 24 rec games, 26 Sep → 14 Nov.
+--
+-- Does three things in one pass, because they are one event and must not be
+-- able to half-happen: moves the date, records where it moved from, and
+-- scrubs the crew. Tod, 2026-09-25: "the assigned refs are scrubbed" — seven
+-- weeks out, nobody's availability from September still means anything.
 --
 -- ⚠️ 24 OF THE 25, NOT ALL OF THEM.
---   Tod, 2026-09-25: "we should probably ask about the CUP match... I would NOT
---   move that. nor the COMP matches... this was REC games alone I would think."
+--   Tod: "we should probably ask about the CUP match... I would NOT move that.
+--   nor the COMP matches... this was REC games alone I would think."
 --   The clubs called off their own rec Saturday. A cup fixture is not theirs to
 --   move — the date belongs to the competition.
 --
 --   id 3231 · RTCT11570 · NECONN · U12 · Gregorzek U12 v Sallam U12 · 10:00
---   CJSA Connecticut Cup, flagged both is_cup and game_type COMP — the only
---   one of the 25 that is either. It stays on 26 Sep until CJSA says otherwise.
+--   CJSA Connecticut Cup, flagged both is_cup and game_type Comp — the only one
+--   of the 25 that is either. It stays on 26 Sep until CJSA says otherwise.
+--
+-- Every row as it stands right now is saved at
+-- BACKUPS/sept26-storm-games-PRE-RESCHEDULE.csv — all 25, every column.
+--
+-- ⚠️ CENTRAL ASSIGN DOES NOT HEAR ABOUT THIS. Its importer adds, it cannot
+-- update (sql/ca-change-sync.sql). All 24 are already in CA at the old date and
+-- have to be changed there BY HAND. ca_change_synced_at is nulled below so the
+-- Changes page keeps asking until somebody has.
 -- ============================================================================
 
--- UPDATE games
--- SET    rescheduled_from = DATE '2026-09-26'
--- WHERE  id IN (3022,3035,                                        -- Canterbury
---               3043,3044,3057,3058,3076,3077,3078,                -- Plainfield
---               3104,3105,3106,3107,3108,3140,3141,3142,3158,
---               3173,3174,3175,3176,3177,3178)                     -- NECONN rec
---   AND  date = DATE '2026-11-14';
---  expected: UPDATE 24.  If it reports fewer, some games have not been moved
---  yet — the AND on the new date is there on purpose so this cannot stamp a
---  game that is still sitting on Saturday.
---  3231 is deliberately absent. See above.
+BEGIN;
+
+UPDATE games
+SET    date             = DATE '2026-11-14',
+       rescheduled_from = DATE '2026-09-26',
+       "Center Referee" = NULL,
+       "AR 1"           = NULL,
+       "AR 2"           = NULL,
+       ca_change_synced_at = NULL
+WHERE  id IN (3022,3035,                                        -- Canterbury
+              3043,3044,3057,3058,3076,3077,3078,                -- Plainfield
+              3104,3105,3106,3107,3108,3140,3141,3142,3158,
+              3173,3174,3175,3176,3177,3178)                     -- NECONN rec
+  AND  date = DATE '2026-09-26';
+--  expected: UPDATE 24.  Anything else — STOP and ROLLBACK.
+--  The AND on the old date makes this safe to run twice: a second run matches
+--  nothing rather than moving something a further seven weeks.
+
+-- Look before you commit.
+SELECT "Source Club", count(*) AS games,
+       count("Center Referee") AS centres_left,
+       min(date) AS date
+FROM   games
+WHERE  rescheduled_from = DATE '2026-09-26'
+GROUP  BY "Source Club"
+ORDER  BY 1;
+--  expected: Canterbury 2, NECONN 15, Plainfield 7 — all 2026-11-14,
+--  centres_left 0 everywhere.
+
+COMMIT;
+-- ROLLBACK;   ← use this one instead if the numbers are wrong
+
+
+-- VERIFY — what 26 Sep looks like afterwards. The 24 are gone from that date
+-- and reachable only through the footprint; the cup game is still sitting there.
+SELECT game_no, "Source Club", time, "Home Team", "Away Team", is_cup, game_type
+FROM   games
+WHERE  date = DATE '2026-09-26'
+ORDER  BY "Source Club", time;
+--  expected: 9 rows — Griswold 5, East Haddam 3, and NECONN's RTCT11570.
 
 
 -- ROLLBACK
