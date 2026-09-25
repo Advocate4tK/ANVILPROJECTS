@@ -1019,6 +1019,9 @@ function fail(title, detail) {
    switching is instant and costs no round-trip.
    ───────────────────────────────────────────────────────────────────────────── */
 let ALL_GAMES = [];        // every club's games, unfiltered
+// Every name every club on this league page answers to. A game is the league's
+// business when one of them is hosting it — see leagueSelect().
+let LEAGUE_HOSTS = new Set();
 let LEAGUE_ON = false;
 
 // fillFilters() APPENDS options and attaches a change listener each time it is
@@ -1043,20 +1046,24 @@ function leagueSelect(tab) {
     // Plainfield is a home game for one and an away game for the other, so the chip
     // would be a lie either way. It is only meaningful on a single-club tab.
     PAGE_CLUB = tab.clubs.length === 1 ? [tab.clubs[0]] : [];
-    // ⚠️ AND A MULTI-CLUB TAB HAS NO AWAY GAMES EITHER. Matching on away_club
-    // drags in fixtures hosted by clubs that are not in this league at all:
-    // Tod, 2026-09-25, "we have a Griswold game showing up in the NECON
-    // schedule" — RTCT11567, Canterbury travelling to Griswold Soccer Complex,
-    // pulled onto Northeast Corner United's page by the away_club clause alone.
-    // Griswold is not a member, the league does not run that game, and it is
-    // already on Griswold's own schedule.
-    //   A single-club tab still matches away_club, because a club's away games
-    //   ARE its own — that is the whole reason they are on its page.
-    const single = tab.clubs.length === 1;
+    // ⚠️ A LEAGUE PAGE ONLY SHOWS GAMES A MEMBER IS HOSTING. Matching away_club
+    // without that guard drags in fixtures hosted by clubs outside the league
+    // entirely — Tod, 2026-09-25, "we have a Griswold game showing up in the
+    // NECON schedule", then again on the Canterbury tab: RTCT11567, Canterbury
+    // travelling to Griswold Soccer Complex. Griswold is not a member, the
+    // league does not run that game, and Griswold already publishes it.
+    //
+    // The line is the HOST, not the shape of the tab. Killingly v Canterbury at
+    // Owen Tarr is NECONN's ground and stays on Canterbury's tab wearing its
+    // Away chip; the same club travelling to a non-member does not appear at
+    // all. A club's own page (the single-club path below) is the place that
+    // shows every away game it plays, wherever it plays them.
     GAMES = ALL_GAMES.filter(g =>
+        LEAGUE_HOSTS.has(norm(g['Source Club'])) || LEAGUE_HOSTS.has(norm(g.club)))
+      .filter(g =>
         wanted.includes(norm(g['Source Club']))
         || wanted.includes(norm(g.club))
-        || (single && wanted.includes(norm(g.away_club))));
+        || wanted.includes(norm(g.away_club)));
     GAMES.sort((a, b) => (a.date || '').localeCompare(b.date || '')
                       || String(a.time || '').localeCompare(String(b.time || '')));
 
@@ -1179,6 +1186,7 @@ function drawLeagueTabs(tabs) {
             (flds || []).forEach(f => { FIELDS[String(f['Field ID'])] = f['Field Name']; });
             (vens || []).forEach(v => { VENUES[String(v['Venue ID'])] = v; });
 
+            LEAGUE_HOSTS = new Set(window.LEAGUE_TABS.flatMap(t => t.clubs).flatMap(c => namesFor(c)).map(norm));
             ALL_GAMES = withFootprints(games);   // cancelled games stay — see isCancelled(); moved ones leave a ghost — see isMoved()
 
             // Highest-ranked season across the tab's clubs — so one club left on an
