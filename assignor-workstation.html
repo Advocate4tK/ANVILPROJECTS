@@ -8225,6 +8225,7 @@
                 </div>
                 <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
                     ${changeReqNote}
+                    ${postponedPrompt(f, gid)}
                     ${assignorNoteSection}
                     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
                         <div><label>Date</label><input type="date" id="editDate-${gid}" value="${f['Date'] || ''}"></div>
@@ -9548,6 +9549,7 @@ Reason (optional):`);
                         </select>
                     </div>
                     <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
+                        ${postponedPrompt(f, gid)}
                         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
                             <div><label>Date</label><input type="date" id="editDate-${gid}" value="${f['Date']||''}"></div>
                             <div><label>Time</label><input type="time" id="editTime-${gid}" value="${f['Time']||''}"></div>
@@ -11047,6 +11049,31 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 return box('#eef2f9', '#2c3e6b', '&#8635; MOVED &mdash; was ' + was);
             }
             return '';
+        }
+
+        // A postponed game is waiting for exactly one thing, so the panel should
+        // ask for it rather than looking like every other edit. Tod, 2026-09-26:
+        // "once its in a postponed state awaiting or whatever there should be a
+        // modify choice to plug in the proper upcoming dates or future
+        // venue/dates time."
+        //   No separate screen: filling the date in is already the whole action.
+        // Saving clears the postponement and stamps rescheduled_from, so the old
+        // date grows its RESCHEDULED footprint by itself. This says so.
+        function postponedPrompt(f, gid) {
+            if (!f['postponed_at']) return '';
+            const was = f['Date']
+                ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US',
+                    { weekday: 'short', month: 'short', day: 'numeric' })
+                : 'its original date';
+            return `<div style="background:#fef3c7;border:1px solid #f0c674;border-left:4px solid #f59e0b;`
+                 + `border-radius:6px;padding:9px 12px;margin-bottom:10px;font-size:0.8rem;color:#7c4a03;line-height:1.5;">`
+                 + `<b>&#9208; Postponed &mdash; waiting on a date.</b> Set the new date, time and ground below and press `
+                 + `<b>Save Changes</b>. That reschedules it: ${was} keeps a <b>RESCHEDULED &rarr;</b> mark on the public `
+                 + `schedule pointing at the new day, and the postponement clears itself.`
+                 + `<div style="margin-top:6px;">`
+                 + `<button class="edit-save-btn" style="background:#f59e0b;color:#3d2405;" `
+                 + `onclick="event.stopPropagation(); document.getElementById('editDate-${gid}')?.focus();">Set the new date</button>`
+                 + `</div></div>`;
         }
 
         // ── POSTPONE ─────────────────────────────────────────────────────────
