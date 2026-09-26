@@ -2907,6 +2907,29 @@
                     if (!weeks[key]) weeks[key] = { label, games: [] };
                 });
 
+                // Same again for games with an OPEN CHANGE REQUEST. They are
+                // bucketed out of Submitted Games into the pending section above,
+                // which meant a week where every game was awaiting a decision
+                // rendered as "No games on file — a bye week, or a week not sent
+                // yet". Star Ems filed four requests for East Haddam at 3:08 PM on
+                // 2026-09-25 and her whole weekend read as a week she never sent.
+                //   That is the same failure as a blank Saturday on the public
+                // schedule: nothing there is indistinguishable from nothing
+                // happened, and the truth was four things waiting on the assignor.
+                const pendingByWeek = {};
+                pendingChanges.forEach(r => {
+                    const dateStr = r.fields['Date'] || new Date().toISOString().split('T')[0];
+                    const { key, label } = getWeekLabel(dateStr);
+                    if (!pendingByWeek[key]) pendingByWeek[key] = [];
+                    pendingByWeek[key].push(r);
+                    // ⚠️ empty:true, because this bucket runs BEFORE the gap-filler
+                    // that normally sets it. Creating the week without the flag
+                    // would leave the render falling through to an ordinary week
+                    // block holding no cards at all — worse than the wrong message
+                    // it replaces.
+                    if (!weeks[key]) weeks[key] = { label, games: [], empty: true };
+                });
+
                 // ⚠️ A WEEK WITH NO GAMES MUST STILL APPEAR.
                 // The list is built from the games, so a week nobody submitted
                 // simply did not exist — Sep 28 ran straight into Oct 12 and the
@@ -2915,7 +2938,7 @@
                 // week looks identical to a club taking a bye. Now every week
                 // between the first and the last is rendered, empty ones included,
                 // saying so. Tod, 2026-09-22.
-                const _wkKeys = Object.keys(weeks).concat(Object.keys(cancelledByWeek)).sort();
+                const _wkKeys = Object.keys(weeks).concat(Object.keys(cancelledByWeek)).concat(Object.keys(pendingByWeek)).sort();
                 if (_wkKeys.length > 1) {
                     const step = k => { const d = new Date(k + 'T00:00:00'); d.setDate(d.getDate() + 7); return d.toISOString().split('T')[0]; };
                     for (let k = _wkKeys[0]; k < _wkKeys[_wkKeys.length - 1]; k = step(k)) {
@@ -2961,6 +2984,16 @@
                     })
                     .map(([key, { label, games: wGames, empty }]) => {
                         const wCancelledCount = (cancelledByWeek[key] || []).length;
+                        const wPendingCount   = (pendingByWeek[key] || []).length;
+                        if (empty && wCancelledCount === 0 && wPendingCount > 0) {
+                            // Games, all of them waiting on a decision. Say the true
+                            // thing rather than the bye-week line.
+                            return `<div style="margin-bottom:5px; background:rgba(245,158,11,0.07); border:1px solid rgba(245,158,11,0.4); border-radius:8px; padding:9px 14px; display:flex; align-items:center; gap:10px; font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; font-weight:800; color:#92400e; text-transform:uppercase; letter-spacing:0.8px;">
+                                <span style="white-space:nowrap;">${label}</span>
+                                <span style="background:#f59e0b; color:#3d2405; font-size:0.72rem; font-weight:800; padding:2px 10px; border-radius:8px; font-family:'DM Sans',sans-serif; flex-shrink:0;">${wPendingCount}</span>
+                                <span style="font-family:'DM Sans',sans-serif; font-size:0.74rem; font-weight:600; letter-spacing:0; text-transform:none; color:#92400e;">${wPendingCount === 1 ? 'game is' : 'games are'} awaiting a decision &mdash; see the change requests above</span>
+                            </div>`;
+                        }
                         if (empty && wCancelledCount === 0) {
                             // No games on file. Say it plainly rather than skipping
                             // the week — a bye and a missed submission look the same
