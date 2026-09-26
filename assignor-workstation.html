@@ -8247,15 +8247,7 @@
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                         <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
                         <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
-                        ${(f['Game Status'] === 'Cancelled' || cancelledGameIds.has(gid))
-                            ? ''
-                            : (f['postponed_at']
-                                ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="unpostponeGame('${gid}')" title="Put this game back on its date">&#8617; Un-postpone</button>`
-                                : `<button class="edit-postpone-btn" onclick="postponeGame('${gid}')" title="Off, with no new date agreed yet">&#9208; Postpone</button>`)}
-                        ${isCancelled
-                            ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
-                            : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`
-                        }
+                        ${statusAndModify(f, gid)}
                         ${(!isCancelled && !f['postponed_at'] && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
                             ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
                             : ''}
@@ -9571,14 +9563,7 @@ Reason (optional):`);
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
                             <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
                             <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
-                        ${(f['Game Status'] === 'Cancelled' || cancelledGameIds.has(gid))
-                            ? ''
-                            : (f['postponed_at']
-                                ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="unpostponeGame('${gid}')" title="Put this game back on its date">&#8617; Un-postpone</button>`
-                                : `<button class="edit-postpone-btn" onclick="postponeGame('${gid}')" title="Off, with no new date agreed yet">&#9208; Postpone</button>`)}
-                            ${cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled'
-                                ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
-                                : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`}
+                            ${statusAndModify(f, gid)}
                             ${(!(cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled') && !f['postponed_at'] && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
                                 ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
                                 : ''}
@@ -11021,6 +11006,94 @@ You will need to contact them yourself. Assign anyway?`)) return;
             }
         }
 
+        // ── STATUS, LOUDLY, AND ONE WAY TO CHANGE IT ────────────────────
+        // Tod, 2026-09-26: "postpone or reschedule ..... why not have current
+        // status and 'modify'" — then "status should be bold".
+        //
+        // The footer had grown to six buttons and three of them were states
+        // wearing verbs: Postpone, Un-postpone, Restore. Which appeared depended
+        // on the state you were already in, so there was no way from cancelled
+        // to postponed without passing through normal, and nothing on the row
+        // simply said where you stood.
+        //
+        // Now: the state in bold, and one Modify offering the same three words
+        // the club portal offers — Change, Postpone, Cancel — plus "on as
+        // scheduled" to undo either. Same vocabulary on both sides of a request.
+        //
+        // Delete (error) stays OUT of the chooser. It is not a status, it is
+        // "this should never have existed", and it is the one irreversible thing
+        // on the card. It keeps its own button and its own guards.
+        function statusAndModify(f, gid) {
+            const cancelled = String(f['Game Status'] || '').trim() === 'Cancelled';
+            let label, bg, fg;
+            if (cancelled) {
+                const how = f['cancellation_type'] === 'weather' ? ' (weather)'
+                          : f['cancellation_type'] ? ' (non-weather)' : '';
+                label = 'CANCELLED' + how; bg = '#fdecea'; fg = '#a5281b';
+            } else if (f['postponed_at']) {
+                label = 'POSTPONED &middot; no new date yet'; bg = '#fef3c7'; fg = '#7c4a03';
+            } else if (String(f['Game Status'] || '').trim() === 'Change Requested') {
+                label = 'CHANGE REQUESTED'; bg = '#fdebd0'; fg = '#935116';
+            } else if (f['rescheduled_from']) {
+                const was = new Date(f['rescheduled_from'] + 'T12:00:00')
+                              .toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                label = 'ON &mdash; moved from ' + was; bg = '#eef2f9'; fg = '#2c3e6b';
+            } else {
+                label = 'ON AS SCHEDULED'; bg = '#eaf7ef'; fg = '#1e7a45';
+            }
+            return '<span style="display:inline-flex;align-items:center;gap:8px;margin-left:4px;">'
+                 + '<span style="font-size:0.68rem;font-weight:800;letter-spacing:0.1em;color:#8a8378;">STATUS</span>'
+                 + '<span style="font-size:0.86rem;font-weight:900;letter-spacing:0.03em;color:' + fg + ';'
+                 + 'background:' + bg + ';border-radius:5px;padding:4px 11px;">' + label + '</span>'
+                 + '<button class="edit-close-btn" onclick="openModify(\'' + gid + '\')" '
+                 + 'title="Change this game\'s status">&#9881; Modify</button></span>';
+        }
+
+        // The chooser. Every branch hands off to an action that already exists
+        // and is already tested — nothing here writes to the database itself.
+        let _modifyGameId = null;
+        function openModify(gameId) {
+            const g = allGames.find(x => String(x.id) === String(gameId));
+            if (!g) return;
+            _modifyGameId = gameId;
+            const f = g.fields;
+            const cancelled = String(f['Game Status'] || '').trim() === 'Cancelled';
+            document.getElementById('gmLabel').textContent =
+                (f['Home Team'] || '?') + ' vs ' + (f['Away Team'] || '?');
+            // "On as scheduled" only means something when it is currently off.
+            document.getElementById('gmOptOn').style.display =
+                (cancelled || f['postponed_at']) ? '' : 'none';
+            document.querySelectorAll('input[name="gmKind"]').forEach(r => r.checked = false);
+            document.getElementById('gmModal').classList.add('open');
+        }
+        function closeModify() {
+            document.getElementById('gmModal').classList.remove('open');
+            _modifyGameId = null;
+        }
+        function applyModify() {
+            const picked = document.querySelector('input[name="gmKind"]:checked');
+            if (!picked) { alert('Pick what is happening to this game.'); return; }
+            const kind = picked.value;
+            const gid = _modifyGameId;
+            const g = allGames.find(x => String(x.id) === String(gid));
+            closeModify();
+            if (!g) return;
+            const f = g.fields;
+            if (kind === 'date') {
+                // The panel already edits date, time, venue and field, and saving
+                // stamps the footprint. Put the cursor where the answer goes.
+                const el = document.getElementById('editDate-' + gid);
+                if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                return;
+            }
+            if (kind === 'postpone') return postponeGame(gid);
+            if (kind === 'cancel')   return cancelGame(gid, (f['Home Team'] || '?') + ' vs ' + (f['Away Team'] || '?'));
+            if (kind === 'on') {
+                if (f['postponed_at']) return unpostponeGame(gid);
+                return restoreGame(gid);
+            }
+        }
+
         // ── WHAT STATE IS THIS GAME IN ───────────────────────────────────────
         // Tod, 2026-09-26: "should have 'STATUS' as whatever it is."
         // Only "Change Requested" ever announced itself on a card. Cancelled
@@ -11459,6 +11532,34 @@ The game keeps its date on the board but reads POSTPONED — new date to come. T
     <div id="s3RefTooltip" style="display:none; position:fixed; z-index:9999; pointer-events:none;
         background:#fff; border:1px solid #d0d7de; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.15);
         padding:10px 14px; min-width:200px; max-width:280px; font-size:0.8rem; line-height:1.6;"></div>
+
+<!-- Modify Game Status Modal — the three words the club portal uses, plus undo -->
+<div class="ctm-overlay" id="gmModal">
+    <div class="ctm-box">
+        <h3>Modify game</h3>
+        <p class="ctm-sub" id="gmLabel"></p>
+        <label class="ctm-opt" id="gmOptOn" onclick="document.getElementById('gmOn').checked=true;">
+            <input type="radio" name="gmKind" value="on" id="gmOn">
+            <span><b>&#9654; On as scheduled</b><small>Undo a cancellation or a postponement</small></span>
+        </label>
+        <label class="ctm-opt" onclick="document.getElementById('gmDate').checked=true;">
+            <input type="radio" name="gmKind" value="date" id="gmDate">
+            <span><b>&#128197; New date, time or ground</b><small>You know when it is being played &mdash; the old date keeps a RESCHEDULED mark</small></span>
+        </label>
+        <label class="ctm-opt" onclick="document.getElementById('gmPost').checked=true;">
+            <input type="radio" name="gmKind" value="postpone" id="gmPost">
+            <span><b>&#9208; Postpone</b><small>Off, with no new date agreed yet. The crew comes off; nobody is scratched and no fee is zeroed</small></span>
+        </label>
+        <label class="ctm-opt" onclick="document.getElementById('gmCancel').checked=true;">
+            <input type="radio" name="gmKind" value="cancel" id="gmCancel">
+            <span><b>&#128683; Cancel</b><small>Not being played at all &mdash; weather or non-weather is the next question</small></span>
+        </label>
+        <div class="ctm-actions">
+            <button class="ctm-cancel" onclick="closeModify()">Back</button>
+            <button class="ctm-confirm" onclick="applyModify()">Continue</button>
+        </div>
+    </div>
+</div>
 
 <!-- Cancel Game Type Modal -->
 <div id="cancelTypeModal">
