@@ -10754,6 +10754,21 @@ You will need to contact them yourself. Assign anyway?`)) return;
                     updates['rescheduled_from'] = cur['Date'];
                 }
 
+                // ── AND CENTRAL ASSIGN NO LONGER KNOWS ABOUT THIS GAME ─────────
+                // ca_change_synced_at records that somebody re-entered a change
+                // in CA by hand, because CA's importer adds and cannot update.
+                // It was only ever set, never cleared — so a game changed a
+                // SECOND time kept the tick from the first, the Changes page
+                // reported "Central Assign updated" about an edit that happened
+                // days earlier, and nobody was ever asked again.
+                //   Tod caught it on RTCT11567, 2026-09-25: moved to 2 Oct at
+                // 22:05, card still showing a CA confirmation from the 22nd, and
+                // CA holding the old Saturday kickoff with nothing to flag it.
+                if (!window.tournamentMode && cur['ca_change_synced_at']
+                    && (newDate !== cur['Date'] || (cleanTime || null) !== (cur['Time'] || null))) {
+                    updates['ca_change_synced_at'] = null;
+                }
+
                 const _gTable2 = window.tournamentMode ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
                 await airtableClient.updateRecord(_gTable2, gameId, updates);
 
@@ -10887,7 +10902,11 @@ You will need to contact them yourself. Assign anyway?`)) return;
             renderGames();
             try {
                 const _cTable = window.tournamentMode ? 'tournament_games' : 'games';
-                const patch = { 'Game Status': 'Cancelled', cancellation_type: type, cancelled_at: cancelledAt };
+                // ca_change_synced_at cleared for the same reason as a date change:
+                // a game cancelled here is still live in CA until somebody says
+                // otherwise, and a tick from a previous change must not silence
+                // the question.
+                const patch = { 'Game Status': 'Cancelled', cancellation_type: type, cancelled_at: cancelledAt, ca_change_synced_at: null };
                 // ⚠️ LOWERCASE. This is the RAW client, not airtableClient — so
                 // _col() never runs and 'Notes' reaches PostgREST as a column
                 // name that does not exist. The whole update is rejected, the
