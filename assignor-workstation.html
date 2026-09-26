@@ -1555,21 +1555,22 @@
         }
 
         // ── Apply ?game= focus after any render (called from loadAll + openWorkstation) ──
+        // Drops ?game= from the URL so renderGames() stops pinning the board to
+        // one fixture. The game stays selected and highlighted — this only ends
+        // the filter override. Safe to call repeatedly.
+        function releaseGameFocusLock() {
+            try {
+                const u = new URL(window.location.href);
+                if (!u.searchParams.has('game')) return;
+                u.searchParams.delete('game');
+                history.replaceState({}, '', u);
+            } catch (e) { /* no replaceState — behaves as it always did */ }
+        }
+
         function applyGameFocus(focusGameId) {
             if (!focusGameId || !allGames.length) return;
             selectGame(focusGameId);
-            // ⚠️ RELEASE THE LOCK. The filter at renderGames() shows only this
-            // game while ?game= is in the URL. Landing on it is the point;
-            // staying trapped in it is not. Clearing the parameter now leaves
-            // the game selected, highlighted and scrolled to, and lets the very
-            // next render obey the club pills again.
-            try {
-                const _u = new URL(window.location.href);
-                if (_u.searchParams.has('game')) {
-                    _u.searchParams.delete('game');
-                    history.replaceState({}, '', _u);
-                }
-            } catch (e) { /* replaceState unavailable — the old behaviour, no worse */ }
+
             // Highlight the game card — works for Standard (card-) and Command/Wide (cmd2row-, cmdrow-)
             const el = document.getElementById('card-' + focusGameId)
                     || document.getElementById('cmd2row-' + focusGameId)
@@ -7171,6 +7172,15 @@
                 pill.dataset.club = club;
                 pill.addEventListener('click', () => {
                     userHasFilteredClubs = true;
+                    // ⚠️ RELEASE THE SINGLE-GAME LOCK — here, not in
+                    // applyGameFocus. While ?game= is in the URL the games
+                    // filter shows that fixture and nothing else, which is
+                    // correct on arrival and wrong the moment you pick a club.
+                    // Clearing it during focus was too early: the render that
+                    // was meant to show the landed-on game had not happened
+                    // yet, so the search stopped working altogether. Picking a
+                    // club is the unambiguous "I am done with that one game".
+                    releaseGameFocusLock();
                     if (selectedClubs.size === clubsList.length && selectedClubs.has(club)) {
                         // All clubs active → first click = "show only this club"
                         selectedClubs.clear();
