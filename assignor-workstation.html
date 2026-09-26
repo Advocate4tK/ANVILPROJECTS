@@ -8195,7 +8195,7 @@
             return `
                 ${isCancelled ? '<div class="cancelled-stamp">CANCELLED</div>' : ''}
                 ${cancelBadge}
-                ${isChangeReq ? '<div style="font-size:0.72rem;font-weight:700;color:#935116;background:#fdebd0;border-radius:4px;padding:2px 8px;margin-bottom:6px;display:inline-block;">⚠ Change Requested</div>' : ''}
+                ${gameStatusBadge(f, isChangeReq)}
                 <div class="game-header">
                     <div>
                         ${gn ? `<span class="game-no" style="margin-right:6px;">${gn}</span>` : ''}
@@ -8255,7 +8255,7 @@
                             ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
                             : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`
                         }
-                        ${(!isCancelled && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
+                        ${(!isCancelled && !f['postponed_at'] && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
                             ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
                             : ''}
                     </div>
@@ -9491,7 +9491,7 @@ Reason (optional):`);
                 html += `<div class="game-card ${f['is_cup'] ? 'cup-game ' : ''}${(f['game_type']||'').toUpperCase()==='COMP' ? 'comp-game' : ''} ${full ? 'fully-assigned' : ''} ${selected ? 'selected' : ''} ${isCancelled ? 'cancelled' : ''} ${isChangeReq ? 'change-focus' : ''}"
                     onclick="selectGame('${gid}')" oncontextmenu="s2ShowCardMenu(event,'${gid}'); return false;" id="card-${gid}" style="${confirmedBorder}">
                     ${isCancelled ? '<div class="cancelled-stamp">CANCELLED</div>' : ''}
-                    ${isChangeReq ? '<div style="font-size:0.72rem;font-weight:700;color:#935116;background:#fdebd0;border-radius:4px;padding:2px 8px;margin-bottom:6px;display:inline-block;">⚠ Change Requested</div>' : ''}
+                    ${gameStatusBadge(f, isChangeReq)}
                     <div class="game-header">
                         <div>
                             ${buildGameNumber(f) ? `<span class="game-no" style="margin-right:6px;">${buildGameNumber(f)}</span>` : ''}
@@ -9577,7 +9577,7 @@ Reason (optional):`);
                             ${cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled'
                                 ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
                                 : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`}
-                            ${(!(cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled') && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
+                            ${(!(cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled') && !f['postponed_at'] && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
                                 ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
                                 : ''}
                         </div>
@@ -11017,6 +11017,36 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 alert('Could not cancel game: ' + e.message);
                 renderGames();
             }
+        }
+
+        // ── WHAT STATE IS THIS GAME IN ───────────────────────────────────────
+        // Tod, 2026-09-26: "should have 'STATUS' as whatever it is."
+        // Only "Change Requested" ever announced itself on a card. Cancelled
+        // showed as styling you had to already know how to read, and postponed
+        // — added this morning — said nothing at all until you opened the edit
+        // panel and noticed the button had changed to Un-postpone.
+        //
+        // One badge, every state, both panes. Colours match the public
+        // schedule so the two describe the same game the same way: red for
+        // settled, amber for waiting.
+        function gameStatusBadge(f, isChangeReq) {
+            const box = (bg, fg, txt) => `<div style="font-size:0.72rem;font-weight:800;letter-spacing:0.04em;`
+                + `color:${fg};background:${bg};border-radius:4px;padding:2px 8px;margin-bottom:6px;`
+                + `display:inline-block;">${txt}</div>`;
+            const status = String(f['Game Status'] || '').trim();
+            if (status === 'Cancelled') {
+                const how = f['cancellation_type'] === 'weather' ? ' (weather)'
+                          : f['cancellation_type'] ? ' (non-weather)' : '';
+                return box('#fdecea', '#a5281b', '&#128683; CANCELLED' + how);
+            }
+            if (f['postponed_at']) return box('#fef3c7', '#7c4a03', '&#9208; POSTPONED &middot; no new date yet');
+            if (isChangeReq)       return box('#fdebd0', '#935116', '&#9888; CHANGE REQUESTED');
+            if (f['rescheduled_from']) {
+                const d = new Date(f['rescheduled_from'] + 'T12:00:00');
+                const was = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                return box('#eef2f9', '#2c3e6b', '&#8635; MOVED &mdash; was ' + was);
+            }
+            return '';
         }
 
         // ── POSTPONE ─────────────────────────────────────────────────────────
