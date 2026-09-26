@@ -2838,6 +2838,16 @@
                 });
                 const showBadgeOnLoad = window._pendingCollapsed && hasAnyNewNote;
 
+                // The week line says "see the change requests above" and the
+                // section above is one collapsed grey row that is easy to scroll
+                // straight past — a pointer at something invisible is not much
+                // better than no pointer. This opens it and goes there.
+                window._jumpToPending = function() {
+                    if (window._pendingCollapsed) window._togglePending();
+                    const el = document.getElementById('openChangeRequests');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                };
+
                 window._togglePending = function() {
                     window._pendingCollapsed = !window._pendingCollapsed;
                     localStorage.setItem('pendingChangesCollapsed', window._pendingCollapsed);
@@ -2860,7 +2870,7 @@
                     }
                 };
 
-                html += `<div style="margin-bottom:32px;">
+                html += `<div id="openChangeRequests" style="margin-bottom:32px; scroll-margin-top:12px;">
                     <div class="chg-section-hdr pending" style="justify-content:space-between; cursor:pointer; user-select:none;" onclick="window._togglePending()">
                         <span style="display:flex; align-items:center; gap:7px;">
                             <span id="pendingArrow" style="font-size:0.8rem; transition:transform 0.2s;">${window._pendingCollapsed ? '▶' : '▼'}</span>
@@ -2988,10 +2998,10 @@
                         if (empty && wCancelledCount === 0 && wPendingCount > 0) {
                             // Games, all of them waiting on a decision. Say the true
                             // thing rather than the bye-week line.
-                            return `<div style="margin-bottom:5px; background:rgba(245,158,11,0.07); border:1px solid rgba(245,158,11,0.4); border-radius:8px; padding:9px 14px; display:flex; align-items:center; gap:10px; font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; font-weight:800; color:#92400e; text-transform:uppercase; letter-spacing:0.8px;">
+                            return `<div onclick="window._jumpToPending()" title="Open the change requests for these games" style="margin-bottom:5px; background:rgba(245,158,11,0.07); border:1px solid rgba(245,158,11,0.4); border-radius:8px; padding:9px 14px; display:flex; align-items:center; gap:10px; font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; font-weight:800; color:#92400e; text-transform:uppercase; letter-spacing:0.8px; cursor:pointer;">
                                 <span style="white-space:nowrap;">${label}</span>
                                 <span style="background:#f59e0b; color:#3d2405; font-size:0.72rem; font-weight:800; padding:2px 10px; border-radius:8px; font-family:'DM Sans',sans-serif; flex-shrink:0;">${wPendingCount}</span>
-                                <span style="font-family:'DM Sans',sans-serif; font-size:0.74rem; font-weight:600; letter-spacing:0; text-transform:none; color:#92400e;">${wPendingCount === 1 ? 'game is' : 'games are'} awaiting a decision &mdash; see the change requests above</span>
+                                <span style="font-family:'DM Sans',sans-serif; font-size:0.74rem; font-weight:600; letter-spacing:0; text-transform:none; color:#92400e;">${wPendingCount === 1 ? 'game is' : 'games are'} awaiting a decision &mdash; <u>see the change requests</u></span>
                             </div>`;
                         }
                         if (empty && wCancelledCount === 0) {
