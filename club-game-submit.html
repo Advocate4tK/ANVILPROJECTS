@@ -2950,6 +2950,9 @@
                 // then finished weeks below, most recent first. Games INSIDE a week
                 // stay chronological — a Saturday reads in kickoff order, which is
                 // what a schedule is.
+                // Stashed so the bulk request modal can read a week's games
+                // without re-deriving them. See openBulkChange().
+                window._weeks = weeks;
                 const weekBlocks = Object.entries(weeks).sort((a, b) => {
                         const aPast = a[0] < currentWeekKey, bPast = b[0] < currentWeekKey;
                         if (aPast !== bPast) return aPast ? 1 : -1;      // finished weeks sink
@@ -2993,8 +2996,17 @@
                         const cancelledInWeekHtml = wCancelled.length > 0
                             ? `<div style="margin-top:${wGames.length > 0 ? '6px' : '0'};">${wCancelled.map(r => buildGameCard(r, { cancelled: true })).join('')}</div>`
                             : '';
+                        // ── REQUEST A CHANGE FOR THE WHOLE WEEK ───────────────────
+                        // Tod, 2026-09-25: "during big storms they could request at
+                        // the top for the whole week or day of games vs one offs."
+                        // Weather cancels a day, not a fixture. Ed Conn filed three
+                        // separate requests over two hours that morning for one
+                        // decision about one afternoon.
+                        const bulkBtn = wGames.length
+                            ? `<button onclick="event.stopPropagation(); openBulkChange('${key}')" title="Request a change for a day or the whole week" style="background:none; border:1px solid var(--amber); color:#92400e; border-radius:6px; padding:3px 11px; font-size:0.72rem; font-weight:700; cursor:pointer; white-space:nowrap; flex-shrink:0; font-family:'DM Sans',sans-serif; letter-spacing:0.02em;">Request Change</button>`
+                            : '';
                         return `<div style="${weekWrapStyle}" class="week-block" id="weekBlock_${key}" data-week="${key}">
-                            <div style="${hdrStyle}" onclick="window._toggleWeek('${key}')">${leftSide}</div>
+                            <div style="${hdrStyle}" onclick="window._toggleWeek('${key}')">${leftSide}${bulkBtn}</div>
                             <div id="weekCards_${key}" style="display:${collapsed ? 'none' : 'block'};">
                                 ${wGames.map(r => buildGameCard(r, { currentWeek: isCurrent })).join('')}
                                 ${cancelledInWeekHtml}
@@ -5414,5 +5426,252 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
     }
     _refreshSeasonBadges();
     </script>
+
+<!-- ══ BULK CHANGE REQUEST ═══════════════════════════════════════════════════
+     A day of games is one decision. Tod, 2026-09-25: "during big storms they
+     could request at the top for the whole week or day of games vs one offs."
+     Emits exactly the per-game requests the single form has always written, so
+     nothing downstream has to learn a new shape — except the third word,
+     POSTPONEMENT, which schedule-changes.html was taught in the same push. -->
+<div id="bcrBack" style="display:none; position:fixed; inset:0; background:rgba(6,14,32,.72); z-index:9000; overflow-y:auto; padding:24px 14px;">
+  <div style="max-width:780px; margin:0 auto; background:var(--bg); border-radius:14px; box-shadow:0 18px 60px rgba(0,0,0,.45); overflow:hidden;">
+    <div style="background:var(--deep); padding:15px 20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <h2 style="font-family:'Barlow Condensed',sans-serif; font-weight:800; color:#fff; margin:0; font-size:1.4rem; text-transform:uppercase; letter-spacing:.02em;">Request Change</h2>
+      <span id="bcrWeek" style="color:rgba(255,255,255,.62); font-size:.8rem; font-weight:600; margin-left:auto;"></span>
+      <button onclick="closeBulkChange()" style="background:none; border:none; color:rgba(255,255,255,.7); font-size:1.3rem; cursor:pointer; line-height:1; padding:0 2px;">&times;</button>
+    </div>
+
+    <div class="bcr-sec"><p class="bcr-k">Which days?</p><div id="bcrDays" style="display:flex; gap:9px; flex-wrap:wrap;"></div></div>
+
+    <div class="bcr-sec">
+      <p class="bcr-k">What's happening?</p>
+      <div id="bcrOut" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(196px,1fr)); gap:9px;">
+        <label class="bcr-o" data-v="change"><input type="radio" name="bcrO" value="change"><div><b>New date</b><span>You know when it's being played</span></div></label>
+        <label class="bcr-o" data-v="postpone"><input type="radio" name="bcrO" value="postpone"><div><b>Postpone</b><span>Not being played &mdash; date to come</span></div></label>
+        <label class="bcr-o bcr-danger" data-v="cancel"><input type="radio" name="bcrO" value="cancel" checked><div><b>Cancel</b><span>Not being played at all</span></div></label>
+      </div>
+      <div id="bcrWhen" style="display:none; margin-top:12px;">
+        <label style="font-size:.78rem; font-weight:700; color:var(--muted); display:block; margin-bottom:4px;">New date</label>
+        <input type="date" id="bcrDate" style="padding:8px 10px; border:1.5px solid var(--border); border-radius:8px; font-family:'DM Sans',sans-serif;">
+        <span style="font-size:.78rem; color:var(--muted); margin-left:9px;">Kickoff times stay as they are.</span>
+      </div>
+    </div>
+
+    <div class="bcr-sec">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <p class="bcr-k" style="margin:0;">Which games?</p>
+        <span style="margin-left:auto; display:flex; gap:6px;">
+          <button class="bcr-mini" onclick="bcrPick('all')">All</button>
+          <button class="bcr-mini" onclick="bcrPick('rec')">Rec only</button>
+          <button class="bcr-mini" onclick="bcrPick('none')">None</button>
+        </span>
+      </div>
+      <div id="bcrGames"></div>
+      <div id="bcrWhy" style="display:none; gap:9px; align-items:flex-start; margin-top:9px; padding:9px 12px; background:rgba(245,158,11,.09); border:1px solid rgba(245,158,11,.35); border-radius:8px; font-size:.79rem; color:#7c4a03; line-height:1.45;">
+        <span>&#9888;</span><span><b>Comp and cup games start unticked.</b> A club doesn't own those dates &mdash; the competition does. Tick them only if whoever runs the competition has already agreed.</span>
+      </div>
+    </div>
+
+    <div class="bcr-sec"><p class="bcr-k">Reason</p>
+      <textarea id="bcrReason" placeholder="Why are these games changing?" style="width:100%; box-sizing:border-box; padding:10px 12px; border:1.5px solid var(--border); border-radius:9px; font-family:'DM Sans',sans-serif; font-size:.92rem; resize:vertical; min-height:58px;"></textarea>
+    </div>
+
+    <div style="padding:15px 20px; background:var(--surface); display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <span id="bcrCount" style="font-size:.85rem; color:var(--muted); font-weight:600;"></span>
+      <button onclick="closeBulkChange()" style="margin-left:auto; background:none; border:1px solid var(--border); color:var(--muted); border-radius:9px; padding:10px 16px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">Close</button>
+      <button id="bcrGo" onclick="bcrSubmit()" style="background:var(--danger); color:#fff; border:none; border-radius:9px; padding:11px 20px; font-weight:800; font-size:.93rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Submit request</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .bcr-sec { padding:16px 20px; border-bottom:1px solid var(--border); }
+  .bcr-k { font-family:'Barlow Condensed',sans-serif; font-weight:800; text-transform:uppercase; letter-spacing:.09em; font-size:.82rem; color:var(--muted); margin:0 0 10px; }
+  .bcr-pick { display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; background:var(--surface); border:1.5px solid var(--border); border-radius:9px; padding:8px 14px; font-weight:600; font-size:.9rem; }
+  .bcr-pick input { width:auto; margin:0; accent-color:var(--accent); transform:scale(1.15); }
+  .bcr-pick.on { border-color:var(--accent); background:rgba(0,200,83,.07); }
+  .bcr-pick .n { font-family:'JetBrains Mono',monospace; font-size:.76rem; color:var(--muted); font-weight:600; }
+  .bcr-o { display:flex; gap:10px; align-items:flex-start; cursor:pointer; background:var(--surface); border:1.5px solid var(--border); border-radius:9px; padding:11px 13px; }
+  .bcr-o.on { border-color:var(--deep); background:#eef2f9; }
+  .bcr-o.on.bcr-danger { border-color:var(--danger); background:#fdf0f0; }
+  .bcr-o input { width:auto; margin:2px 0 0; accent-color:var(--deep); }
+  .bcr-o b { display:block; font-size:.92rem; font-weight:700; }
+  .bcr-o span { display:block; font-size:.76rem; color:var(--muted); line-height:1.35; margin-top:2px; }
+  .bcr-mini { background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:3px 11px; font-size:.75rem; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .bcr-g { display:flex; align-items:center; gap:11px; padding:9px 12px; background:var(--surface); border:1.5px solid var(--border); border-radius:9px; margin-bottom:7px; cursor:pointer; }
+  .bcr-g.on { border-color:var(--accent); box-shadow:inset 3px 0 0 var(--accent); }
+  .bcr-g.locked { background:#faf7f3; }
+  .bcr-g input { width:auto; margin:0; accent-color:var(--accent); transform:scale(1.15); }
+  .bcr-g .t { font-family:'JetBrains Mono',monospace; font-size:.79rem; font-weight:600; min-width:68px; }
+  .bcr-g .ag { font-size:.71rem; font-weight:800; background:#eef2f9; color:var(--deep); border-radius:4px; padding:2px 7px; }
+  .bcr-g .m { flex:1; font-size:.89rem; font-weight:600; min-width:140px; }
+  .bcr-g .k { font-size:.69rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; border-radius:4px; padding:2px 8px; white-space:nowrap; }
+  .bcr-g .k.rec { background:rgba(0,200,83,.12); color:#0a7a37; }
+  .bcr-g .k.comp { background:rgba(124,58,237,.12); color:#6d28d9; }
+  .bcr-g .k.cup { background:rgba(245,158,11,.16); color:#92400e; }
+  .bcr-g.hid { display:none; }
+</style>
+
+<script>
+// ── Bulk change request ──────────────────────────────────────────────────────
+// Writes the SAME per-game requests the single form always has, one per ticked
+// game, so schedule-changes.html and the workstation need no new vocabulary
+// beyond POSTPONEMENT. A bulk write multiplies a mistake, so nothing here is
+// optimistic: each game is confirmed before the next, and the tally at the end
+// is what actually saved.
+let _bcrWeek = null, _bcrGames = [];
+
+function openBulkChange(weekKey) {
+    const wk = (window._weeks || {})[weekKey];
+    if (!wk || !wk.games || !wk.games.length) return;
+    _bcrWeek = weekKey;
+    _bcrGames = wk.games.map(r => {
+        const f = r.fields || {};
+        const kind = f['is_cup'] ? 'cup'
+                   : String(f['game_type'] || '').trim().toLowerCase() === 'comp' ? 'comp' : 'rec';
+        return { id: r.id, date: f['Date'] || '', time: f['Time'] || '',
+                 age: f['Age Group'] || '', kind: kind,
+                 m: (f['Home Team'] || 'TBD') + ' vs ' + (f['Away Team'] || 'TBD') };
+    }).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+
+    document.getElementById('bcrWeek').textContent = wk.label || '';
+    document.getElementById('bcrReason').value = '';
+    document.querySelector('#bcrOut input[value="cancel"]').checked = true;
+
+    const days = [...new Set(_bcrGames.map(g => g.date))].filter(Boolean);
+    const lbl = d => new Date(d + 'T12:00:00')
+        .toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    document.getElementById('bcrDays').innerHTML = days.map((d, i) =>
+        '<label class="bcr-pick' + (i === 0 ? ' on' : '') + '" data-day="' + d + '">'
+      + '<input type="checkbox" ' + (i === 0 ? 'checked' : '')
+      + ' onchange="this.closest(\'.bcr-pick\').classList.toggle(\'on\', this.checked); bcrSync();"> '
+      + lbl(d) + ' <span class="n">' + _bcrGames.filter(g => g.date === d).length + '</span></label>').join('');
+
+    document.getElementById('bcrGames').innerHTML = _bcrGames.map((g, i) =>
+        '<label class="bcr-g' + (g.kind === 'rec' ? ' on' : ' locked') + '" data-i="' + i + '" data-day="' + g.date + '" data-kind="' + g.kind + '">'
+      + '<input type="checkbox" ' + (g.kind === 'rec' ? 'checked' : '') + ' onchange="bcrSync()">'
+      + '<span class="t">' + _bcrFmtTime(g.time) + '</span><span class="ag">' + (g.age || '—') + '</span>'
+      + '<span class="m">' + g.m + '</span>'
+      + '<span class="k ' + g.kind + '">' + (g.kind === 'cup' ? 'Cup' : g.kind) + '</span></label>').join('');
+
+    document.getElementById('bcrBack').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    bcrSync();
+}
+
+function _bcrFmtTime(t) {
+    if (!t) return 'TBD';
+    const parts = String(t).split(':').map(Number);
+    const h = parts[0], m = parts[1] || 0;
+    const ap = h >= 12 ? 'PM' : 'AM';
+    return (((h + 11) % 12) + 1) + ':' + String(m).padStart(2, '0') + ' ' + ap;
+}
+
+function closeBulkChange() {
+    document.getElementById('bcrBack').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function bcrPick(what) {
+    document.querySelectorAll('#bcrGames .bcr-g').forEach(row => {
+        if (row.classList.contains('hid')) return;
+        row.querySelector('input').checked =
+            what === 'all' ? true : what === 'none' ? false : row.dataset.kind === 'rec';
+    });
+    bcrSync();
+}
+
+function bcrSync() {
+    const live = new Set([...document.querySelectorAll('#bcrDays input:checked')]
+                          .map(i => i.closest('.bcr-pick').dataset.day));
+    let anyLocked = false;
+    document.querySelectorAll('#bcrGames .bcr-g').forEach(row => {
+        const hide = !live.has(row.dataset.day);
+        row.classList.toggle('hid', hide);
+        if (hide) row.querySelector('input').checked = false;
+        row.classList.toggle('on', row.querySelector('input').checked);
+        if (!hide && row.dataset.kind !== 'rec') anyLocked = true;
+    });
+    document.getElementById('bcrWhy').style.display = anyLocked ? 'flex' : 'none';
+
+    const sel = document.querySelector('#bcrOut input:checked');
+    const outcome = sel ? sel.value : 'cancel';
+    document.querySelectorAll('#bcrOut .bcr-o').forEach(l => l.classList.toggle('on', l.dataset.v === outcome));
+    document.getElementById('bcrWhen').style.display = outcome === 'change' ? 'block' : 'none';
+
+    const n = document.querySelectorAll('#bcrGames .bcr-g input:checked').length;
+    const verb = outcome === 'cancel' ? 'cancelled' : outcome === 'postpone' ? 'postponed' : 'moved';
+    document.getElementById('bcrCount').innerHTML = n
+        ? '<b style="color:var(--text);">' + n + '</b> game' + (n === 1 ? '' : 's') + ' will be requested ' + verb
+        : 'Nothing selected';
+    const go = document.getElementById('bcrGo');
+    go.disabled = !n;
+    go.style.background = !n ? '#d9d2c8' : outcome === 'cancel' ? 'var(--danger)' : 'var(--accent)';
+    go.style.color      = !n ? '#8a8378' : outcome === 'cancel' ? '#fff' : '#06210f';
+    go.textContent = n ? 'Submit request for ' + n + ' game' + (n === 1 ? '' : 's') : 'Submit request';
+}
+document.addEventListener('change', e => { if (e.target && e.target.name === 'bcrO') bcrSync(); });
+
+async function bcrSubmit() {
+    const outcome = document.querySelector('#bcrOut input:checked').value;
+    const reason  = document.getElementById('bcrReason').value.trim();
+    const newDate = document.getElementById('bcrDate').value || '';
+    const rows = [...document.querySelectorAll('#bcrGames .bcr-g')]
+                   .filter(r => r.querySelector('input').checked);
+    if (!rows.length) return;
+    if (!reason) { alert('Please give a reason.'); return; }
+    if (outcome === 'change' && !newDate) { alert('Pick the new date.'); return; }
+
+    const verb = outcome === 'cancel' ? 'CANCEL' : outcome === 'postpone' ? 'POSTPONE' : 'MOVE';
+    if (!confirm(verb + ' ' + rows.length + ' game' + (rows.length === 1 ? '' : 's') + '?\n\nThis sends a request for every game ticked.')) return;
+
+    const go = document.getElementById('bcrGo');
+    go.disabled = true;
+    const now = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+    const head = outcome === 'cancel'   ? 'CANCELLATION REQUEST'
+               : outcome === 'postpone' ? 'POSTPONEMENT REQUEST'
+                                        : 'CHANGE REQUEST';
+    const _t = currentTournament ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
+
+    let done = 0; const failed = [];
+    for (const row of rows) {
+        const g = _bcrGames[Number(row.dataset.i)];
+        go.textContent = 'Sending ' + (done + 1) + ' of ' + rows.length + '…';
+        let note = '\n\n[' + head + ' – ' + now + ']';
+        if (outcome === 'change')   note += '\nRequested Date: ' + newDate;
+        if (outcome === 'postpone') note += '\nRequested Date: to be confirmed';
+        note += '\nReason: ' + reason;
+        if (currentSubmitter) note += '\nRequested by: ' + currentSubmitter;
+        try {
+            const ex = await airtableClient.getRecords(_t, { filterByFormula: "RECORD_ID()='" + g.id + "'", maxRecords: 1 });
+            const prev = (ex[0] && ex[0].fields['Notes']) || '';
+            await airtableClient.updateRecord(_t, g.id, { 'Notes': prev + note });
+            await airtableClient.updateRecord(_t, g.id, { 'Game Status': 'Change Requested' });
+            done++;
+            try {
+                fetch(CONFIG.SUPABASE_URL + '/functions/v1/notify-assignor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY },
+                    body: JSON.stringify({ event: outcome === 'cancel' ? 'cancellation_request' : 'change_request', game_id: Number(g.id) })
+                }).catch(() => {});
+            } catch (e) {}
+        } catch (err) {
+            failed.push(_bcrFmtTime(g.time) + ' ' + g.m + ' — ' + err.message);
+        }
+    }
+
+    // ⚠️ SAY WHAT ACTUALLY SAVED. A bulk write that half-succeeds and reports
+    // success is worse than one that fails outright — the club believes a game
+    // was called off and nobody is looking for it.
+    if (failed.length) {
+        alert(done + ' of ' + rows.length + ' sent.\n\nThese did NOT save — tell your assignor directly:\n\n' + failed.join('\n'));
+    } else {
+        alert(done + ' request' + (done === 1 ? '' : 's') + ' sent. Your assignor has been notified.');
+    }
+    closeBulkChange();
+    loadScheduledGames();
+}
+</script>
+
 </body>
 </html>
