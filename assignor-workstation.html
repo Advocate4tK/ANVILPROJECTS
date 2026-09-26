@@ -314,6 +314,12 @@
             background: #0f3460; color: white; border: none; border-radius: 6px;
             padding: 6px 14px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit;
         }
+        /* Amber, not red. Red on this page means finished. A postponed game is
+           still coming — it just has no date yet. Matches the schedule chip. */
+        .edit-postpone-btn {
+            background: #f59e0b; color: #3d2405; border: none; border-radius: 6px;
+            padding: 6px 14px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit;
+        }
         .edit-cancel-game-btn {
             background: #e74c3c; color: white; border: none; border-radius: 6px;
             padding: 6px 14px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit;
@@ -8240,6 +8246,11 @@
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                         <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
                         <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
+                        ${(f['Game Status'] === 'Cancelled' || cancelledGameIds.has(gid))
+                            ? ''
+                            : (f['postponed_at']
+                                ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="unpostponeGame('${gid}')" title="Put this game back on its date">&#8617; Un-postpone</button>`
+                                : `<button class="edit-postpone-btn" onclick="postponeGame('${gid}')" title="Off, with no new date agreed yet">&#9208; Postpone</button>`)}
                         ${isCancelled
                             ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
                             : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`
@@ -9558,6 +9569,11 @@ Reason (optional):`);
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
                             <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
                             <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
+                        ${(f['Game Status'] === 'Cancelled' || cancelledGameIds.has(gid))
+                            ? ''
+                            : (f['postponed_at']
+                                ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="unpostponeGame('${gid}')" title="Put this game back on its date">&#8617; Un-postpone</button>`
+                                : `<button class="edit-postpone-btn" onclick="postponeGame('${gid}')" title="Off, with no new date agreed yet">&#9208; Postpone</button>`)}
                             ${cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled'
                                 ? `<button class="edit-save-btn" style="background:#27ae60;" onclick="restoreGame('${gid}')">↩ Restore Game</button>`
                                 : `<button class="edit-cancel-game-btn" onclick="cancelGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')">🗑 Cancel Game</button>`}
@@ -10806,6 +10822,13 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 //   Tod caught it on RTCT11567, 2026-09-25: moved to 2 Oct at
                 // 22:05, card still showing a CA confirmation from the 22nd, and
                 // CA holding the old Saturday kickoff with nothing to flag it.
+                // A date is exactly what a postponed game was waiting for, so
+                // setting one ends the postponement. Leaving the flag would show
+                // POSTPONED against a fixture that now has a kickoff.
+                if (cur['postponed_at'] && newDate !== cur['Date']) {
+                    updates['postponed_at'] = null;
+                }
+
                 if (!window.tournamentMode && cur['ca_change_synced_at']
                     && (newDate !== cur['Date'] || (cleanTime || null) !== (cur['Time'] || null))) {
                     updates['ca_change_synced_at'] = null;
@@ -10993,6 +11016,77 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 }
                 alert('Could not cancel game: ' + e.message);
                 renderGames();
+            }
+        }
+
+        // ── POSTPONE ─────────────────────────────────────────────────────────
+        // Off, with no new date agreed. Tod, 2026-09-26, after a phone call
+        // postponed a cup tie an hour before kickoff: "when I edit a game in the
+        // assignor workstation there should be same options to postpone etc as
+        // in workstation. there is no button for this."
+        //
+        // Clubs could already REQUEST a postponement through the portal; there
+        // was no way to grant one. The only postponed games in the database got
+        // there by hand-written SQL.
+        //
+        // ⚠️ NOT A CANCELLATION. It scratches nobody and zeroes no fee — the
+        // game has not happened yet rather than having been called off. Keep it
+        // out of anything that reads cancellation_type.
+        async function postponeGame(gameId) {
+            const game = allGames.find(g => String(g.id) === String(gameId));
+            if (!game) return;
+            const f = game.fields;
+            const label = `${f['Home Team'] || '?'} vs ${f['Away Team'] || '?'}`;
+            if (!confirm(`Postpone ${label}?
+
+The game keeps its date on the board but reads POSTPONED — new date to come. The crew comes off, because a date nobody knows yet cannot hold one.`)) return;
+
+            const wasChangeRequest = (f['Game Status'] || '').toLowerCase() === 'change requested';
+            const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+            const stamped = wasChangeRequest
+                ? `${f['Notes'] || ''}
+[RESOLVED – ${now}] Postponed — new date to come`
+                : (f['Notes'] || '');
+
+            const patch = {
+                postponed_at: new Date().toISOString(),
+                'Center Referee': null, 'AR 1': null, 'AR 2': null,
+                // Central Assign still holds this game on its old date and its
+                // importer cannot update — somebody has to pull it back by hand.
+                ca_change_synced_at: null
+            };
+            if (wasChangeRequest) { patch['Game Status'] = 'Change Resolved'; patch['notes'] = stamped; }
+
+            try {
+                const { data, error } = await supabaseClient.client
+                    .from('games').update(patch).eq('id', gameId).select('id');
+                if (error) throw new Error(error.message);
+                if (!data || !data.length) throw new Error('the database accepted the request but changed no rows.');
+                f['postponed_at'] = patch.postponed_at;
+                f['Center Referee'] = ''; f['AR 1'] = ''; f['AR 2'] = '';
+                if (wasChangeRequest) { f['Game Status'] = 'Change Resolved'; f['Notes'] = stamped; }
+                renderGames();
+                renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
+            } catch (e) {
+                alert('Could not postpone this game: ' + e.message);
+            }
+        }
+
+        // Back on, still with no date change — the postponement was wrong or the
+        // weather turned. A real new date clears this by itself, in saveGameEdit.
+        async function unpostponeGame(gameId) {
+            const game = allGames.find(g => String(g.id) === String(gameId));
+            if (!game) return;
+            if (!confirm('Put this game back on? It returns to the schedule on its current date with its slots open.')) return;
+            try {
+                const { data, error } = await supabaseClient.client
+                    .from('games').update({ postponed_at: null }).eq('id', gameId).select('id');
+                if (error) throw new Error(error.message);
+                if (!data || !data.length) throw new Error('the database accepted the request but changed no rows.');
+                game.fields['postponed_at'] = null;
+                renderGames();
+            } catch (e) {
+                alert('Could not un-postpone this game: ' + e.message);
             }
         }
 
