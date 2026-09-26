@@ -1176,6 +1176,26 @@
     <script>
         checkAdminAccess();
 
+        // ── HOW WE ARRIVED ───────────────────────────────────────────────────
+        // ?game=<id> means "land on this game". The games filter honours it by
+        // showing that game AND NOTHING ELSE — right when the change-control
+        // page hands you one fixture to deal with, wrong the moment you then
+        // try to work. The parameter was never cleared, so it kept overriding
+        // every club pill and date range until the page was reloaded by hand.
+        //
+        // Tod, 2026-09-25, after an hour of it: "I logged out of the
+        // workstation and went back in again.... things worked perfectly...
+        // but the pass through from the admin portal for a game search busted
+        // it." Game Search navigates to this same URL, so looking a game
+        // number up quietly locked the whole board to it — and selectGame then
+        // pointed the referee pane at that game's club, showing NECONN's
+        // referees to someone filtered on East Haddam.
+        //
+        // Captured here, once, because applyGameFocus strips it from the URL
+        // afterwards and the "return to the changes page" branch still needs
+        // to know how we got here.
+        const _GAME_FOCUS_FROM_URL = new URLSearchParams(window.location.search).get('game');
+
 
         // ── Assignor Profile ─────────────────────────────────────────────────
         let currentAssignor     = null; // { id, name, role } — set after profile selection
@@ -1538,6 +1558,18 @@
         function applyGameFocus(focusGameId) {
             if (!focusGameId || !allGames.length) return;
             selectGame(focusGameId);
+            // ⚠️ RELEASE THE LOCK. The filter at renderGames() shows only this
+            // game while ?game= is in the URL. Landing on it is the point;
+            // staying trapped in it is not. Clearing the parameter now leaves
+            // the game selected, highlighted and scrolled to, and lets the very
+            // next render obey the club pills again.
+            try {
+                const _u = new URL(window.location.href);
+                if (_u.searchParams.has('game')) {
+                    _u.searchParams.delete('game');
+                    history.replaceState({}, '', _u);
+                }
+            } catch (e) { /* replaceState unavailable — the old behaviour, no worse */ }
             // Highlight the game card — works for Standard (card-) and Command/Wide (cmd2row-, cmdrow-)
             const el = document.getElementById('card-' + focusGameId)
                     || document.getElementById('cmd2row-' + focusGameId)
@@ -10938,7 +10970,7 @@ You will need to contact them yourself. Assign anyway?`)) return;
                         else link.style.display = 'none';
                     }
                     // Came in from the changes page (?game=N) → go back there, same as resolve.
-                    if (new URLSearchParams(window.location.search).get('game')) {
+                    if (_GAME_FOCUS_FROM_URL) {
                         showChangeCompleteModal(gameLabel || `${game?.fields['Home Team']} vs ${game?.fields['Away Team']}`, game?.fields['Date'], null, 'Cancelled');
                     }
                 }
