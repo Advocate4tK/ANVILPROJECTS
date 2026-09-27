@@ -281,6 +281,19 @@
         .cancel-type-badge.weather     { background:#e8f4fd; color:#1565c0; border:1px solid #90caf9; }
         .cancel-type-badge.non-weather { background:#fff3e0; color:#bf360c; border:1px solid #ffcc80; }
 
+        /* ── Modify Game modal ── shares .ctm-* innards with the cancel dialog.
+           The overlay is styled by ID in this file, not by class, so it needs
+           its own rule or it renders as loose text at the foot of the page. */
+        #gmModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
+        #gmModal.open { display:flex; }
+        #gmModal .ctm-box { background:#fff; border-radius:12px; padding:28px 28px 22px; max-width:460px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.25); }
+        #gmModal h3 { font-size:1.05rem; font-weight:800; color:#1a2e4a; margin-bottom:4px; }
+        #gmModal .ctm-game { font-size:0.82rem; color:#555; margin-bottom:18px; }
+        #gmModal .ctm-option.selected { border-color:#1a2e4a; background:#f3f6fb; }
+        #gmModal .ctm-option input[type=radio] { accent-color:#1a2e4a; }
+        #gmModal .ctm-confirm { background:#1a2e4a; }
+        #gmModal .ctm-confirm:hover { background:#13223a; }
+
         /* ── Cancel Game modal ── */
         #cancelTypeModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
         #cancelTypeModal.open { display:flex; }
@@ -11064,8 +11077,18 @@ You will need to contact them yourself. Assign anyway?`)) return;
             document.getElementById('gmOptOn').style.display =
                 (cancelled || f['postponed_at']) ? '' : 'none';
             document.querySelectorAll('input[name="gmKind"]').forEach(r => r.checked = false);
+            document.querySelectorAll('#gmModal .ctm-option').forEach(o => o.classList.remove('selected'));
             document.getElementById('gmModal').classList.add('open');
         }
+        // Clicking the row ticks the radio and shows it, same as ctmSelect().
+        function gmSelect(kind) {
+            const map = { on: 'gmOptOn', date: 'gmOptDate', postpone: 'gmOptPost', cancel: 'gmOptCancel' };
+            document.querySelectorAll('#gmModal .ctm-option').forEach(o => o.classList.remove('selected'));
+            document.getElementById(map[kind])?.classList.add('selected');
+            const r = document.querySelector('input[name="gmKind"][value="' + kind + '"]');
+            if (r) r.checked = true;
+        }
+
         function closeModify() {
             document.getElementById('gmModal').classList.remove('open');
             _modifyGameId = null;
@@ -11534,28 +11557,40 @@ The game keeps its date on the board but reads POSTPONED — new date to come. T
         padding:10px 14px; min-width:200px; max-width:280px; font-size:0.8rem; line-height:1.6;"></div>
 
 <!-- Modify Game Status Modal — the three words the club portal uses, plus undo -->
-<div class="ctm-overlay" id="gmModal">
+<div id="gmModal">
     <div class="ctm-box">
         <h3>Modify game</h3>
-        <p class="ctm-sub" id="gmLabel"></p>
-        <label class="ctm-opt" id="gmOptOn" onclick="document.getElementById('gmOn').checked=true;">
-            <input type="radio" name="gmKind" value="on" id="gmOn">
-            <span><b>&#9654; On as scheduled</b><small>Undo a cancellation or a postponement</small></span>
+        <div class="ctm-game" id="gmLabel"></div>
+        <label class="ctm-option" id="gmOptOn" onclick="gmSelect('on')">
+            <input type="radio" name="gmKind" value="on">
+            <div>
+                <div class="ctm-option-label">&#9654; On as scheduled</div>
+                <div class="ctm-option-sub">Undo a cancellation or a postponement</div>
+            </div>
         </label>
-        <label class="ctm-opt" onclick="document.getElementById('gmDate').checked=true;">
-            <input type="radio" name="gmKind" value="date" id="gmDate">
-            <span><b>&#128197; New date, time or ground</b><small>You know when it is being played &mdash; the old date keeps a RESCHEDULED mark</small></span>
+        <label class="ctm-option" id="gmOptDate" onclick="gmSelect('date')">
+            <input type="radio" name="gmKind" value="date">
+            <div>
+                <div class="ctm-option-label">&#128197; New date, time or ground</div>
+                <div class="ctm-option-sub">You know when it is being played &mdash; the old date keeps a RESCHEDULED mark</div>
+            </div>
         </label>
-        <label class="ctm-opt" onclick="document.getElementById('gmPost').checked=true;">
-            <input type="radio" name="gmKind" value="postpone" id="gmPost">
-            <span><b>&#9208; Postpone</b><small>Off, with no new date agreed yet. The crew comes off; nobody is scratched and no fee is zeroed</small></span>
+        <label class="ctm-option" id="gmOptPost" onclick="gmSelect('postpone')">
+            <input type="radio" name="gmKind" value="postpone">
+            <div>
+                <div class="ctm-option-label">&#9208; Postpone</div>
+                <div class="ctm-option-sub">Off, with no new date agreed yet. The crew comes off; nobody is scratched and no fee is zeroed</div>
+            </div>
         </label>
-        <label class="ctm-opt" onclick="document.getElementById('gmCancel').checked=true;">
-            <input type="radio" name="gmKind" value="cancel" id="gmCancel">
-            <span><b>&#128683; Cancel</b><small>Not being played at all &mdash; weather or non-weather is the next question</small></span>
+        <label class="ctm-option" id="gmOptCancel" onclick="gmSelect('cancel')">
+            <input type="radio" name="gmKind" value="cancel">
+            <div>
+                <div class="ctm-option-label">&#128683; Cancel</div>
+                <div class="ctm-option-sub">Not being played at all &mdash; weather or non-weather is the next question</div>
+            </div>
         </label>
-        <div class="ctm-actions">
-            <button class="ctm-cancel" onclick="closeModify()">Back</button>
+        <div class="ctm-btns">
+            <button class="ctm-keep" onclick="closeModify()">Back</button>
             <button class="ctm-confirm" onclick="applyModify()">Continue</button>
         </div>
     </div>
