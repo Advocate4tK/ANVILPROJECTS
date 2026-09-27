@@ -10911,12 +10911,55 @@ You will need to contact them yourself. Assign anyway?`)) return;
             document.querySelectorAll('input[name="ctmType"]').forEach(r => r.checked = false);
             document.getElementById('ctmOptWeather').classList.remove('selected');
             document.getElementById('ctmOptNonWeather').classList.remove('selected');
+            _ctmNoticeAnswer = null;
+            ctmClearNotice();
             document.getElementById('cancelTypeModal').classList.add('open');
+        }
+
+        // Two hours' notice is the line the club agreement draws, so weather asks
+        // one more question. Tod, 2026-09-27: "it should specify if rain... did
+        // refs get notified 2 hours before?"
+        let _ctmNoticeAnswer = null;
+        function ctmNotice(ok) {
+            _ctmNoticeAnswer = ok;
+            document.getElementById('ctmNoticeYes').classList.toggle('selected', ok === true);
+            document.getElementById('ctmNoticeNo').classList.toggle('selected', ok === false);
+            const r = document.querySelector('input[name="ctmNotice"][value="' + (ok ? 'yes' : 'no') + '"]');
+            if (r) r.checked = true;
+        }
+
+        function ctmClearNotice() {
+            const box = document.getElementById('ctmNotice');
+            if (box) box.style.display = 'none';
+            document.querySelectorAll('input[name="ctmNotice"]').forEach(r => r.checked = false);
+            document.getElementById('ctmNoticeYes')?.classList.remove('selected');
+            document.getElementById('ctmNoticeNo')?.classList.remove('selected');
         }
 
         function ctmSelect(type) {
             document.getElementById('ctmOptWeather').classList.toggle('selected', type === 'weather');
             document.getElementById('ctmOptNonWeather').classList.toggle('selected', type === 'non_weather');
+            // The hint, not the answer: how far from kickoff this moment is.
+            const box = document.getElementById('ctmNotice');
+            if (box) {
+                box.style.display = (type === 'weather') ? 'block' : 'none';
+                if (type !== 'weather') { _ctmNoticeAnswer = null; ctmClearNotice(); }
+                else {
+                    const g = allGames.find(x => String(x.id) === String(_cancelPendingId));
+                    const el = document.getElementById('ctmNoticeClock');
+                    if (g && el) {
+                        const f = g.fields;
+                        const ko = f['Date'] ? new Date(f['Date'] + 'T' + ((f['Time'] || '00:00').slice(0,5)) + ':00') : null;
+                        if (ko && !isNaN(ko)) {
+                            const mins = Math.round((ko - new Date()) / 60000);
+                            const koTxt = ko.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                            if (mins < 0)       el.innerHTML = 'Kickoff was <b>' + koTxt + '</b> &mdash; already passed.';
+                            else if (mins < 120) el.innerHTML = 'Kickoff is <b>' + koTxt + '</b> &mdash; <b>' + Math.floor(mins/60) + 'h ' + (mins%60) + 'm</b> away, inside the two-hour line right now.';
+                            else                 el.innerHTML = 'Kickoff is <b>' + koTxt + '</b> &mdash; <b>' + Math.floor(mins/60) + 'h ' + (mins%60) + 'm</b> away, outside the two-hour line right now.';
+                        } else if (el) el.textContent = '';
+                    }
+                }
+            }
             const radio = document.querySelector(`input[name="ctmType"][value="${type}"]`);
             if (radio) radio.checked = true;
         }
@@ -10930,6 +10973,12 @@ You will need to contact them yourself. Assign anyway?`)) return;
         async function confirmCancelGame() {
             const type = document.querySelector('input[name="ctmType"]:checked')?.value;
             if (!type) { alert('Please select a cancellation reason.'); return; }
+            // Weather without an answer is the case that costs somebody money.
+            if (type === 'weather' && _ctmNoticeAnswer === null) {
+                alert('Please say whether the referees had two hours notice.\n\nIt decides whether a fee is due under the club agreement, and nobody can work it out afterwards.');
+                return;
+            }
+            const noticeOk = (type === 'weather') ? _ctmNoticeAnswer : null;
             const gameId      = _cancelPendingId;
             const gameLabel   = _cancelPendingLabel;   // closeCancelModal() nulls it — read first
             const cancelledAt = new Date().toISOString();
@@ -10948,7 +10997,13 @@ You will need to contact them yourself. Assign anyway?`)) return;
             const wasChangeRequest = (game?.fields['Game Status'] || '').toLowerCase() === 'change requested';
             const nowLabel = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
             const prevNotes = game?.fields['Notes'] || '';
-            const stampedNotes = wasChangeRequest ? `${prevNotes}\n[RESOLVED – ${nowLabel}] Cancelled (${type === 'weather' ? 'weather' : 'non-weather'})` : prevNotes;
+            // Spelled out, because the pay run reads notes and not columns.
+            const feeLine = (noticeOk === true)  ? ' — crew notified 2h+ before kickoff, no fee due'
+                          : (noticeOk === false) ? ' — cancelled inside 2 hours, CREW IS PAID'
+                          : '';
+            const stampedNotes = wasChangeRequest
+                ? `${prevNotes}\n[RESOLVED – ${nowLabel}] Cancelled (${type === 'weather' ? 'weather' : 'non-weather'})${feeLine}`
+                : (feeLine ? `${prevNotes}\n[CANCELLED – ${nowLabel}] Weather${feeLine}` : prevNotes);
 
             if (game) {
                 // Remove from conflict detection — refs stay assigned, just remove from conflict map
@@ -10972,6 +11027,7 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 // otherwise, and a tick from a previous change must not silence
                 // the question.
                 const patch = { 'Game Status': 'Cancelled', cancellation_type: type, cancelled_at: cancelledAt, ca_change_synced_at: null };
+                if (type === 'weather') patch['refs_notified_2h'] = noticeOk;
                 // ⚠️ LOWERCASE. This is the RAW client, not airtableClient — so
                 // _col() never runs and 'Notes' reaches PostgREST as a column
                 // name that does not exist. The whole update is rejected, the
@@ -10980,7 +11036,7 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 // wasChangeRequest branch, which is why every other cancel on
                 // this page worked: Ed Conn's weather request on RTCT11563,
                 // 2026-09-25, could not be cancelled at all.
-                if (wasChangeRequest) patch['notes'] = stampedNotes;
+                if (wasChangeRequest || feeLine) patch['notes'] = stampedNotes;
                 // ⚠️ READ THE ERROR. supabase-js RESOLVES on a rejected write — it
                 // does not throw — so `await` alone sends every failure past the
                 // catch below in silence. The row went grey from the optimistic
@@ -11605,9 +11661,30 @@ The game keeps its date on the board but reads POSTPONED — new date to come. T
             <input type="radio" name="ctmType" value="weather">
             <div>
                 <div class="ctm-option-label">🌧 Weather Cancellation</div>
-                <div class="ctm-option-sub">Refs are NOT paid regardless of notice time</div>
+                <div class="ctm-option-sub">No fee <b>if</b> the crew had two hours' notice &mdash; club agreement, clause 920</div>
             </div>
         </label>
+        <!-- Only meaningful for weather, so it stays hidden until weather is picked.
+             Asked rather than calculated: the tool knows when this button was
+             pressed, not when the referees were actually told. -->
+        <div id="ctmNotice" style="display:none; margin:-4px 0 10px; padding:11px 13px; background:#fff8ec; border:1px solid #f0c674; border-radius:8px;">
+            <div id="ctmNoticeClock" style="font-size:0.76rem; color:#7c4a03; margin-bottom:7px;"></div>
+            <div style="font-size:0.82rem; font-weight:700; color:#1a2e4a; margin-bottom:7px;">Were the referees notified at least 2 hours before kickoff?</div>
+            <label class="ctm-option" id="ctmNoticeYes" onclick="ctmNotice(true)" style="margin-bottom:7px; padding:9px 12px;">
+                <input type="radio" name="ctmNotice" value="yes">
+                <div>
+                    <div class="ctm-option-label">Yes &mdash; two hours or more</div>
+                    <div class="ctm-option-sub">No fee due, per the agreement</div>
+                </div>
+            </label>
+            <label class="ctm-option" id="ctmNoticeNo" onclick="ctmNotice(false)" style="margin-bottom:0; padding:9px 12px;">
+                <input type="radio" name="ctmNotice" value="no">
+                <div>
+                    <div class="ctm-option-label">No &mdash; inside two hours</div>
+                    <div class="ctm-option-sub">The crew is paid</div>
+                </div>
+            </label>
+        </div>
         <label class="ctm-option" id="ctmOptNonWeather" onclick="ctmSelect('non_weather')">
             <input type="radio" name="ctmType" value="non_weather">
             <div>
