@@ -919,6 +919,37 @@ function fmtTime(t) {
     return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
+// ⚠️ SHOW THE FIELD THAT DECIDES WHERE THE GAME GOES. Central Assign files
+// by league and locks the fee on import, and this column has now caused two
+// incidents while being invisible on this screen: RTCT11570 exported under
+// NECONN's district at the club's rate instead of the cup's mandated 60/40,
+// and three of Ed Conn's U10 district games were offered as cup ties because
+// the game's own league was being dropped on read. Tod, 2026-09-28: "because
+// it doesnt show me."
+//
+// Gold for a competition that mandates its own fees, so the rows where a wrong
+// value costs somebody money are the ones that catch the eye. Red when there
+// is no league at all — that game cannot be exported and the reason should be
+// on the row, not only in the alert.
+function leagueCell(f) {
+    const lg = resolveLeague(f);
+    if (!lg) {
+        return '<td><span style="color:#e74c3c;font-size:10.5px;font-weight:700;" '
+             + 'title="No Central Assign league — this game cannot be exported">\u26d4 none</span></td>';
+    }
+    const mandates = leagueHasSchedule(lg);
+    // From the club record rather than the game: worth knowing, because a
+    // multi-league club has been the source of both incidents.
+    const fromGame = !!((f['league'] || f['League'] || '').trim());
+    const short = lg.replace(/^CJSA\s+/, '').replace(/\s+Travel League$/, '').replace(/^CT\s+/, '');
+    const col = mandates ? '#f0b429' : '#9fb3c8';
+    return '<td><span style="font-size:10.5px;font-weight:' + (mandates ? '800' : '600') + ';color:' + col + ';" '
+         + 'title="' + lg.replace(/"/g, '&quot;') + (mandates ? ' \u2014 sets its own referee fees' : '')
+         + (fromGame ? ' \u2014 chosen on the game' : ' \u2014 inherited from the club, not set on the game') + '">'
+         + (mandates ? '\u{1F3C6} ' : '') + short + (fromGame ? '' : ' <span style="opacity:.55;">(club)</span>')
+         + '</span></td>';
+}
+
 function renderGamesTable(records) {
     // Summary counts
     let venueOk = 0, refOk = 0, genderOk = 0, fieldOk = 0;
@@ -967,6 +998,7 @@ function renderGamesTable(records) {
         <th style="width:14%;">Away Team</th>
         ${sortHdr('age','Age','44px')}
         <th style="width:36px;">M/F</th>
+        <th style="width:13%;" title="The competition this game is filed under in Central Assign. A cup or state league sets its own referee fees; a district league uses the club's.">League</th>
         <th style="width:18%;">Venue / Field</th>
         <th style="width:52px;">CR</th>
         <th style="width:52px;">AR1</th>
@@ -1011,6 +1043,7 @@ function renderGamesTable(records) {
             <td style="word-break:break-word;">${f['Away Team'] || ''}</td>
             <td style="text-align:center;">${f['Age Group'] || ''}</td>
             <td style="text-align:center;">${genderBadge(f['Gender'])}</td>
+            <td>${leagueCell(f)}</td>
             <td>${venueBadge(f)}</td>
             <td>${refBadge(f['Center Referee'])}</td>
             <td>${refBadge(f['AR 1'])}</td>
