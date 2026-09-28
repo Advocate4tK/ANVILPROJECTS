@@ -4303,7 +4303,7 @@
                         ? `<span style="background:#1a3a6b;color:#fff;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;margin-left:5px;vertical-align:middle;">${assignedCount}</span>`
                         : '';
                     const s3refObj   = refLookupByName[r.name.trim().toLowerCase()];
-                    const s3unavail  = s3refObj?.fields['unavailable'] === true;
+                    const s3unavail  = isUnavailableNow(s3refObj?.fields);
                     const s3conflict = !!r._conflict;
                     const s3rowBg    = s3unavail  ? 'background:#f0f0f0;opacity:0.55;'
                                      : s3conflict ? 'background:#fdecea;'
@@ -10149,7 +10149,7 @@ Reason (optional):`);
                     // but out of the way of the people who have not answered.
                     const ad = hasDeclinedSelected(a.fields['Name']), bd = hasDeclinedSelected(b.fields['Name']);
                     if (ad !== bd) return ad ? 1 : -1;
-                    const as = a.fields['unavailable'] === true, bs = b.fields['unavailable'] === true;
+                    const as = isUnavailableNow(a.fields), bs = isUnavailableNow(b.fields);
                     return as === bs ? 0 : as ? 1 : -1;
                 });
 
@@ -10244,7 +10244,7 @@ Reason (optional):`);
                     else if (yrsNum === 0 && gameAge >= 13) score -= 1; // Seas 1 on U13+ games
                     throbClass = score >= 6 ? ' throb-hot' : score >= 4 ? ' throb-med' : score >= 2 ? ' throb' : '';
                 }
-                const isStruck  = r.fields['unavailable'] === true;
+                const isStruck  = isUnavailableNow(r.fields);
                 const cardClass = (cls <= 1 ? (cls === 0 ? 'available prefers' : 'available') : cls === 2 ? 'conflict' : 'no-avail') + throbClass + (isStruck ? ' struck' : '');
                 const badgeLabel = singleDay || workDate ? 'this day' : 'this period';
                 const assignedBadge = assignedCount > 0
@@ -10362,7 +10362,7 @@ Reason (optional):`);
                 menu.style.cssText = 'position:fixed;background:#fff;border:1px solid #d0d7de;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:sans-serif;font-size:0.82rem;z-index:9999;min-width:220px;overflow:hidden;';
                 document.body.appendChild(menu);
             }
-            const struck = ref?.fields['unavailable'] === true;
+            const struck = isUnavailableNow(ref?.fields);
             if (struck) {
                 const since  = ref.fields['unavailable_since']
                     ? new Date(ref.fields['unavailable_since']).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
@@ -10370,7 +10370,14 @@ Reason (optional):`);
                 const by     = ref.fields['unavailable_by'] || '';
                 const reason = ref.fields['unavailable_reason'] || '';
                 menu.innerHTML = `<div style="padding:8px 14px 8px;">
-                    <div style="font-size:0.78rem;color:#c0392b;font-weight:700;margin-bottom:2px;">⚠ Marked unavailable</div>
+                    <div style="font-size:0.78rem;color:#c0392b;font-weight:700;margin-bottom:2px;">⚠ Marked unavailable${(() => {
+                        const u = ref?.fields?.['unavailable_until'];
+                        if (u) return ` · until ${new Date(u + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
+                        const d = unavailableAgeDays(ref?.fields);
+                        // An indefinite mark left sitting for a fortnight is usually
+                        // one somebody forgot, so say its age out loud.
+                        return (d != null && d >= 14) ? ` · indefinite, ${d} days so far` : ' · indefinite';
+                    })()}</div>
                     ${since ? `<div style="font-size:0.75rem;color:#888;margin-bottom:2px;">${since}${by ? ' by ' + by : ''}</div>` : ''}
                     ${reason ? `<div style="font-size:0.8rem;color:#444;font-style:italic;margin-bottom:6px;">"${reason}"</div>` : ''}
                     <div onclick="refToggleUnavailable('${rid}'); document.getElementById('s2RefCtxMenu').style.display='none';"
@@ -10381,13 +10388,24 @@ Reason (optional):`);
                 </div>`;
             } else {
                 const inputId = 's2UnavailReason_' + rid;
+                const untilId = 's2UnavailUntil_' + rid;
+                // Bounded by default. Marking somebody hidden forever should be a
+                // thing you choose, not a thing you get by not choosing.
+                const _d = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+                const _sun = (() => { const d = new Date(); d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); return d.toISOString().slice(0, 10); })();
                 menu.innerHTML = `<div style="padding:8px 14px 8px;">
                     <div style="font-size:0.75rem;font-weight:700;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.5px;">Mark unavailable</div>
+                    <select id="${untilId}" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:6px;">
+                        <option value="${_sun}">Through this weekend</option>
+                        <option value="${_d(14)}">For two weeks</option>
+                        <option value="${_d(30)}">For a month</option>
+                        <option value="">Indefinitely — until I clear it</option>
+                    </select>
                     <input id="${inputId}" type="text" placeholder="Reason (required)" maxlength="120"
                         style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:7px;"
-                        onkeydown="if(event.key==='Enter'){ const v=this.value.trim(); if(!v){this.style.borderColor='#c0392b';this.placeholder='Required — enter a reason';return;} refToggleUnavailable('${rid}', v); document.getElementById('s2RefCtxMenu').style.display='none'; event.stopPropagation(); }"
+                        onkeydown="if(event.key==='Enter'){ const v=this.value.trim(); if(!v){this.style.borderColor='#c0392b';this.placeholder='Required — enter a reason';return;} refToggleUnavailable('${rid}', v, document.getElementById('${untilId}').value); document.getElementById('s2RefCtxMenu').style.display='none'; event.stopPropagation(); }"
                         oninput="this.style.borderColor='#ccc';">
-                    <div onclick="const inp=document.getElementById('${inputId}'); const v=inp.value.trim(); if(!v){inp.style.borderColor='#c0392b';inp.placeholder='Required — enter a reason';inp.focus();return;} refToggleUnavailable('${rid}', v); document.getElementById('s2RefCtxMenu').style.display='none';"
+                    <div onclick="const inp=document.getElementById('${inputId}'); const v=inp.value.trim(); if(!v){inp.style.borderColor='#c0392b';inp.placeholder='Required — enter a reason';inp.focus();return;} refToggleUnavailable('${rid}', v, document.getElementById('${untilId}').value); document.getElementById('s2RefCtxMenu').style.display='none';"
                          style="padding:6px 10px;cursor:pointer;font-weight:600;color:#fff;background:#c0392b;border-radius:5px;text-align:center;"
                          onmouseover="this.style.filter='brightness(0.9)';" onmouseout="this.style.filter='';">
                         ☒ Mark unavailable
@@ -10417,14 +10435,48 @@ Reason (optional):`);
             if (document.getElementById('sheet3View')?.style.display !== 'none') renderSheet3View(sheet3LastFiltered);
         }
 
-        async function refToggleUnavailable(rid, reason) {
+        // ── IS THIS REFEREE HIDDEN TODAY? ─────────────────────────────
+        // Tod, 2026-09-28: "now I'm legitimately scared to mark a players as
+        // unavailable.... if the system flags the player eternally. it hsould
+        // only be for that day or week or whatever is marked."
+        //
+        // The mark used to have a beginning and no end, so a bereavement from
+        // one weekend was still hiding Jolie Clavette twelve days later. NULL
+        // until stays indefinite — that is what "too far" means — but a dated
+        // one simply stops applying that morning. Nobody has to remember and
+        // nothing has to run.
+        //
+        // ⚠️ EVERY reader goes through here. A pane that checks `unavailable`
+        // on its own will keep hiding somebody the rest of the tool thinks is
+        // free, which is the two-panes-disagreeing bug this codebase keeps
+        // growing.
+        function isUnavailableNow(f, onDate) {
+            if (!f || f['unavailable'] !== true) return false;
+            const until = f['unavailable_until'];
+            if (!until) return true;                       // indefinite
+            const day = onDate || new Date().toISOString().slice(0, 10);
+            return String(until) >= day;                   // inclusive of the last day
+        }
+
+        // How long an indefinite mark has been sitting there, for the chip.
+        function unavailableAgeDays(f) {
+            const since = f && f['unavailable_since'];
+            if (!since) return null;
+            return Math.round((Date.now() - new Date(since).getTime()) / 86400000);
+        }
+
+        async function refToggleUnavailable(rid, reason, until) {
             const ref = allRefs.find(r => r.id == rid);
             if (!ref) return;
-            const markUnavail  = !(ref.fields['unavailable'] === true);
+            const markUnavail  = !isUnavailableNow(ref.fields);
             const assignorName = currentAssignor?.name || currentAssignor?.fields?.['Name'] || 'assignor';
+            // `until` is a yyyy-mm-dd string, or null for indefinite. Passed in
+            // from the menu so the caller decides the length, not this function.
             const updates = markUnavail
-                ? { unavailable: true, unavailable_reason: reason || null, unavailable_since: new Date().toISOString(), unavailable_by: assignorName }
-                : { unavailable: false, unavailable_reason: null, unavailable_since: null, unavailable_by: null };
+                ? { unavailable: true, unavailable_reason: reason || null, unavailable_since: new Date().toISOString(),
+                    unavailable_by: assignorName, unavailable_until: until || null }
+                : { unavailable: false, unavailable_reason: null, unavailable_since: null,
+                    unavailable_by: null, unavailable_until: null };
             try {
                 await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, rid, updates);
                 Object.assign(ref.fields, updates);
@@ -10452,7 +10504,7 @@ Reason (optional):`);
             clearTimeout(window._availNotesTimer);
             window._availNotesTimer = setTimeout(() => {
                 const ref = allRefs.find(r => r.id == rid);
-                if (!ref || ref.fields['unavailable'] !== true) return;
+                if (!ref || !isUnavailableNow(ref.fields)) return;
                 const since  = ref.fields['unavailable_since']
                     ? new Date(ref.fields['unavailable_since']).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
                     : '';
