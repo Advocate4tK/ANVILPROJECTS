@@ -6166,6 +6166,67 @@
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
 
+        // ── EVERY ASSIGNMENT THIS PERSON HAS, ANYWHERE ──────────────────
+        // Tod, 2026-09-28: "If a canterbury assignor assigns Harrison for 2pm
+        // then Eric cant assign him at 2 either... there are always only 1
+        // referee (person) that is able to be used at one time."
+        //
+        // allGames is deliberately scoped to the assignor's own clubs — club
+        // isolation, 2026-09-16, after Dave Paquette saw NECONN's data in his
+        // header. That rule is right and stays. But a REFEREE is not scoped to a
+        // club: Harrison works for Griswold, NECONN and Canterbury, and each
+        // assignor could only ever see their own third of his Saturday. Asking a
+        // scoped array whether he is free gives a confident wrong answer.
+        //
+        // So this is a second, deliberately thin source: names, dates, times,
+        // ages and venue ids for every assignment in games AND tournament_games,
+        // across every club, event and tournament. No teams, no clubs, no
+        // opponents — nothing that could be rendered. It exists to answer one
+        // yes/no at the moment of assigning.
+        //
+        // ⚠️ A clash OUTSIDE this assignor's scope is reported without naming
+        // the fixture. "Another assignment, 2:00–3:15, 22 miles away" tells them
+        // everything they need and leaks nothing they should not have.
+        let refBusy = {};   // lowercase referee name -> [{ date, start, end, venue, id, mine }]
+
+        async function loadRefBusy() {
+            const since = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+            const cols = 'id,date,time,"Age Group","Center Referee","AR 1","AR 2","Venue ID","Game Status",postponed_at';
+            const grab = async (table, withPostponed) => {
+                let out = [], from = 0;
+                for (;;) {
+                    const sel = withPostponed ? cols : cols.replace(',postponed_at', '');
+                    const { data, error } = await supabaseClient.client
+                        .from(table).select(sel).gte('date', since).range(from, from + 999);
+                    if (error) { console.warn('refBusy', table, error.message); break; }
+                    if (!data || !data.length) break;
+                    out = out.concat(data);
+                    if (data.length < 1000) break;
+                    from += 1000;
+                }
+                return out;
+            };
+            const [a, b] = await Promise.all([grab('games', true), grab('tournament_games', false)]);
+            const mineIds = new Set((allGames || []).map(g => String(g.id)));
+            const marker = v => ['EMPTY', 'FILLED'].includes(String(v || '').trim().toUpperCase());
+            const next = {};
+            [...a, ...b].forEach(g => {
+                if (String(g['Game Status'] || '') === 'Cancelled' || g['postponed_at']) return;
+                const start = startMins(g);
+                if (start === null) return;
+                const end = start + gameLengthMins(g);
+                ['Center Referee', 'AR 1', 'AR 2'].forEach(pos => {
+                    const nm = String(g[pos] || '').trim();
+                    if (!nm || marker(nm)) return;
+                    (next[nm.toLowerCase()] ||= []).push({
+                        date: g.date, start, end, venue: g['Venue ID'],
+                        id: String(g.id), mine: mineIds.has(String(g.id))
+                    });
+                });
+            });
+            refBusy = next;
+        }
+
         // ── CAN ONE PERSON BE AT BOTH OF THESE? ──────────────────────────
         // Eric Baughman, 2026-09-28: "I see in RT that I can assign a ref to same
         // time that he has another game in RT." Harrison Durand had a U15 at
@@ -6189,11 +6250,15 @@
         const GAME_MINUTES = { U8:45, U9:45, U10:45, U11:75, U12:75, U13:90, U14:90,
                                U15:90, U16:90, U17:90, U18:90, U19:100 };
         function gameLengthMins(f) {
-            const m = String(f['Age Group'] || '').toUpperCase().match(/U-?(\d+)/);
+            const m = String(f['Age Group'] ?? f['age_group'] ?? '').toUpperCase().match(/U-?(\d+)/);
             return (m && GAME_MINUTES['U' + m[1]]) || 75;   // unknown age: assume a long one
         }
         function startMins(f) {
-            const t = String(f['Time'] || '').trim();
+            // ⚠️ BOTH SPELLINGS. Board games arrive Airtable-wrapped ('Time'); the
+            // refBusy index reads raw rows straight from PostgREST ('time'). One
+            // spelling here silently drops every entry from the other source —
+            // and a busy index that quietly holds nothing reports everyone free.
+            const t = String(f['Time'] ?? f['time'] ?? '').trim();
             const m = t.match(/^(\d{1,2}):(\d{2})/);
             if (!m) return null;
             return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
@@ -6208,7 +6273,9 @@
             const miles = haversine(la[0], la[1], lb[0], lb[1]);
             return Math.max(10, Math.round(miles / 30 * 60)); // 30mph on CT back roads, floor 10
         }
-        // Every game this referee already has that this one would collide with.
+        // Every commitment this referee already has that this one would collide
+        // with — read from refBusy, which spans every club, event and tournament,
+        // not from the scoped board.
         function findClashes(refId, targetGame) {
             const out = [];
             if (!refId || !targetGame) return out;
@@ -6218,24 +6285,15 @@
             const tEnd = tStart + gameLengthMins(tf);
             const tDate = tf['Date'];
             const name = String(refLookup[refId]?.fields['Name'] || '').trim().toLowerCase();
-            allGames.forEach(g => {
-                if (String(g.id) === String(targetGame.id)) return;
-                if (cancelledGameIds.has(g.id)) return;
-                const f = g.fields;
-                if (f['Date'] !== tDate) return;
-                if (String(f['Game Status'] || '') === 'Cancelled' || f['postponed_at']) return;
-                const onIt = ['Center Referee', 'AR 1', 'AR 2'].some(pos => {
-                    const v = resolveRefName(f[pos]);
-                    return v && String(v).trim().toLowerCase() === name;
-                });
-                if (!onIt) return;
-                const oStart = startMins(f);
-                if (oStart === null) return;
-                const oEnd = oStart + gameLengthMins(f);
-                const buffer = travelMins(f['Venue ID'], tf['Venue ID']);
-                // Overlap once travel is counted on whichever side comes first.
-                if (tStart < oEnd + buffer && oStart < tEnd + buffer) {
-                    out.push({ game: g, buffer, oStart, oEnd });
+            (refBusy[name] || []).forEach(b => {
+                if (b.date !== tDate) return;
+                if (String(b.id) === String(targetGame.id)) return;
+                if (cancelledGameIds.has(b.id)) return;
+                const buffer = travelMins(b.venue, tf['Venue ID']);
+                if (tStart < b.end + buffer && b.start < tEnd + buffer) {
+                    // Only name the fixture when it is one of this assignor's own.
+                    const g = b.mine ? allGames.find(x => String(x.id) === String(b.id)) : null;
+                    out.push({ game: g, buffer, oStart: b.start, oEnd: b.end, mine: b.mine });
                 }
             });
             return out;
@@ -7585,6 +7643,7 @@
                     const allowed = new Set(assignorClubRestriction);
                     allGames = allGames.filter(g => allowed.has(g.fields['Source Club']));
                 }
+                await loadRefBusy();   // spans every club — see the comment on refBusy
                 buildCAConfirmedMap();
                 await loadCAEmailSent();
                 await loadIncidents();
@@ -10531,8 +10590,11 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 if (clashes.length > 0 && !override) {
                     const fmtM = m => `${Math.floor(m / 60) % 12 || 12}:${String(m % 60).padStart(2, '0')} ${m % 1440 >= 720 ? 'PM' : 'AM'}`;
                     const lines = clashes.map(c => {
-                        const cf = c.game.fields;
-                        return `${cf['Home Team'] || '?'} vs ${cf['Away Team'] || '?'}\n`
+                        // A fixture belonging to another assignor is never named.
+                        const what = c.game
+                            ? `${c.game.fields['Home Team'] || '?'} vs ${c.game.fields['Away Team'] || '?'}`
+                            : 'another assignment (another club\u2019s fixture)';
+                        return `${what}\n`
                              + `      ${fmtM(c.oStart)}–${fmtM(c.oEnd)}${c.buffer ? `, and ${c.buffer} min to travel between grounds` : ', same ground'}`;
                     }).join('\n  • ');
                     if (!confirm(`⛔ ${refName} cannot be in two places at once.\n\nAlready on:\n  • ${lines}\n\nThis game runs ${fmtM(startMins(targetGame.fields))}–${fmtM(startMins(targetGame.fields) + gameLengthMins(targetGame.fields))}.\n\nAssign anyway?`)) return;
