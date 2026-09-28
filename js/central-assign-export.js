@@ -751,9 +751,23 @@ loadBtn.addEventListener('click', async () => {
             // than one league, so Entity Status stores e.g. ["CT Northeast District
             // Travel League","General Non-League Games"]. Reading it raw would have put
             // the brackets and quotes into CA's League column verbatim.
-            // The FIRST entry is the club's default; a per-game override (General
-            // Non-League Games) is still to be built.
-            const leagueNm = parseClubLeagues(c.fields['ca_league'])[0] || '';
+            // ⚠️ THE DEFAULT IS ca_league_primary, NOT POSITION 0. ca_league is a
+            // checkbox list and its order means nothing — it is whatever order the
+            // boxes were ticked in. Taking [0] as the default made an accident of
+            // data entry decide which competition a game was filed under, and
+            // because a cup was ticked first for several clubs, the default became
+            // the one competition that mandates its own fees and locks them in CA.
+            //
+            // Entity Status has always stored the real answer in
+            // ca_league_primary (manage-clubs.html reads it); the export simply
+            // never looked. Tod, 2026-09-28: "the default should be as listed in
+            // the entity status."
+            //
+            // Position 0 stays as a last resort for a club whose primary has not
+            // been set yet.
+            const picked = parseClubLeagues(c.fields['ca_league']);
+            const primary = (c.fields['ca_league_primary'] || '').trim();
+            const leagueNm = (primary && picked.some(l => l === primary)) ? primary : (picked[0] || '');
             if (clubName && leagueId) clubLeagueMap[clubName] = parseInt(leagueId);
             if (clubName && leagueNm) clubLeagueNameMap[clubName] = leagueNm;
             if (clubName) clubIdMap[clubName] = parseInt(c.id);
