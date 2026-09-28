@@ -1505,9 +1505,42 @@
         return !!(v && String(v).trim() !== '' && v !== '—' && v !== '[]' && v !== 'null') || String(v).toUpperCase() === 'EMPTY';
     }
 
+    // ── A SLOT IS ONLY CLOSED ONCE CENTRAL ASSIGN SAYS SO ──────────────────
+    // Tod, 2026-09-28: "The only time a game should be removed off of Ref
+    // openings is if referee has been confirmed as accepting a game in Central
+    // Assign. Until they actually accept the game in Central Assign, it should
+    // be remained open on Ref openings page."
+    //
+    // A name in the slot is an intention — the assignor's. Acceptance in CA is
+    // the referee's commitment, and it is the only event that means somebody is
+    // actually turning up. Advertising a game as covered on the strength of the
+    // first one is how a club finds out on the morning.
+    //
+    // ⚠️ MARKERS ARE NOT PEOPLE. EMPTY means no referee is wanted for that
+    // slot and FILLED means it is covered outside the tool. Neither can ever be
+    // confirmed in CA, so requiring confirmation of them would advertise them
+    // forever. They stay closed. Only a real name needs acceptance.
+    const _CA_POS = { 'Center Referee': 'Center Referee', 'AR 1': 'AR 1', 'AR 2': 'AR 2' };
+    function _isMarker(v) {
+        const s = String(v || '').trim().toUpperCase();
+        return s === 'EMPTY' || s === 'FILLED';
+    }
+    function caAccepted(g, col) {
+        const raw = g['ca_confirmed_positions'];
+        if (!raw) return false;
+        return String(raw).split(',').map(x => x.trim()).includes(_CA_POS[col] || col);
+    }
+    // The question the page actually asks: is this slot closed to referees?
+    function slotClosed(g, col) {
+        const v = g[col];
+        if (!isFilled(v)) return false;      // nothing in it at all
+        if (_isMarker(v))  return true;      // EMPTY / FILLED — not a person, not CA's business
+        return caAccepted(g, col);           // a named referee closes it only once CA has them
+    }
+
     function hasOpenSlot(g) {
-        if (isSingleRefGame(g)) return !isFilled(g['Center Referee']);
-        return !isFilled(g['Center Referee']) || !isFilled(g['AR 1']) || !isFilled(g['AR 2']);
+        if (isSingleRefGame(g)) return !slotClosed(g, 'Center Referee');
+        return !slotClosed(g, 'Center Referee') || !slotClosed(g, 'AR 1') || !slotClosed(g, 'AR 2');
     }
 
     function isU8Game(g) {
@@ -1634,9 +1667,9 @@
             .trim();
         const u8        = isSingleRefGame(g);
 
-        const crFilled  = isFilled(g['Center Referee']);
-        const ar1Filled = isFilled(g['AR 1']);
-        const ar2Filled = isFilled(g['AR 2']);
+        const crFilled  = slotClosed(g, 'Center Referee');
+        const ar1Filled = slotClosed(g, 'AR 1');
+        const ar2Filled = slotClosed(g, 'AR 2');
 
         const openCount = u8
             ? (!crFilled ? 1 : 0)
