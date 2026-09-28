@@ -10350,6 +10350,14 @@ Reason (optional):`);
             if (titleEl) titleEl.textContent = `👤 Referees (${displayRefs.length})`;
         }
 
+        // Resolves the duration picker to a yyyy-mm-dd, or '' for indefinite.
+        function _untilValue(selId) {
+            const sel = document.getElementById(selId);
+            if (!sel) return '';
+            if (sel.value !== 'PICK') return sel.value;
+            return document.getElementById(selId + '_pick')?.value || '';
+        }
+
         // ── Ref unavailability — Supabase-backed, shared across all views ────────
         function s2ShowRefCtx(e, rid) {
             e.preventDefault();
@@ -10395,17 +10403,21 @@ Reason (optional):`);
                 const _sun = (() => { const d = new Date(); d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); return d.toISOString().slice(0, 10); })();
                 menu.innerHTML = `<div style="padding:8px 14px 8px;">
                     <div style="font-size:0.75rem;font-weight:700;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.5px;">Mark unavailable</div>
-                    <select id="${untilId}" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:6px;">
-                        <option value="${_sun}">Through this weekend</option>
+                    <select id="${untilId}" onchange="document.getElementById('${untilId}_pick').style.display = (this.value === 'PICK' ? 'block' : 'none');"
+                        style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:6px;">
+                        <option value="${_d(0)}">Today only</option>
+                        <option value="${_sun}" selected>Through this weekend</option>
                         <option value="${_d(14)}">For two weeks</option>
                         <option value="${_d(30)}">For a month</option>
+                        <option value="PICK">Until a date I choose…</option>
                         <option value="">Indefinitely — until I clear it</option>
                     </select>
+                    <input id="${untilId}_pick" type="date" style="display:none;width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:6px;">
                     <input id="${inputId}" type="text" placeholder="Reason (required)" maxlength="120"
                         style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:7px;"
-                        onkeydown="if(event.key==='Enter'){ const v=this.value.trim(); if(!v){this.style.borderColor='#c0392b';this.placeholder='Required — enter a reason';return;} refToggleUnavailable('${rid}', v, document.getElementById('${untilId}').value); document.getElementById('s2RefCtxMenu').style.display='none'; event.stopPropagation(); }"
+                        onkeydown="if(event.key==='Enter'){ const v=this.value.trim(); if(!v){this.style.borderColor='#c0392b';this.placeholder='Required — enter a reason';return;} refToggleUnavailable('${rid}', v, _untilValue('${untilId}')); document.getElementById('s2RefCtxMenu').style.display='none'; event.stopPropagation(); }"
                         oninput="this.style.borderColor='#ccc';">
-                    <div onclick="const inp=document.getElementById('${inputId}'); const v=inp.value.trim(); if(!v){inp.style.borderColor='#c0392b';inp.placeholder='Required — enter a reason';inp.focus();return;} refToggleUnavailable('${rid}', v, document.getElementById('${untilId}').value); document.getElementById('s2RefCtxMenu').style.display='none';"
+                    <div onclick="const inp=document.getElementById('${inputId}'); const v=inp.value.trim(); if(!v){inp.style.borderColor='#c0392b';inp.placeholder='Required — enter a reason';inp.focus();return;} refToggleUnavailable('${rid}', v, _untilValue('${untilId}')); document.getElementById('s2RefCtxMenu').style.display='none';"
                          style="padding:6px 10px;cursor:pointer;font-weight:600;color:#fff;background:#c0392b;border-radius:5px;text-align:center;"
                          onmouseover="this.style.filter='brightness(0.9)';" onmouseout="this.style.filter='';">
                         ☒ Mark unavailable
@@ -10414,8 +10426,17 @@ Reason (optional):`);
                 setTimeout(() => document.getElementById(inputId)?.focus(), 50);
             }
             menu.style.left    = Math.min(e.clientX, window.innerWidth  - 240) + 'px';
-            menu.style.top     = Math.min(e.clientY, window.innerHeight - 150) + 'px';
+            menu.style.top     = e.clientY + 'px';
             menu.style.display = 'block';
+            // ⚠️ MEASURE, DO NOT GUESS. This reserved a flat 150px of headroom,
+            // which stopped being enough when the menu grew — so near the foot of
+            // the screen the "Mark available again" button rendered off-screen and
+            // a referee marked unavailable looked like one you could not release.
+            // Tod spent a fortnight thinking the feature did not exist.
+            const _mh = menu.offsetHeight || 150;
+            if (e.clientY + _mh > window.innerHeight - 8) {
+                menu.style.top = Math.max(8, e.clientY - _mh) + 'px';
+            }
             setTimeout(() => document.addEventListener('click', ev => {
                 if (!menu.contains(ev.target)) menu.style.display = 'none';
             }, { once: true }), 0);
@@ -10512,9 +10533,17 @@ Reason (optional):`);
                 const reason = ref.fields['unavailable_reason'] || '';
                 const tip = document.getElementById('s3RefTooltip');
                 if (!tip) return;
-                tip.innerHTML = `<div style="color:#c0392b;font-weight:700;">⚠ Marked unavailable</div>`
+                const _u = ref.fields['unavailable_until'];
+                const _when = _u
+                    ? ` · until ${new Date(_u + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' })}`
+                    : ' · indefinite';
+                tip.innerHTML = `<div style="color:#c0392b;font-weight:700;">⚠ Marked unavailable${_when}</div>`
                     + (since ? `<div style="font-size:0.78rem;color:#888;margin-top:2px;">${since}${by ? ' by ' + by : ''}</div>` : '')
-                    + (reason ? `<div style="font-style:italic;color:#444;margin-top:3px;">"${reason}"</div>` : '');
+                    + (reason ? `<div style="font-style:italic;color:#444;margin-top:3px;">"${reason}"</div>` : '')
+                    // The way out, said out loud. The release has always been on the
+                    // right-click menu; nothing ever mentioned it, so from this pane
+                    // the mark looked permanent.
+                    + `<div style="font-size:0.72rem;color:#27ae60;font-weight:700;margin-top:5px;">Right-click to release</div>`;
                 tip.style.display = 'block';
                 const tipW = 270;
                 let left = e.clientX + 14;
