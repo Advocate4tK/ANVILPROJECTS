@@ -1624,7 +1624,17 @@ function resolveLeague(f) {
     // club league at all: Eric had to move RTCT11570 out of NECONN's district
     // by hand. games.league is that answer when the club portal asked for it.
     // sql/game-league.sql
-    const own = (f['league'] || '').trim();
+    // ⚠️ BOTH SPELLINGS. supabase-client's _colReverse renames the lowercase
+    // `league` column to 'League' when it wraps a row, so f['league'] is empty
+    // for every game read through airtableClient — and this function fell
+    // through to the club fallback it was written to replace. Griswold's
+    // ca_league is ["CJSA Connecticut Cup","CT Southeast District Travel
+    // League"]; the map keeps one name per club, the Cup won, and three U10
+    // district games were offered to Central Assign as cup ties. The export
+    // refused them because no cup rate exists at U10 — the CT Cup has no U10
+    // bracket at all — which is the only reason anybody noticed.
+    //   Same shape as the 'Notes'/'notes' bug that stopped games cancelling.
+    const own = (f['league'] || f['League'] || '').trim();
     if (own) return own;
     const src = f['Source Club'] || '';
     if (!src) return '';
