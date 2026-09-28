@@ -4263,9 +4263,11 @@
                 if (_selGameDT) {
                     refRows.forEach(r => {
                         const ro = refLookupByName[r.name.trim().replace(/\s+/g, ' ').toLowerCase()];
-                        r._conflict = ro && assignedAt[ro.id]
-                            ? [...(assignedAt[ro.id].get(_selGameDT) || [])].some(gid => String(gid) !== sheet3SelectedGameId)
-                            : false;
+                        // Overlap, not an identical kickoff. Same engine the
+                        // assign guard uses, so the list and the refusal can
+                        // never disagree about who is double-booked.
+                        const _selG = allGames.find(g => String(g.id) === String(sheet3SelectedGameId));
+                        r._conflict = !!(ro && _selG && findClashes(ro.id, _selG).length);
                     });
                     if (!sheet3ShowConflicts) {
                         refRows = refRows.filter(r => !r._conflict);
@@ -6045,6 +6047,7 @@
         let refLookupByEmail       = {}; // lowercase email → ref object (for email-based ghost resolution)
         let refLookupByLastNameFirst = {}; // "firstinitial_lastname" → ref (fuzzy fallback when name doesn't exact-match)
         let venueZipMap     = {}; // Airtable field record ID → venue zip string
+        let venueZipByNum   = {}; // numeric Venue ID → zip, for venue-to-venue distance
         let clubVenueZipMap = {}; // club name (lowercase) → representative venue zip
 
         // ── CT Zip Code Centroids (lat, lng) ─────────────────────────────────
@@ -6161,6 +6164,81 @@
             const dLon = (lon2 - lon1) * Math.PI / 180;
             const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        // ── CAN ONE PERSON BE AT BOTH OF THESE? ──────────────────────────
+        // Eric Baughman, 2026-09-28: "I see in RT that I can assign a ref to same
+        // time that he has another game in RT." Harrison Durand had a U15 at
+        // 5:15 at Rawson Field and a U12 at 5:30 at Griswold Soccer Complex.
+        //
+        // The old check compared `date|time` as a string, so it only ever caught
+        // two games kicking off in the SAME MINUTE. Fifteen minutes apart and
+        // twenty miles away looked fine to it.
+        //
+        // A game occupies its kickoff plus its real length, and getting from one
+        // ground to another takes time. Both are already known to this page: the
+        // duration table below mirrors the one the CA export uses, and the zip
+        // centroids and haversine() have been here all along for proximity
+        // sorting — they were just never pointed at two venues.
+        //
+        // ⚠️ These are estimates. Durations are the rec schedule (comp lengths
+        // are still TBD in the export too) and zip centroids are coarse — two
+        // grounds in one town read as ten minutes apart whether they are next
+        // door or across it. That is exactly why this warns and lets Override
+        // Assign through rather than refusing outright.
+        const GAME_MINUTES = { U8:45, U9:45, U10:45, U11:75, U12:75, U13:90, U14:90,
+                               U15:90, U16:90, U17:90, U18:90, U19:100 };
+        function gameLengthMins(f) {
+            const m = String(f['Age Group'] || '').toUpperCase().match(/U-?(\d+)/);
+            return (m && GAME_MINUTES['U' + m[1]]) || 75;   // unknown age: assume a long one
+        }
+        function startMins(f) {
+            const t = String(f['Time'] || '').trim();
+            const m = t.match(/^(\d{1,2}):(\d{2})/);
+            if (!m) return null;
+            return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+        }
+        // Minutes to get from one ground to the other. Same venue costs nothing:
+        // back-to-back games on one field are the normal shape of a referee's day.
+        function travelMins(venueA, venueB) {
+            if (venueA != null && venueB != null && String(venueA) === String(venueB)) return 0;
+            const za = venueZipByNum[venueA], zb = venueZipByNum[venueB];
+            const la = za && ZIP_LATLNG[za], lb = zb && ZIP_LATLNG[zb];
+            if (!la || !lb) return 30;                       // unknown ground: assume a real drive
+            const miles = haversine(la[0], la[1], lb[0], lb[1]);
+            return Math.max(10, Math.round(miles / 30 * 60)); // 30mph on CT back roads, floor 10
+        }
+        // Every game this referee already has that this one would collide with.
+        function findClashes(refId, targetGame) {
+            const out = [];
+            if (!refId || !targetGame) return out;
+            const tf = targetGame.fields;
+            const tStart = startMins(tf);
+            if (tStart === null) return out;                 // no kickoff time: nothing to compare
+            const tEnd = tStart + gameLengthMins(tf);
+            const tDate = tf['Date'];
+            const name = String(refLookup[refId]?.fields['Name'] || '').trim().toLowerCase();
+            allGames.forEach(g => {
+                if (String(g.id) === String(targetGame.id)) return;
+                if (cancelledGameIds.has(g.id)) return;
+                const f = g.fields;
+                if (f['Date'] !== tDate) return;
+                if (String(f['Game Status'] || '') === 'Cancelled' || f['postponed_at']) return;
+                const onIt = ['Center Referee', 'AR 1', 'AR 2'].some(pos => {
+                    const v = resolveRefName(f[pos]);
+                    return v && String(v).trim().toLowerCase() === name;
+                });
+                if (!onIt) return;
+                const oStart = startMins(f);
+                if (oStart === null) return;
+                const oEnd = oStart + gameLengthMins(f);
+                const buffer = travelMins(f['Venue ID'], tf['Venue ID']);
+                // Overlap once travel is counted on whichever side comes first.
+                if (tStart < oEnd + buffer && oStart < tEnd + buffer) {
+                    out.push({ game: g, buffer, oStart, oEnd });
+                }
+            });
+            return out;
         }
 
         // Returns the venue zip for the currently selected game (via Field → Venue chain)
@@ -7686,6 +7764,7 @@
                         numericVenueIdToZip[v.fields['Venue ID']] = v.fields['Zip'].toString().trim();
                     }
                 });
+                venueZipByNum = { ...numericVenueIdToZip };
                 venueZipMap = {};
                 fields.forEach(f => {
                     const zip = numericVenueIdToZip[f.fields['Venue ID']];
@@ -10447,16 +10526,16 @@ You will need to contact them yourself. Assign anyway?`)) return;
 
                 const override = document.getElementById('overrideAssign')?.checked;
 
-                // Scheduling conflict
-                const conflicts = assignedAt[refId] ? [...(assignedAt[refId].get(dt) || [])].filter(gid => gid !== gameId && !cancelledGameIds.has(gid)) : [];
-                if (conflicts.length > 0 && !override) {
-                    const conflictDetails = conflicts.map(cid => {
-                        const cg = allGames.find(g => g.id === cid);
-                        if (!cg) return 'another game';
-                        const cf = cg.fields;
-                        return `${cf['Home Team'] || '?'} vs ${cf['Away Team'] || '?'} (${cf['Date'] || '?'} @ ${formatTime(cf['Time'] || '')})`;
+                // Scheduling conflict — overlap, not an identical kickoff minute.
+                const clashes = findClashes(refId, targetGame);
+                if (clashes.length > 0 && !override) {
+                    const fmtM = m => `${Math.floor(m / 60) % 12 || 12}:${String(m % 60).padStart(2, '0')} ${m % 1440 >= 720 ? 'PM' : 'AM'}`;
+                    const lines = clashes.map(c => {
+                        const cf = c.game.fields;
+                        return `${cf['Home Team'] || '?'} vs ${cf['Away Team'] || '?'}\n`
+                             + `      ${fmtM(c.oStart)}–${fmtM(c.oEnd)}${c.buffer ? `, and ${c.buffer} min to travel between grounds` : ', same ground'}`;
                     }).join('\n  • ');
-                    if (!confirm(`⚠️ ${refName} is already assigned to:\n  • ${conflictDetails}\n\nAssign anyway?`)) return;
+                    if (!confirm(`⛔ ${refName} cannot be in two places at once.\n\nAlready on:\n  • ${lines}\n\nThis game runs ${fmtM(startMins(targetGame.fields))}–${fmtM(startMins(targetGame.fields) + gameLengthMins(targetGame.fields))}.\n\nAssign anyway?`)) return;
                 }
 
                 // Ref has not submitted availability for this date
