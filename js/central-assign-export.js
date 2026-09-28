@@ -1520,6 +1520,15 @@ let _pendingSpan = {};
 // by hand should not be overwritten.
 function syncRangeToChecked() {
     try {
+        // ⚠️ BY WEEK WINS. Ticking a club fills the range with that club's
+        // whole outstanding span and used to force the mode to Custom Date
+        // Range to show it — which threw away a choice the user had just made
+        // one control earlier. Tod, 2026-09-28: "if I click 'by week' first and
+        // then go down and pick griswold or any club..... it resets back to
+        // custom date range again."
+        //   In week mode the week pickers own the dates. A club tick there is
+        // about WHICH clubs, not which days.
+        if (document.getElementById('modeWeek')?.checked) return;
         const checked = [...document.querySelectorAll('.club-cb:checked')]
             .map(cb => (cb.value || '').trim().toLowerCase())
             .filter(c => _pendingSpan[c]);
