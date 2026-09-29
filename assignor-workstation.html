@@ -10350,12 +10350,23 @@ Reason (optional):`);
             if (titleEl) titleEl.textContent = `👤 Referees (${displayRefs.length})`;
         }
 
-        // Resolves the duration picker to a yyyy-mm-dd, or '' for indefinite.
+        // Resolves the duration picker to a yyyy-mm-dd, '' for indefinite, or
+        // null when the answer is incomplete.
+        // ⚠️ "Until a date I choose" with the box empty must NOT fall through to
+        // indefinite. Empty string means forever here, so a half-finished answer
+        // would have silently produced the one outcome this whole change exists
+        // to stop — somebody hidden with no end.
         function _untilValue(selId) {
             const sel = document.getElementById(selId);
             if (!sel) return '';
             if (sel.value !== 'PICK') return sel.value;
-            return document.getElementById(selId + '_pick')?.value || '';
+            const pick = document.getElementById(selId + '_pick');
+            const v = pick?.value || '';
+            if (!v) {
+                if (pick) { pick.style.borderColor = '#c0392b'; pick.focus(); }
+                return null;                      // incomplete — caller must stop
+            }
+            return v;
         }
 
         // ── Ref unavailability — Supabase-backed, shared across all views ────────
@@ -10415,9 +10426,9 @@ Reason (optional):`);
                     <input id="${untilId}_pick" type="date" style="display:none;width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:6px;">
                     <input id="${inputId}" type="text" placeholder="Reason (required)" maxlength="120"
                         style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:7px;"
-                        onkeydown="if(event.key==='Enter'){ const v=this.value.trim(); if(!v){this.style.borderColor='#c0392b';this.placeholder='Required — enter a reason';return;} refToggleUnavailable('${rid}', v, _untilValue('${untilId}')); document.getElementById('s2RefCtxMenu').style.display='none'; event.stopPropagation(); }"
+                        onkeydown="if(event.key==='Enter'){ const v=this.value.trim(); if(!v){this.style.borderColor='#c0392b';this.placeholder='Required — enter a reason';return;} const u=_untilValue('${untilId}'); if(u===null) return; refToggleUnavailable('${rid}', v, u); document.getElementById('s2RefCtxMenu').style.display='none'; event.stopPropagation(); }"
                         oninput="this.style.borderColor='#ccc';">
-                    <div onclick="const inp=document.getElementById('${inputId}'); const v=inp.value.trim(); if(!v){inp.style.borderColor='#c0392b';inp.placeholder='Required — enter a reason';inp.focus();return;} refToggleUnavailable('${rid}', v, _untilValue('${untilId}')); document.getElementById('s2RefCtxMenu').style.display='none';"
+                    <div onclick="const inp=document.getElementById('${inputId}'); const v=inp.value.trim(); if(!v){inp.style.borderColor='#c0392b';inp.placeholder='Required — enter a reason';inp.focus();return;} const u=_untilValue('${untilId}'); if(u===null) return; refToggleUnavailable('${rid}', v, u); document.getElementById('s2RefCtxMenu').style.display='none';"
                          style="padding:6px 10px;cursor:pointer;font-weight:600;color:#fff;background:#c0392b;border-radius:5px;text-align:center;"
                          onmouseover="this.style.filter='brightness(0.9)';" onmouseout="this.style.filter='';">
                         ☒ Mark unavailable
