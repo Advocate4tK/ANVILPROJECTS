@@ -10389,6 +10389,8 @@ Reason (optional):`);
                 const by     = ref.fields['unavailable_by'] || '';
                 const reason = ref.fields['unavailable_reason'] || '';
                 menu.innerHTML = `<div style="padding:8px 14px 8px;">
+                    <div style="display:flex;align-items:flex-start;gap:8px;">
+                    <div style="flex:1;min-width:0;">
                     <div style="font-size:0.78rem;color:#c0392b;font-weight:700;margin-bottom:2px;">⚠ Marked unavailable${(() => {
                         const u = ref?.fields?.['unavailable_until'];
                         if (u) return ` · until ${new Date(u + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
@@ -10399,6 +10401,11 @@ Reason (optional):`);
                     })()}</div>
                     ${since ? `<div style="font-size:0.75rem;color:#888;margin-bottom:2px;">${since}${by ? ' by ' + by : ''}</div>` : ''}
                     ${reason ? `<div style="font-size:0.8rem;color:#444;font-style:italic;margin-bottom:6px;">"${reason}"</div>` : ''}
+                    </div>
+                    <button onclick="document.getElementById('s2RefCtxMenu').style.display='none';" title="Close — change nothing"
+                        style="background:none;border:none;color:#9aa5b1;font-size:1.05rem;line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0;"
+                        onmouseover="this.style.color='#c0392b';" onmouseout="this.style.color='#9aa5b1';">✕</button>
+                    </div>
                     <div onclick="refToggleUnavailable('${rid}'); document.getElementById('s2RefCtxMenu').style.display='none';"
                          style="margin-top:4px;padding:6px 10px;cursor:pointer;font-weight:600;color:#27ae60;background:#f0fdf4;border-radius:5px;text-align:center;"
                          onmouseover="this.style.filter='brightness(0.95)';" onmouseout="this.style.filter='';">
@@ -10413,7 +10420,12 @@ Reason (optional):`);
                 const _d = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
                 const _sun = (() => { const d = new Date(); d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); return d.toISOString().slice(0, 10); })();
                 menu.innerHTML = `<div style="padding:8px 14px 8px;">
-                    <div style="font-size:0.75rem;font-weight:700;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.5px;">Mark unavailable</div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                        <div style="flex:1;font-size:0.75rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;">Mark unavailable</div>
+                        <button onclick="document.getElementById('s2RefCtxMenu').style.display='none';" title="Cancel — nobody is marked"
+                            style="background:none;border:none;color:#9aa5b1;font-size:1.05rem;line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0;"
+                            onmouseover="this.style.color='#c0392b';" onmouseout="this.style.color='#9aa5b1';">✕</button>
+                    </div>
                     <select id="${untilId}" onchange="document.getElementById('${untilId}_pick').style.display = (this.value === 'PICK' ? 'block' : 'none');"
                         style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:5px;font-size:0.82rem;font-family:inherit;margin-bottom:6px;">
                         <option value="${_d(0)}">Today only</option>
@@ -10444,6 +10456,11 @@ Reason (optional):`);
             // the screen the "Mark available again" button rendered off-screen and
             // a referee marked unavailable looked like one you could not release.
             // Tod spent a fortnight thinking the feature did not exist.
+            // Escape closes it too. A destructive control you opened by mistake
+            // should shut the way every other menu on the machine shuts.
+            document.addEventListener('keydown', function _esc(ev) {
+                if (ev.key === 'Escape') { menu.style.display = 'none'; document.removeEventListener('keydown', _esc); }
+            });
             const _mh = menu.offsetHeight || 150;
             if (e.clientY + _mh > window.innerHeight - 8) {
                 menu.style.top = Math.max(8, e.clientY - _mh) + 'px';
