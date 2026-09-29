@@ -10701,6 +10701,21 @@ You will need to contact them yourself. Assign anyway?`)) return;
 
                 const override = document.getElementById('overrideAssign')?.checked;
 
+                // Already working that day. Not a clash — the overlap guard below
+                // handles those — but three games and a drive is a real day, and
+                // the assignor should be told before adding a fourth rather than
+                // discovering it on the hover card afterwards.
+                if (!override) {
+                    const sameDay = (refBusy[String(refLookup[refId]?.fields['Name'] || refName).trim().toLowerCase()] || [])
+                        .filter(b => b.date === gameDate && String(b.id) !== String(gameId) && !cancelledGameIds.has(b.id));
+                    if (sameDay.length) {
+                        const fmtT = m => `${Math.floor(m / 60) % 12 || 12}:${String(m % 60).padStart(2, '0')} ${m >= 720 ? 'PM' : 'AM'}`;
+                        const when = sameDay.sort((a, b) => a.start - b.start)
+                                            .map(b => fmtT(b.start)).join(', ');
+                        if (!confirm(`${refName} already has ${sameDay.length} game${sameDay.length === 1 ? '' : 's'} that day — ${when}.\n\nAdd this one too?`)) return;
+                    }
+                }
+
                 // Scheduling conflict — overlap, not an identical kickoff minute.
                 const clashes = findClashes(refId, targetGame);
                 if (clashes.length > 0 && !override) {
@@ -10722,18 +10737,40 @@ You will need to contact them yourself. Assign anyway?`)) return;
                     if (!confirm(`${refName} has not submitted availability for this date.\n\nAssign anyway?`)) return;
                 }
 
-                // Ref has not listed this game's club in their preferences
+                // Ref has not listed this game's club — ask what they submitted FOR
+                // THIS DATE first, and only fall back to the profile.
+                //
+                // ⚠️ THE SUBMISSION IS THE ANSWER. Jolie Clavette's profile says
+                // ["NECONN"] and has done all season, but she picked Griswold on
+                // the form for 16, 17, 18 and 20 Sep and again for 4 Oct. The
+                // guard read the stale profile and told Tod she had not listed
+                // Griswold, about a date she had explicitly listed it for.
+                // Same shape as the league bug: the specific answer is on the
+                // row and the code asked a general default instead.
                 const ref = refLookup[refId];
                 const gameClub = resolveGameClub(targetGame.fields);
                 if (ref && gameClub && !override && !window.tournamentMode) {
-                    const prefs = parsePreferences(ref.fields['Club Preference']);
-                    if (!prefs.some(p => p.toLowerCase() === gameClub.toLowerCase())) {
-                        if (!confirm(`${refName} has not listed "${gameClub}" as a preferred location.\n\nAssign anyway?`)) return;
+                    const saidToday = (availTimeByName[refNameKey]?.[gameDate] || [])
+                        .flatMap(sl => sl.clubs || []).map(c => String(c).toLowerCase().trim());
+                    const prefs = parsePreferences(ref.fields['Club Preference']).map(x => x.toLowerCase());
+                    const wanted = gameClub.toLowerCase();
+                    const ok = saidToday.includes(wanted) || (!saidToday.length && prefs.includes(wanted));
+                    if (!ok) {
+                        const where = saidToday.length
+                            ? `On the form for this date they asked for: ${[...new Set(saidToday)].join(', ')}.`
+                            : `Their profile lists: ${prefs.join(', ') || 'nothing'}.`;
+                        if (!confirm(`${refName} did not ask for "${gameClub}".\n\n${where}\n\nAssign anyway?`)) return;
                     }
                 }
 
-                // Tournament: warn if game time falls outside ALL of the ref's availability windows
-                if (window.tournamentMode && gameDate && !override) {
+                // Warn if the kickoff falls outside EVERY window they gave for that
+                // date. This was gated to tournamentMode, so a club game only ever
+                // checked whether they had submitted for the DAY — not whether they
+                // said they could be there at that hour. Jolie submitted
+                // 14:00–20:45 for Sunday and the tool offered her a 12:45 kickoff
+                // without a murmur. Tod, 2026-09-29: "Shouldn't flag me and tell
+                // me."
+                if (gameDate && !override) {
                     const slots = availTimeByName[refNameKey]?.[gameDate] || [];
                     const timed = slots.filter(s => s.start && s.end);
                     if (timed.length) {
