@@ -8803,6 +8803,14 @@ Reason (optional):`);
                     if (!caEmailSent[key]) caEmailSent[key] = {};
                     if (!caEmailSent[key][stage]) caEmailSent[key][stage] = row.sent_at;
                     if (!caEmailSent[key].at && stage === 'confirmed') caEmailSent[key].at = row.sent_at;
+                    // ── HOW MANY TIMES HAVE I ASKED? ───────────────────────
+                    // Tod, 2026-09-29: "maybe a number next to it on how many
+                    // attempts I have made in getting them to accept their stupid
+                    // game." Every nudge already writes its own blast_log row;
+                    // this loop was reading them all and keeping only the latest
+                    // timestamp, so the count was being thrown away every load.
+                    // He knew Leah was on four because he remembered.
+                    if (stage === 'assigned') caEmailSent[key].asks = (caEmailSent[key].asks || 0) + 1;
                 });
             } catch (e) { console.warn('[caEmailSent]', e.message); }
         }
@@ -8824,16 +8832,25 @@ Reason (optional):`);
             const st    = caSlotState(gid, position);
             const _e    = st && sent[st] ? '✉' : '';
             const first = String(name).split(' ')[0];
-            const mark  = { '': '', 'assigned': ' ◑', 'confirmed': ' ✓', 'rejected': ' ✗' }[st] + _e;
+            // The count only means anything while we are still waiting on them.
+            const asks  = (st === 'assigned' && sent.asks > 1) ? `×${sent.asks}` : '';
+            const mark  = { '': '', 'assigned': ' ◑', 'confirmed': ' ✓', 'rejected': ' ✗' }[st] + _e + asks;
+            // Three asks and no answer is a different situation from one ask, so
+            // it stops looking the same. Nothing is removed — somebody chased
+            // three times might be in hospital, and a tool that quietly drops
+            // them is how you lose a referee. It just stops being quiet.
+            const stale = (st === 'assigned' && sent.asks >= 3);
             const paint = {
                 '':          { fg: color,   bg: bg },
-                'assigned':  { fg: '#7a5200', bg: '#fff3cd' },
+                'assigned':  stale ? { fg: '#fff', bg: '#c1440e' } : { fg: '#7a5200', bg: '#fff3cd' },
                 'confirmed': { fg: '#fff',    bg: '#1e8449' },
                 'rejected':  { fg: '#fff',    bg: '#b91c1c' },
             }[st];
             const tip = {
                 '':          `${name} — not in Central Assign yet. Expand and click ○ CA.`,
-                'assigned':  `${name} — in Central Assign, WAITING for them to accept.${_e ? ' Asked by email.' : ' NOT emailed yet.'} Expand and click ◑ CA.`,
+                'assigned':  `${name} — in Central Assign, WAITING for them to accept.`
+                             + (sent.asks ? ` Asked ${sent.asks} time${sent.asks === 1 ? '' : 's'}${sent.asks >= 3 ? ' — consider replacing them' : ''}.` : ' NOT emailed yet.')
+                             + ` Expand and click ◑ CA.`,
                 'confirmed': `${name} — accepted in Central Assign.${_e ? ' Emailed.' : ''}`,
                 'rejected':  `${name} — DECLINED this in Central Assign. The slot needs filling again.`,
             }[st];
@@ -9316,6 +9333,11 @@ Reason (optional):`);
                     const _k = `${gameId}|${position}`;
                     if (!caEmailSent[_k]) caEmailSent[_k] = {};
                     caEmailSent[_k][stage || 'assigned'] = new Date().toISOString();
+                    // Count it now, not on the next reload — otherwise sending a
+                    // third nudge and seeing the chip still say ×2 invites a fourth.
+                    if ((stage || 'assigned') === 'assigned') {
+                        caEmailSent[_k].asks = (caEmailSent[_k].asks || 0) + 1;
+                    }
                     if ((stage || '') === 'confirmed') caEmailSent[_k].at = caEmailSent[_k].confirmed;
                     renderGames();
                     const g = j.minor ? (j.results?.guardian === 'sent' ? ' + parent' : j.results?.guardian === 'no guardian on file' ? ' (minor — NO parent on file)' : ' (parent failed)') : '';
