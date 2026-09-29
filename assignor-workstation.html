@@ -10453,7 +10453,14 @@ Reason (optional):`);
             if (error) { alert('Could not remove: ' + error.message); return; }
             allAvail = allAvail.filter(a => (a.fields['Referee Name'] || '').trim().toLowerCase() !== refName.trim().toLowerCase());
             renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
-            if (document.getElementById('sheet3View')?.style.display !== 'none') renderSheet3View(sheet3LastFiltered);
+            // ⚠️ ASK viewMode, NOT THE DOM. There is no element with id
+            // 'sheet3View' — getElementById returns null, the optional chain
+            // yields undefined, and undefined !== 'none' is always true. So this
+            // painted Sheet 3's grid over whatever view was actually open, every
+            // single time somebody was marked or released. Tod, 2026-09-28: "the
+            // workstation is half sheet 3 and half standard 2... it got all
+            // whack."
+            if (viewMode === 'sheet3') renderSheet3View(sheet3LastFiltered);
         }
 
         // ── IS THIS REFEREE HIDDEN TODAY? ─────────────────────────────
@@ -10514,7 +10521,7 @@ Reason (optional):`);
                 }
                 renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
                 // Re-render Sheet 3 if it's the active view
-                if (document.getElementById('sheet3View')?.style.display !== 'none') renderSheet3View(sheet3LastFiltered);
+                if (viewMode === 'sheet3') renderSheet3View(sheet3LastFiltered);
             } catch(err) {
                 console.error('refToggleUnavailable error:', err);
                 alert('Failed to save: ' + err.message);
