@@ -7061,12 +7061,24 @@
                         const gender = f['Gender'] || '';
                         const soloOnly = _crewSoloOnly(f['Source Club'] || '', age, f['game_type']);
                         const displayGender = (!gender || age.toLowerCase().includes(gender.toLowerCase())) ? '' : (' ' + gender);
+                        // ⚠️ THE SAME RULE AS THE MULTI-CLUB BUILDER ABOVE. There are
+                        // two blast builders in this function and only one was
+                        // updated on 2026-09-29, so a single-club blast listed
+                        // Leah's three games — correctly, they are unaccepted —
+                        // with no positions after the dashes, because this copy
+                        // still asked whether the column was empty. Two builders,
+                        // one rule: slotTakenForBlast().
                         const openSlots = [];
-                        if (!f['Center Referee']?.trim()) openSlots.push('CR');
-                        if (!soloOnly && !f['AR 1']?.trim()) openSlots.push('AR');
-                        if (!soloOnly && !f['AR 2']?.trim()) openSlots.push('AR');
+                        const _pend = [];
+                        [['Center Referee', 'CR'], ['AR 1', 'AR'], ['AR 2', 'AR']].forEach(([col, label]) => {
+                            if (soloOnly && col !== 'Center Referee') return;
+                            if (slotTakenForBlast(g, col)) return;
+                            openSlots.push(label);
+                            if (String(f[col] || '').trim()) _pend.push(label);
+                        });
                         const positions = openSlots.join(' | ');
-                        return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age}${displayGender}    ${vName}   --   ${positions}`;
+                        const pendingNote = _pend.length ? '  (awaiting confirmation)' : '';
+                        return `${fmtDate(f['Date'])} ${fmtTime(f['Time'])}   ${age}${displayGender}    ${vName}   --   ${positions}${pendingNote}`;
                     }).join('\n');
 
                     const openCount = games.length;
