@@ -1521,6 +1521,29 @@
         // header stops counting it unassigned, and it collapses like any finished game.
         // A crew rule describes what a LEAGUE game needs; a scrimmage is not one, so
         // the rule stops being a requirement and becomes an option.
+        // ── A SLOT IS ONLY SPOKEN FOR ONCE CENTRAL ASSIGN SAYS SO ──────────
+        // Tod, 2026-09-29: "Leah hasnt accepted her games in CA yet... and so I
+        // need referee blasts to offer that game until she is checked off as
+        // accepting in CA."
+        //
+        // Same rule the public openings board took on 28 Sep. A name in the slot
+        // is the assignor's intention; acceptance in CA is the referee's answer,
+        // and only the second one means somebody is turning up. Advertising on
+        // the strength of the first is how a game sits quietly covered for two
+        // days and then gets declined.
+        //
+        // ⚠️ MARKERS ARE NOT PEOPLE. EMPTY means no referee is wanted and
+        // FILLED means it is covered outside the tool; neither can ever appear
+        // in ca_confirmed_positions, so requiring acceptance of them would
+        // advertise them forever. They count as taken.
+        function slotTakenForBlast(g, position) {
+            const raw = String(g.fields[position] || '').trim();
+            if (!raw) return false;
+            const up = raw.toUpperCase();
+            if (up === 'EMPTY' || up === 'FILLED') return true;
+            return caSlotState(g.id, position) === 'confirmed';
+        }
+
         function crewSatisfied(f, cRef, ar1, ar2, noARs) {
             if (!cRef) return false;
             if (isScrimmage(f)) return true;
@@ -6863,8 +6886,10 @@
                 const ar1 = resolveRefName(f['AR 1']);
                 const ar2 = resolveRefName(f['AR 2']);
                 const soloOnly = _crewSoloOnly(f['Source Club'] || '', age, f['game_type']);
-                const fullyAssigned = crewSatisfied(f, cr, ar1, ar2, soloOnly);
-                if (fullyAssigned) return false;
+                // Accepted in CA, not merely assigned — see slotTakenForBlast().
+                const crDone  = slotTakenForBlast(g, 'Center Referee');
+                const arsDone = soloOnly || (slotTakenForBlast(g, 'AR 1') && slotTakenForBlast(g, 'AR 2'));
+                if (crDone && arsDone) return false;
                 if (!isAllClubs && !selectedClubs.has(f['Source Club'])) return false;
                 return true;
             });
@@ -6988,10 +7013,17 @@
                             // rules. NECONN's U8s and U10s have no ARs, so those read
                             // "CR" alone instead of advertising slots that do not exist.
                             const soloOnly = _crewSoloOnly(f['Source Club'] || '', age, f['game_type']);
+                            // Awaiting acceptance reads as open, and says so, so a
+                            // referee knows it is a real offer rather than a mistake.
                             const openSlots = [];
-                            if (!f['Center Referee']?.trim()) openSlots.push('CR');
-                            if (!soloOnly && !f['AR 1']?.trim()) openSlots.push('AR');
-                            if (!soloOnly && !f['AR 2']?.trim()) openSlots.push('AR');
+                            const _pend = [];
+                            [['Center Referee', 'CR'], ['AR 1', 'AR'], ['AR 2', 'AR']].forEach(([col, label]) => {
+                                if (soloOnly && col !== 'Center Referee') return;
+                                if (slotTakenForBlast(g, col)) return;
+                                openSlots.push(label);
+                                if (String(f[col] || '').trim()) _pend.push(label);
+                            });
+                            const pendingNote = _pend.length ? '  (awaiting confirmation)' : '';
                             // ⚠️ NO GAME NUMBER IN THE OPENINGS EMAIL. Tod,
                             // 2026-09-23: "the game request email doesnt need to
                             // have the game number... you can nix that." A
@@ -7000,7 +7032,7 @@
                             // pushed the useful part of the line to the right.
                             // The number belongs where somebody LOOKS a game up:
                             // Game Search, the card, the schedule, the note.
-                            return `${dateLabel}  ${fmtTime(f['Time'])}  ${vName}  ${age}${displayGender}  --  ${openSlots.join(' | ')}`;
+                            return `${dateLabel}  ${fmtTime(f['Time'])}  ${vName}  ${age}${displayGender}  --  ${openSlots.join(' | ')}${pendingNote}`;
                         }).join('\n');
                     }).join('\n\n');
 
