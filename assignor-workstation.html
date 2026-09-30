@@ -8909,12 +8909,18 @@ Reason (optional):`);
             }[st];
             // ✉ = the email for this state went. ✉̶ is not a thing, so the
             // absence of the mark is the signal: nothing sent yet.
+            // How many times they have been asked, beside the envelope. Only
+            // while still waiting, and only once it is more than one — a slot
+            // asked once is ordinary.
+            const askN = (st === 'assigned' && sent.asks > 1) ? String(sent.asks) : '';
             const label = { '': '○ CA', 'assigned': '◑ CA', 'confirmed': '✓ CA', 'rejected': '✗ CA' }[st]
-                        + (st && sentAt ? ' ✉' : '');
+                        + (st && sentAt ? ' ✉' + askN : '');
             const mailBit = sentAt ? ` Emailed ${when}.` : ' No email sent for this step yet.';
             const tip = {
                 '':          `Not in Central Assign. Click to put ${who} in — you'll be asked whether to email them to accept.`,
-                'assigned':  `In Central Assign, waiting for ${who} to ACCEPT it.${mailBit} Click to answer, or to ask them again.`,
+                'assigned':  `In Central Assign, waiting for ${who} to ACCEPT it.${mailBit}`
+                             + (sent.asks > 1 ? ` Asked ${sent.asks} times.` : '')
+                             + ` Click to answer, ask again, or take them off.`,
                 'confirmed': `${who} accepted this in Central Assign.${mailBit} Click to clear.`,
                 'rejected':  `${who} DECLINED this in Central Assign — the slot needs filling again.${mailBit} Click to clear.`,
             }[st];
@@ -9023,7 +9029,55 @@ Reason (optional):`);
                 { label: '✓ Accepted — no email',                 fn: () => caChoose(gid, [position], 'confirmed', false), quiet: true },
                 { label: `✗ Declined &mdash; email ${firstName}`, fn: () => caChoose(gid, [position], 'rejected', true),  danger: true },
                 { label: '✗ Declined — no email',                 fn: () => caChoose(gid, [position], 'rejected', false), quiet: true },
+                // Tod, 2026-09-29: "we should have a button that says we have
+                // removed you from the game for failure to accept". Four asks to
+                // Leah Talaga and no answer — at some point the slot has to go
+                // back on the board, and the referee should be told why rather
+                // than noticing they are no longer on it.
+                { label: `⚠ Remove ${firstName} — never accepted`,
+                  fn: () => removeForNotAccepting(gid, position), danger: true },
             ]);
+        }
+
+        // ── TAKE THEM OFF FOR NEVER ANSWERING ───────────────────────
+        // Not the same as a decline. A decline is the referee's answer; this is
+        // the absence of one, and the slot cannot wait forever. It empties the
+        // position, clears what Central Assign thought about it, and tells them
+        // plainly — being quietly dropped and finding out later is how you lose
+        // somebody who was simply not reading their email.
+        //
+        // ⚠️ The same email the declined path sends: "it is back on the board".
+        // That is the true statement either way, and it avoids inventing a
+        // fourth kind of assignment email for one case.
+        async function removeForNotAccepting(gameId, position) {
+            const gid  = String(gameId);
+            const game = allGames.find(g => String(g.id) === String(gid));
+            if (!game) return;
+            const who = resolveRefName(game.fields[position]) || 'this referee';
+            const asks = caEmailSent[`${gid}|${position}`]?.asks || 0;
+            if (!confirm(`Take ${who} off this game for not accepting it?\n\n`
+                + (asks ? `They have been asked ${asks} time${asks === 1 ? '' : 's'}.\n\n` : '')
+                + `The slot goes back on the openings board and ${who} is emailed to say so.`)) return;
+            try {
+                // Tell them BEFORE the slot is emptied, while the game still
+                // knows who they were.
+                try { await sendAssignmentConfirmation(gid, position, 'declined'); }
+                catch (e) { console.warn('[removeForNotAccepting] email', e); }
+
+                const { data, error } = await supabaseClient.client
+                    .from('games').update({ [position]: null, ca_change_synced_at: null })
+                    .eq('id', gid).select('id');
+                if (error) throw new Error(error.message);
+                if (!data || !data.length) throw new Error('the database accepted the request but changed no rows.');
+
+                game.fields[position] = '';
+                await caClearSlot(gid, position);
+                delete caEmailSent[`${gid}|${position}`];
+                renderGames();
+                renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
+            } catch (e) {
+                alert('Could not remove them: ' + e.message);
+            }
         }
 
         // One popover, two buttons. Used by the slot chip and the card button.
