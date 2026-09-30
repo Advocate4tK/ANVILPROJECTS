@@ -10443,6 +10443,33 @@ Reason (optional):`);
                         <span id="rtri-${rid}" onclick="event.stopPropagation(); toggleRefCardWS('${rid}')" style="cursor:pointer; font-size:0.7rem; color:${cls === 2 ? '#e74c3c' : '#aaa'}; padding:2px 4px; flex-shrink:0; font-weight:${cls === 2 ? '900' : 'normal'};">▶</span>
                     </div>
                     <div id="rcd-${rid}" style="display:none;" onmousedown="event.stopPropagation();" draggable="false">
+                        ${isStruck ? (() => {
+                            // Tod, 2026-09-30: "the strike out does the trick... the
+                            // why should be in the expanded card... the how long and
+                            // why." The line through the name says THAT they are off;
+                            // this says why, for how long and who decided — first in
+                            // the stack, because it is the question a crossed-out name
+                            // raises before any other.
+                            const f2 = r.fields;
+                            const sc = unavailableClubsOf(f2);
+                            const scope = sc.length
+                                ? sc.map(c => c.replace(/\w/g, m => m.toUpperCase())).join(', ') + ' only'
+                                : 'all clubs';
+                            const u = f2['unavailable_until'];
+                            const howLong = u
+                                ? `until ${new Date(u + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}`
+                                : 'indefinitely';
+                            const by  = f2['unavailable_by'] || '';
+                            const on  = f2['unavailable_since']
+                                ? new Date(f2['unavailable_since']).toLocaleDateString('en-US', { month:'short', day:'numeric' })
+                                : '';
+                            const why = f2['unavailable_reason'] || '';
+                            return `<div style="margin:2px 0 6px;padding:6px 9px;background:#fff4e2;border:1px solid #f0c674;border-left:3px solid #c0392b;border-radius:5px;">
+                                <div style="font-size:0.74rem;font-weight:800;color:#8a2b12;letter-spacing:.02em;">⚠ UNAVAILABLE &middot; ${scope} &middot; ${howLong}</div>
+                                ${why ? `<div style="font-size:0.78rem;color:#5b4632;font-style:italic;margin-top:2px;">“${String(why).replace(/</g,'&lt;')}”</div>` : ''}
+                                ${by ? `<div style="font-size:0.7rem;color:#8a7a5f;margin-top:2px;">marked by ${String(by).replace(/</g,'&lt;')}${on ? ' · ' + on : ''}</div>` : ''}
+                            </div>`;
+                        })() : ''}
                         ${metaParts.length ? `<div class="ref-meta">${metaParts.join(' · ')}</div>` : ''}
                         ${timeLines  ? `<div class="ref-meta" style="margin-top:2px;">${timeLines}</div>`  : ''}
                         ${clubLine      ? `<div class="ref-meta" style="margin-top:2px; color:#0f3460; font-weight:600;">${clubLine}</div>` : ''}
