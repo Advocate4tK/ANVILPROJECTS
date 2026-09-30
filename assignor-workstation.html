@@ -8781,8 +8781,24 @@ Reason (optional):`);
                  + row('⏰ Late scratch', `openIncidentModal('${gid}','${safePos}','late_scratch');`, '#b45309');
         }
 
+        // ⚠️ BUILD PRIVATELY, PUBLISH ONCE. loadAll() can be in flight twice —
+        // ?filter=unassigned fires it without awaiting, and the init below then
+        // sees allGames.length === 0 (the first load has not resolved) and fires
+        // it again. Both runs used to reset the SHARED caEmailSent and then both
+        // counted the same rows into it:
+        //
+        //     A: reset → await   B: reset → await
+        //     A: counts row → asks = 1
+        //     B: counts the SAME row → asks = 2
+        //
+        // Every other field here is guarded first-write-wins, so nothing ever
+        // looked wrong. `asks` accumulates, so it was the one thing that
+        // doubled — Tod mailed Francis Senat once per game and both chips read
+        // ✉2. Nothing is shared now: each run fills its own object and the last
+        // one to finish assigns it. A bonus is that the old counts stay on
+        // screen during the fetch instead of blinking away.
         async function loadCAEmailSent() {
-            caEmailSent = {};
+            const next = {};
             try {
                 const ids = allGames.map(g => g.id);
                 if (!ids.length) return;
@@ -8801,7 +8817,13 @@ Reason (optional):`);
                     .order('id', { ascending: false })
                     .limit(2000);
                 const posOf = { 'Center Referee': 'Center Referee', 'Assistant Referee 1': 'AR 1', 'Assistant Referee 2': 'AR 2' };
+                // One blast_log row is one email, however many times it appears
+                // in the result. Counting by id means a repeated row can never
+                // become a second ask.
+                const counted = new Set();
                 (data || []).forEach(row => {
+                    if (counted.has(row.id)) return;
+                    counted.add(row.id);
                     const w = String(row.where_text || '');
                     const m = w.match(/· (Center Referee|Assistant Referee [12]) · game (\d+)$/);
                     if (!m) return;
@@ -8810,9 +8832,9 @@ Reason (optional):`);
                                 : 'confirmed';
                     const key = `${m[2]}|${posOf[m[1]]}`;
                     // Newest first, so the first one seen for a stage is the latest.
-                    if (!caEmailSent[key]) caEmailSent[key] = {};
-                    if (!caEmailSent[key][stage]) caEmailSent[key][stage] = row.sent_at;
-                    if (!caEmailSent[key].at && stage === 'confirmed') caEmailSent[key].at = row.sent_at;
+                    if (!next[key]) next[key] = {};
+                    if (!next[key][stage]) next[key][stage] = row.sent_at;
+                    if (!next[key].at && stage === 'confirmed') next[key].at = row.sent_at;
                     // ── HOW MANY TIMES HAVE I ASKED? ───────────────────────
                     // Tod, 2026-09-29: "maybe a number next to it on how many
                     // attempts I have made in getting them to accept their stupid
@@ -8820,9 +8842,10 @@ Reason (optional):`);
                     // this loop was reading them all and keeping only the latest
                     // timestamp, so the count was being thrown away every load.
                     // He knew Leah was on four because he remembered.
-                    if (stage === 'assigned') caEmailSent[key].asks = (caEmailSent[key].asks || 0) + 1;
+                    if (stage === 'assigned') next[key].asks = (next[key].asks || 0) + 1;
                 });
             } catch (e) { console.warn('[caEmailSent]', e.message); }
+            finally { caEmailSent = next; }
         }
 
         // The pill on a COLLAPSED card. The collapsed row is what an assignor
