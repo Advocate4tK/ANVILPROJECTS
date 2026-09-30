@@ -8797,6 +8797,24 @@ Reason (optional):`);
         // ✉2. Nothing is shared now: each run fills its own object and the last
         // one to finish assigns it. A bonus is that the old counts stay on
         // screen during the fetch instead of blinking away.
+        // ── THE KEY IS GAME + POSITION + PERSON ────────────────────────
+        // Built in one place so the loader and the readers cannot drift. Names
+        // are compared lowercased and trimmed because blast_log stores whatever
+        // the roster said at send time and the game stores it again separately.
+        //
+        // A slot changing hands starts the new referee at zero, which is right:
+        // asking Harrison three times says nothing about how many times Francis
+        // has been asked. It also means a count quietly disappears when somebody
+        // is replaced, and that is right too — it was never about the slot.
+        function caKeyFor(gid, position, refName) {
+            return `${gid}|${position}|${String(refName || '').trim().toLowerCase()}`;
+        }
+        // The same key for whoever is in that slot RIGHT NOW.
+        function caKey(gid, position) {
+            const g = (typeof allGames !== 'undefined' ? allGames : []).find(x => String(x.id) === String(gid));
+            return caKeyFor(gid, position, g ? resolveRefName(g.fields[position]) : '');
+        }
+
         async function loadCAEmailSent() {
             const next = {};
             try {
@@ -8825,12 +8843,20 @@ Reason (optional):`);
                     if (counted.has(row.id)) return;
                     counted.add(row.id);
                     const w = String(row.where_text || '');
-                    const m = w.match(/· (Center Referee|Assistant Referee [12]) · game (\d+)$/);
+                    // ⚠️ THE REFEREE IS PART OF THE ASSIGNMENT. Tod, 2026-09-30:
+                    // "I need it to parse per assignment and not overall." He
+                    // mailed Francis Senat once for each of two games and both
+                    // chips read ✉2. His own rows were right — one each. The key
+                    // was game|position with NO NAME in it, so every email ever
+                    // sent about that Center slot counted, including the ones to
+                    // whoever held it before him. A slot is not an assignment;
+                    // a slot plus a person is.
+                    const m = w.match(/→ (.+?) · (Center Referee|Assistant Referee [12]) · game (\d+)$/);
                     if (!m) return;
                     const stage = w.startsWith('assignment:pending')  ? 'assigned'
                                 : w.startsWith('assignment:declined') ? 'rejected'
                                 : 'confirmed';
-                    const key = `${m[2]}|${posOf[m[1]]}`;
+                    const key = caKeyFor(m[3], posOf[m[2]], m[1]);
                     // Newest first, so the first one seen for a stage is the latest.
                     if (!next[key]) next[key] = {};
                     if (!next[key][stage]) next[key][stage] = row.sent_at;
@@ -8861,7 +8887,7 @@ Reason (optional):`);
             // of amber reads as done. Tod, 2026-09-22: "I keep forgetting who I
             // already assigned and who rejected the games." This row is what he
             // scans, so it says which of the four it is without expanding.
-            const sent  = caEmailSent[`${gid}|${position}`] || {};
+            const sent  = caEmailSent[caKey(gid, position)] || {};
             const st    = caSlotState(gid, position);
             const _e    = st && sent[st] ? '✉' : '';
             const first = String(name).split(' ')[0];
@@ -8926,7 +8952,7 @@ Reason (optional):`);
         // Sheet 3 can never drift — they did on the old two-state version.
         function caChipHtml(gid, position, refName, compact) {
             const st   = caSlotState(gid, position);
-            const sent = caEmailSent[`${gid}|${position}`] || {};
+            const sent = caEmailSent[caKey(gid, position)] || {};
             // Was the email for THIS state sent? An amber chip with no ✉ means
             // the referee has not been asked yet.
             const sentAt = sent[st];
@@ -8973,7 +8999,7 @@ Reason (optional):`);
             const gid = String(gameId);
             if (caSlotState(gid, position) === '') return;
             caSetState(gid, position, '');
-            delete caEmailSent[`${gid}|${position}`];
+            delete caEmailSent[caKey(gid, position)];
             await saveCAConfirmed(gid);
         }
 
@@ -9054,7 +9080,7 @@ Reason (optional):`);
             // not an edge case — if the email was skipped at assign time there
             // was previously NO way to send it, which is exactly what Tod hit
             // with Jenna Crowell. Sending does not change the state.
-            const alreadyEmailed = !!caEmailSent[`${gid}|${position}`];
+            const alreadyEmailed = !!caEmailSent[caKey(gid, position)];
             showCAChoice(event, `Did ${who || 'the referee'} accept it in CA?`, [
                 { label: `✉ ${alreadyEmailed ? 'Ask again' : 'Ask'} ${firstName} to accept &mdash; still waiting`,
                   fn: () => sendAssignmentConfirmation(gid, position, 'assigned') },
@@ -9087,7 +9113,7 @@ Reason (optional):`);
             const game = allGames.find(g => String(g.id) === String(gid));
             if (!game) return;
             const who = resolveRefName(game.fields[position]) || 'this referee';
-            const asks = caEmailSent[`${gid}|${position}`]?.asks || 0;
+            const asks = caEmailSent[caKey(gid, position)]?.asks || 0;
             if (!confirm(`Take ${who} off this game for not accepting it?\n\n`
                 + (asks ? `They have been asked ${asks} time${asks === 1 ? '' : 's'}.\n\n` : '')
                 + `The slot goes back on the openings board and ${who} is emailed to say so.`)) return;
@@ -9107,9 +9133,16 @@ Reason (optional):`);
                 if (error) throw new Error(error.message);
                 if (!data || !data.length) throw new Error('the database accepted the request but changed no rows.');
 
-                game.fields[position] = '';
+                // ⚠️ ORDER MATTERS NOW THAT THE KEY CARRIES THE NAME. caKey() reads
+                // whoever is in the slot at the time it is called, so clearing
+                // the field first would make it build `gid|pos|` and delete
+                // nothing, stranding the old count. caClearSlot goes first —
+                // same order the other two callers already use — and the
+                // explicit delete names the referee outright rather than asking
+                // a slot that no longer holds them.
                 await caClearSlot(gid, position);
-                delete caEmailSent[`${gid}|${position}`];
+                delete caEmailSent[caKeyFor(gid, position, who)];
+                game.fields[position] = '';
                 renderGames();
                 renderRefs(document.getElementById('refSearch')?.value.toLowerCase() || '');
             } catch (e) {
@@ -9421,7 +9454,9 @@ Reason (optional):`);
                 const j = await r.json().catch(() => ({}));
                 console.log('[' + _event + ']', j);
                 if (j.ok) {
-                    const _k = `${gameId}|${position}`;
+                    // Same key shape as the loader, so the optimistic bump and
+                    // the next reload agree about who was asked.
+                    const _k = caKeyFor(gameId, position, who);
                     if (!caEmailSent[_k]) caEmailSent[_k] = {};
                     caEmailSent[_k][stage || 'assigned'] = new Date().toISOString();
                     // Count it now, not on the next reload — otherwise sending a
