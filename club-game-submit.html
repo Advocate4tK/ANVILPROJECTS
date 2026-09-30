@@ -2023,15 +2023,20 @@
         if (isComp && scrimBox) scrimBox.checked = false;
         if (!wrap || !sel) return;
         wrap.style.display = isComp ? '' : 'none';
-        if (!isComp) { sel.value = ''; return; }
+        if (!isComp) { sel.value = ''; updateCreateBtn(); return; }
         const leagues = clubLeagueList();
         const keep = sel.value;
         // "General Non-League Games" is Central Assign's own escape hatch and any
         // club may use it — a friendly against a club in another district belongs
         // to no league at all.
         const opts = leagues.concat(leagues.includes('General Non-League Games') ? [] : ['General Non-League Games']);
+        // ⚠️ DO NOT GUESS THE LEAGUE. A club that has not stated its primary gets
+        // a blank sitting at the top and has to choose. See the note below.
+        const stated  = currentClubRecord?.fields?.['ca_league_primary'] || '';
+        const known   = stated && opts.includes(stated);
+        const blank   = known ? '' : '<option value="">— pick the league —</option>';
         sel.innerHTML = opts.length
-            ? opts.map(l => `<option value="${l}">${l}</option>`).join('')
+            ? blank + opts.map(l => `<option value="${l}">${l}</option>`).join('')
             : '<option value="">— no leagues set for this club —</option>';
         // ⚠️ NEVER DEFAULT TO A CUP. The club's list is stored alphabetically, so
         // leagues[0] for NECONN is "CJSA Connecticut Cup" — which meant every
@@ -2039,19 +2044,36 @@
         // Eric caught it; Tod agreed: "it is mandatory to pick the league but
         // should default to the usual NE District Travel and not CUP."
         //
-        // A cup is the exception and has to be chosen on purpose. The ordinary
-        // league is the one a club plays week in, week out, so that is the one
-        // sitting there when the form opens. General Non-League Games is an
-        // escape hatch, not a default, so it is skipped too.
+        // A cup is the exception and has to be chosen on purpose.
         // The club SAYS which league it belongs to — clubs.ca_league_primary,
-        // starred in manage-clubs -> Entity Status. "First non-cup" is only the
-        // fallback for a club that has not said yet, and it is a statement about
-        // alphabetical order rather than about the club: Canterbury lists three
-        // districts and nothing in the order tells you which is home.
-        const stated  = currentClubRecord?.fields?.['ca_league_primary'] || '';
-        const ordinary = opts.filter(l => !isCupLeague(l) && l !== 'General Non-League Games');
-        const fallback = (stated && opts.includes(stated)) ? stated : (ordinary[0] || opts[0] || '');
-        sel.value = (keep && opts.includes(keep)) ? keep : fallback;
+        // starred in manage-clubs -> Entity Status. If it has not said, the form
+        // now says nothing rather than guessing.
+        //
+        // ⚠️ THERE IS NO SENSIBLE FALLBACK, SO THERE IS NO FALLBACK. This used to
+        // be "first non-cup alphabetically", which is a statement about the
+        // alphabet and not about the club: Canterbury lists three districts and
+        // nothing in the order tells you which is home, and the first non-cup
+        // across the whole set is CT Central/North Central — wrong for every
+        // northeast club. 2026-09-30: the cup filter here had been DEAD since
+        // 9081ffa (a swallowed \b, see FIXES_LOG), so the guess was landing on
+        // "CJSA Connecticut Cup" and that is how Ed Conn's Southeast District
+        // games came through as cup ties. Fixing the regex only moved the guess
+        // to a different wrong answer. A guess on this field costs real money —
+        // the fee columns ride with the league into the CSV and Central Assign
+        // will not let anyone change them afterwards.
+        //
+        // Leaving it blank is safe: updateCreateBtn() already refuses to stage a
+        // Comp game with no league, so Create Game stays disabled until the club
+        // picks one. That is what "mandatory to pick the league" actually means.
+        if (known) {
+            sel.value = (keep && opts.includes(keep)) ? keep : stated;
+        } else {
+            sel.value = (keep && opts.includes(keep)) ? keep : '';
+        }
+        // Assigning .value in code fires no 'change', and on a club switch this
+        // runs 250ms after updateCreateBtn() already ran — so ask it again or a
+        // blank league sits under an enabled Create Game button.
+        updateCreateBtn();
     }
 
     function renderStagedTable() {
