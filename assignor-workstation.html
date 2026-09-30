@@ -8891,8 +8891,13 @@ Reason (optional):`);
             const st    = caSlotState(gid, position);
             const _e    = st && sent[st] ? '✉' : '';
             const first = String(name).split(' ')[0];
-            // The count only means anything while we are still waiting on them.
-            const asks  = (st === 'assigned' && sent.asks > 1) ? String(sent.asks) : '';
+            // The count only means anything while we are still waiting on them,
+            // but it shows from ONE. Tod, 2026-09-30: "I sent email for both
+            // assignments for him to log in and take the game in CA... so each
+            // should have a 1." A bare ✉ made him infer the count was working
+            // from the absence of a number, which is not something a tool should
+            // ask anyone to do. One ask is a fact worth printing.
+            const asks  = (st === 'assigned' && sent.asks > 0) ? String(sent.asks) : '';
             const mark  = { '': '', 'assigned': ' ◑', 'confirmed': ' ✓', 'rejected': ' ✗' }[st] + _e + asks;
             // Three asks and no answer is a different situation from one ask, so
             // it stops looking the same. Nothing is removed — somebody chased
@@ -8969,16 +8974,16 @@ Reason (optional):`);
             // ✉ = the email for this state went. ✉̶ is not a thing, so the
             // absence of the mark is the signal: nothing sent yet.
             // How many times they have been asked, beside the envelope. Only
-            // while still waiting, and only once it is more than one — a slot
-            // asked once is ordinary.
-            const askN = (st === 'assigned' && sent.asks > 1) ? String(sent.asks) : '';
+            // while still waiting, and from the FIRST ask — see the note on the
+            // slot chip: an absent number is not a readable way to say "once".
+            const askN = (st === 'assigned' && sent.asks > 0) ? String(sent.asks) : '';
             const label = { '': '○ CA', 'assigned': '◑ CA', 'confirmed': '✓ CA', 'rejected': '✗ CA' }[st]
                         + (st && sentAt ? ' ✉' + askN : '');
             const mailBit = sentAt ? ` Emailed ${when}.` : ' No email sent for this step yet.';
             const tip = {
                 '':          `Not in Central Assign. Click to put ${who} in — you'll be asked whether to email them to accept.`,
                 'assigned':  `In Central Assign, waiting for ${who} to ACCEPT it.${mailBit}`
-                             + (sent.asks > 1 ? ` Asked ${sent.asks} times.` : '')
+                             + (sent.asks ? ` Asked ${sent.asks} time${sent.asks === 1 ? '' : 's'}.` : '')
                              + ` Click to answer, ask again, or take them off.`,
                 'confirmed': `${who} accepted this in Central Assign.${mailBit} Click to clear.`,
                 'rejected':  `${who} DECLINED this in Central Assign — the slot needs filling again.${mailBit} Click to clear.`,
