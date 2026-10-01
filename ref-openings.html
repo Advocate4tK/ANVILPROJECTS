@@ -1544,31 +1544,21 @@
         return !slotClosed(g, 'Center Referee') || !slotClosed(g, 'AR 1') || !slotClosed(g, 'AR 2');
     }
 
-    // ── WHAT THE BOARD SHOWS IS WHO IS IN THE SLOT ─────────────────────
-    // Tod, 2026-10-01: "if a game is filled or spots filled it needs to show."
-    // RTCT10272 had all three positions assigned and the board advertised it as
-    // "3 Open", because slotClosed() above asks Central Assign and CA had not
-    // been told about the game yet.
+    // ⛔ DO NOT DRAW OCCUPANCY HERE. Tried on 2026-10-01 — slotTaken()/crewed()
+    // marked a slot Filled as soon as anyone was dropped into it, so RTCT10272
+    // went from "3 Open" to "Filled" on the strength of an assignment nobody
+    // had accepted. Tod reverted it the same day: "if we havent marked as
+    // assigned in CA they should still list as open."
     //
-    // ⚠️ THESE ARE TWO DIFFERENT QUESTIONS and conflating them is what made
-    // the board lie:
-    //    slotClosed  — has the referee COMMITTED? (CA acceptance) — the rule
-    //                  about when a game stops being offered.
-    //    slotTaken   — is there SOMEBODY IN IT right now? — what the page
-    //                  draws.
+    // The reason is the whole point of the page. A name in a slot is the
+    // ASSIGNOR'S intention; acceptance in CA is the REFEREE'S commitment, and
+    // only the second one means somebody is turning up. Eric Baughman has 76
+    // NECONN games exported to CA and acceptance recorded on 23 of them — on
+    // boards like that, drawing occupancy would mark games covered that have
+    // nobody committed to them, and the referees who would have bid move on.
+    // Staying open is the safe failure.
     //
-    // Nothing about the listing changes: hasOpenSlot never filtered a game off
-    // the board, it only chose a badge, so every game stays listed and every
-    // game stays submittable exactly as before. A referee can still put their
-    // name down on a filled game, which is the point — if the assigned referee
-    // never accepts in CA, the assignor needs somebody already waiting.
-    function slotTaken(g, col) {
-        return isFilled(g[col]);   // a name OR a marker. CA is not asked.
-    }
-    function crewed(g) {
-        if (isSingleRefGame(g)) return slotTaken(g, 'Center Referee');
-        return slotTaken(g, 'Center Referee') && slotTaken(g, 'AR 1') && slotTaken(g, 'AR 2');
-    }
+    // slotClosed() above is the only question this page asks.
 
     function isU8Game(g) {
         const age = (g['Age Group'] || '').toUpperCase();
@@ -1694,11 +1684,9 @@
             .trim();
         const u8        = isSingleRefGame(g);
 
-        // Occupancy, not CA — see slotTaken(). A spot with somebody in it reads
-        // Filled whether or not Central Assign has heard about it yet.
-        const crFilled  = slotTaken(g, 'Center Referee');
-        const ar1Filled = slotTaken(g, 'AR 1');
-        const ar2Filled = slotTaken(g, 'AR 2');
+        const crFilled  = slotClosed(g, 'Center Referee');
+        const ar1Filled = slotClosed(g, 'AR 1');
+        const ar2Filled = slotClosed(g, 'AR 2');
 
         const openCount = u8
             ? (!crFilled ? 1 : 0)
@@ -1843,7 +1831,9 @@
                       legend explains what it means — but the collapsed row
                       rendered an empty string and no .badge-filled class existed.
                       Tod, 2026-10-01: "the ones that are filled already arent
-                      showing as filled." */''}
+                      showing as filled."
+                      ⚠️ This is the BADGE only. What counts as covered is still
+                      slotClosed() — CA acceptance — and that is deliberate. */''}
                 ${covered
                     ? (!isJotform ? `<span class="badge badge-filled">Filled</span>` : '')
                     : (!isJotform ? `<span class="badge badge-open">${openCount} Open</span>` : '')}
@@ -2238,9 +2228,7 @@
                 .filter(g => !_hasStarted(g))
                 .filter(g => (g['Game Status'] || '') !== 'Cancelled')
                 .map(g => {
-                    // Crewed, not CA-confirmed. The listing is unaffected either
-                    // way — this flag only ever chose a badge and fed the counter.
-                    g._covered = (g['Game Status'] || '') === 'Filled' || crewed(g);
+                    g._covered = (g['Game Status'] || '') === 'Filled' || !hasOpenSlot(g);
                     return g;
                 })
                 .sort((a, b) => {
