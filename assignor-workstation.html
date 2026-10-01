@@ -10962,20 +10962,24 @@ You will need to contact them yourself. Assign anyway?`)) return;
 
                 const override = document.getElementById('overrideAssign')?.checked;
 
-                // Already working that day. Not a clash — the overlap guard below
-                // handles those — but three games and a drive is a real day, and
-                // the assignor should be told before adding a fourth rather than
-                // discovering it on the hover card afterwards.
-                if (!override) {
-                    const sameDay = (refBusy[String(refLookup[refId]?.fields['Name'] || refName).trim().toLowerCase()] || [])
-                        .filter(b => b.date === gameDate && String(b.id) !== String(gameId) && !cancelledGameIds.has(b.id));
-                    if (sameDay.length) {
-                        const fmtT = m => `${Math.floor(m / 60) % 12 || 12}:${String(m % 60).padStart(2, '0')} ${m >= 720 ? 'PM' : 'AM'}`;
-                        const when = sameDay.sort((a, b) => a.start - b.start)
-                                            .map(b => fmtT(b.start)).join(', ');
-                        if (!confirm(`${refName} already has ${sameDay.length} game${sameDay.length === 1 ? '' : 's'} that day — ${when}.\n\nAdd this one too?`)) return;
-                    }
-                }
+                // ⛔ NO "ALREADY WORKING THAT DAY" PROMPT. There used to be one
+                // here, on the theory that a heavy day deserves a mention. It
+                // asked at the FIRST existing game, not the fourth, so it fired
+                // on the ordinary second game of a Saturday — and being a
+                // confirm() with OK/Cancel it read as a stop sign while saying
+                // nothing about whether the games actually conflicted.
+                //
+                // Eric Baughman hit it adding Deegan Bryniarski to a 12:00 when
+                // he had a 9:00, forwarded it as "weird message", and said the
+                // thing that settles it: "The games do not overlap - one is at
+                // 9 and the other is at 12." Tod, 2026-09-30: "there is no issue
+                // with how many games a ref wants to take as long as they dont
+                // overlap."
+                //
+                // So the count is not the tool's business. OVERLAP is, and
+                // findClashes() immediately below is the guard that enforces it
+                // — travel time included. A referee who wants five games in a
+                // day and can physically make them gets five games.
 
                 // Scheduling conflict — overlap, not an identical kickoff minute.
                 const clashes = findClashes(refId, targetGame);
