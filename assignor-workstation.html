@@ -2692,7 +2692,18 @@
         let sheet3ZoomGames       = 1.0;
         let sheet3ZoomRefs        = 1.0;
         let sheet3LastFiltered    = null;
-        let sheet3SeedOrder       = 'exp-asc'; // 'exp-asc' | 'exp-desc'
+        // Eric Baughman by phone, 2026-10-01: the opt queue should re-sort —
+        // by years, by how many games they are already carrying, or scrambled.
+        // The point is the SIX CELLS ARE A WINDOW onto a longer queue: when more
+        // than six referees match a game, re-sorting is how you see the others
+        // without having to assign somebody first.
+        let sheet3SeedOrder       = 'exp-asc'; // exp-asc|exp-desc|games-asc|games-desc|mix
+        // ⚠️ THE SHUFFLE HAS TO HOLD STILL. Rolling fresh randomness inside the
+        // sort would reshuffle on every assignment, filter change and redraw, and
+        // the person Eric was looking at two seconds ago would be gone. The seed
+        // is rolled ONCE per click of Mix and then hashed with each name, so the
+        // order is arbitrary but stable until he asks for a new one.
+        let sheet3SeedSeed        = 1;
         let sheet3MaxQueueLen     = 6;
         let sheet3StagingLoaded   = false; // true after first fetch; prevents re-fetch on every renderGames
         let sheet3AgeFilter       = null; // null = all, or an age group string
@@ -2735,7 +2746,8 @@
                     baseColOrder: baseColOrder,
                     hiddenCols:      sheet3HiddenCols,
                     refHiddenCols:   sheet3RefHiddenCols,
-                    seedOrder:       sheet3SeedOrder
+                    seedOrder:       sheet3SeedOrder,
+                    seedSeed:        sheet3SeedSeed
                 }));
             } catch(e) {}
         }
@@ -2744,7 +2756,7 @@
             try {
                 const saved = localStorage.getItem(SHEET3_STATE_KEY);
                 if (!saved) return;
-                const { cleared, colors, roles, splitH, zoomGames, zoomRefs, baseColOrder, colOrder, hiddenCols, refHiddenCols, seedOrder } = JSON.parse(saved);
+                const { cleared, colors, roles, splitH, zoomGames, zoomRefs, baseColOrder, colOrder, hiddenCols, refHiddenCols, seedOrder, seedSeed } = JSON.parse(saved);
                 if (cleared)    sheet3ClearedAssigned = cleared;
                 if (colors)     sheet3OptColors       = colors;
                 if (roles)      sheet3OptRoles        = roles;
@@ -2762,7 +2774,8 @@
                 if (Array.isArray(sheet3ColOrder) && !sheet3ColOrder.includes('no')) sheet3ColOrder.unshift('no');
                 if (hiddenCols    && Array.isArray(hiddenCols))    sheet3HiddenCols    = hiddenCols;
                 if (refHiddenCols && Array.isArray(refHiddenCols)) sheet3RefHiddenCols = refHiddenCols;
-                if (seedOrder === 'exp-asc' || seedOrder === 'exp-desc') sheet3SeedOrder = seedOrder;
+                if (['exp-asc','exp-desc','games-asc','games-desc','mix'].includes(seedOrder)) sheet3SeedOrder = seedOrder;
+                if (Number.isFinite(seedSeed)) sheet3SeedSeed = seedSeed;
                 // Restore base col order (ignore legacy colOrder key)
                 const savedBase = baseColOrder || (colOrder ? colOrder.filter(k => SHEET3_BASE_COLS.includes(k)) : null);
                 if (savedBase && Array.isArray(savedBase) && !savedBase.includes('no')) savedBase.unshift('no');
@@ -3045,6 +3058,38 @@
                 const n = parseInt(v);
                 return isNaN(n) ? 9999 : n;
             };
+            // How many games is this referee already carrying? Same number as the
+            // badge beside their name, and the same scope: games inside the
+            // LOADED date window, not their whole season — so "fewest games"
+            // balances the weekend in front of you, which is the question
+            // actually being asked.
+            const _loadedIds = new Set(allGames.map(g => String(g.id)));
+            const getGames = name => {
+                const ref = refLookupByName[(name || '').trim().toLowerCase()];
+                if (!ref || !assignedAt[ref.id]) return 0;
+                let c = 0;
+                for (const gameSet of assignedAt[ref.id].values())
+                    for (const gid of gameSet) if (_loadedIds.has(String(gid))) c++;
+                return c;
+            };
+            // Arbitrary but STABLE: FNV-1a over the name, salted with the held
+            // seed. Same seed, same order, every redraw.
+            //
+            // ⚠️ THE FINALIZER IS NOT DECORATION. With the raw FNV hash, seeds
+            // 999 and 4242 produced orders differing in two places out of eight
+            // — clicking Mix looked like it had done nothing. murmur3's fmix32
+            // avalanche fixes it: eight test seeds now give eight distinct
+            // orders. A shuffle that barely changes is worse than no shuffle,
+            // because you cannot tell whether you already tried it.
+            const mixKey = name => {
+                let h = sheet3SeedSeed >>> 0;
+                const t = String(name || '').toLowerCase();
+                for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 0x01000193) >>> 0;
+                h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0;
+                h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
+                return (h ^ (h >>> 16)) >>> 0;
+            };
+
             // Tournament mode: Eric fills opt cells manually — no auto-seed
             if (!window.tournamentMode) allGames.forEach(g => {
                 const gid = String(g.id);
@@ -3103,9 +3148,21 @@
                 // Sort by experience per seed order
                 // Requesters take Opt 1 onward; everyone else keeps the experience order.
                 names.sort((a, b) => {
+                    // ⚠️ WHOEVER ASKED FOR THIS GAME STAYS ON TOP, in every order
+                    // including Mix. Sorting a volunteer down the queue behind
+                    // somebody who merely happened to be free is how you lose the
+                    // one person who actually wanted the fixture.
                     const ra = requested.has(a.toLowerCase()) ? 0 : 1;
                     const rb = requested.has(b.toLowerCase()) ? 0 : 1;
                     if (ra !== rb) return ra - rb;
+                    if (sheet3SeedOrder === 'mix') return mixKey(a) - mixKey(b);
+                    if (sheet3SeedOrder === 'games-asc' || sheet3SeedOrder === 'games-desc') {
+                        const gd = getGames(a) - getGames(b);
+                        // Equal load is common, so fall back to experience rather
+                        // than leaving ties to whatever order they arrived in.
+                        if (gd) return sheet3SeedOrder === 'games-asc' ? gd : -gd;
+                        return getExp(a) - getExp(b);
+                    }
                     const diff = getExp(a) - getExp(b);
                     return sheet3SeedOrder === 'exp-asc' ? diff : -diff;
                 });
@@ -3418,6 +3475,10 @@
         }
 
         function sheet3SetSeedOrder(order) {
+            // Clicking Mix again means "give me a different six", so it rolls.
+            // Clicking any other order leaves the seed alone, so going away to
+            // Gms and back to Mix returns the SAME scramble he was looking at.
+            if (order === 'mix') sheet3SeedSeed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
             sheet3SeedOrder = order;
             // Re-seed only games that haven't been touched (no staging rows)
             // Clear untouched games so autoSeed re-runs for them
@@ -3978,8 +4039,7 @@
             const showAllBtn = sheet3HiddenCols.length
                 ? `<button onclick="sheet3ShowAllCols()" style="${zoomBtn}" title="Show all hidden columns">Show all cols</button>`
                 : '';
-            const seedAscStyle  = `${zoomBtn} ${sheet3SeedOrder === 'exp-asc'  ? 'background:#0f3460;color:#fff;border-color:#0f3460;' : ''}`;
-            const seedDescStyle = `${zoomBtn} ${sheet3SeedOrder === 'exp-desc' ? 'background:#0f3460;color:#fff;border-color:#0f3460;' : ''}`;
+            const _seedOn = o => `${zoomBtn} ${sheet3SeedOrder === o ? 'background:#0f3460;color:#fff;border-color:#0f3460;' : ''}`;
             const gamesTable = `
                 <div style="display:flex; align-items:center; gap:5px; padding:4px 2px 2px 2px; flex-wrap:wrap;">
                     <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em;">GAMES ZOOM</span>
@@ -3989,8 +4049,11 @@
                     <span style="font-size:0.7rem; color:#aaa; margin-left:6px;">${displayGames.length}${displayGames.length !== allFilteredGames.length ? ` of ${allFilteredGames.length}` : ''} games</span>
                     ${showAllBtn}
                     <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em; margin-left:10px;">SEED ORDER</span>
-                    <button onclick="sheet3SetSeedOrder('exp-asc')"  style="${seedAscStyle}"  title="Seed queue: least experienced first">Exp ▲</button>
-                    <button onclick="sheet3SetSeedOrder('exp-desc')" style="${seedDescStyle}" title="Seed queue: most experienced first">Exp ▼</button>
+                    <button onclick="sheet3SetSeedOrder('exp-asc')"    style="${_seedOn('exp-asc')}"    title="Years reffing — least experienced first">★ Yrs ▲</button>
+                    <button onclick="sheet3SetSeedOrder('exp-desc')"   style="${_seedOn('exp-desc')}"   title="Years reffing — most experienced first">★ Yrs ▼</button>
+                    <button onclick="sheet3SetSeedOrder('games-asc')"  style="${_seedOn('games-asc')}"  title="Games already assigned in this date range — fewest first, to spread the work"># Gms ▲</button>
+                    <button onclick="sheet3SetSeedOrder('games-desc')" style="${_seedOn('games-desc')}" title="Games already assigned in this date range — most first"># Gms ▼</button>
+                    <button onclick="sheet3SetSeedOrder('mix')"        style="${_seedOn('mix')}"        title="Scramble the queue — click again for a different draw. Referees who asked for the game stay on top.">⤨ Mix</button>
                     <button onclick="sheet3ToggleMissingFilter()" style="${zoomBtn} margin-left:10px; ${sheet3MissingFilter ? 'background:#c0392b;color:#fff;border-color:#c0392b;' : ''}" title="Show only games missing at least one referee">⚠ Missing Refs${sheet3MissingFilter ? ' ✕' : ''}</button>
                 </div>
                 <div id="s3gamesPane" style="max-height:${sheet3SplitGamesH}px; overflow:auto; border:2px solid #d0d7de; direction:rtl;">
