@@ -3121,6 +3121,74 @@
             });
         }
 
+        // Re-order queues that ALREADY have names in them, using whatever
+        // sheet3SeedOrder is currently set to. Pass the games to touch.
+        //
+        // ⚠️ ROLES AND COLOURS ARE KEYED BY SLOT, NOT BY PERSON, so they are
+        // captured against the NAME before anything moves and reattached by new
+        // index. Otherwise a CR badge ends up over whoever lands in slot 0.
+        // sheet3SlideQueue has the same hazard and solves it the same way.
+        function sheet3ResortQueues(games) {
+            const rows = [];
+            const uid  = currentUserId();
+            (games || []).forEach(g => {
+                const gid   = String(g.id);
+                const queue = (sheet3StagedRefs[gid] || []).filter(Boolean);
+                if (!queue.length) { sheet3StagedRefs[gid] = []; return; }   // let autoSeed fill it
+
+                const roleByName = {}, colorByName = {};
+                queue.forEach((nm, i) => {
+                    const r = sheet3OptRoles[`${gid}-${i}`];
+                    const c = sheet3OptColors[`${gid}-${i}`];
+                    if (r) roleByName[nm]  = r;
+                    if (c) colorByName[nm] = c;
+                });
+
+                const sorted = sheet3SortNames(g, queue);
+                if (sorted.join('\u0001') === queue.join('\u0001')) return;   // unchanged — no write
+
+                sheet3StagedRefs[gid] = sorted;
+                queue.forEach((_, i) => { delete sheet3OptRoles[`${gid}-${i}`]; delete sheet3OptColors[`${gid}-${i}`]; });
+                sorted.forEach((nm, i) => {
+                    if (roleByName[nm])  sheet3OptRoles[`${gid}-${i}`]  = roleByName[nm];
+                    if (colorByName[nm]) sheet3OptColors[`${gid}-${i}`] = colorByName[nm];
+                    rows.push({ game_id: parseInt(gid), slot: i, ref_name: nm, assignor_id: uid });
+                });
+            });
+
+            // One round trip for everything that moved rather than a write per
+            // cell. staging upserts on (game_id, slot), and the queue only ever
+            // changes ORDER here, never length.
+            if (rows.length) {
+                supabaseClient.client.from('staging')
+                    .upsert(rows, { onConflict: 'game_id,slot' })
+                    .then(({ error }) => { if (error) console.error('queue re-sort:', error); })
+                    .catch(e => console.error('queue re-sort:', e));
+            }
+            sheet3CacheStagedRefs();
+            return rows.length;
+        }
+
+        // ── AFTER AN ASSIGNMENT, THE LOAD-BASED ORDER IS STALE ────────────
+        // Tod, 2026-10-01: "once a ref is placed in a game if there are 8 refs
+        // available the next ref should fill in based on the sort request."
+        //
+        // Giving Harrison a game takes him from 1 to 2, which should move him
+        // down a "# Gms ▼ Least" queue — and move whoever is now carrying least
+        // up into the cell he vacated. assignedAt is already maintained live by
+        // assignRef and unassignRef, so the count is right the moment it changes;
+        // it was only the ORDER that was still from page-load time.
+        //
+        // Only the games orders go stale. Years do not change when you assign
+        // somebody, and Mix is deliberately frozen until the button is clicked
+        // again — re-rolling it here would move the board under Eric's hands
+        // every time he placed a referee.
+        function sheet3ResortAfterAssignment() {
+            if (sheet3SeedOrder !== 'games-asc' && sheet3SeedOrder !== 'games-desc') return;
+            if (typeof allGames === 'undefined' || !allGames.length) return;
+            sheet3ResortQueues(allGames);
+        }
+
         function sheet3AutoSeed() {
             // Tournament mode: Eric fills opt cells manually — no auto-seed
             if (!window.tournamentMode) allGames.forEach(g => {
@@ -3508,46 +3576,8 @@
             // ⚠️ ROLES AND COLOURS ARE KEYED BY SLOT, NOT BY PERSON, so they must
             // travel with the name or a CR badge ends up over somebody else.
             // sheet3SlideQueue has the same problem and solves it the same way.
-            const _rows = [];
-            const _uid  = currentUserId();
-            allGames.forEach(g => {
-                const gid   = String(g.id);
-                const queue = (sheet3StagedRefs[gid] || []).filter(Boolean);
-                if (!queue.length) { sheet3StagedRefs[gid] = []; return; }   // let autoSeed fill it
-
-                // Remember what is attached to each NAME before anything moves.
-                const roleByName  = {}, colorByName = {};
-                queue.forEach((nm, i) => {
-                    const r = sheet3OptRoles[`${gid}-${i}`];
-                    const c = sheet3OptColors[`${gid}-${i}`];
-                    if (r) roleByName[nm]  = r;
-                    if (c) colorByName[nm] = c;
-                });
-
-                const sorted = sheet3SortNames(g, queue);
-                if (sorted.join('\u0001') === queue.join('\u0001')) return;   // unchanged — no write
-
-                sheet3StagedRefs[gid] = sorted;
-                queue.forEach((_, i) => { delete sheet3OptRoles[`${gid}-${i}`]; delete sheet3OptColors[`${gid}-${i}`]; });
-                sorted.forEach((nm, i) => {
-                    if (roleByName[nm])  sheet3OptRoles[`${gid}-${i}`]  = roleByName[nm];
-                    if (colorByName[nm]) sheet3OptColors[`${gid}-${i}`] = colorByName[nm];
-                    _rows.push({ game_id: parseInt(gid), slot: i, ref_name: nm, assignor_id: _uid });
-                });
-            });
-
+            sheet3ResortQueues(allGames);
             sheet3AutoSeed();   // games that had nothing still get seeded
-
-            // One round trip for the whole board rather than a write per cell.
-            // staging upserts on (game_id, slot), so rewriting the slots in place
-            // is enough — the queue length never grows here, only its order.
-            if (_rows.length) {
-                supabaseClient.client.from('staging')
-                    .upsert(_rows, { onConflict: 'game_id,slot' })
-                    .then(({ error }) => { if (error) console.error('seed re-sort:', error); })
-                    .catch(e => console.error('seed re-sort:', e));
-            }
-            sheet3CacheStagedRefs();
             sheet3MaxQueueLen = Math.max(6, ...Object.values(sheet3StagedRefs).map(q => (q || []).filter(Boolean).length));
             sheet3SaveLocalState();
             renderSheet3View(sheet3LastFiltered);
@@ -11220,6 +11250,12 @@ You will need to contact them yourself. Assign anyway?`)) return;
                     }
                 }
 
+                // The person just placed now carries one more game, so a
+                // load-based queue has to be rebuilt before it is drawn. Runs
+                // AFTER the slides above, or it would sort a queue that still
+                // contains the referee being removed from it.
+                sheet3ResortAfterAssignment();
+
                 renderGames();
                 const _rw = document.getElementById('refsListWrap');
                 const _rs = _rw ? _rw.scrollTop : 0;
@@ -11351,6 +11387,11 @@ You will need to contact them yourself. Assign anyway?`)) return;
                     const dt = `${game.fields['Date']}|${game.fields['Time'] || ''}`;
                     if (oldRef) assignedAt[oldRef.id]?.get(dt)?.delete(String(gameId));
                 }
+
+                // Taking a game off somebody drops their count, which should
+                // float them back UP a "fewest games" queue — the same staleness
+                // in the other direction.
+                sheet3ResortAfterAssignment();
 
                 renderGames();
                 renderRefs(document.getElementById('refSearch').value.toLowerCase());
