@@ -3048,48 +3048,80 @@
             return true;
         }
 
-        function sheet3AutoSeed() {
-            const getExp = name => {
-                const ref = refLookupByName[(name || '').trim().toLowerCase()];
-                if (!ref) return 9999;
-                const v = String(ref.fields['Years Reffing'] || '').toLowerCase().trim();
-                if (v === 'season 1' || v === 'seas 1') return -2;
-                if (v === 'season 2' || v === 'seas 2') return -1;
-                const n = parseInt(v);
-                return isNaN(n) ? 9999 : n;
-            };
-            // How many games is this referee already carrying? Same number as the
-            // badge beside their name, and the same scope: games inside the
-            // LOADED date window, not their whole season — so "fewest games"
-            // balances the weekend in front of you, which is the question
-            // actually being asked.
-            const _loadedIds = new Set(allGames.map(g => String(g.id)));
-            const getGames = name => {
-                const ref = refLookupByName[(name || '').trim().toLowerCase()];
-                if (!ref || !assignedAt[ref.id]) return 0;
-                let c = 0;
-                for (const gameSet of assignedAt[ref.id].values())
-                    for (const gid of gameSet) if (_loadedIds.has(String(gid))) c++;
-                return c;
-            };
-            // Arbitrary but STABLE: FNV-1a over the name, salted with the held
-            // seed. Same seed, same order, every redraw.
-            //
-            // ⚠️ THE FINALIZER IS NOT DECORATION. With the raw FNV hash, seeds
-            // 999 and 4242 produced orders differing in two places out of eight
-            // — clicking Mix looked like it had done nothing. murmur3's fmix32
-            // avalanche fixes it: eight test seeds now give eight distinct
-            // orders. A shuffle that barely changes is worse than no shuffle,
-            // because you cannot tell whether you already tried it.
-            const mixKey = name => {
-                let h = sheet3SeedSeed >>> 0;
-                const t = String(name || '').toLowerCase();
-                for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 0x01000193) >>> 0;
-                h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0;
-                h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
-                return (h ^ (h >>> 16)) >>> 0;
-            };
+        function sheet3ExpOf(name) {
+            const ref = refLookupByName[(name || '').trim().toLowerCase()];
+            if (!ref) return 9999;
+            const v = String(ref.fields['Years Reffing'] || '').toLowerCase().trim();
+            if (v === 'season 1' || v === 'seas 1') return -2;
+            if (v === 'season 2' || v === 'seas 2') return -1;
+            const n = parseInt(v);
+            return isNaN(n) ? 9999 : n;
+        }
+        // How many games is this referee already carrying? Same number as the
+        // badge beside their name, and the same scope: games inside the LOADED
+        // date window, not their whole season — so "fewest games" balances the
+        // weekend in front of you, which is the question actually being asked.
+        function sheet3GamesOf(name) {
+            const ref = refLookupByName[(name || '').trim().toLowerCase()];
+            if (!ref || !assignedAt[ref.id]) return 0;
+            const loaded = new Set(allGames.map(g => String(g.id)));
+            let c = 0;
+            for (const gameSet of assignedAt[ref.id].values())
+                for (const gid of gameSet) if (loaded.has(String(gid))) c++;
+            return c;
+        }
+        // Arbitrary but STABLE: FNV-1a over the name, salted with the held seed.
+        // Same seed, same order, every redraw.
+        //
+        // ⚠️ THE FINALIZER IS NOT DECORATION. With the raw FNV hash, seeds 999
+        // and 4242 produced orders differing in two places out of eight —
+        // clicking Mix looked like it had done nothing. murmur3's fmix32
+        // avalanche fixes it: eight test seeds give eight distinct orders.
+        function sheet3MixKey(name) {
+            let h = sheet3SeedSeed >>> 0;
+            const t = String(name || '').toLowerCase();
+            for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 0x01000193) >>> 0;
+            h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0;
+            h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
+            return (h ^ (h >>> 16)) >>> 0;
+        }
+        // Who asked for THIS fixture by name.
+        function sheet3RequestedSet(g) {
+            const set = new Set();
+            const d = g.fields['Date'];
+            (allAvail || []).forEach(a => {
+                if (a.fields['Date'] !== d) return;
+                const nm = (a.fields['Referee Name'] || '').trim();
+                if (nm && availRequestsGame(a.fields, g)) set.add(nm.toLowerCase());
+            });
+            return set;
+        }
+        // THE one comparator. Used when seeding a fresh queue and when
+        // re-sorting one that already exists, so the two can never disagree.
+        function sheet3SortNames(g, names, requested) {
+            const req = requested || sheet3RequestedSet(g);
+            return [...names].sort((a, b) => {
+                // ⚠️ WHOEVER ASKED FOR THIS GAME STAYS ON TOP, in every order
+                // including Mix. Sorting a volunteer down the queue behind
+                // somebody who merely happened to be free is how you lose the
+                // one person who actually wanted the fixture.
+                const ra = req.has(a.toLowerCase()) ? 0 : 1;
+                const rb = req.has(b.toLowerCase()) ? 0 : 1;
+                if (ra !== rb) return ra - rb;
+                if (sheet3SeedOrder === 'mix') return sheet3MixKey(a) - sheet3MixKey(b);
+                if (sheet3SeedOrder === 'games-asc' || sheet3SeedOrder === 'games-desc') {
+                    const gd = sheet3GamesOf(a) - sheet3GamesOf(b);
+                    // Equal load is common, so fall back to experience rather than
+                    // leaving ties to whatever order they arrived in.
+                    if (gd) return sheet3SeedOrder === 'games-asc' ? gd : -gd;
+                    return sheet3ExpOf(a) - sheet3ExpOf(b);
+                }
+                const diff = sheet3ExpOf(a) - sheet3ExpOf(b);
+                return sheet3SeedOrder === 'exp-asc' ? diff : -diff;
+            });
+        }
 
+        function sheet3AutoSeed() {
             // Tournament mode: Eric fills opt cells manually — no auto-seed
             if (!window.tournamentMode) allGames.forEach(g => {
                 const gid = String(g.id);
@@ -3147,26 +3179,7 @@
                 });
                 // Sort by experience per seed order
                 // Requesters take Opt 1 onward; everyone else keeps the experience order.
-                names.sort((a, b) => {
-                    // ⚠️ WHOEVER ASKED FOR THIS GAME STAYS ON TOP, in every order
-                    // including Mix. Sorting a volunteer down the queue behind
-                    // somebody who merely happened to be free is how you lose the
-                    // one person who actually wanted the fixture.
-                    const ra = requested.has(a.toLowerCase()) ? 0 : 1;
-                    const rb = requested.has(b.toLowerCase()) ? 0 : 1;
-                    if (ra !== rb) return ra - rb;
-                    if (sheet3SeedOrder === 'mix') return mixKey(a) - mixKey(b);
-                    if (sheet3SeedOrder === 'games-asc' || sheet3SeedOrder === 'games-desc') {
-                        const gd = getGames(a) - getGames(b);
-                        // Equal load is common, so fall back to experience rather
-                        // than leaving ties to whatever order they arrived in.
-                        if (gd) return sheet3SeedOrder === 'games-asc' ? gd : -gd;
-                        return getExp(a) - getExp(b);
-                    }
-                    const diff = getExp(a) - getExp(b);
-                    return sheet3SeedOrder === 'exp-asc' ? diff : -diff;
-                });
-                sheet3StagedRefs[gid] = names;
+                sheet3StagedRefs[gid] = sheet3SortNames(g, names, requested);
             });
             sheet3CacheStagedRefs();
         }
@@ -3480,14 +3493,61 @@
             // Gms and back to Mix returns the SAME scramble he was looking at.
             if (order === 'mix') sheet3SeedSeed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
             sheet3SeedOrder = order;
-            // Re-seed only games that haven't been touched (no staging rows)
-            // Clear untouched games so autoSeed re-runs for them
+
+            // ⚠️ RE-SORT WHAT IS THERE. THIS BUTTON USED TO DO NOTHING.
+            // It only cleared games with an EMPTY queue so autoSeed would re-run
+            // for them — but autoSeed skips any game that already has names, and
+            // on a loaded board every game has names. So the button highlighted
+            // and not one cell moved. Tod, 2026-10-01: "they are there but how do
+            // you activate?" It was activating; there was nothing for it to do.
+            //
+            // Sorting now means sorting the queue that exists. Manually dragged
+            // names stay IN the queue — they are candidates like any other — they
+            // just take their place in the new order, which is what sorting is.
+            //
+            // ⚠️ ROLES AND COLOURS ARE KEYED BY SLOT, NOT BY PERSON, so they must
+            // travel with the name or a CR badge ends up over somebody else.
+            // sheet3SlideQueue has the same problem and solves it the same way.
+            const _rows = [];
+            const _uid  = currentUserId();
             allGames.forEach(g => {
-                const gid = String(g.id);
-                if (sheet3StagedRefs[gid] && sheet3StagedRefs[gid].some(Boolean)) return;
-                sheet3StagedRefs[gid] = [];
+                const gid   = String(g.id);
+                const queue = (sheet3StagedRefs[gid] || []).filter(Boolean);
+                if (!queue.length) { sheet3StagedRefs[gid] = []; return; }   // let autoSeed fill it
+
+                // Remember what is attached to each NAME before anything moves.
+                const roleByName  = {}, colorByName = {};
+                queue.forEach((nm, i) => {
+                    const r = sheet3OptRoles[`${gid}-${i}`];
+                    const c = sheet3OptColors[`${gid}-${i}`];
+                    if (r) roleByName[nm]  = r;
+                    if (c) colorByName[nm] = c;
+                });
+
+                const sorted = sheet3SortNames(g, queue);
+                if (sorted.join('\u0001') === queue.join('\u0001')) return;   // unchanged — no write
+
+                sheet3StagedRefs[gid] = sorted;
+                queue.forEach((_, i) => { delete sheet3OptRoles[`${gid}-${i}`]; delete sheet3OptColors[`${gid}-${i}`]; });
+                sorted.forEach((nm, i) => {
+                    if (roleByName[nm])  sheet3OptRoles[`${gid}-${i}`]  = roleByName[nm];
+                    if (colorByName[nm]) sheet3OptColors[`${gid}-${i}`] = colorByName[nm];
+                    _rows.push({ game_id: parseInt(gid), slot: i, ref_name: nm, assignor_id: _uid });
+                });
             });
-            sheet3AutoSeed();
+
+            sheet3AutoSeed();   // games that had nothing still get seeded
+
+            // One round trip for the whole board rather than a write per cell.
+            // staging upserts on (game_id, slot), so rewriting the slots in place
+            // is enough — the queue length never grows here, only its order.
+            if (_rows.length) {
+                supabaseClient.client.from('staging')
+                    .upsert(_rows, { onConflict: 'game_id,slot' })
+                    .then(({ error }) => { if (error) console.error('seed re-sort:', error); })
+                    .catch(e => console.error('seed re-sort:', e));
+            }
+            sheet3CacheStagedRefs();
             sheet3MaxQueueLen = Math.max(6, ...Object.values(sheet3StagedRefs).map(q => (q || []).filter(Boolean).length));
             sheet3SaveLocalState();
             renderSheet3View(sheet3LastFiltered);
