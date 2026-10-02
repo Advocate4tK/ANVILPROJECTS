@@ -20,10 +20,6 @@
 -- Nobody who has opted in loses anything, because right now nobody has: the
 -- verification at the bottom should return 0 before and after.
 --
--- Tod's position on consent, 2026-10-02: "we are not going to wait for consent."
--- That is about not BLOCKING on it — it is not an instruction to let a column
--- default make the decision silently. Set it deliberately or leave it false.
---
 -- Run in DBeaver: open this file and hit Alt+X.
 -- ============================================================================
 
