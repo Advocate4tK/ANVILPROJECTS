@@ -3094,14 +3094,42 @@
             return true;
         }
 
+        // ⚠️ UNKNOWN IS NOT "VERY EXPERIENCED". This used to return 9999 for
+        // anything it could not parse, and 9999 sorts to the TOP of "★ Yrs
+        // ▲ Most" — so a referee with nothing on file outranked a fifteen-year
+        // veteran. 913 of 1000 referees have a blank Years Reffing, so the first
+        // one to land in an opt queue would have sat at Opt1 claiming to be the
+        // most experienced person on the board.
+        //
+        // ⚠️ AND parseInt('Yr 5') IS NaN. parseInt gives up on a leading letter,
+        // so every referee stored as "Yr 5" or "Year 2" fell into the same hole
+        // as the blanks. Pull the first number out of the string instead; the
+        // column holds "Seas 1", "Yr 4", a bare "3" and one "2024-2025".
+        const SHEET3_EXP_UNKNOWN = Number.POSITIVE_INFINITY;
         function sheet3ExpOf(name) {
             const ref = refLookupByName[(name || '').trim().toLowerCase()];
-            if (!ref) return 9999;
+            if (!ref) return SHEET3_EXP_UNKNOWN;
             const v = String(ref.fields['Years Reffing'] || '').toLowerCase().trim();
-            if (v === 'season 1' || v === 'seas 1') return -2;
-            if (v === 'season 2' || v === 'seas 2') return -1;
-            const n = parseInt(v);
-            return isNaN(n) ? 9999 : n;
+            if (!v || v === 'n/a') return SHEET3_EXP_UNKNOWN;
+            if (/^seas(on)?\s*1$/.test(v)) return -2;
+            if (/^seas(on)?\s*2$/.test(v)) return -1;
+            const m = v.match(/\d+/);
+            if (!m) return SHEET3_EXP_UNKNOWN;
+            // One record reads "2024-2025", which would parse as 2024 YEARS of
+            // experience and top every "Most" sort. Nobody has reffed for more
+            // than a working lifetime; anything past that is a typo or a season
+            // label, not a count.
+            const n = parseInt(m[0], 10);
+            return (n >= 0 && n <= 60) ? n : SHEET3_EXP_UNKNOWN;
+        }
+        // Unknown sorts LAST whichever way the arrow points — it is an absence of
+        // information, not a value, and it should never win either end.
+        function sheet3CompareExp(a, b, mostFirst) {
+            const ea = sheet3ExpOf(a), eb = sheet3ExpOf(b);
+            const ua = !isFinite(ea),  ub = !isFinite(eb);
+            if (ua !== ub) return ua ? 1 : -1;
+            if (ua && ub)  return 0;
+            return mostFirst ? eb - ea : ea - eb;
         }
         // How many games is this referee already carrying? Same number as the
         // badge beside their name, and the same scope: games inside the LOADED
@@ -3160,10 +3188,9 @@
                     // Equal load is common, so fall back to experience rather than
                     // leaving ties to whatever order they arrived in.
                     if (gd) return sheet3SeedOrder === 'games-asc' ? gd : -gd;
-                    return sheet3ExpOf(a) - sheet3ExpOf(b);
+                    return sheet3CompareExp(a, b, false);
                 }
-                const diff = sheet3ExpOf(a) - sheet3ExpOf(b);
-                return sheet3SeedOrder === 'exp-asc' ? diff : -diff;
+                return sheet3CompareExp(a, b, sheet3SeedOrder === 'exp-desc');
             });
         }
 
