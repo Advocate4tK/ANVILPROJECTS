@@ -263,31 +263,37 @@
            #GMS are not actual buttons but descriptors... I'm almost tempted to
            press them." It is now plain text OUTSIDE the control, un-selectable
            and with a default cursor — nothing left to misread. */
-        .s3grp { display:inline-flex; align-items:center; gap:6px; }
+        .s3grp { display:inline-flex; align-items:center; gap:7px; }
         .s3grplbl { font-size:0.66rem; color:#97a0ad; font-weight:700; letter-spacing:0.05em;
                     white-space:nowrap; cursor:default; user-select:none; }
-        .s3seg { display:inline-flex; align-items:stretch; border:1px solid #c3cad4; border-radius:6px;
-                 overflow:hidden; line-height:1.5; background:#dde3ea; padding:1px;
-                 box-shadow:inset 0 1px 2px rgba(16,24,40,.10); }
-        /* ── RAISED vs PRESSED ────────────────────────────────────
-           Pressed only reads as pressed NEXT TO something raised, which is why
-           the first attempt failed: every segment was flat, and a dark inset on
-           a dark navy fill is invisible anyway. So the track is now a sunken
-           grey well, the unselected segments sit PROUD of it with a highlight
-           on top and a shadow beneath, and the selected one drops INTO it. */
-        .s3seg button { border:0; border-radius:4px; background:linear-gradient(#ffffff,#f1f4f8); color:#3d4450;
-                        padding:2px 9px; font-size:0.76rem; font-family:inherit; cursor:pointer;
-                        white-space:nowrap; transition:background .12s, color .12s, box-shadow .12s, transform .06s;
-                        box-shadow:0 1px 0 rgba(255,255,255,.9) inset, 0 1px 2px rgba(16,24,40,.18); margin:0 1px; }
-        .s3seg button:hover { background:linear-gradient(#ffffff,#e8eef6); color:#0f3460; }
-        .s3seg button:active { box-shadow:inset 0 2px 4px rgba(16,24,40,.30); transform:translateY(1px); }
-        .s3seg button.on { background:linear-gradient(#0c2b50,#154a86); color:#fff; font-weight:700;
-                           box-shadow:inset 0 2px 5px rgba(0,0,0,.65),
-                                      inset 0 -1px 0 rgba(255,255,255,.18),
-                                      0 0 0 1px rgba(12,43,80,.55);
+        /* ⚠️ EACH SEGMENT IS ITS OWN BUTTON NOW. They used to be borderless
+           slices inside a shared track, which is why "selected" never read as
+           pressed — there was no button edge for anything to be pressed into.
+           Tod, 2026-10-02: "make the buttons more like buttons... they still
+           dont look selected as actual buttons." So: own border, own radius,
+           own shadow, and a 3px gap so each one is visibly a separate thing. */
+        .s3seg { display:inline-flex; align-items:center; gap:3px; }
+        .s3seg button { border:1px solid #b9c2cf; border-radius:5px; padding:3px 10px;
+                        background:linear-gradient(#ffffff,#eceff5); color:#36404e;
+                        font-size:0.76rem; font-family:inherit; font-weight:600; cursor:pointer;
+                        white-space:nowrap; line-height:1.35;
+                        box-shadow:inset 0 1px 0 #fff, 0 1px 2px rgba(16,24,40,.22);
+                        transition:background .12s, border-color .12s, box-shadow .1s, transform .06s; }
+        .s3seg button:hover { background:linear-gradient(#ffffff,#dfe8f4); border-color:#8fa3bd; color:#0f3460; }
+        .s3seg button:active { transform:translateY(1px);
+                               box-shadow:inset 0 2px 4px rgba(16,24,40,.28); }
+        /* Selected = pushed IN and ringed. The ring is what makes it unmissable
+           at a glance; the inset shadow is what makes it feel pushed. */
+        .s3seg button.on { background:linear-gradient(#0a2746,#17487f); color:#fff; font-weight:800;
+                           border-color:#061c34;
+                           box-shadow:inset 0 2px 6px rgba(0,0,0,.62),
+                                      inset 0 -1px 0 rgba(255,255,255,.22),
+                                      0 0 0 2px rgba(15,52,96,.22);
                            transform:translateY(1px); }
-        .s3seg button.on:hover { background:linear-gradient(#0c2b50,#17508f); }
-        .s3seg.s3seg-solo button { padding:2px 11px; }
+        .s3seg button.on:hover { background:linear-gradient(#0a2746,#1a5091); }
+        .s3seg.s3seg-solo button { padding:3px 12px; }
+        /* ①/② — which dial leads when both are on. */
+        .s3pip { display:inline-block; margin-left:5px; font-size:0.72rem; opacity:.95; vertical-align:baseline; }
         .ref-card.struck .ref-name { text-decoration:line-through; text-decoration-color:#c0392b; text-decoration-thickness:2px; color:#6b5a33 !important; }
 
         /* ── Change Complete Modal ── */
@@ -2743,7 +2749,22 @@
         // The point is the SIX CELLS ARE A WINDOW onto a longer queue: when more
         // than six referees match a game, re-sorting is how you see the others
         // without having to assign somebody first.
-        let sheet3SeedOrder       = 'exp-asc'; // exp-asc|exp-desc|games-asc|games-desc|mix
+        // ⚠️ TWO INDEPENDENT DIALS, NOT ONE OF FIVE. Tod, 2026-10-02: "what is
+        // to keep us from sorting both Most number of years as well as most
+        // number of games... or least number of games and most number of years."
+        // Nothing — and the code was already half doing it, since the games sort
+        // silently tie-broke on experience. This makes that choosable.
+        //
+        //   yrs / gms : null | 'most' | 'least'   (null = that dial is OFF)
+        //   seq       : which dial was clicked most recently, FIRST — that one
+        //               is primary and the other breaks its ties
+        //   mix       : exclusive. Scramble answers to no dial.
+        let sheet3Sort = { yrs: 'least', gms: null, mix: false, seq: ['yrs'] };
+        function sheet3SortRank(which) {          // 1 = primary, 2 = tie-break, 0 = off
+            if (sheet3Sort.mix || !sheet3Sort[which]) return 0;
+            const live = sheet3Sort.seq.filter(k => sheet3Sort[k]);
+            return live.indexOf(which) + 1;
+        }
         // ⚠️ THE SHUFFLE HAS TO HOLD STILL. Rolling fresh randomness inside the
         // sort would reshuffle on every assignment, filter change and redraw, and
         // the person Eric was looking at two seconds ago would be gone. The seed
@@ -2792,7 +2813,7 @@
                     baseColOrder: baseColOrder,
                     hiddenCols:      sheet3HiddenCols,
                     refHiddenCols:   sheet3RefHiddenCols,
-                    seedOrder:       sheet3SeedOrder,
+                    sort:            sheet3Sort,
                     seedSeed:        sheet3SeedSeed
                 }));
             } catch(e) {}
@@ -2802,7 +2823,7 @@
             try {
                 const saved = localStorage.getItem(SHEET3_STATE_KEY);
                 if (!saved) return;
-                const { cleared, colors, roles, splitH, zoomGames, zoomRefs, baseColOrder, colOrder, hiddenCols, refHiddenCols, seedOrder, seedSeed } = JSON.parse(saved);
+                const { cleared, colors, roles, splitH, zoomGames, zoomRefs, baseColOrder, colOrder, hiddenCols, refHiddenCols, seedOrder, seedSeed, sort } = JSON.parse(saved);
                 if (cleared)    sheet3ClearedAssigned = cleared;
                 if (colors)     sheet3OptColors       = colors;
                 if (roles)      sheet3OptRoles        = roles;
@@ -2820,7 +2841,22 @@
                 if (Array.isArray(sheet3ColOrder) && !sheet3ColOrder.includes('no')) sheet3ColOrder.unshift('no');
                 if (hiddenCols    && Array.isArray(hiddenCols))    sheet3HiddenCols    = hiddenCols;
                 if (refHiddenCols && Array.isArray(refHiddenCols)) sheet3RefHiddenCols = refHiddenCols;
-                if (['exp-asc','exp-desc','games-asc','games-desc','mix'].includes(seedOrder)) sheet3SeedOrder = seedOrder;
+                if (sort && typeof sort === 'object') {
+                    const d = v => (v === 'most' || v === 'least') ? v : null;
+                    sheet3Sort = { yrs: d(sort.yrs), gms: d(sort.gms), mix: !!sort.mix,
+                                   seq: Array.isArray(sort.seq) ? sort.seq.filter(k => k === 'yrs' || k === 'gms') : [] };
+                    ['yrs','gms'].forEach(k => { if (sheet3Sort[k] && !sheet3Sort.seq.includes(k)) sheet3Sort.seq.push(k); });
+                } else if (seedOrder) {
+                    // Layouts saved before the dials existed carry the old single
+                    // string. Translate rather than discard — an assignor who had
+                    // picked an order should not silently lose it.
+                    const was = { 'exp-asc':   { yrs:'least', seq:['yrs'] },
+                                  'exp-desc':  { yrs:'most',  seq:['yrs'] },
+                                  'games-asc': { gms:'least', seq:['gms'] },
+                                  'games-desc':{ gms:'most',  seq:['gms'] },
+                                  'mix':       { mix:true,    seq:[] } }[seedOrder];
+                    if (was) sheet3Sort = Object.assign({ yrs:null, gms:null, mix:false, seq:[] }, was);
+                }
                 if (Number.isFinite(seedSeed)) sheet3SeedSeed = seedSeed;
                 // Restore base col order (ignore legacy colOrder key)
                 const savedBase = baseColOrder || (colOrder ? colOrder.filter(k => SHEET3_BASE_COLS.includes(k)) : null);
@@ -3182,20 +3218,27 @@
                 const ra = req.has(a.toLowerCase()) ? 0 : 1;
                 const rb = req.has(b.toLowerCase()) ? 0 : 1;
                 if (ra !== rb) return ra - rb;
-                if (sheet3SeedOrder === 'mix') return sheet3MixKey(a) - sheet3MixKey(b);
-                if (sheet3SeedOrder === 'games-asc' || sheet3SeedOrder === 'games-desc') {
-                    const gd = sheet3GamesOf(a) - sheet3GamesOf(b);
-                    // Equal load is common, so fall back to experience rather than
-                    // leaving ties to whatever order they arrived in.
-                    if (gd) return sheet3SeedOrder === 'games-asc' ? gd : -gd;
-                    return sheet3CompareExp(a, b, false);
+                if (sheet3Sort.mix) return sheet3MixKey(a) - sheet3MixKey(b);
+                // Walk the dials in the order they were last clicked. The first
+                // one that can tell the two apart decides; the next only ever
+                // sees the ties the one before it could not break.
+                for (const k of sheet3Sort.seq) {
+                    const dir = sheet3Sort[k];
+                    if (!dir) continue;
+                    if (k === 'gms') {
+                        const gd = sheet3GamesOf(a) - sheet3GamesOf(b);
+                        if (gd) return dir === 'least' ? gd : -gd;
+                    } else {
+                        const ed = sheet3CompareExp(a, b, dir === 'most');
+                        if (ed) return ed;
+                    }
                 }
-                return sheet3CompareExp(a, b, sheet3SeedOrder === 'exp-desc');
+                return 0;   // both dials silent — leave the order alone
             });
         }
 
         // Re-order queues that ALREADY have names in them, using whatever
-        // sheet3SeedOrder is currently set to. Pass the games to touch.
+        // sheet3Sort is currently set to. Pass the games to touch.
         //
         // ⚠️ ROLES AND COLOURS ARE KEYED BY SLOT, NOT BY PERSON, so they are
         // captured against the NAME before anything moves and reattached by new
@@ -3257,7 +3300,7 @@
         // again — re-rolling it here would move the board under Eric's hands
         // every time he placed a referee.
         function sheet3ResortAfterAssignment() {
-            if (sheet3SeedOrder !== 'games-asc' && sheet3SeedOrder !== 'games-desc') return;
+            if (sheet3Sort.mix || !sheet3Sort.gms) return;
             if (typeof allGames === 'undefined' || !allGames.length) return;
             sheet3ResortQueues(allGames);
         }
@@ -3628,12 +3671,25 @@
             renderSheet3View(sheet3LastFiltered);
         }
 
-        function sheet3SetSeedOrder(order) {
-            // Clicking Mix again means "give me a different six", so it rolls.
-            // Clicking any other order leaves the seed alone, so going away to
-            // Gms and back to Mix returns the SAME scramble he was looking at.
-            if (order === 'mix') sheet3SeedSeed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
-            sheet3SeedOrder = order;
+        // which: 'yrs' | 'gms' | 'mix'.  dir: 'most' | 'least' (ignored for mix)
+        //
+        // Each dial is TRI-STATE: off → most → off, or off → least → off.
+        // Clicking the segment that is already lit turns that dial OFF, which is
+        // what gives the buttons a real unselected state to contrast against.
+        // Clicking a dial puts it at the FRONT of seq, so the thing you touched
+        // last is the thing that leads — and the other becomes its tie-break.
+        function sheet3SetSeedOrder(which, dir) {
+            if (which === 'mix') {
+                // Clicking Mix again means "give me a different six", so it rolls.
+                sheet3SeedSeed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
+                sheet3Sort = { yrs: null, gms: null, mix: true, seq: [] };
+            } else {
+                const off = sheet3Sort[which] === dir && !sheet3Sort.mix;
+                sheet3Sort.mix = false;                      // any dial cancels scramble
+                sheet3Sort[which] = off ? null : dir;
+                sheet3Sort.seq = sheet3Sort.seq.filter(k => k !== which);
+                if (!off) sheet3Sort.seq.unshift(which);     // most recent leads
+            }
 
             // ⚠️ RE-SORT WHAT IS THERE. THIS BUTTON USED TO DO NOTHING.
             // It only cleared games with an EMPTY queue so autoSeed would re-run
@@ -4199,6 +4255,15 @@
 
             const zoomBtn = 'border:1px solid #ccc; background:#f6f8fa; border-radius:3px; padding:1px 7px; font-size:0.8rem; cursor:pointer; line-height:1.4;';
             const zoomLbl = 'font-size:0.72rem; color:#444; min-width:36px; text-align:center; display:inline-block;';
+            // ① / ② beside a lit segment says WHICH DIAL LEADS. With two dials
+            // able to be on at once the fill alone cannot say that, and a sort
+            // whose precedence you have to remember is a sort you will misread.
+            // Only drawn when both are on — a lone dial needs no number.
+            const _rankPip = (which, dir) => {
+                if (sheet3Sort.mix || sheet3Sort[which] !== dir) return '';
+                if (!(sheet3Sort.yrs && sheet3Sort.gms)) return '';
+                return `<span class="s3pip">${sheet3SortRank(which) === 1 ? '①' : '②'}</span>`;
+            };
             const showAllBtn = sheet3HiddenCols.length
                 ? `<button onclick="sheet3ShowAllCols()" style="${zoomBtn}" title="Show all hidden columns">Show all cols</button>`
                 : '';
@@ -4225,20 +4290,20 @@
                           along with the arrow so neither can be misread alone. */''}
                     <span class="s3grp"><span class="s3grplbl">★ YRS</span>
                     <span class="s3seg">
-                        <button class="${sheet3SeedOrder === 'exp-desc' ? 'on' : ''}" onclick="sheet3SetSeedOrder('exp-desc')" title="Most experienced first — most years reffing at the top">▲ Most</button>
-                        <button class="${sheet3SeedOrder === 'exp-asc'  ? 'on' : ''}" onclick="sheet3SetSeedOrder('exp-asc')"  title="Newest first — fewest years reffing at the top">▼ Least</button>
+                        <button class="${sheet3Sort.yrs === 'most'  && !sheet3Sort.mix ? 'on' : ''}" onclick="sheet3SetSeedOrder('yrs','most')"  title="Most experienced first. Click again to switch this dial off.">▲ Most${_rankPip('yrs','most')}</button>
+                        <button class="${sheet3Sort.yrs === 'least' && !sheet3Sort.mix ? 'on' : ''}" onclick="sheet3SetSeedOrder('yrs','least')" title="Newest first. Click again to switch this dial off.">▼ Least${_rankPip('yrs','least')}</button>
                     </span>
                     </span>
                     
                     <span class="s3grp"><span class="s3grplbl"># GMS</span>
                     <span class="s3seg">
-                        <button class="${sheet3SeedOrder === 'games-desc' ? 'on' : ''}" onclick="sheet3SetSeedOrder('games-desc')" title="Most games already assigned in this date range — your busiest referees at the top">▲ Most</button>
-                        <button class="${sheet3SeedOrder === 'games-asc'  ? 'on' : ''}" onclick="sheet3SetSeedOrder('games-asc')"  title="Fewest games already assigned in this date range — spreads the work to whoever is carrying least">▼ Least</button>
+                        <button class="${sheet3Sort.gms === 'most'  && !sheet3Sort.mix ? 'on' : ''}" onclick="sheet3SetSeedOrder('gms','most')"  title="Busiest referees first. Click again to switch this dial off.">▲ Most${_rankPip('gms','most')}</button>
+                        <button class="${sheet3Sort.gms === 'least' && !sheet3Sort.mix ? 'on' : ''}" onclick="sheet3SetSeedOrder('gms','least')" title="Fewest games first — spreads the work. Click again to switch this dial off.">▼ Least${_rankPip('gms','least')}</button>
                     </span>
                     </span>
                     
                     <span class="s3seg s3seg-solo">
-                        <button class="${sheet3SeedOrder === 'mix' ? 'on' : ''}" onclick="sheet3SetSeedOrder('mix')" title="Scramble the queue. Click again for a different draw — referees who asked for the game stay on top.">⤨ Mix${sheet3SeedOrder === 'mix' ? ' ↻' : ''}</button>
+                        <button class="${sheet3Sort.mix ? 'on' : ''}" onclick="sheet3SetSeedOrder('mix')" title="Scramble the queue. Click again for a different draw — referees who asked for the game stay on top.">⤨ Mix${sheet3Sort.mix ? ' ↻' : ''}</button>
                     </span>
                     </span>
                     <button onclick="sheet3ToggleMissingFilter()" style="${zoomBtn} margin-left:8px; ${sheet3MissingFilter ? 'background:#c0392b;color:#fff;border-color:#c0392b;' : ''}" title="Show only games missing at least one referee">⚠ Missing Refs${sheet3MissingFilter ? ' ✕' : ''}</button>
