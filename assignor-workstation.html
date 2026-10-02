@@ -3406,10 +3406,35 @@
                         names.push(name);
                         return;
                     }
+                    // ⚠️ THE CLUB THEY PICKED ON THE FORM IS THE ANSWER. Tod,
+                    // 2026-10-02: "once they submit their availability, they pick
+                    // the club. They pick the times. And when they do that... they're
+                    // going to show up on the assignor workstations area and op cells
+                    // particularly." And: "referees reflect a certain preference, but
+                    // they're not bound to a particular club" — a kid can referee at
+                    // Glastonbury, then East Haddam, then NECONN on the same weekend.
+                    //
+                    // This block used to read ONLY the profile's Club Preference and
+                    // exclude anyone it did not match. Two things were wrong with it:
+                    //   • the clubs chosen ON THAT DAY'S SUBMISSION were ignored, so
+                    //     a referee who ticked East Haddam on the form still failed
+                    //     the test if their profile said Griswold;
+                    //   • an EMPTY preference excluded them from EVERY club rather
+                    //     than none — which is all 89 referees imported 2026-10-02,
+                    //     who could have submitted availability and still never
+                    //     appeared.
+                    //
+                    // Every other club gate in this file already merges the two and
+                    // guards the empty case (lines ~1795, ~1924). This was the stale
+                    // copy. Preference NARROWS nothing on its own; it only joins what
+                    // the submission said.
                     if (gameClubLower) {
                         const ref = refLookupByName[name.toLowerCase()];
                         const prefs = parsePreferences(ref?.fields['Club Preference'] || '');
-                        if (!prefs.some(p => p.toLowerCase() === gameClubLower)) return;
+                        const availClubs = (availTimeByName[name.toLowerCase()]?.[gameDate] || [])
+                                             .flatMap(sl => sl.clubs || []);
+                        const merged = [...new Set([...prefs.map(x => x.toLowerCase()), ...availClubs])];
+                        if (merged.length > 0 && !merged.some(x => x === gameClubLower)) return;
                     }
                     if (gameTime) {
                         const slots = availTimeByName[name.toLowerCase()]?.[gameDate] || [];
