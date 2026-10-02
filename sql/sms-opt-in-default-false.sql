@@ -7,10 +7,14 @@
 -- the ONLY referee on a 3,460-row roster with that value. Every other import
 -- had set it explicitly, so the default had never been exercised.
 --
--- 2,240 of the 3,460 referees are minors. A column that silently opts a
--- thirteen-year-old into text messages is not a default anyone chose; it is one
--- nobody noticed. The value should come from the availability form, where the
--- referee — or their guardian — actually answers the question.
+-- ⚠️ THIS IS TIDINESS, NOT SAFETY. sms_opt_in is NOT read by any send path.
+-- A text is gated on sms_consent_at / guardian_sms_consent_at, stamped by the
+-- availability form; sms_opt_in survives only as a Yes/No display column in
+-- referee-blasts.html. Nobody was ever texted because of this default.
+--
+-- It is still worth flipping: a column named "opt in" that defaults TRUE is a
+-- trap for whoever wires it up later, and today it makes every new referee
+-- disagree with the other 3,459.
 --
 -- ⚠️ THIS CHANGES THE DEFAULT ONLY. It does not touch a single existing row.
 -- Nobody who has opted in loses anything, because right now nobody has: the
