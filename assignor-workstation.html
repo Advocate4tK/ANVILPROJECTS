@@ -292,6 +292,9 @@
                            transform:translateY(1px); }
         .s3seg button.on:hover { background:linear-gradient(#0a2746,#1a5091); }
         .s3seg.s3seg-solo button { padding:3px 12px; }
+        .s3seednote { font-size:0.68rem; color:#8a93a0; font-style:italic; white-space:nowrap;
+                      cursor:help; user-select:none; }
+        .s3seedlbl { cursor:help; }
         /* ①/② — which dial leads when both are on. */
         .s3pip { display:inline-block; margin-left:5px; font-size:0.72rem; opacity:.95; vertical-align:baseline; }
         .ref-card.struck .ref-name { text-decoration:line-through; text-decoration-color:#c0392b; text-decoration-thickness:2px; color:#6b5a33 !important; }
@@ -3195,6 +3198,33 @@
             h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
             return (h ^ (h >>> 16)) >>> 0;
         }
+        // ── FIRST COME, FIRST SERVED ──────────────────────────────
+        // Tod, 2026-10-02: "OPT cells default to first come first serve unless
+        // seed order sort is on."
+        //
+        // Before this, two referees the dials could not separate fell back to
+        // whatever order Postgres returned — neither query has an ORDER BY, so
+        // it is unspecified and can shift after an edit. That is how Noah and
+        // Mason, who tie on games AND on experience, swapped places between two
+        // screenshots for no reason anybody could name.
+        //
+        // Submission time is a real fact about the referee, it rewards being
+        // prompt, and it never ties. "Submitted At" is empty on every row; the
+        // Supabase client denormalises created_at into fields, and that is what
+        // is actually populated.
+        function sheet3SubmittedMap() {
+            const m = new Map();
+            (allAvail || []).forEach(a => {
+                const f  = a.fields || {};
+                const nm = String(f['Referee Name'] || '').trim().toLowerCase();
+                const ts = f['created_at'] || f['Submitted At'] || '';
+                if (!nm || !ts) return;
+                const prev = m.get(nm);
+                if (!prev || String(ts) < prev) m.set(nm, String(ts));   // their EARLIEST
+            });
+            return m;
+        }
+
         // Who asked for THIS fixture by name.
         function sheet3RequestedSet(g) {
             const set = new Set();
@@ -3210,6 +3240,9 @@
         // re-sorting one that already exists, so the two can never disagree.
         function sheet3SortNames(g, names, requested) {
             const req = requested || sheet3RequestedSet(g);
+            const sub = sheet3SubmittedMap();
+            // Never submitted anything we can see — sorts after those who did.
+            const subOf = n => sub.get(String(n || '').trim().toLowerCase()) || '\uffff';
             return [...names].sort((a, b) => {
                 // ⚠️ WHOEVER ASKED FOR THIS GAME STAYS ON TOP, in every order
                 // including Mix. Sorting a volunteer down the queue behind
@@ -3233,7 +3266,12 @@
                         if (ed) return ed;
                     }
                 }
-                return 0;   // both dials silent — leave the order alone
+                // ⚠️ THE LAST WORD, ALWAYS. With both dials off this IS the order:
+                // whoever put their availability in first. With a dial on it only
+                // decides the ties that dial could not, so no two referees are
+                // ever left in an order nobody chose.
+                const sa = subOf(a), sb = subOf(b);
+                return sa === sb ? 0 : (sa < sb ? -1 : 1);
             });
         }
 
@@ -4276,7 +4314,13 @@
                     <span style="font-size:0.7rem; color:#aaa; margin-left:6px;">${displayGames.length}${displayGames.length !== allFilteredGames.length ? ` of ${allFilteredGames.length}` : ''} games</span>
                     ${showAllBtn}
                     <span class="s3seedwrap">
-                    <span class="s3seedlbl">Seed order</span>
+                    ${/* ⚠️ A RULE NOBODY CAN SEE IS A RULE NOBODY TRUSTS. Tod,
+                          2026-10-02, on first-come-first-served: "should explain
+                          that somewhere." So the control says what order it is
+                          in RIGHT NOW — when both dials are off it reads "first
+                          come, first served" in words, rather than leaving the
+                          assignor to wonder what an empty control means. */''}
+                    <span class="s3seedlbl" title="How the Opt queue is ordered.&#10;&#10;• Referees who asked for THIS game always come first, in every order.&#10;• ★ Yrs and # Gms are independent — switch on either, both, or neither. Click a lit button to switch that dial off.&#10;• With both on, ① leads and ② breaks its ties.&#10;• Whatever the dials cannot separate falls to FIRST COME, FIRST SERVED — whoever submitted their availability earliest.&#10;• With no dial on, that submission order IS the order.">Seed order</span>
                     ${/* ⚠️ THE ARROW POINTS AT THE QUANTITY, NOT AT THE SORT.
                           ▲ = MOST, ▼ = LEAST. Tod, 2026-10-01: "the trangle up
                           should be most years... the triangle down is least
@@ -4305,6 +4349,9 @@
                     <span class="s3seg s3seg-solo">
                         <button class="${sheet3Sort.mix ? 'on' : ''}" onclick="sheet3SetSeedOrder('mix')" title="Scramble the queue. Click again for a different draw — referees who asked for the game stay on top.">⤨ Mix${sheet3Sort.mix ? ' ↻' : ''}</button>
                     </span>
+                    ${(!sheet3Sort.mix && !sheet3Sort.yrs && !sheet3Sort.gms)
+                        ? `<span class="s3seednote" title="No sort dial is on, so the Opt cells are in the order the referees submitted their availability. Anyone who asked for a specific game still comes first.">first come, first served</span>`
+                        : ''}
                     </span>
                     <button onclick="sheet3ToggleMissingFilter()" style="${zoomBtn} margin-left:8px; ${sheet3MissingFilter ? 'background:#c0392b;color:#fff;border-color:#c0392b;' : ''}" title="Show only games missing at least one referee">⚠ Missing Refs${sheet3MissingFilter ? ' ✕' : ''}</button>
                 </div>
@@ -4824,6 +4871,8 @@
                     .select('*').eq('tournament_key', tKey);
                 if (!error && data) {
                     allAvail = data.map(r => ({ id: r.id, fields: {
+                        // Needed by sheet3SubmittedMap for the first-come order.
+                        'created_at':          r['created_at'] || '',
                         'Referee Name':        r['Referee Name'] || '',
                         'Referee Email':       r['Referee Email'] || r['email'] || '',
                         'Date':                r['date'] || '',
