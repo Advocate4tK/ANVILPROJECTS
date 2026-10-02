@@ -354,8 +354,30 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
 
     const isMinor = ref.age != null && Number(ref.age) < 18;
     const gEmail  = String(ref["Guardian Email"] || "").trim();
+    // ⚠️ ONE INBOX GETS ONE EMAIL. 25 of the minors on the roster have their
+    // guardian's address in BOTH fields — a 13-year-old using their mother's
+    // gmail is the normal case, not an error. Without this check that parent
+    // received two of everything: "Hi Noah," and "A message to Noah Slonski:",
+    // for every assignment, every nudge, every decline. Found 2026-10-02 on
+    // Alexander Kubrynski, whose own email and guardian email are both
+    // jennifer.kubrynski@gmail.com.
+    //
+    // The REFEREE copy is the one that survives: it reads correctly to a parent
+    // and it carries the accept/decline instruction. The guardian copy is the
+    // duplicate, so the guardian copy is what we drop.
+    //
+    // Still recorded in blast_recipients as a guardian row so the log does not
+    // silently show one send where two were expected — "did the parent get
+    // told" must stay answerable.
+    const sameInbox = !!gEmail && gEmail.toLowerCase() === String(ref.email || "").trim().toLowerCase();
     if (isMinor) {
-      if (gEmail) {
+      if (sameInbox) {
+        results.guardian = "same address as referee — one email sent";
+        if (alog) await db.from("blast_recipients").insert({
+          blast_id: alog.id, referee_id: ref.id, email: gEmail, is_guardian: true,
+          status: "sent", error: null,
+        });
+      } else if (gEmail) {
         try { await sendWithReply(gEmail, subject, bodyText(true), bodyHtml(true), replyTo); results.guardian = "sent"; await logRow(gEmail, true, true); }
         catch (e) { results.guardian = "failed: " + (e as Error).message; await logRow(gEmail, true, false, (e as Error).message); }
       } else {
@@ -375,7 +397,20 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
     }
     if (isMinor) {
       const gPhone = String(ref["Guardian Phone"] || "").trim();
-      if (ref.guardian_sms_consent_at && gPhone) {
+      // ⚠️ SAME ONE-INBOX RULE AS THE EMAIL ABOVE, AND IT IS WIDER HERE.
+      // 62 minors on the roster carry their guardian's number in both fields
+      // against 61 sharing an email — a child on a parent's handset is the
+      // ordinary case. Two texts to one phone, seconds apart, saying "you're
+      // assigned" and "Noah is assigned", is how a parent decides the tool is
+      // broken. Compared on the last ten digits because the two fields are not
+      // stored in the same format: "+18604660934" against "8604660934".
+      // e164() returns "" for anything it cannot parse, so BOTH blank would
+      // compare equal — hence the truthiness check before the comparison.
+      const gE164 = e164(gPhone);
+      const sameHandset = !!gE164 && gE164 === e164(ref.phone);
+      if (sameHandset) {
+        results.guardian_sms = "same number as referee — one text sent";
+      } else if (ref.guardian_sms_consent_at && gPhone) {
         const r = await sendSms(gPhone, smsBody.replace("you're assigned", `${ref.name} is assigned`));
         results.guardian_sms = r.ok ? "sent" : r.error || "failed";
         await logSms(db, { ...smsBase, to_phone: e164(gPhone) || gPhone, is_guardian: true, status: r.ok ? "sent" : (r.error?.includes("not configured") ? "skipped" : "failed"), provider_id: r.sid ?? null, error: r.ok ? null : r.error });
