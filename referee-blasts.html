@@ -1209,11 +1209,19 @@
         refPoolMap = {};
         if (POOLS.length) {
             const poolIds = POOLS.map(p => p.id);
-            const { data: mem } = await supabaseClient.client
-                .from('pool_members')
-                .select('id, pool_id, referee_id')
-                .in('pool_id', poolIds);
-            MEMBERS = mem || [];
+            // ⚠️ selectAll, NOT .select(). Same cap that broke the directory read
+            // above, and pool_members crossed it on 2026-10-02 — 1,046 rows. The
+            // 46 past the cap were invisible here, so refPoolMap called them
+            // non-members, the bulk-add button offered to add exactly those 46,
+            // and the insert collided on every one: "duplicate key value violates
+            // unique constraint pool_members_pool_id_referee_id_key". The 46 in
+            // the button and the 46 over the cap were the same 46.
+            let mem = [];
+            try {
+                mem = await supabaseClient.selectAll('pool_members', 'id, pool_id, referee_id',
+                                                     q => q.in('pool_id', poolIds).order('id'));
+            } catch (e) { console.error('[pool_members]', e); }
+            MEMBERS = mem;
             MEMBERS.forEach(m => {
                 (refPoolMap[m.referee_id] = refPoolMap[m.referee_id] || new Set()).add(m.pool_id);
             });
@@ -1545,12 +1553,24 @@
         const toAdd = lastFiltered.filter(r => !(refPoolMap[r.id] && refPoolMap[r.id].has(active.id)));
         if (!toAdd.length) { alert(`All shown referees are already in “${active.name}”.`); return; }
         if (!confirm(`Add ${toAdd.length} referee${toAdd.length === 1 ? '' : 's'} to “${active.name}”?`)) return;
-        // Pre-filtered to non-members, so no unique-constraint collisions.
+        // ⚠️ DO NOT TRUST THE PRE-FILTER. It used to say "pre-filtered to
+        // non-members, so no unique-constraint collisions" and that was exactly
+        // the assumption that broke: refPoolMap is only as complete as the rows
+        // loaded above, and one stale entry rejected the WHOLE insert, adding
+        // nobody. upsert with ignoreDuplicates makes this idempotent — anyone
+        // already in the pool is skipped by the database rather than taking the
+        // rest of the batch down with them.
         const rows = toAdd.map(r => ({ pool_id: active.id, referee_id: r.id }));
-        const { error } = await supabaseClient.client.from('pool_members').insert(rows);
+        const { error } = await supabaseClient.client
+            .from('pool_members')
+            .upsert(rows, { onConflict: 'pool_id,referee_id', ignoreDuplicates: true });
         if (error) { alert('Bulk add failed: ' + error.message); return; }
         await loadPools();
         renderAll();
+        // Say what actually landed. The ask and the result can differ now that
+        // duplicates are skipped instead of fatal.
+        const nowIn = lastFiltered.filter(r => refPoolMap[r.id] && refPoolMap[r.id].has(active.id)).length;
+        alert(`“${active.name}” now holds ${nowIn} of the ${lastFiltered.length} shown.`);
     }
 
     // ── Pool actions ──────────────────────────────────────────────────────────
