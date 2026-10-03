@@ -5802,7 +5802,7 @@
                           outside the panel. */''}
                     <div class="game-edit-panel" style="margin-top:0;">
                         ${gameEditPanelBody(game, f, gid, {
-                            showField: true,
+                            showVenue: true,
                             onSave:  `saveGameEdit('${gid}').then(()=>{ document.getElementById('s3GameEditModal').style.display='none'; renderGames(); })`,
                             onClose: `document.getElementById('s3GameEditModal').style.display='none'`
                         })}
@@ -10268,39 +10268,7 @@ Reason (optional):`);
                         ${hideARs ? '' : makeSlot2(gid, 'AR 1', 'AR 1', (!crewAllowed(f['Source Club'],age,'AR 1',f['game_type']) && !ar1) ? 'BLOCKED' : ar1, f['AR 1'])}
                         ${hideARs ? '' : makeSlot2(gid, 'AR 2', 'AR 2', (!crewAllowed(f['Source Club'],age,'AR 2',f['game_type']) && !ar2) ? 'BLOCKED' : ar2, f['AR 2'])}
                     </div>
-                    <div class="venue-field-row" onclick="event.stopPropagation()">
-                        <span style="font-size:0.72rem;color:#888;">📍</span>
-                        <select class="vf-select" onchange="onVenueChange('${gid}', this)" style="flex:2;">
-                            <option value="">Venue…</option>${(() => {
-                                const curVenueId = f['Venue ID'] || '';
-                                const gameClubLower = (resolveGameClub(f)||'').toLowerCase();
-                                let vf = scopedVenues(gameClubLower) || allVenues.filter(v => !gameClubLower || v.clubs.some(c => c.includes(gameClubLower)||gameClubLower.includes(c)));
-                                if (vf.length === 0) vf = allVenues;   // never a dead dropdown
-                                // Same reason as above: a venue the club filter does
-                                // not claim is still THIS game's venue. Show it.
-                                if (curVenueId && !vf.some(v => v.id == curVenueId)) {
-                                    const curV = allVenues.find(v => v.id == curVenueId);
-                                    if (curV) vf = [curV, ...vf];
-                                }
-                                return vf.map(v=>`<option value="${v.id}" ${v.id==curVenueId?'selected':''}>${v.name}</option>`).join('');
-                            })()}
-                        </select>
-                        <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;" ${!f['Venue ID'] ? 'disabled' : ''}>
-                            <option value="">Field…</option>${(() => {
-                                if (!f['Venue ID']) return '';
-                                // Key on rowId — an unnumbered field has no CA number to be keyed by.
-                                const _curNm = (f['Field'] || f['field'] || '').trim().toLowerCase();
-                                const takenKeys = new Set(allGames.filter(og=>og.id!==g.id&&gamesOverlap(g,og))
-                                    .map(og=>`${og.fields['Venue ID']}|${((og.fields['Field']||og.fields['field']||'')).trim().toLowerCase()}`)
-                                    .filter(k=>!k.endsWith('|')));
-                                return allFields.filter(fi=>fi.venueId==f['Venue ID']).map(fi=>{
-                                    const taken=takenKeys.has(`${f['Venue ID']}|${String(fi.name).trim().toLowerCase()}`);
-                                    const sel = fi.caId ? (fi.caId==f['Field ID']) : (_curNm && String(fi.name).trim().toLowerCase()===_curNm);
-                                    return `<option value="${fi.rowId}" ${sel?'selected':''} ${taken?'disabled style="color:#bbb;"':''}>${fi.name}${taken?' — in use':''}</option>`;
-                                }).join('');
-                            })()}
-                        </select>
-                    </div>
+                    ${gameVenueFieldRow(g, f, gid)}
                     <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
                         ${gameEditPanelBody(g, f, gid)}
                     </div>
@@ -12043,6 +12011,57 @@ You will need to contact them yourself. Assign anyway?`)) return;
         // Delete (error) stays OUT of the chooser. It is not a status, it is
         // "this should never have existed", and it is the one irreversible thing
         // on the card. It keeps its own button and its own guards.
+        // ── WHERE IT IS PLAYED, ALSO RENDERED ONCE ─────────────────────────
+        // Tod, 2026-10-03: "that doesnt allow you to modify venue and fields...
+        // the standard 2 does." It did not, because this row lives on the CARD,
+        // above the edit panel — so extracting the panel did not bring it along
+        // and Sheet 3 was left with a plain text Field box and no venue at all.
+        //
+        // It is not a trivial pair of selects: the venue list is scoped to the
+        // game's club, falls back to every venue rather than going dead, force-
+        // includes the game's CURRENT venue even when the club filter disowns it,
+        // and the field list keys on rowId because an unnumbered field has no CA
+        // number to key on. Reproducing that by hand for Sheet 3 is exactly how
+        // the two views drifted apart in the first place.
+        //
+        // ⚠️ onVenueChange/onFieldChange write immediately — they are NOT part of
+        // Save Changes. Same behaviour in both views, which is what Tod asked for.
+        function gameVenueFieldRow(g, f, gid) {
+            return `<div class="venue-field-row" onclick="event.stopPropagation()">
+                <span style="font-size:0.72rem;color:#888;">📍</span>
+                <select class="vf-select" onchange="onVenueChange('${gid}', this)" style="flex:2;">
+                    <option value="">Venue…</option>${(() => {
+                        const curVenueId = f['Venue ID'] || '';
+                        const gameClubLower = (resolveGameClub(f)||'').toLowerCase();
+                        let vf = scopedVenues(gameClubLower) || allVenues.filter(v => !gameClubLower || v.clubs.some(c => c.includes(gameClubLower)||gameClubLower.includes(c)));
+                        if (vf.length === 0) vf = allVenues;   // never a dead dropdown
+                        // Same reason as above: a venue the club filter does
+                        // not claim is still THIS game's venue. Show it.
+                        if (curVenueId && !vf.some(v => v.id == curVenueId)) {
+                            const curV = allVenues.find(v => v.id == curVenueId);
+                            if (curV) vf = [curV, ...vf];
+                        }
+                        return vf.map(v=>`<option value="${v.id}" ${v.id==curVenueId?'selected':''}>${v.name}</option>`).join('');
+                    })()}
+                </select>
+                <select class="vf-select" id="fieldSel-${gid}" onchange="onFieldChange('${gid}', this)" style="flex:1;" ${!f['Venue ID'] ? 'disabled' : ''}>
+                    <option value="">Field…</option>${(() => {
+                        if (!f['Venue ID']) return '';
+                        // Key on rowId — an unnumbered field has no CA number to be keyed by.
+                        const _curNm = (f['Field'] || f['field'] || '').trim().toLowerCase();
+                        const takenKeys = new Set(allGames.filter(og=>og.id!==g.id&&gamesOverlap(g,og))
+                            .map(og=>`${og.fields['Venue ID']}|${((og.fields['Field']||og.fields['field']||'')).trim().toLowerCase()}`)
+                            .filter(k=>!k.endsWith('|')));
+                        return allFields.filter(fi=>fi.venueId==f['Venue ID']).map(fi=>{
+                            const taken=takenKeys.has(`${f['Venue ID']}|${String(fi.name).trim().toLowerCase()}`);
+                            const sel = fi.caId ? (fi.caId==f['Field ID']) : (_curNm && String(fi.name).trim().toLowerCase()===_curNm);
+                            return `<option value="${fi.rowId}" ${sel?'selected':''} ${taken?'disabled style="color:#bbb;"':''}>${fi.name}${taken?' — in use':''}</option>`;
+                        }).join('');
+                    })()}
+                </select>
+            </div>`;
+        }
+
         // ── ONE GAME EDIT PANEL, RENDERED BY EVERY VIEW ─────────────────
         // Tod, 2026-10-03: "Sheet 3 needs the same treatment that standard 2
         // has... same windows when you go to edit... and that pencil should
@@ -12096,8 +12115,15 @@ You will need to contact them yourself. Assign anyway?`)) return;
                     <div><label>Home Team</label><input type="text" id="editHome-${gid}" style="width:150px;" value="${esc(f['Home Team'])}"></div>
                     <div><label>Away Team</label><input type="text" id="editAway-${gid}" style="width:150px;" value="${esc(f['Away Team'])}"></div>
                     <div><label>Visiting Club</label>${caClubSelect(`editAwayClub-${gid}`, f['away_club'])}</div>
-                    ${opts.showField ? `<div><label>Field</label><input type="text" id="editField-${gid}" style="width:150px;" value="${esc(f['field'])}"></div>` : ''}
                 </div>
+                ${/* ⚠️ THE SAME VENUE AND FIELD CONTROLS THE CARDS USE. Sheet 3 had a
+                      plain text Field box and no venue at all — Tod, 2026-10-03:
+                      "that doesnt allow you to modify venue and fields... the
+                      standard 2 does." On the cards this row sits ABOVE the panel,
+                      which is why extracting the panel alone did not bring it. It
+                      renders INSIDE the panel here because a modal has no card to
+                      put it on; same markup either way. */''}
+                ${opts.showVenue ? gameVenueFieldRow(g, f, gid) : ''}
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                     <button class="edit-save-btn" onclick="${opts.onSave || `saveGameEdit('${gid}')`}">Save Changes</button>
                     <button class="edit-close-btn" onclick="${opts.onClose || `toggleGameEdit('${gid}')`}">Close</button>
