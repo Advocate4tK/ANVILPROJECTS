@@ -368,7 +368,15 @@
         /* ── Modify Game modal ── shares .ctm-* innards with the cancel dialog.
            The overlay is styled by ID in this file, not by class, so it needs
            its own rule or it renders as loose text at the foot of the page. */
-        #gmModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
+        /* ⚠️ ABOVE THE SHEET 3 EDITOR, WHICH IS 10000. These two dialogs are
+           opened FROM that editor — Modify, then Cancel — so at 9999 they
+           opened behind it and the screen looked frozen. Raising them is what
+           lets Sheet 3 run the identical chain Standard 2 runs, with the edit
+           panel still sitting underneath: applyModify's "new date" branch
+           focuses editDate-<gid> IN that panel, so the panel has to still be
+           there. Closing it instead would have made "New date, time or ground"
+           silently do nothing. */
+        #gmModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:10010; align-items:center; justify-content:center; }
         #gmModal.open { display:flex; }
         #gmModal .ctm-box { background:#fff; border-radius:12px; padding:28px 28px 22px; max-width:460px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.25); }
         #gmModal h3 { font-size:1.05rem; font-weight:800; color:#1a2e4a; margin-bottom:4px; }
@@ -379,7 +387,7 @@
         #gmModal .ctm-confirm:hover { background:#13223a; }
 
         /* ── Cancel Game modal ── */
-        #cancelTypeModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
+        #cancelTypeModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:10020; align-items:center; justify-content:center; }
         #cancelTypeModal.open { display:flex; }
         #cancelTypeModal .ctm-box { background:#fff; border-radius:12px; padding:28px 28px 22px; max-width:420px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.25); }
         #cancelTypeModal h3 { font-size:1.05rem; font-weight:800; color:#1a2e4a; margin-bottom:4px; }
@@ -5767,15 +5775,6 @@
             menu.style.top     = e.clientY + 'px';
             menu.style.display = 'block';
             setTimeout(() => document.addEventListener('click', sheet3HideOptMenu, { once: true }), 0);
-        }
-
-        // ⚠️ THE CHOOSER MUST NOT OPEN BEHIND THE EDITOR. The Sheet 3 edit
-        // modal is z-index 10000; #gmModal is not above it. Called from
-        // statusAndModify's Modify button, which both views share — a no-op on
-        // Standard 2, where this modal has never been created.
-        function s3CloseEditModal() {
-            const m = document.getElementById('s3GameEditModal');
-            if (m) m.style.display = 'none';
         }
 
         function sheet3OpenGameEditModal(gid) {
@@ -12144,7 +12143,7 @@ You will need to contact them yourself. Assign anyway?`)) return;
                  + '<span style="font-size:0.68rem;font-weight:800;letter-spacing:0.1em;color:#8a8378;">STATUS</span>'
                  + '<span style="font-size:0.86rem;font-weight:900;letter-spacing:0.03em;color:' + fg + ';'
                  + 'background:' + bg + ';border-radius:5px;padding:4px 11px;">' + label + '</span>'
-                 + '<button class="edit-close-btn" onclick="s3CloseEditModal(); openModify(\'' + gid + '\')" '
+                 + '<button class="edit-close-btn" onclick="openModify(\'' + gid + '\')" '
                  + 'title="Change this game\'s status">&#9881; Modify</button></span>';
         }
 
@@ -12195,6 +12194,11 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
                 return;
             }
+            // Anything that takes the game OFF is the end of editing it, so the
+            // Sheet 3 editor underneath gets out of the way. Harmless on
+            // Standard 2, where that modal has never been created.
+            const _s3m = document.getElementById('s3GameEditModal');
+            if (kind !== 'date' && _s3m) _s3m.style.display = 'none';
             if (kind === 'postpone') return postponeGame(gid);
             if (kind === 'cancel')   return cancelGame(gid, (f['Home Team'] || '?') + ' vs ' + (f['Away Team'] || '?'));
             if (kind === 'on') {
