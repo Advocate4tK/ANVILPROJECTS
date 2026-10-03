@@ -4139,7 +4139,19 @@
                 const fmtGameTime = t => { if (!t) return '—'; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
                 const fmtGameDate = d => { if (!d) return '—'; const [,m,day] = d.split('-'); const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]; return `${mo} ${parseInt(day)}`; };
                 const colRenderers = {
-                    no:       () => `<td style="${cancelCell} white-space:nowrap;">${buildGameNumber(f) ? `<span class="game-no">${buildGameNumber(f)}</span>` : '—'}</td>`,
+                    // ✏️ on hover, in the game-number cell. The right-click menu is
+                    // the full set of game actions, but a context menu is something
+                    // you have to be TOLD about — Standard 2 has a visible pencil and
+                    // Sheet 3 had nothing, which is why Tod said Sheet 3 could not edit
+                    // games at all. Hover-only so a full sheet stays readable, the same
+                    // way the Opt cells reveal their ×.
+                    no:       () => `<td class="s3-no-cell" style="${cancelCell} white-space:nowrap;"
+                                        onmouseover="this.querySelector('.s3-edit')?.style.setProperty('opacity','1')"
+                                        onmouseout="this.querySelector('.s3-edit')?.style.setProperty('opacity','0')"
+                                     >${buildGameNumber(f) ? `<span class="game-no">${buildGameNumber(f)}</span>` : '—'}<span class="s3-edit"
+                                        onclick="event.stopPropagation(); sheet3ShowGameMenu(event,'${gid}');"
+                                        title="Edit this game — or right-click anywhere on the row"
+                                        style="opacity:0; transition:opacity .12s; margin-left:6px; cursor:pointer; font-size:0.78rem;">✏️</span></td>`,
                     date:     () => `<td style="${cancelCell}">${fmtGameDate(f['Date'])}</td>`,
                     time:     () => `<td style="${cancelCell}">${fmtGameTime(f['Time'])}</td>`,
                     club:     () => `<td style="${cancelCell}">${f['Source Club'] || '—'}</td>`,
@@ -4238,7 +4250,20 @@
                 return periodDivider + `<tr style="background:${_isSel ? '#a5d6a7' : _isComp ? _compTint : rowBg};">${_dotTd}${sheet3ColOrder.map(k => {
                     if (sheet3HiddenCols.includes(k)) return `<td style="${stubTd}"></td>`;
                     const raw = colRenderers[k] ? colRenderers[k]() : '<td></td>';
-                    return raw.replace(/^<td/, `<td data-gcol="${k}"`);
+                    // ⚠️ THE GAME MENU WAS REACHABLE FROM AN 11-PIXEL DOT AND NOWHERE
+                    // ELSE. Tod, 2026-10-02: "you can edit games on Standard2 (pencil)
+                    // but there is no ability to edit a game for Sheet3." There was —
+                    // right-click the ◉ in the first column — but a 22px cell whose
+                    // tooltip you have to hover to discover is not an affordance. Same
+                    // shape as the Opt-cell remove Eric could not find.
+                    //
+                    // Right-clicking the GAME'S OWN cells now opens it: date, time,
+                    // club, age, teams, venue, field, number. The slot columns keep
+                    // their own menus — right-click a GAME for game actions, a SLOT
+                    // for slot actions — so nothing is overridden.
+                    const _slotCol = k === 'center' || k === 'ar1' || k === 'ar2' || /^opt\d+$/.test(k);
+                    const _ctx = _slotCol ? '' : ` oncontextmenu="sheet3ShowGameMenu(event,'${gid}'); return false;"`;
+                    return raw.replace(/^<td/, `<td data-gcol="${k}"${_ctx}`);
                 }).join('')}</tr>`;
             }).join('') : `<tr><td colspan="${sheet3ColOrder.length + 1}" style="${cell} color:#888;">No games in current date range.</td></tr>`;
 
