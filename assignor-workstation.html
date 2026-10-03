@@ -5789,48 +5789,23 @@
                 modal.addEventListener('click', e => { if (e.target === modal) modal.style.display='none'; });
                 document.body.appendChild(modal);
             }
-            const esc = v => (v||'').replace(/"/g,'&quot;');
             modal.innerHTML = `
                 <div style="background:#fff;border-radius:10px;padding:24px 28px;min-width:360px;max-width:540px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.22);font-family:sans-serif;">
                     <div style="font-weight:800;font-size:1rem;color:#1a3a6b;margin-bottom:16px;">✏️ Edit Game</div>
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
-                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Date</label><input type="date" id="editDate-${gid}" value="${esc(f['Date'])}" style="border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
-                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Time</label><input type="time" id="editTime-${gid}" value="${esc(f['Time'])}" style="border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
-                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Age Group</label><input type="text" id="editAge-${gid}" value="${esc(f['Age Group'])}" style="width:70px;border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
-                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Type</label><select id="editType-${gid}" onchange="editTypeChanged('${gid}')" style="height:28px;border:1px solid #ccc;border-radius:4px;padding:0 4px;font-size:0.82rem;">
-                            <option value="Rec"${f['game_type']==='Rec'?' selected':''}>Rec</option>
-                            <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
-                            <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
-                        </select></div>
-                        ${leagueEditControl(f, gid)}
-                    </div>
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
-                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Home Team</label><input type="text" id="editHome-${gid}" value="${esc(f['Home Team'])}" style="width:150px;border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
-                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Away Team</label><input type="text" id="editAway-${gid}" value="${esc(f['Away Team'])}" style="width:150px;border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
-                        <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Visiting Club</label>${caClubSelect(`editAwayClub-${gid}`, f['away_club'])}</div>
-                        <div style="flex:1;min-width:140px;"><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Field</label><input type="text" id="editField-${gid}" value="${esc(f['field'])}" style="width:100%;border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
-                    </div>
-                    ${/* ⚠️ THE SAME FOOTER AS STANDARD 2, NOT A SECOND ONE. Tod,
-                          2026-10-03: "it doesnt have all the options as standard
-                          2.... they need to be the same logic" and "sheet 3 should
-                          do all the things the same way standard 2 does."
-                          Sheet 3 had Save and Cancel and nothing else — so from
-                          this view a game could be re-dated but never postponed,
-                          never cancelled, and its STATUS was invisible. The whole
-                          nor'easter workflow was missing from one of the two views.
-                          statusAndModify() and deleteGame() are called here with
-                          the identical arguments and the identical guard as line
-                          ~10357, so there is one rule, not a copy of one. */''}
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                        <button onclick="saveGameEdit('${gid}').then(()=>{ document.getElementById('s3GameEditModal').style.display='none'; renderGames(); })"
-                            style="background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:7px 20px;font-size:0.82rem;font-weight:700;cursor:pointer;">Save</button>
-                        <button onclick="document.getElementById('s3GameEditModal').style.display='none';"
-                            style="background:#eee;color:#333;border:1px solid #ccc;border-radius:6px;padding:7px 14px;font-size:0.82rem;cursor:pointer;">Cancel</button>
-                        ${statusAndModify(f, gid)}
-                        ${(!(cancelledGameIds.has(game.id) || f['Game Status'] === 'Cancelled') && !f['postponed_at'] && !['Center Referee','AR 1','AR 2'].some(pp => { const v = (f[pp]||'').trim().toUpperCase(); return v && v !== 'EMPTY' && v !== 'FILLED'; }))
-                            ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
-                            : ''}
+                    ${/* ⚠️ ONE PANEL, NOT A SECOND ONE. This modal used to carry its
+                          own transcription of every field and a footer of just Save
+                          and Cancel — which is how Sheet 3 ended up unable to
+                          postpone or cancel a game at all. It renders the shared
+                          gameEditPanelBody now, so Sheet 3 and Standard 2 cannot
+                          disagree again. showField because Sheet 3 edits the field
+                          here; the cards have their own venue/field dropdowns
+                          outside the panel. */''}
+                    <div class="game-edit-panel" style="margin-top:0;">
+                        ${gameEditPanelBody(game, f, gid, {
+                            showField: true,
+                            onSave:  `saveGameEdit('${gid}').then(()=>{ document.getElementById('s3GameEditModal').style.display='none'; renderGames(); })`,
+                            onClose: `document.getElementById('s3GameEditModal').style.display='none'`
+                        })}
                     </div>
                 </div>`;
             modal.style.display = 'flex';
@@ -8894,34 +8869,7 @@
                     </select>
                 </div>
                 <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
-                    ${changeReqNote}
-                    ${postponedPrompt(f, gid)}
-                    ${assignorNoteSection}
-                    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
-                        <div><label>Date</label><input type="date" id="editDate-${gid}" value="${f['Date'] || ''}"></div>
-                        <div><label>Time</label><input type="time" id="editTime-${gid}" value="${f['Time'] || ''}"></div>
-                        <div><label>Age Group</label><input type="text" id="editAge-${gid}" style="width:70px;" value="${(f['Age Group']||'').replace(/"/g,'&quot;')}"></div>
-                        <div><label>Type</label><select id="editType-${gid}" onchange="editTypeChanged('${gid}')" style="height:28px;border:1px solid #ccc;border-radius:4px;padding:0 4px;font-size:0.82rem;">
-                            <option value="Rec"${f['game_type']==='Rec'?' selected':''}>Rec</option>
-                            <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
-                            <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
-                        </select></div>
-                        ${leagueEditControl(f, gid)}
-                    </div>
-                    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
-                        <div><label>Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
-                        <div><label>Home Team</label><input type="text" id="editHome-${gid}" style="width:150px;" value="${(f['Home Team']||'').replace(/"/g,'&quot;')}"></div>
-                        <div><label>Away Team</label><input type="text" id="editAway-${gid}" style="width:150px;" value="${(f['Away Team']||'').replace(/"/g,'&quot;')}"></div>
-                        <div><label>Visiting Club</label>${caClubSelect(`editAwayClub-${gid}`, f['away_club'])}</div>
-                    </div>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
-                        <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
-                        ${statusAndModify(f, gid)}
-                        ${(!isCancelled && !f['postponed_at'] && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
-                            ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${(home + ' vs ' + away).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
-                            : ''}
-                    </div>
+                    ${gameEditPanelBody(g, f, gid, { before: changeReqNote, afterPrompt: assignorNoteSection })}
                 </div>`;
         }
 
@@ -10354,33 +10302,7 @@ Reason (optional):`);
                         </select>
                     </div>
                     <div class="game-edit-panel" id="editPanel-${gid}" style="display:none;" onclick="event.stopPropagation()">
-                        ${postponedPrompt(f, gid)}
-                        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
-                            <div><label>Date</label><input type="date" id="editDate-${gid}" value="${f['Date']||''}"></div>
-                            <div><label>Time</label><input type="time" id="editTime-${gid}" value="${f['Time']||''}"></div>
-                            <div><label>Age Group</label><input type="text" id="editAge-${gid}" style="width:70px;" value="${(f['Age Group']||'').replace(/"/g,'&quot;')}"></div>
-                            <div><label>Type</label><select id="editType-${gid}" onchange="editTypeChanged('${gid}')" style="height:28px;border:1px solid #ccc;border-radius:4px;padding:0 4px;font-size:0.82rem;">
-                                <option value="Rec"${f['game_type']==='Rec'?' selected':''}>Rec</option>
-                                <option value="Comp"${f['game_type']==='Comp'?' selected':''}>Comp</option>
-                                <option value="Tournament"${f['game_type']==='Tournament'?' selected':''}>Tournament</option>
-                            </select></div>
-                            
-                            ${leagueEditControl(f, gid)}
-                        </div>
-                        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
-                            <div><label>Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
-                            <div><label>Home Team</label><input type="text" id="editHome-${gid}" style="width:150px;" value="${(f['Home Team']||'').replace(/"/g,'&quot;')}"></div>
-                            <div><label>Away Team</label><input type="text" id="editAway-${gid}" style="width:150px;" value="${(f['Away Team']||'').replace(/"/g,'&quot;')}"></div>
-                            <div><label>Visiting Club</label>${caClubSelect(`editAwayClub-${gid}`, f['away_club'])}</div>
-                        </div>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                            <button class="edit-save-btn" onclick="saveGameEdit('${gid}')">Save Changes</button>
-                            <button class="edit-close-btn" onclick="toggleGameEdit('${gid}')">Close</button>
-                            ${statusAndModify(f, gid)}
-                            ${(!(cancelledGameIds.has(g.id)||f['Game Status']==='Cancelled') && !f['postponed_at'] && !['Center Referee','AR 1','AR 2'].some(p => { const v=(f[p]||'').trim().toUpperCase(); return v && v!=='EMPTY' && v!=='FILLED'; }))
-                                ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
-                                : ''}
-                        </div>
+                        ${gameEditPanelBody(g, f, gid)}
                     </div>
                 </div>`;
             });
@@ -12121,6 +12043,71 @@ You will need to contact them yourself. Assign anyway?`)) return;
         // Delete (error) stays OUT of the chooser. It is not a status, it is
         // "this should never have existed", and it is the one irreversible thing
         // on the card. It keeps its own button and its own guards.
+        // ── ONE GAME EDIT PANEL, RENDERED BY EVERY VIEW ─────────────────
+        // Tod, 2026-10-03: "Sheet 3 needs the same treatment that standard 2
+        // has... same windows when you go to edit... and that pencil should
+        // provide the same access to those games."
+        //
+        // This markup used to be transcribed THREE times — the Sheet 3 modal,
+        // buildGameCardInner, and the Standard 2 card. They fed the same
+        // saveGameEdit through the same editDate-/editHomeClub- ids, so they
+        // mostly agreed; but Sheet 3's copy had drifted to Save + Cancel alone,
+        // with no STATUS, no ⚙ Modify and no Delete, which meant a game could be
+        // re-dated from Sheet 3 but never postponed or cancelled. Three copies
+        // is how that happens, and it will happen again to whoever edits two of
+        // them. There is one now.
+        //
+        // opts.before      — above the postponed prompt (the change-request note)
+        // opts.afterPrompt — below it (the assignor note). Two slots, not one,
+        //                    so the original order survives the extraction.
+        // opts.showField  — Sheet 3 edits Field here; the cards have their own
+        //                   venue/field dropdowns outside the panel
+        // opts.onSave     — defaults to saveGameEdit; Sheet 3 also shuts its modal
+        // opts.onClose    — defaults to collapsing the card panel
+        function gameEditPanelBody(g, f, gid, opts) {
+            opts = opts || {};
+            const esc = v => String(v == null ? '' : v).replace(/"/g, '&quot;');
+            const isCancelled = cancelledGameIds.has(g.id) || f['Game Status'] === 'Cancelled';
+            const anyRealRef  = ['Center Referee', 'AR 1', 'AR 2'].some(pos => {
+                const v = (f[pos] || '').trim().toUpperCase();
+                return v && v !== 'EMPTY' && v !== 'FILLED';
+            });
+            const canDelete = !isCancelled && !f['postponed_at'] && !anyRealRef;
+            const label = ((f['Home Team'] || '?') + ' vs ' + (f['Away Team'] || '?')).replace(/'/g, "\\'");
+            const sel = v => f['game_type'] === v ? ' selected' : '';
+
+            return `
+                ${opts.before || ''}
+                ${postponedPrompt(f, gid)}
+                ${opts.afterPrompt || ''}
+                <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
+                    <div><label>Date</label><input type="date" id="editDate-${gid}" value="${f['Date'] || ''}"></div>
+                    <div><label>Time</label><input type="time" id="editTime-${gid}" value="${f['Time'] || ''}"></div>
+                    <div><label>Age Group</label><input type="text" id="editAge-${gid}" style="width:70px;" value="${esc(f['Age Group'])}"></div>
+                    <div><label>Type</label><select id="editType-${gid}" onchange="editTypeChanged('${gid}')" style="height:28px;border:1px solid #ccc;border-radius:4px;padding:0 4px;font-size:0.82rem;">
+                        <option value="Rec"${sel('Rec')}>Rec</option>
+                        <option value="Comp"${sel('Comp')}>Comp</option>
+                        <option value="Tournament"${sel('Tournament')}>Tournament</option>
+                    </select></div>
+                    ${leagueEditControl(f, gid)}
+                </div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
+                    <div><label>Home Club</label>${caClubSelect(`editHomeClub-${gid}`, f['home_club'])}</div>
+                    <div><label>Home Team</label><input type="text" id="editHome-${gid}" style="width:150px;" value="${esc(f['Home Team'])}"></div>
+                    <div><label>Away Team</label><input type="text" id="editAway-${gid}" style="width:150px;" value="${esc(f['Away Team'])}"></div>
+                    <div><label>Visiting Club</label>${caClubSelect(`editAwayClub-${gid}`, f['away_club'])}</div>
+                    ${opts.showField ? `<div><label>Field</label><input type="text" id="editField-${gid}" style="width:150px;" value="${esc(f['field'])}"></div>` : ''}
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <button class="edit-save-btn" onclick="${opts.onSave || `saveGameEdit('${gid}')`}">Save Changes</button>
+                    <button class="edit-close-btn" onclick="${opts.onClose || `toggleGameEdit('${gid}')`}">Close</button>
+                    ${statusAndModify(f, gid)}
+                    ${canDelete
+                        ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${label}')" title="Permanently remove a game created in error (no refs assigned)">\u2716 Delete (error)</button>`
+                        : ''}
+                </div>`;
+        }
+
         function statusAndModify(f, gid) {
             const cancelled = String(f['Game Status'] || '').trim() === 'Cancelled';
             let label, bg, fg;
