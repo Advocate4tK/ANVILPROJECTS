@@ -381,6 +381,14 @@
         .pay-amount-wrap .pay-prefix { padding:4px 5px 4px 7px; font-size:0.82rem; color:#888; font-family:'DM Sans',sans-serif; line-height:1; }
         .pay-amount { width:60px; padding:4px 7px 4px 0; border:none; font-size:0.82rem; font-family:'DM Sans',sans-serif; text-align:right; background:transparent; outline:none; }
         .pay-amount-wrap:focus-within { border-color:var(--accent); box-shadow:0 0 0 2px rgba(0,200,83,0.13); }
+        /* The assignor agreed a different number and said why. Shown beside the
+           money, not hidden in a tooltip: the club is paying it. */
+        .pay-ovr { display:block; margin-top:3px; font-size:0.62rem; line-height:1.35; font-weight:700; color:#14532d; background:#dcfce7; border-left:3px solid #15803d; border-radius:3px; padding:2px 5px; max-width:160px; cursor:help; }
+        .pay-ovr .po-amt  { font-weight:900; }
+        .pay-ovr .po-why  { display:block; font-weight:600; font-style:italic; color:#166534; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .pay-ovr .po-who  { display:block; font-weight:600; color:#4d7c57; }
+        .pay-ovr.down { color:#7c2d12; background:#ffedd5; border-left-color:#c2410c; }
+        .pay-ovr.down .po-why, .pay-ovr.down .po-who { color:#9a3412; }
         .pay-venmo { font-family:'JetBrains Mono',monospace; font-size:0.78rem; color:#2563eb; }
         .pay-pos-badge { font-size:0.68rem; font-weight:800; padding:2px 7px; border-radius:8px; white-space:nowrap; }
         .pay-pos-cr { background:rgba(9,20,42,0.1); color:var(--deep); }
@@ -4689,7 +4697,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 ? `venmo://paycharge?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`
                 : `https://venmo.com/?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`;
             const _clubId = currentClubRecord?.id || null;
-            const [rawGrisGames, ratesResult, refPayResult, clubResult, invoiceResult, incidentResult] = await Promise.all([
+            const [rawGrisGames, ratesResult, refPayResult, clubResult, invoiceResult, incidentResult, overrideResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', _sourceClub).limit(2000),
                 _clubId
                     ? supabaseClient.client.from('pay_rates').select('*').eq('club_id', _clubId).order('sort_order')
@@ -4704,7 +4712,23 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 // No-shows / late scratches — game_incident_slots is the anon-safe
                 // view (game, position, kind; no names). A no-show is $0 and can't be
                 // marked paid. sql/game-incidents-pay-view.sql
-                supabaseClient.client.from('game_incident_slots').select('game_id, position, kind')
+                supabaseClient.client.from('game_incident_slots').select('game_id, position, kind'),
+                // ── What the assignor AGREED to pay, and why ───────────────
+                // pay_overrides (sql/pay-overrides.sql). Tod, 2026-10-03:
+                // "there needs to be an assignor override so that an increase
+                // is marked by the assignor and reason given."
+                //
+                // He had promised a referee $80 on a $50 game he could not get
+                // covered, typed 80 into the box below, and this page threw it
+                // away — the input is redrawn from getRate() every time, so
+                // the Total still read $110 and the next person to open the
+                // portal saw $50. The promise was real and the page disagreed
+                // with it.
+                //
+                // ⚠️ NO VIEW, unlike game_incident_slots. That one exists
+                // because game_incidents carries referee names and this page
+                // reads under the anon key. There is no name in pay_overrides.
+                supabaseClient.client.from('pay_overrides').select('game_id, slot, amount, reason, set_by_name, set_at')
             ]);
             // ⚠️ ONLY ATTENDANCE AFFECTS PAY. A no-show or a late scratch is a
             // statement that somebody did not work, so $0 is right. A
@@ -4731,6 +4755,43 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 const pos = i.position === 'Center Referee' ? 'CR' : i.position === 'AR 1' ? 'AR1' : 'AR2';
                 _incidentSlots[`${i.game_id}|${pos}`] = i.kind;
             });
+            // Same CR/AR1/AR2 keys as _incidentSlots, from the same column
+            // names, so the two can be read side by side without translating
+            // twice.
+            const _ovrSlots = {};        // `${game_id}|CR` → row
+            (overrideResult?.data || []).forEach(o => {
+                const pos = o.slot === 'Center Referee' ? 'CR' : o.slot === 'AR 1' ? 'AR1' : 'AR2';
+                _ovrSlots[`${o.game_id}|${pos}`] = o;
+            });
+            // ⚠️ ONE BUILDER FOR BOTH VIEWS. The desktop table and the phone
+            // cards each carry their own copy of the rate maths, which is how
+            // they drift. The override is resolved HERE and both call it.
+            //
+            // An incident still wins. A no-show did not work the game, so $0
+            // beats any agreed number — the money was for turning up.
+            const _rateFor = (gameId, slot, age, isSolo, incident) => {
+                if (incident) return { rate: 0, ovr: null, band: 0 };
+                const band = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                const o    = _ovrSlots[`${gameId}|${slot.pos}`] || null;
+                return o ? { rate: Number(o.amount), ovr: o, band } : { rate: band, ovr: null, band };
+            };
+            // The chip under the money. Shows the band rate it replaced, so
+            // nobody has to work out whether $80 was a rise or a cut, and the
+            // reason the club is being asked to pay it.
+            const _ovrChip = (o, band) => {
+                if (!o) return '';
+                const amt  = Number(o.amount);
+                const up   = amt >= band;
+                const when = o.set_at ? new Date(o.set_at).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
+                const who  = [o.set_by_name, when].filter(Boolean).join(', ');
+                const why  = String(o.reason || '').replace(/"/g, '&quot;');
+                const tip  = `Assignor override: $${amt} instead of the $${band} band rate${who ? ' — set by ' + who : ''}. Reason: ${o.reason || ''}`;
+                return `<span class="pay-ovr${up ? '' : ' down'}" title="${tip.replace(/"/g, '&quot;')}">
+                    <span class="po-amt">${up ? '&#9650;' : '&#9660;'} $${amt}</span> &middot; was $${band}
+                    <span class="po-why">&ldquo;${why}&rdquo;</span>
+                    ${who ? `<span class="po-who">${who}</span>` : ''}
+                </span>`;
+            };
             const clubPayMethods = (clubResult.data?.payment_methods || 'venmo,check')
                 .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
@@ -5031,7 +5092,9 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                             const zip     = zipRaw && zipRaw.length === 4 ? '0' + zipRaw : zipRaw;
                             const address = [rf['address'], rf['city'], rf['state'], zip].filter(Boolean).join(', ');
                             const incident  = _incidentSlots[`${r.id}|${slot.pos}`] || null;   // 'no_show' | 'late_scratch'
-                            const rate      = incident ? 0 : getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                            const _r        = _rateFor(r.id, slot, age, isSolo, incident);
+                            const rate      = _r.rate;
+                            const ovrChip   = _ovrChip(_r.ovr, _r.band);
                             gameTotal      += rate;
 
                             const venmoHandle = venmo.replace(/^@/, '');
@@ -5105,7 +5168,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                                 <td>${idx === 0 ? age : ''}</td>
                                 <td>${refNameCell}</td>
                                 <td>${posBadge}</td>
-                                <td>${incident ? `<span style="color:#b91c1c; font-size:0.82rem; font-weight:800; white-space:nowrap;" title="${incident === 'no_show' ? 'Did not show' : 'Bailed inside 24 hours'}">$0 <span style="font-weight:600;">· ${incident === 'no_show' ? 'no show' : 'late scratch'}</span></span>` : gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>`}</td>
+                                <td>${incident ? `<span style="color:#b91c1c; font-size:0.82rem; font-weight:800; white-space:nowrap;" title="${incident === 'no_show' ? 'Did not show' : 'Bailed inside 24 hours'}">$0 <span style="font-weight:600;">· ${incident === 'no_show' ? 'no show' : 'late scratch'}</span></span>` : gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>${ovrChip}`}</td>
                                 <td>${venmoHtml}</td>
                                 <td style="text-align:center;">${cbHtml}</td>
                             </tr>
@@ -5215,7 +5278,12 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                         const rf         = resolveRef(slot.name);
                         const venmo      = rf['venmo'] || '';
                         const payMethod  = rf['payment_method'] || 'venmo';
-                        const rate       = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                        // ⚠️ The phone is where Tod actually pays. An override
+                        // honoured only on the desktop table would be worse
+                        // than none at all.
+                        const _mr        = _rateFor(r.id, slot, age, isSolo, _incidentSlots[`${r.id}|${slot.pos}`] || null);
+                        const rate       = _mr.rate;
+                        const mOvrChip   = _ovrChip(_mr.ovr, _mr.band);
                         const venmoHandle = venmo.replace(/^@/, '');
                         const venmoNote  = encodeURIComponent(`${_sourceClub} - ${slot.pos} ${date}`);
                         const slotPaid   = !!(slotPaidMap[r.id] && slotPaidMap[r.id][slot.pos]) || !!paidAtById[r.id];
@@ -5248,7 +5316,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                         cards += `<div class="pay-card-m${slotPaid ? ' paid' : ''}" id="${cardId}">
                             <div class="pay-card-m-date">${dateDisplay}</div>
                             ${isCheck ? `<div style="flex:1; min-width:120px;">${actionHtml}</div>` : `<div class="pay-card-m-ref">${refDisplay}</div>`}
-                            <div class="pay-card-m-amount">$${rate}</div>
+                            <div class="pay-card-m-amount">$${rate}${mOvrChip}</div>
                             <div class="pay-card-m-actions">${isCheck ? '' : actionHtml}${cbHtml}</div>
                         </div>`;
                     });

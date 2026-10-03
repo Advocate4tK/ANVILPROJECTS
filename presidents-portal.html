@@ -9,6 +9,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <style>
+/* An agreed rate that is not the band rate, with the reason beside it. */
+.ovr-note { display:block; margin-top:2px; font-size:0.6rem; line-height:1.3; font-weight:700; font-style:italic; color:#14532d; background:#dcfce7; border-left:3px solid #15803d; border-radius:3px; padding:1px 5px; max-width:180px; cursor:help; }
+.ovr-note.down { color:#7c2d12; background:#ffedd5; border-left-color:#c2410c; }
+
         body {
             background-color: #060e20 !important;
             background-image: repeating-linear-gradient(
@@ -528,6 +532,56 @@ function getRate(posKey, ageGroup, isSolo) {
     return posKey === 'CR' ? row.center : row.ar;
 }
 
+// ── What the assignor AGREED to pay ───────────────────────────────────────────
+// pay_overrides (sql/pay-overrides.sql). Tod, 2026-10-03: "there needs to be an
+// assignor override so that an increase is marked by the assignor and reason
+// given." He had promised a referee $80 on a $50 game he could not get covered.
+//
+// ⚠️ THIS PAGE HAS TO AGREE WITH THE PAY PORTAL. It is the same money read by
+// two different people — the club president sees "owed", the treasurer sees the
+// row he is about to pay. If only one of them knows about the $80, the club gets
+// a bill for $30 more than its own audit page said it owed, and the number
+// nobody trusts is the one nobody pays.
+//
+// There are five rate calls on this page. They all go through rateFor() now, so
+// a sixth cannot be added that forgets.
+let _payOverrides = {};   // `${game_id}|CR` → row
+
+async function loadPayOverrides() {
+    _payOverrides = {};
+    try {
+        // selectAll pages past the 1000-row cap and THROWS on error — including
+        // the 404 before Tod has run the SQL — so this gets its own try. An
+        // audit page that will not load because a new table is missing is a
+        // worse bug than the one being fixed.
+        const rows = await supabaseClient.selectAll('pay_overrides', 'game_id, slot, amount, reason, set_by_name, set_at');
+        rows.forEach(o => {
+            const pos = o.slot === 'Center Referee' ? 'CR' : o.slot === 'AR 1' ? 'AR1' : 'AR2';
+            _payOverrides[`${o.game_id}|${pos}`] = o;
+        });
+    } catch (e) { console.warn('[payOverrides]', e.message); }
+}
+function payOverrideFor(gameId, pos) { return _payOverrides[`${gameId}|${pos}`] || null; }
+
+// The agreed rate if there is one, the band rate if there is not.
+function rateFor(gameId, slot, ageGroup, isSolo) {
+    const o = payOverrideFor(gameId, slot.pos);
+    if (o) return Number(o.amount);
+    return getRate(slot.rateKey, ageGroup, isSolo && slot.pos === 'CR');
+}
+// Why the club is being asked for more. The reason travels with the number —
+// that was the whole point of the override.
+function overrideNote(gameId, slot, ageGroup, isSolo) {
+    const o = payOverrideFor(gameId, slot.pos);
+    if (!o) return '';
+    const band = getRate(slot.rateKey, ageGroup, isSolo && slot.pos === 'CR');
+    const amt  = Number(o.amount);
+    const when = o.set_at ? new Date(o.set_at).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
+    const who  = [o.set_by_name, when].filter(Boolean).join(', ');
+    const tip  = `Assignor override: $${amt} instead of the $${band} band rate${who ? ' — set by ' + who : ''}. Reason: ${o.reason || ''}`;
+    return `<span class="ovr-note${amt >= band ? '' : ' down'}" title="${tip.replace(/"/g, '&quot;')}">${amt >= band ? '&#9650;' : '&#9660;'} was $${band} &middot; ${String(o.reason || '').replace(/"/g, '&quot;')}</span>`;
+}
+
 // ── Week label ────────────────────────────────────────────────────────────────
 function weekLabel(dateStr) {
     if (!dateStr) return 'Unknown Week';
@@ -570,7 +624,8 @@ async function loadDashboard(club) {
         const [rawGames, ratesResult, refPayResult] = await Promise.all([
             supabaseClient.client.from('games').select('*').eq('Source Club', clubName).limit(2000),
             supabaseClient.client.from('pay_rates').select('*').eq('club_id', club.id).order('sort_order'),
-            supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount')
+            supabaseClient.client.from('ref_payments').select('game_id, slot, paid_at, amount'),
+            loadPayOverrides()
         ]);
 
         // Scope ref fetch to only refs assigned to this club's games
@@ -648,7 +703,7 @@ async function loadDashboard(club) {
             const gameOutsourced = (f['Payment Status'] || '').toLowerCase() === 'outsourced';
             let gameOwed = 0;
             slots.forEach(slot => {
-                const rate     = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                const rate     = rateFor(r.id, slot, age, isSolo);
                 const slotPaid = slotPaidMap[r.id]?.[slot.pos];
                 if (gameOutsourced) {
                     // Paid externally (e.g. district pays refs at the field) — not owed, not paid by us, $0 in-tool
@@ -672,7 +727,7 @@ async function loadDashboard(club) {
             if (!gameOutsourced && (status.includes('cancel') || status.includes('postpone') || changeTs) && isAfterThursday(changeTs || new Date().toISOString(), date)) {
                 let gameCost = 0;
                 slots.forEach(slot => {
-                    gameCost += getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                    gameCost += rateFor(r.id, slot, age, isSolo);
                 });
                 lateCancelCost += gameCost;
                 lateChanges.push({ r, date, slots, gameCost, changeTs, status });
@@ -748,7 +803,7 @@ function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
                 { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
             ].filter(s => s.name && s.name.toUpperCase() !== 'EMPTY');
             const isSolo = slots.length === 1 && slots[0].pos === 'CR';
-            slots.forEach(slot => { weekTotal += getRate(slot.rateKey, age, isSolo && slot.pos === 'CR'); });
+            slots.forEach(slot => { weekTotal += rateFor(r.id, slot, age, isSolo); });
         });
 
         html += `<div class="week-accordion">
@@ -778,7 +833,8 @@ function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
 
             slots.forEach((slot, idx) => {
                 const rf       = resolveRef(slot.name);
-                const rate     = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                const rate     = rateFor(r.id, slot, age, isSolo);
+                const ovrNote  = overrideNote(r.id, slot, age, isSolo);
                 const slotPaid = slotPaidMap[r.id]?.[slot.pos];
                 const paidTs   = slotPaid ? new Date(slotPaid).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
                 const rowBg    = gameOut ? '#f3f4f6' : slotPaid ? '#dcfce7' : bg;
@@ -802,7 +858,7 @@ function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
                     <td>${idx === 0 ? age : ''}</td>
                     <td style="font-weight:600;color:#1a2e4a;">${rf.name || slot.name}</td>
                     <td>${posBadge}</td>
-                    <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#1a2e4a;">${gameOut ? `$0 <span style="color:#9ca3af;font-weight:600;">(other)</span>` : `$${rate}`}</td>
+                    <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#1a2e4a;">${gameOut ? `$0 <span style="color:#9ca3af;font-weight:600;">(other)</span>` : `$${rate}${ovrNote}`}</td>
                     <td>${pill}</td>
                     <td style="font-size:0.72rem;color:#555;">${paidTs}</td>
                     <td style="text-align:center;">${paidInHtml}</td>
@@ -839,7 +895,7 @@ function renderPayments(pastGames, upcomingGames, slotPaidMap, resolveRef) {
 
             slots.forEach((slot, idx) => {
                 const rf   = resolveRef(slot.name);
-                const rate = getRate(slot.rateKey, age, isSolo && slot.pos === 'CR');
+                const rate = rateFor(r.id, slot, age, isSolo);
                 const posBadge = slot.pos === 'CR'
                     ? `<span style="background:#1e3a8a;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">CR</span>`
                     : `<span style="background:#059669;color:white;font-size:0.66rem;font-weight:800;padding:2px 6px;border-radius:6px;">${slot.pos}</span>`;

@@ -131,6 +131,9 @@
         /* no-show / late-scratch — the referee stays, the stamp says what happened */
         .incident-stamp { display:inline-block; margin-left:6px; font-size:0.6rem; font-weight:900; letter-spacing:.6px; color:#fff; background:#b91c1c; border:1px solid #7f1d1d; border-radius:3px; padding:1px 6px; vertical-align:middle; white-space:nowrap; transform:rotate(-2deg); }
         .incident-stamp.late_scratch { background:#b45309; border-color:#78350f; }
+        /* The money twin of .incident-stamp. Green because it is a promise
+           kept, not a problem; same rotate so the two read as one family. */
+        .pay-override-stamp { display:inline-block; margin-left:6px; font-size:0.6rem; font-weight:900; letter-spacing:.4px; color:#fff; background:#15803d; border:1px solid #14532d; border-radius:3px; padding:1px 6px; vertical-align:middle; white-space:nowrap; transform:rotate(-2deg); cursor:help; }
         .slot.has-incident { background:repeating-linear-gradient(135deg,#fff1f1,#fff1f1 6px,#ffe1e1 6px,#ffe1e1 12px) !important; border-color:#b91c1c !important; }
         /* Who has already said no to this game, shown on the empty slot where
            the decision gets made. */
@@ -2730,6 +2733,7 @@
                          onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
                         ✉ Message ref
                     </div>
+                    ${payOverrideMenuItems(gid, paySlotCol(field), 'sheet2HideOptMenu();')}
                     <div onclick="sheet2ClearAssignedCell('${gid}','${field}'); sheet2HideOptMenu();"
                          style="padding:7px 16px; cursor:pointer; color:#cf222e;"
                          onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
@@ -4109,7 +4113,7 @@
                     return `<td id="s3${field}-${gid}" style="${cell} min-width:120px; cursor:${!isCleared?'pointer':'default'}; background:${bg}; color:${isCleared?'#bbb':hasRef?'#2e7d32':'inherit'};" ${drag} ${ctx} ${hoverIn} ${hoverOut} ${cellClick}
                         ondragover="event.preventDefault(); this.style.outline='2px dashed #1a3a6b';"
                         ondragleave="this.style.outline='';"
-                        ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}${caChip}${hasRef ? cupGreenWarn(gid, posName, rawName) : ''}${hasRef ? incidentStamp(gid, posName) : ''}</td>`;
+                        ondrop="sheet3AssignedDrop(event,'${gid}','${field}'); this.style.outline='';">${display}${badge}${caChip}${hasRef ? cupGreenWarn(gid, posName, rawName) : ''}${hasRef ? incidentStamp(gid, posName) : ''}${hasRef ? payOverrideStamp(gid, posName) : ''}</td>`;
                 };
                 const optTd = n => {
                     const name = staged[n] || '';
@@ -5667,7 +5671,8 @@
                          onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
                         ✉ Message ref
                     </div>
-                    ${incidentMenuItems(gid, ({ center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' })[field] || field, 'sheet3HideOptMenu();')}
+                    ${incidentMenuItems(gid, paySlotCol(field), 'sheet3HideOptMenu();')}
+                    ${payOverrideMenuItems(gid, paySlotCol(field), 'sheet3HideOptMenu();')}
                     <div onclick="sheet3ClearAssignedCell('${gid}','${field}'); sheet3HideOptMenu();"
                          style="padding:7px 16px; cursor:pointer; color:#cf222e;"
                          onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">
@@ -8140,7 +8145,7 @@
                 await loadRefBusy();   // spans every club — see the comment on refBusy
                 buildCAConfirmedMap();
                 await loadCAEmailSent();
-                await loadIncidents();
+                await loadIncidents(); await loadPayOverrides();
 
                 // Load crew rules for all clubs in loaded games — must run before renderGames()
                 window._crewRules = {};
@@ -9026,6 +9031,160 @@
         }
         function incidentFor(gid, position) { return incidentsByGame[`${gid}|${position}`] || null; }
 
+        // ── Pay overrides: an agreed rate, who agreed it, and why ──────────
+        // pay_overrides (sql/pay-overrides.sql). Tod, 2026-10-03: "there needs
+        // to be an assignor override so that an increase is marked by the
+        // assignor and reason given."
+        //
+        // He had offered a referee $80 for a $50 game because he could not get
+        // it covered, typed 80 into the pay portal, and the portal threw it
+        // away on the next draw — the $ box is rendered from the band rate
+        // every time. The promise lived in his head; the portal disagreed.
+        //
+        // ⚠️ SET HERE, NOT IN THE PAY PORTAL. The portal is Jeff Green's
+        // screen. He should be shown an authorised number, not invited to
+        // invent one — and the person who made the promise is the one who has
+        // to answer for it.
+        //
+        // ⚠️ THE SLOT, NOT THE PERSON — the opposite of an incident, and for
+        // the same reason. A no-show is about a referee, so it follows the
+        // referee. This is about a GAME nobody wants, so it stays on the slot:
+        // if Donnie drops out on the Friday and somebody else picks it up at
+        // short notice, the $80 was still what the game cost.
+        //
+        // ⚠️ NO SECOND RATE CALCULATOR LIVES HERE. The band rate, the age
+        // bands and the solo bump are all in the pay portal's getRate(), and
+        // this session has been one long lesson in what two copies of one rule
+        // do. So the workstation records the agreed number and the portal does
+        // the comparing — it is the only place that can honestly say "$80, up
+        // from $50".
+        let payOverridesBySlot = {};   // `${gid}|${position}` → row
+
+        async function loadPayOverrides() {
+            const next = {};
+            try {
+                const ids = allGames.map(g => g.id);
+                if (!ids.length) { payOverridesBySlot = next; return; }
+                // ⚠️ CHUNKED AT 300 GAMES. PostgREST caps a response at 1000
+                // rows and says nothing about it — three times in one day it
+                // has cost us (duplicate referees, pool_members, the blast
+                // reads). Three slots a game means 300 games is 900 rows at
+                // the absolute worst, which stays under the cap even if every
+                // slot on every game carries an override.
+                for (let i = 0; i < ids.length; i += 300) {
+                    const { data, error } = await supabaseClient.client
+                        .from('pay_overrides').select('*')
+                        .in('game_id', ids.slice(i, i + 300));
+                    if (error) throw error;
+                    (data || []).forEach(r => { next[`${r.game_id}|${r.slot}`] = r; });
+                }
+            } catch (e) { console.warn('[payOverrides]', e.message); }
+            finally { payOverridesBySlot = next; }
+        }
+        function payOverrideFor(gid, position) { return payOverridesBySlot[`${gid}|${position}`] || null; }
+
+        // The green tag on the slot. Without this he would have to right-click
+        // every slot to find out which games carry a promise.
+        function payOverrideStamp(gid, position) {
+            const o = payOverrideFor(gid, position);
+            if (!o) return '';
+            const amt  = Number(o.amount);
+            const when = o.set_at ? new Date(o.set_at).toLocaleString('en-US', { month:'short', day:'numeric' }) : '';
+            const tip  = `Pay override $${amt} — ${o.reason}${o.set_by_name ? ' · ' + o.set_by_name : ''}${when ? ' · ' + when : ''}. The pay portal shows this instead of the band rate. Right-click to change it.`;
+            return `<span class="pay-override-stamp" title="${tip.replace(/"/g, '&quot;')}">💲${amt}</span>`;
+        }
+
+        // The menu rows shared by all three right-click menus, same shape as
+        // incidentMenuItems — because three hand-written copies of one menu is
+        // how Sheet 3 ended up unable to cancel a game.
+        function payOverrideMenuItems(gid, position, hide) {
+            const safePos = position.replace(/'/g, "\\'");
+            const o = payOverrideFor(gid, position);
+            const row = (label, fn, color) => `<div onclick="${fn} ${hide}" style="padding:7px 16px; cursor:pointer; color:${color}; font-weight:600;" onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">${label}</div>`;
+            if (o) return row(`💲 Pay override $${Number(o.amount)} — change`, `openPayOverrideModal('${gid}','${safePos}');`, '#15803d')
+                        + row('✖ Drop the override', `removePayOverride('${gid}','${safePos}');`, '#b45309');
+            return row('💲 Override pay…', `openPayOverrideModal('${gid}','${safePos}');`, '#15803d');
+        }
+
+        // Sheet 2 and Sheet 3 pass their column key (center/ar1/ar2); the cards
+        // and the database use the games column name. One map, not three.
+        const PAY_SLOT_COL = { center: 'Center Referee', ar1: 'AR 1', ar2: 'AR 2' };
+        function paySlotCol(field) { return PAY_SLOT_COL[field] || field; }
+
+        function openPayOverrideModal(gid, position) {
+            const g = allGames.find(x => String(x.id) === String(gid)); if (!g) return;
+            const f = g.fields;
+            const name = resolveRefName(f[position]) || '';
+            const d = f['Date'] ? new Date(f['Date'] + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '';
+            const o = payOverrideFor(gid, position);
+            document.getElementById('povTitle').textContent = `💲 Override pay — ${position}`;
+            document.getElementById('povGame').textContent =
+                `${buildGameNumber(f) ? buildGameNumber(f) + ' · ' : ''}${f['Home Team'] || ''} vs ${f['Away Team'] || ''} — ${d}${f['Time'] ? ' ' + formatTime(f['Time']) : ''}${name ? ' · ' + name : ''}`;
+            document.getElementById('povAmount').value = o ? Number(o.amount) : '';
+            document.getElementById('povReason').value = o ? (o.reason || '') : '';
+            const prev = document.getElementById('povPrev');
+            prev.innerHTML = o
+                ? `Currently $${Number(o.amount)} — set by ${o.set_by_name || '?'} on ${new Date(o.set_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })}.`
+                : '';
+            prev.style.display = o ? 'block' : 'none';
+            document.getElementById('povResult').innerHTML = '';
+            const btn = document.getElementById('povSave');
+            btn.disabled = false; btn.textContent = o ? 'Update override' : 'Set override';
+            btn.onclick = () => savePayOverride(gid, position);
+            document.getElementById('povOverlay').style.display = 'flex';
+            setTimeout(() => document.getElementById('povAmount').focus(), 50);
+        }
+        function closePayOverrideModal() { document.getElementById('povOverlay').style.display = 'none'; }
+
+        async function savePayOverride(gid, position) {
+            const res    = document.getElementById('povResult');
+            const amtEl  = document.getElementById('povAmount');
+            const whyEl  = document.getElementById('povReason');
+            const amount = parseFloat(amtEl.value);
+            const reason = whyEl.value.trim();
+            if (!isFinite(amount) || amount < 0) { res.innerHTML = '<span style="color:#dc2626;">Needs a dollar amount.</span>'; amtEl.focus(); return; }
+            // ⚠️ The reason IS the feature. The database refuses a blank one
+            // too, so this can never be loosened by accident later.
+            if (!reason) { res.innerHTML = '<span style="color:#dc2626;">Say why — an unexplained $' + amount + ' in November is the argument this is meant to prevent.</span>'; whyEl.focus(); return; }
+            const jwt = _getSupabaseSession()?.access_token;
+            if (!jwt) { res.innerHTML = '<span style="color:#dc2626;">Your login has expired — sign in again.</span>'; return; }
+            const btn = document.getElementById('povSave'); btn.disabled = true; btn.textContent = 'Saving…';
+            const g = allGames.find(x => String(x.id) === String(gid));
+            const asUser = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } } });
+            const { data: { user } } = await asUser.auth.getUser();
+            const row = {
+                game_id: Number(gid),
+                game_no: g?.fields['game_no'] ? RT_GAME_NO.fmt(g.fields['game_no']) : null,
+                slot: position,
+                amount, reason,
+                set_by: user?.id || null,
+                set_by_name: document.getElementById('profileBadgeName')?.textContent || user?.email || null,
+                // ⚠️ EXPLICIT. set_at defaults on INSERT only, so a changed
+                // override would otherwise keep the original date and the
+                // portal would credit the new number to the old decision.
+                set_at: new Date().toISOString(),
+            };
+            const { error } = await asUser.from('pay_overrides').upsert(row, { onConflict: 'game_id,slot' });
+            if (error) { res.innerHTML = `<span style="color:#dc2626;">Didn't save: ${error.message}</span>`; btn.disabled = false; btn.textContent = 'Try again'; return; }
+            closePayOverrideModal();
+            showToast(`💲 ${position} on this game is $${amount} — the pay portal will show it`, true);
+            await loadPayOverrides();
+            renderGames();
+        }
+
+        async function removePayOverride(gid, position) {
+            const o = payOverrideFor(gid, position); if (!o) return;
+            if (!confirm(`Drop the $${Number(o.amount)} override on ${position}?\n\nThe pay portal goes back to the band rate. "${o.reason}" goes with it.`)) return;
+            const jwt = _getSupabaseSession()?.access_token;
+            if (!jwt) { showToast('⚠ Your login has expired — sign in again', true); return; }
+            const asUser = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } } });
+            const { error } = await asUser.from('pay_overrides').delete().eq('id', o.id);
+            if (error) { showToast('⚠ Could not drop it: ' + error.message, true); return; }
+            showToast(`↩ Override dropped — ${position} is back on the band rate`);
+            await loadPayOverrides();
+            renderGames();
+        }
+
         // ── Cup match crew experience ──────────────────────────────────────
         // A cup match is a level up from league comp: quicker, harder, a louder
         // sideline. A first- or second-season referee in the middle of one is
@@ -9165,7 +9324,7 @@
             if (error) { res.innerHTML = `<span style="color:#dc2626;">Didn't save: ${error.message}</span>`; btn.disabled = false; btn.textContent = 'Try again'; return; }
             closeIncidentModal();
             showToast(`${INCIDENT_ICON[kind]} ${row.referee_name} recorded as ${kind === 'no_show' ? 'a no show' : 'a late scratch'}`, true);
-            await loadIncidents();
+            await loadIncidents(); await loadPayOverrides();
             renderGames(); renderRefs(document.getElementById('refSearch')?.value || '');
         }
         async function retractIncident(gid, position) {
@@ -9184,7 +9343,7 @@ Reason (optional):`);
             }).eq('id', i.id);
             if (error) { showToast('⚠ Could not retract: ' + error.message, true); return; }
             showToast(`↩ Retracted — ${i.referee_name} is clear on this game`);
-            await loadIncidents();
+            await loadIncidents(); await loadPayOverrides();
             renderGames(); renderRefs(document.getElementById('refSearch')?.value || '');
         }
         // The menu rows shared by both templates' right-click menus.
@@ -9684,7 +9843,7 @@ Reason (optional):`);
 
             // Off the game, and the slot's CA state goes with them.
             await unassignRef(gid, position);
-            await loadIncidents();
+            await loadIncidents(); await loadPayOverrides();
             renderGames();
             renderRefs(document.getElementById('refSearch')?.value?.toLowerCase() || '');
             showToast(`✗ ${name} declined — taken off the game, slot is open again`, true);
@@ -9857,6 +10016,7 @@ Reason (optional):`);
         }
         document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('refMsgOverlay').style.display === 'flex') closeRefMessage(); });
         document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('incOverlay').style.display === 'flex') closeIncidentModal(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('povOverlay').style.display === 'flex') closePayOverrideModal(); });
 
         // stage: 'assigned' -> "please accept in CA" | 'confirmed' -> "you're on"
         //        | 'rejected'  -> "you declined; update your availability"
@@ -10009,7 +10169,7 @@ Reason (optional):`);
                     onmouseenter="showRefTooltip('${safeName}', this, event)"
                     onmouseleave="hideRefTooltip()">
                     <span class="slot-label" style="${labelColor}">${label}</span>
-                    <span style="display:flex;align-items:center;gap:5px;font-size:0.8rem;">${assignedCountBadge(refId)}${refName}${cupGreenWarn(gameId, position, refName)}${incidentStamp(gameId, position)}</span>
+                    <span style="display:flex;align-items:center;gap:5px;font-size:0.8rem;">${assignedCountBadge(refId)}${refName}${cupGreenWarn(gameId, position, refName)}${incidentStamp(gameId, position)}${payOverrideStamp(gameId, position)}</span>
                     ${confirmBtn}
                     <button class="unassign-btn s2-unassign" onclick="event.stopPropagation(); unassignRef('${gameId}','${position}')" title="Remove">✕</button>
                 </div>`;
@@ -10041,6 +10201,7 @@ Reason (optional):`);
             menu.innerHTML = `<div style="padding:6px 0;">
                 <div onclick="openRefMessageByName('${safeName}','${gameId}'); ${hide}" style="padding:7px 16px; cursor:pointer; color:#0f3460; font-weight:600;" onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">✉ Message ref</div>
                 ${incidentMenuItems(gameId, position, hide)}
+                ${payOverrideMenuItems(gameId, position, hide)}
                 <div onclick="unassignRef('${gameId}','${safePos}'); ${hide}" style="padding:7px 16px; cursor:pointer; color:#cf222e; border-top:1px solid #eee; margin-top:4px;" onmouseover="this.style.background='#f6f8fa';" onmouseout="this.style.background='';">Remove ref</div>
             </div>`;
             menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px'; menu.style.display = 'block';
@@ -12610,6 +12771,33 @@ The game keeps its date on the board but reads POSTPONED — new date to come. T
                 <div style="display:flex; gap:10px; margin-top:14px; justify-content:flex-end;">
                     <button onclick="closeIncidentModal()" style="background:#f0ece6; color:#09142a; border:1px solid #ddd3c6; border-radius:8px; padding:9px 18px; font-weight:700; cursor:pointer; font-family:inherit;">Cancel</button>
                     <button id="incSave" style="background:#b91c1c; color:#fff; border:none; border-radius:8px; padding:9px 22px; font-weight:800; cursor:pointer; font-family:inherit;">Record no show</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Pay override. Green head, not red: this is a promise being recorded,
+         not a problem being logged. -->
+    <div id="povOverlay" style="display:none; position:fixed; inset:0; background:rgba(4,10,22,0.7); z-index:9998; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:#fff; border-radius:14px; width:100%; max-width:480px; box-shadow:0 30px 80px rgba(0,0,0,0.5); overflow:hidden;">
+            <div style="background:#15803d; color:#fff; padding:14px 18px; display:flex; align-items:center; gap:10px;">
+                <div id="povTitle" style="font-family:'Barlow Condensed',sans-serif; font-size:1.2rem; font-weight:800; text-transform:uppercase; letter-spacing:0.6px;">Override pay</div>
+                <button onclick="closePayOverrideModal()" style="margin-left:auto; background:none; border:none; color:#fff; font-size:1.3rem; cursor:pointer;">&#10005;</button>
+            </div>
+            <div style="padding:18px;">
+                <div id="povGame" style="font-size:0.82rem; color:#555; background:#f0fdf4; border-left:4px solid #15803d; border-radius:6px; padding:8px 12px; margin-bottom:12px;"></div>
+                <div id="povPrev" style="display:none; font-size:0.8rem; color:#14532d; font-weight:700; margin-bottom:10px;"></div>
+                <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Pay this slot</label>
+                <div style="display:inline-flex; align-items:center; border:1.5px solid #dde3f0; border-radius:7px; overflow:hidden;">
+                    <span style="padding:9px 4px 9px 11px; color:#888;">$</span>
+                    <input id="povAmount" type="number" min="0" step="1" style="width:110px; padding:9px 11px 9px 2px; border:none; outline:none; font-family:inherit; font-size:1rem; font-weight:700;" placeholder="80">
+                </div>
+                <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin:12px 0 4px;">Why <span style="font-weight:400; text-transform:none; color:#b91c1c;">(required)</span></label>
+                <textarea id="povReason" rows="2" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem; resize:vertical;" placeholder="couldn't get it covered at the band rate &#183; drove from Thompson &#183; agreed with the club"></textarea>
+                <div style="font-size:0.75rem; color:#888; margin-top:10px;">The pay portal shows this instead of the band rate, with your name, the date and the reason beside it. It belongs to the SLOT &mdash; if the referee changes, the agreed amount stays.</div>
+                <div id="povResult" style="margin-top:10px; font-size:0.85rem;"></div>
+                <div style="display:flex; gap:10px; margin-top:14px; justify-content:flex-end;">
+                    <button onclick="closePayOverrideModal()" style="background:#f0ece6; color:#09142a; border:1px solid #ddd3c6; border-radius:8px; padding:9px 18px; font-weight:700; cursor:pointer; font-family:inherit;">Cancel</button>
+                    <button id="povSave" style="background:#15803d; color:#fff; border:none; border-radius:8px; padding:9px 22px; font-weight:800; cursor:pointer; font-family:inherit;">Set override</button>
                 </div>
             </div>
         </div>
