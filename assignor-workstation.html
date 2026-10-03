@@ -5769,6 +5769,15 @@
             setTimeout(() => document.addEventListener('click', sheet3HideOptMenu, { once: true }), 0);
         }
 
+        // ⚠️ THE CHOOSER MUST NOT OPEN BEHIND THE EDITOR. The Sheet 3 edit
+        // modal is z-index 10000; #gmModal is not above it. Called from
+        // statusAndModify's Modify button, which both views share — a no-op on
+        // Standard 2, where this modal has never been created.
+        function s3CloseEditModal() {
+            const m = document.getElementById('s3GameEditModal');
+            if (m) m.style.display = 'none';
+        }
+
         function sheet3OpenGameEditModal(gid) {
             const game = allGames.find(g => String(g.id) === String(gid));
             if (!game) return;
@@ -5803,11 +5812,26 @@
                         <div><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Visiting Club</label>${caClubSelect(`editAwayClub-${gid}`, f['away_club'])}</div>
                         <div style="flex:1;min-width:140px;"><label style="font-size:0.75rem;color:#555;display:block;margin-bottom:3px;">Field</label><input type="text" id="editField-${gid}" value="${esc(f['field'])}" style="width:100%;border:1px solid #ccc;border-radius:4px;padding:4px 6px;font-size:0.82rem;"></div>
                     </div>
-                    <div style="display:flex;gap:8px;">
+                    ${/* ⚠️ THE SAME FOOTER AS STANDARD 2, NOT A SECOND ONE. Tod,
+                          2026-10-03: "it doesnt have all the options as standard
+                          2.... they need to be the same logic" and "sheet 3 should
+                          do all the things the same way standard 2 does."
+                          Sheet 3 had Save and Cancel and nothing else — so from
+                          this view a game could be re-dated but never postponed,
+                          never cancelled, and its STATUS was invisible. The whole
+                          nor'easter workflow was missing from one of the two views.
+                          statusAndModify() and deleteGame() are called here with
+                          the identical arguments and the identical guard as line
+                          ~10357, so there is one rule, not a copy of one. */''}
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                         <button onclick="saveGameEdit('${gid}').then(()=>{ document.getElementById('s3GameEditModal').style.display='none'; renderGames(); })"
                             style="background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:7px 20px;font-size:0.82rem;font-weight:700;cursor:pointer;">Save</button>
                         <button onclick="document.getElementById('s3GameEditModal').style.display='none';"
                             style="background:#eee;color:#333;border:1px solid #ccc;border-radius:6px;padding:7px 14px;font-size:0.82rem;cursor:pointer;">Cancel</button>
+                        ${statusAndModify(f, gid)}
+                        ${(!(cancelledGameIds.has(game.id) || f['Game Status'] === 'Cancelled') && !f['postponed_at'] && !['Center Referee','AR 1','AR 2'].some(pp => { const v = (f[pp]||'').trim().toUpperCase(); return v && v !== 'EMPTY' && v !== 'FILLED'; }))
+                            ? `<button class="edit-close-btn" style="background:#fff; color:#b91c1c; border:1px solid #e8a3a3;" onclick="deleteGame('${gid}', '${((f['Home Team']||'?')+' vs '+(f['Away Team']||'?')).replace(/'/g,"\\'")}')" title="Permanently remove a game created in error (no refs assigned)">✖ Delete (error)</button>`
+                            : ''}
                     </div>
                 </div>`;
             modal.style.display = 'flex';
@@ -12120,7 +12144,7 @@ You will need to contact them yourself. Assign anyway?`)) return;
                  + '<span style="font-size:0.68rem;font-weight:800;letter-spacing:0.1em;color:#8a8378;">STATUS</span>'
                  + '<span style="font-size:0.86rem;font-weight:900;letter-spacing:0.03em;color:' + fg + ';'
                  + 'background:' + bg + ';border-radius:5px;padding:4px 11px;">' + label + '</span>'
-                 + '<button class="edit-close-btn" onclick="openModify(\'' + gid + '\')" '
+                 + '<button class="edit-close-btn" onclick="s3CloseEditModal(); openModify(\'' + gid + '\')" '
                  + 'title="Change this game\'s status">&#9881; Modify</button></span>';
         }
 
