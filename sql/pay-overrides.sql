@@ -70,6 +70,20 @@ ALTER TABLE pay_overrides ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS pay_overrides_all ON pay_overrides;
 CREATE POLICY pay_overrides_all ON pay_overrides FOR ALL USING (true) WITH CHECK (true);
 
+-- ⚠️ RLS AND GRANTS ARE DIFFERENT QUESTIONS. The policy above decides which
+-- ROWS a role may touch; these decide whether PostgREST exposes the table to
+-- that role at all. Supabase's default privileges usually cover a table created
+-- by `postgres`, but saying it explicitly costs nothing and removes a whole
+-- class of "could not find the table in the schema cache".
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pay_overrides TO anon, authenticated;
+GRANT USAGE, SELECT ON SEQUENCE public.pay_overrides_id_seq TO anon, authenticated;
+
+-- PostgREST caches the schema. Supabase reloads it on DDL automatically, but
+-- ⚠️ NOT reliably through the transaction pooler on 6543 — the notification can
+-- land on a connection that goes back to the pool before PostgREST hears it.
+-- If the app still 404s the table, run this from the Supabase web SQL editor.
+NOTIFY pgrst, 'reload schema';
+
 
 -- VERIFY ---------------------------------------------------------------------
 
@@ -79,7 +93,7 @@ WHERE  table_name = 'pay_overrides'
 ORDER  BY ordinal_position;
 
 -- Empty on a fresh install. After Tod sets one it reads like a receipt.
-SELECT o.game_id, o.game_no, g."Date", o.slot, o.amount, o.reason, o.set_by_name, o.set_at
+SELECT o.game_id, o.game_no, g.date, o.slot, o.amount, o.reason, o.set_by_name, o.set_at
 FROM   pay_overrides o
 JOIN   games g ON g.id = o.game_id
 ORDER  BY o.set_at DESC;
