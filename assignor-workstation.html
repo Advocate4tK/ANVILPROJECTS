@@ -6793,6 +6793,38 @@
         let loadedDateFrom = '';
         let loadedDateTo   = '';
         let availTimeByName = {}; // ref name → { date → { start, end } }
+
+        // ── CAN THIS REFEREE WORK THIS KICKOFF? ────────────────────────────
+        // ⚠️ THE ONE COPY. The referee pane and the assign-time guard each had
+        // their own answer and they disagreed. Tod, 2026-10-05: Nehemiah Lucas
+        // Tharel showed in the pane for the Griswold U10 Girls games at 11:30
+        // and 1:00, and dropping him on one said "available 3:00 PM–5:00 PM but
+        // this game starts at 1:00 PM."
+        //
+        // The pane asked availByName — did they submit ANYTHING that DAY — and
+        // classify() never got the time half, because when a game is selected
+        // the pane skipped its own time filter and left the colouring to
+        // classify(). So a referee who gave an afternoon window was offered for
+        // a morning game.
+        //
+        // ⚠️ NO TIMES MEANS YES. A referee who submitted for the date without
+        // hours has not told us they are unavailable, and absence of a claim is
+        // not a claim. Same as the assign-time guard has always treated it.
+        function availCoversKickoff(refKey, date, time) {
+            if (!date || !time) return true;
+            const timed = (availTimeByName[refKey]?.[date] || []).filter(s => s.start && s.end);
+            if (!timed.length) return true;
+            const toMins = t => { const [h, m] = String(t || '').split(':').map(Number); return h * 60 + (m || 0); };
+            const g = toMins(time);
+            return timed.some(sl => g >= toMins(sl.start) && g < toMins(sl.end));
+        }
+        // The windows they actually gave — for saying so on screen.
+        function availWindowText(refKey, date) {
+            const timed = (availTimeByName[refKey]?.[date] || []).filter(s => s.start && s.end);
+            if (!timed.length) return '';
+            const fmt = t => { const [h, m] = String(t).split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
+            return timed.map(sl => `${fmt(sl.start)}\u2013${fmt(sl.end)}`).join(', ');
+        }
         const KNOWN_CLUBS = ['East Haddam','Glastonbury','Griswold','Haddam-Killingworth','Lebanon','NECONN','New London','Portland','RHAMYS','Stonington','Valley','WAM'];
         let clubsList     = KNOWN_CLUBS.slice(); // pre-seeded so pills render on page load
         let _liveClubNames = new Set();   // enabled (live) clubs+events. When populated, club pills are filtered to these — so unbuilt/not-live clubs don't show.
@@ -10775,9 +10807,22 @@ Reason (optional):`);
                             const timed = slots.filter(s => s.start && s.end);
                             if (timed.length && !timed.some(s => timeFilter >= s.start && timeFilter <= s.end)) { _why.time++; return false; }
                         }
-                    } else if (visibleGameDates.size > 0 && !gameDate) {
-                        // Filter by the actual dates of games on screen —
-                        // skip when a specific game is selected (classify() handles coloring)
+                    } else if (gameDate) {
+                        // ⚠️ A SELECTED GAME MEANS A TIME, NOT JUST A DATE. Tod,
+                        // 2026-10-05: "so if you click a game... only the
+                        // referees that have availability for that time should
+                        // show up in the right pane."
+                        //
+                        // This branch was skipped entirely when a game was
+                        // selected — the comment below sent the reader to
+                        // classify(), which only ever checked the date. Show All
+                        // Refs and a name search still bypass this, which is the
+                        // escape hatch for asking someone outside their window.
+                        if (!availByName[refName]?.has(gameDate)) { _why.date++; return false; }
+                        if (!availCoversKickoff(refName, gameDate, gameTime)) { _why.time++; return false; }
+                    } else if (visibleGameDates.size > 0) {
+                        // No game selected — filter by the dates of the games
+                        // on screen. The selected-game case is handled above.
                         const refDates = availByName[refName];
                         if (!refDates || refDates.size === 0) { _why.noAvail++; return false; }
                         const matchingDates = [...visibleGameDates].filter(d => refDates.has(d));
@@ -11541,19 +11586,16 @@ You will need to contact them yourself. Assign anyway?`)) return;
                 // 14:00–20:45 for Sunday and the tool offered her a 12:45 kickoff
                 // without a murmur. Tod, 2026-09-29: "Shouldn't flag me and tell
                 // me."
+                // Same rule the pane filters on. This still fires, because
+                // Show All Refs, a name search and a drag can each put a
+                // referee in front of you that the pane would have hidden.
                 if (gameDate && !override) {
-                    const slots = availTimeByName[refNameKey]?.[gameDate] || [];
-                    const timed = slots.filter(s => s.start && s.end);
-                    if (timed.length) {
-                        const toMins = t => { const [h, m] = (t || '').split(':').map(Number); return h * 60 + (m || 0); };
-                        const gameTime = targetGame.fields['Time'] || '';
-                        const gameMins = toMins(gameTime);
-                        const withinAny = timed.some(s => gameMins >= toMins(s.start) && gameMins < toMins(s.end));
-                        if (!withinAny) {
-                            const fmt = t => { const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
-                            const windowList = timed.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ');
-                            if (!confirm(`⚠️ ${refName} is available ${windowList} but this game starts at ${fmt(gameTime)}.\n\nAssign anyway?`)) return;
-                        }
+                    const gameTime = targetGame.fields['Time'] || '';
+                    if (!availCoversKickoff(refNameKey, gameDate, gameTime)) {
+                        const fmt = t => { const [h,m] = String(t).split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+                        if (!confirm(`⚠️ ${refName} is available ${availWindowText(refNameKey, gameDate)} but this game starts at ${fmt(gameTime)}.
+
+Assign anyway?`)) return;
                     }
                 }
             }
