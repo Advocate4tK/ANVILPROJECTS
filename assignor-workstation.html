@@ -119,7 +119,15 @@
             text-transform:uppercase; letter-spacing:0.5px; color:#ffffff;
             background:#7c3aed; border-radius:3px; padding:1px 5px; margin-left:5px; }
         .game-card.comp-game:hover { border-color: #7c3aed; }
-        .game-card.selected { border-color: #e94560; background: #fff8f9; }
+        /* ⚠️ THE LOUDEST STATE ON THE CARD, DELIBERATELY. Selecting a game
+           used to only tint the ref pane's ordering; since 6094c49 it DECIDES
+           WHICH REFEREES EXIST in that pane, so it is now the most load-bearing
+           control on the screen. It was also the quietest — a border-colour
+           change competing with fully-assigned, cup-game, comp-game:hover and
+           change-focus for the same two pixels, and the only one of them with
+           no ring. The ring is what separates "this is selected" from "this is
+           some other kind of card". */
+        .game-card.selected { border-color: #e94560; background: #fff5f7; box-shadow: 0 0 0 3px rgba(233,69,96,0.25); }
         .game-card.fully-assigned { border-color: #27ae60; background: #f0faf4; }
         .game-card.change-focus { border-color: #f0a500; background: #fff8e8; box-shadow: 0 0 0 3px rgba(240,165,0,0.25); }
         .game-header {
@@ -10636,11 +10644,27 @@ Reason (optional):`);
             if (selectedGame) {
                 const card = document.getElementById('card-' + gameId);
                 card?.classList.add('selected');
-                // Scroll page so the selected card sits near the top of the viewport
-                // (aligned with the sticky refs panel) to make drag-and-drop easy
+                // Line the card up with the sticky refs panel so a name can be
+                // dragged across without the page moving under it.
+                //
+                // ⚠️ ONLY WHEN IT IS ACTUALLY NEEDED. This fired on every
+                // selection, including on a card already sitting in plain view,
+                // so clicking a game you were already looking at threw the page
+                // to the top and lost your place in the day. Tod, 2026-10-05:
+                // "whenever I select a game it shifts the cell to the top... not
+                // sure why it has to do that."
+                //
+                // The drag-and-drop reason is real, so the scroll stays for the
+                // case it was written for — a card under the sticky header or
+                // hanging off the bottom. A card wholly on screen is already in
+                // a position you can drag to, and moving it helps nobody.
                 if (card) {
-                    const offset = card.getBoundingClientRect().top + window.scrollY - 80;
-                    window.scrollTo({ top: offset, behavior: 'smooth' });
+                    const r = card.getBoundingClientRect();
+                    const tucked  = r.top < 90;                          // under the sticky header
+                    const hanging = r.bottom > window.innerHeight - 20;  // off the bottom
+                    if (tucked || hanging) {
+                        window.scrollTo({ top: r.top + window.scrollY - 80, behavior: 'smooth' });
+                    }
                 }
                 // Auto-set preference filter to this game's club so preferred refs float up
                 const gameClub = resolveGameClub(selectedGame.fields);
