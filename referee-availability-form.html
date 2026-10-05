@@ -276,16 +276,16 @@
 
                                 <div class="form-group">
                                     <label for="refereeAddress">Street Address <span class="required">*</span></label>
-                                    <input type="text" id="refereeAddress" name="refereeAddress" placeholder="123 Main St">
+                                    <input type="text" id="refereeAddress" name="refereeAddress" required placeholder="123 Main St">
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label for="refereeCity">Town / City <span class="required">*</span></label>
-                                        <input type="text" id="refereeCity" name="refereeCity" placeholder="Hartford">
+                                        <input type="text" id="refereeCity" name="refereeCity" required placeholder="Hartford">
                                     </div>
                                     <div class="form-group">
                                         <label for="refereeState">State <span class="required">*</span></label>
-                                        <input type="text" id="refereeState" name="refereeState" placeholder="CT" maxlength="2" style="text-transform:uppercase;">
+                                        <input type="text" id="refereeState" name="refereeState" required placeholder="CT" maxlength="2" style="text-transform:uppercase;">
                                     </div>
                                     <div class="form-group">
                                         <label for="refereeZip">Zip Code <span class="required">*</span></label>
@@ -918,6 +918,15 @@
                 box.innerHTML = rtClubs.length
                     ? rtClubs.map(club => `<label><input type="checkbox" name="locations" value="${club}"> ${club}</label>`).join('')
                     : '<small style="color:#c00;">No clubs configured. Contact your assignor.</small>';
+                // Which clubs pay through the tool, from clubs.payment_methods.
+                // Exposed for anything that needs to know; the payment gate in
+                // js/form-handler.js deliberately does NOT consult it any more.
+                // It used to carry its own hardcoded ['Griswold','East Haddam']
+                // — NECONN is cheque-ONLY and was in neither list, so NECONN
+                // referees were never once asked how to pay them. The fix is not
+                // a better club list, it is not asking about clubs at all: how
+                // you are paid is a fact about the person.
+                window._payClubs = PAY_CLUBS;
                 attachLocationListeners(PAY_CLUBS);
 
                 // Pre-fill club checkbox from ?club= param — must run after checkboxes are rendered
@@ -1345,15 +1354,16 @@
                 document.querySelectorAll('input[name="locations"]').forEach(cb => cb.checked = false);
 
                 // Show/hide payment section for clubs configured in avail_pay_clubs setting
+                // ⚠️ ASKED OF EVERYONE, NOT JUST THE CLUBS THAT PAY TODAY.
+                // This used to appear only when a paying club was ticked, which
+                // meant a referee who happened to pick only non-paying clubs was
+                // never asked — and then turned up on a NECONN game six weeks
+                // later with no address to post a cheque to. Tod, 2026-10-05:
+                // "at some point these referees are going to referee at a
+                // location that requires their address to send a check to."
+                // It is a fact about the person. Ask once, keep it.
                 function updateClubPaySection() {
-                    const anyChecked = PAY_CLUBS.some(name => {
-                        const cb = document.querySelector(`input[name="locations"][value="${name}"]`);
-                        return cb && cb.checked;
-                    });
-                    if (!anyChecked) {
-                        document.getElementById('clubPaySection').style.display = 'none';
-                        document.getElementById('clubPayOnFile').style.display  = 'none';
-                    } else if (window._clubPayOnFile) {
+                    if (window._clubPayOnFile) {
                         document.getElementById('clubPayOnFile').style.display  = 'flex';
                         document.getElementById('clubPaySection').style.display = 'none';
                     } else {
@@ -1361,10 +1371,9 @@
                         document.getElementById('clubPayOnFile').style.display  = 'none';
                     }
                 }
-                PAY_CLUBS.forEach(name => {
-                    const cb = document.querySelector(`input[name="locations"][value="${name}"]`);
-                    if (cb) cb.addEventListener('change', updateClubPaySection);
-                });
+                // Nothing to listen to any more — it does not depend on which
+                // clubs are ticked. Set it once, now.
+                updateClubPaySection();
 
                 // ⚠️ ADD TO THE NOTE, DON'T REPLACE IT.
                 // Both prefill paths assigned straight over notesEl.value. A referee

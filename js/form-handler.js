@@ -30,17 +30,53 @@ document.addEventListener('DOMContentLoaded', function() {
         if (genderEl && genderEl.offsetParent !== null && !genderEl.value) missing.push('Gender');
         if (!window._tournamentMode && !window._eventMode) {
             if (!document.querySelectorAll('input[name="locations"]:checked').length)  missing.push('Preferred Locations (at least one)');
-            // Venmo — required if Griswold or East Haddam selected, no payment on file, and venmo method chosen
-            const checkedLocs = [...document.querySelectorAll('input[name="locations"]:checked')].map(c => c.value);
-            const needsPay = ['Griswold','East Haddam'].some(c => checkedLocs.includes(c));
-            if (needsPay && !window._clubPayOnFile) {
+            // ── HOW DO WE PAY YOU ─────────────────────────────
+            // ⚠️ This read ['Griswold','East Haddam'], hardcoded, while the
+            // form itself built the real list from clubs.payment_methods.
+            // NECONN pays by CHEQUE ONLY and was in neither — so no NECONN
+            // referee has ever been asked how to pay them, which is a large
+            // part of why the roster has towns and no streets.
+            //
+            // Asked of everyone with nothing on file now, not just the clubs
+            // that pay today: a referee who ticks only non-paying clubs this
+            // week still works a NECONN game in six, and that is too late to
+            // discover we cannot post them anything.
+            if (!window._clubPayOnFile) {
                 const payMethod = document.querySelector('input[name="clubPayMethod"]:checked')?.value;
-                if (!payMethod || payMethod === 'venmo') {
+                if (!payMethod) {
+                    missing.push('How you want to be paid');
+                } else if (payMethod === 'venmo') {
                     const venmoVal = (document.getElementById('clubVenmo')?.value || '').trim();
-                    if (!venmoVal) missing.push('Venmo handle (required for Griswold / East Haddam)');
+                    if (!venmoVal) missing.push('Venmo handle');
                 }
             }
         }
+
+        // ── WHERE DO WE POST IT ────────────────────────────
+        // ⚠️ Street, Town and State all carried a red * in the markup and
+        // none of them had the `required` attribute — only Zip did. So the
+        // login banner could say "we just need a couple more details:
+        // Address, City / Zip" and the browser would accept the form with
+        // every one of them blank. That is how Igor Stambuk reached the
+        // availability grid with no street on file.
+        //
+        // Required of EVERYONE, not only cheque-payers. Tod, 2026-10-05: "at
+        // some point these referees are going to referee at a location that
+        // requires their address to send a check to." A Venmo referee today
+        // is a NECONN referee in six weeks.
+        //
+        // ⚠️ offsetParent is the visibility test the three fields above
+        // already use, and it is load-bearing here: hideFilledFields() hides
+        // the Address group and the City/State/Zip row outright for anyone who
+        // already has them, so a complete returning referee is never asked and
+        // can never be blocked by a field they cannot see.
+        [['refereeAddress', 'Street Address'],
+         ['refereeCity',    'Town / City'],
+         ['refereeState',   'State'],
+         ['refereeZip',     'Zip Code']].forEach(([id, label]) => {
+            const el = document.getElementById(id);
+            if (el && el.offsetParent !== null && !el.value.trim()) missing.push(label);
+        });
         if (window._tournamentMode || window._eventMode) {
             if (!document.querySelectorAll('input[name="ageGroups"]:checked').length)  missing.push('Preferred Age Groups (at least one)');
             if (!document.getElementById('arOnly')?.value)                             missing.push('AR Only preference');
@@ -143,9 +179,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     refUpdates['Club Preference'] = locations; // array for multi-select
                 }
 
-                // Payment preference (Griswold / East Haddam) — skip if already on file
-                const needsPay = ['Griswold','East Haddam'].some(c => locations.includes(c));
-                if (needsPay && !window._clubPayOnFile) {
+                // ⚠️ ⚠ THE THIRD COPY OF ONE RULE, AND THE WORST ONE. The gate
+                // asks, validateForm() re-checks, and THIS decides whether the
+                // answer is kept. All three carried their own hardcoded
+                // ['Griswold','East Haddam'], so a NECONN referee who typed a
+                // payment method would have had it silently dropped on save
+                // even after being asked for it. Everyone with nothing on file
+                // gets asked, so everyone with nothing on file gets saved.
+                if (!window._clubPayOnFile) {
                     const payMethod = document.querySelector('input[name="clubPayMethod"]:checked')?.value || 'venmo';
                     refUpdates['payment_method'] = payMethod;
                     if (payMethod === 'venmo') {
@@ -518,17 +559,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 showMessage('error', 'Please select at least one preferred location.');
                 return false;
             }
-            // Venmo required for Griswold or East Haddam
-            const needsPay = ['Griswold','East Haddam'].some(c => locations.includes(c));
-            if (needsPay && !window._clubPayOnFile) {
+            // A way to be paid, from everyone — same rule as checkFormReady().
+            if (!window._clubPayOnFile) {
                 const payMethod = document.querySelector('input[name="clubPayMethod"]:checked')?.value;
-                if (!payMethod || payMethod === 'venmo') {
+                if (!payMethod) {
+                    showMessage('error', 'Please choose how you would like to be paid.');
+                    return false;
+                }
+                if (payMethod === 'venmo') {
                     const venmoVal = (document.getElementById('clubVenmo')?.value || '').trim();
                     if (!venmoVal) {
                         showMessage('error', 'Please enter your Venmo handle for payment.');
                         document.getElementById('clubVenmo')?.focus();
                         return false;
                     }
+                }
+            }
+            // An address, from everyone. A cheque needs all four lines, and a
+            // referee who only works Venmo clubs today works a cheque club
+            // tomorrow. hideFilledFields() hides these for anyone who already
+            // has them, so offsetParent keeps us from demanding the invisible.
+            for (const [id, label] of [['refereeAddress','street address'], ['refereeCity','town or city'],
+                                       ['refereeState','state'], ['refereeZip','zip code']]) {
+                const el = document.getElementById(id);
+                if (el && el.offsetParent !== null && !el.value.trim()) {
+                    showMessage('error', `Please enter your ${label} — clubs that pay by cheque post it to this address.`);
+                    el.focus();
+                    return false;
                 }
             }
         }
