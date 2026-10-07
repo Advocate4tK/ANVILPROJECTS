@@ -1452,16 +1452,15 @@
               }).join('')
             : '<span class="muted-dash">—</span>';
 
-        // Add-to-pool menu (only pools this ref is NOT already in)
-        const addable = POOLS.filter(p => !(set && set.has(p.id)));
-        const menuItems = addable.length
-            ? addable.map(p => `<button onclick="addToPool(${r.id}, ${p.id})">+ ${esc(p.name)}</button>`).join('')
-            : '<div class="apm-empty">In all pools</div>';
+        // ⚠️ A BOX, NOT A STACK OF BUTTONS. This used to drop one button per
+        // pool anchored to the row, and clicking one committed immediately.
+        // Three things wrong with that, all of which Central Assign gets right:
+        // it never said WHO you were adding (mis-click a row and you would
+        // never know), one button per pool stops working past a handful, and a
+        // stray click changed data with no second step. Tod, 2026-10-07: "the
+        // drop down has all your pools that you can add the referee to."
         const addMenu = POOLS.length
-            ? `<div class="addpool-wrap">
-                    <button class="btn-addpool" onclick="toggleAddMenu(event, ${r.id})">+ Pool</button>
-                    <div class="addpool-menu" id="apm-${r.id}">${menuItems}</div>
-               </div>`
+            ? `<button class="btn-addpool" onclick="openPoolModal(event, ${r.id})">+ Pool</button>`
             : '<span class="muted-dash" style="font-size:0.76rem;">no pools</span>';
 
         // The email used to be a mailto: link. That opened Gmail and left the
@@ -1751,7 +1750,61 @@
         renderTable();
     }
 
-    // ── Add-to-pool dropdown menu handling ──────────────────────────────────
+    // ── Add to Pool ─────────────────────────────────────────────────────────
+    let _poolRefId = null;
+
+    function openPoolModal(evt, refId) {
+        if (evt) evt.stopPropagation();
+        const r = REFS.find(x => String(x.id) === String(refId));
+        if (!r) return;
+        _poolRefId = refId;
+
+        const inSet = refPoolMap[refId];
+        const already = POOLS.filter(p => inSet && inSet.has(p.id));
+        const addable = POOLS.filter(p => !(inSet && inSet.has(p.id)));
+
+        document.getElementById('poolRefName').textContent = r.name || ('#' + refId);
+        document.getElementById('poolAlready').innerHTML = already.length
+            ? `Already in: <b style="color:#4b5563;">${already.map(p => esc(p.name)).join(', ')}</b>`
+            : '<span style="color:#9ca3af;">Not in any pool yet.</span>';
+
+        const pick = document.getElementById('poolPick');
+        const btn  = document.getElementById('poolAddBtn');
+        if (addable.length) {
+            pick.innerHTML = addable.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+            pick.disabled = false; btn.disabled = false; btn.style.opacity = '1';
+        } else {
+            pick.innerHTML = '<option>In every pool already</option>';
+            pick.disabled = true; btn.disabled = true; btn.style.opacity = '0.45';
+        }
+        document.getElementById('poolResult').textContent = '';
+        document.getElementById('poolOverlay').style.display = 'flex';
+        if (addable.length) setTimeout(() => pick.focus(), 40);
+    }
+
+    function closePoolModal() {
+        document.getElementById('poolOverlay').style.display = 'none';
+        _poolRefId = null;
+    }
+
+    async function confirmAddToPool() {
+        const pick = document.getElementById('poolPick');
+        const poolId = Number(pick.value);
+        if (!_poolRefId || !poolId) return;
+        const btn = document.getElementById('poolAddBtn');
+        btn.disabled = true; btn.textContent = 'Adding\u2026';
+        const refId = _poolRefId;
+        await addToPool(refId, poolId);
+        btn.disabled = false; btn.textContent = 'Add';
+        closePoolModal();
+    }
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && document.getElementById('poolOverlay')?.style.display === 'flex') closePoolModal();
+    });
+
+    // ── Legacy anchored menu — nothing renders one any more, kept because
+    //    closeAllMenus() is still wired to the document click handler.
     function toggleAddMenu(evt, refId) {
         evt.stopPropagation();
         const menu = document.getElementById('apm-' + refId);
@@ -2820,5 +2873,27 @@
         closeCompose();   // the fields are NOT cleared — reopen and it's still there
     }
 </script>
+
+    <!-- Add to Pool. Named after the person, so a mis-clicked row is visible
+         before it is committed, and listing the pools they are already in so
+         the box also answers "where is this referee?" -->
+    <div id="poolOverlay" style="display:none; position:fixed; inset:0; background:rgba(4,10,22,0.55); z-index:9998; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:#fff; border-radius:12px; width:100%; max-width:380px; box-shadow:0 24px 70px rgba(0,0,0,0.4); overflow:hidden;">
+            <div style="padding:14px 18px; border-bottom:1px solid rgba(0,0,0,0.08); display:flex; align-items:center; gap:10px;">
+                <b style="font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; letter-spacing:.5px; text-transform:uppercase; color:#0f3460;">Add to Pool</b>
+                <button onclick="closePoolModal()" style="margin-left:auto; background:none; border:none; font-size:1.2rem; color:#9ca3af; cursor:pointer; line-height:1;">&#10005;</button>
+            </div>
+            <div style="padding:16px 18px;">
+                <div style="font-size:0.88rem; color:#4b5563; margin-bottom:4px;">Adding <b id="poolRefName" style="color:#1a2e4a;"></b></div>
+                <div id="poolAlready" style="font-size:0.76rem; color:#6b7280; margin-bottom:12px;"></div>
+                <select id="poolPick" style="width:100%; font-family:inherit; font-size:0.9rem; padding:8px 10px; border:1.5px solid #dde3f0; border-radius:7px; background:#fff; color:#1a2e4a;"></select>
+                <div id="poolResult" style="font-size:0.8rem; margin-top:8px;"></div>
+                <div style="display:flex; gap:9px; justify-content:flex-end; margin-top:14px;">
+                    <button onclick="closePoolModal()" style="background:#f0ece6; color:#09142a; border:1px solid #ddd3c6; border-radius:7px; padding:7px 15px; font-family:inherit; font-weight:700; font-size:0.85rem; cursor:pointer;">Cancel</button>
+                    <button id="poolAddBtn" onclick="confirmAddToPool()" style="background:#0f3460; color:#fff; border:none; border-radius:7px; padding:7px 20px; font-family:inherit; font-weight:800; font-size:0.85rem; cursor:pointer;">Add</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
