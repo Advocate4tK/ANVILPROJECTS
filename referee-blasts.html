@@ -1492,7 +1492,6 @@
     // Full detail shown when a row's chevron is expanded
     function detailHtml(r) {
         const addr = [r.address, r.city, r.state, r['Zip Code'] || r.zip].filter(Boolean).join(', ');
-        const optEmail = r.email_opt_in === false ? 'No' : 'Yes';
         const optSms   = r.sms_opt_in   === false ? 'No' : 'Yes';
         const fields = [
             ['Email 2', r['Email 2']],
@@ -1507,7 +1506,6 @@
             ['Rating', r.rating],
             ['Club Preference', r['Club Preference']],
             ['Source Club', r.source_club],
-            ['Email opt-in', optEmail],
             ['Text opt-in', optSms],
             ['Notes', r.notes],
         ];
@@ -1515,7 +1513,102 @@
             .filter(([, v]) => v != null && String(v).trim() !== '')
             .map(([k, v]) => `<div class="det-field"><div class="det-label">${k}</div><div class="det-value">${esc(String(v))}</div></div>`)
             .join('');
-        return `<div style="display:flex; flex-wrap:wrap; gap:14px 26px;">${cells || '<span class="muted-dash">No extra details on file yet — fills in when they log in.</span>'}</div>`;
+        // ⚠️ LIVE, NOT READ-ONLY. This printed "Email opt-in: Yes/No" and left
+        // you to go to Referee Management to change it. Tod, 2026-10-07: "I
+        // don't know why we can't just check off, opt out on emails right here.
+        // And it replicate."
+        //
+        // A three-way, not a tick box: 'assignments' is what referees usually
+        // mean by "take me off the list" — stop the blasts, still tell me when I
+        // have a game — and a checkbox would flatten that into the hard stop.
+        //
+        // It writes the same four columns the Referee Management card writes, so
+        // it replicates: the Opt-outs panel here, the workstation's ✉ OFF badge,
+        // and the card itself.
+        const pref = r.email_pref || 'all';
+        const prefColour = pref === 'none' ? '#b91c1c' : pref === 'assignments' ? '#1d4ed8' : '#1a2e4a';
+        const prefBorder = pref === 'all' ? 'rgba(0,0,0,0.2)' : prefColour;
+        const prefWho = (pref !== 'all' && (r.email_pref_by || r.email_pref_at))
+            ? `Set ${r.email_pref_at ? new Date(r.email_pref_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : ''}${r.email_pref_by ? ' by ' + esc(r.email_pref_by) : ''}`
+            : '';
+        const prefCell = `
+            <div class="det-field" style="min-width:320px;">
+                <div class="det-label">Email preference</div>
+                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:2px;">
+                    <select id="pref-${r.id}" onchange="setEmailPref(${r.id})"
+                        style="font-family:inherit; font-size:0.84rem; padding:4px 7px; border:1px solid ${prefBorder};
+                               border-radius:6px; font-weight:700; color:${prefColour}; background:#fff;">
+                        <option value="all"         ${pref === 'all'         ? 'selected' : ''}>All email</option>
+                        <option value="assignments" ${pref === 'assignments' ? 'selected' : ''}>Assignments only — no blasts</option>
+                        <option value="none"        ${pref === 'none'        ? 'selected' : ''}>No email at all</option>
+                    </select>
+                    <input id="prefnote-${r.id}" value="${esc(r.email_pref_note || '')}"
+                        placeholder="why — e.g. emailed 7 Oct, stop the blasts" onchange="setEmailPref(${r.id})"
+                        style="flex:1; min-width:160px; font-family:inherit; font-size:0.8rem; padding:4px 7px;
+                               border:1px solid rgba(0,0,0,0.15); border-radius:6px;">
+                </div>
+                <div id="prefwho-${r.id}" style="font-size:0.72rem; color:#9ca3af; margin-top:3px;">${prefWho}</div>
+            </div>`;
+        // Writing to one person was always possible — basket them, then Email
+        // These Referees. This is the same two clicks as one, where the name is.
+        const mailCell = `
+            <div class="det-field">
+                <div class="det-label">&nbsp;</div>
+                <button onclick="emailJustThisRef(${r.id})"
+                    style="background:#0f3460; color:#fff; border:none; border-radius:7px; padding:6px 13px;
+                           font-family:inherit; font-size:0.8rem; font-weight:700; cursor:pointer; white-space:nowrap;"
+                    title="Put just this referee in the basket and open the composer">✉ Email this referee</button>
+            </div>`;
+        return `<div style="display:flex; flex-wrap:wrap; gap:14px 26px;">${cells}${prefCell}${mailCell}</div>`;
+    }
+
+    // Save the preference — in memory and in the database — then repaint
+    // whatever is on screen, so the recipient count moves while you watch.
+    async function setEmailPref(id) {
+        const sel  = document.getElementById('pref-' + id);
+        const note = document.getElementById('prefnote-' + id);
+        const who  = document.getElementById('prefwho-' + id);
+        if (!sel) return;
+        const r = REFS.find(x => String(x.id) === String(id));
+        if (!r) return;
+
+        const picked  = sel.value;
+        const changed = picked !== (r.email_pref || 'all');
+        const updates = { email_pref: picked, email_pref_note: (note?.value || '').trim() || null };
+        // Only restamp when the SETTING moved. Fixing a typo in the reason
+        // should not rewrite the date somebody asked to be left alone.
+        if (changed) {
+            updates.email_pref_at = new Date().toISOString();
+            updates.email_pref_by = (document.getElementById('profileBadgeName')?.textContent || MY_USERNAME || 'admin').trim();
+        }
+
+        if (who) { who.style.color = '#9ca3af'; who.textContent = 'Saving\u2026'; }
+        const { error } = await supabaseClient.client.from('referees').update(updates).eq('id', id);
+        if (error) {
+            if (who) { who.style.color = '#b91c1c'; who.textContent = 'Did not save: ' + error.message; }
+            return;
+        }
+        Object.assign(r, updates);
+
+        const c = picked === 'none' ? '#b91c1c' : picked === 'assignments' ? '#1d4ed8' : '#1a2e4a';
+        sel.style.color = c;
+        sel.style.borderColor = picked === 'all' ? 'rgba(0,0,0,0.2)' : c;
+        if (who) {
+            who.textContent = picked === 'all' ? ''
+                : `Set ${new Date(r.email_pref_at || Date.now()).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}${r.email_pref_by ? ' by ' + r.email_pref_by : ''}`;
+        }
+
+        // The composer may be open behind this and its count has just changed.
+        try { if (document.getElementById('cmpRecipients')) renderCompose(); } catch (e) {}
+        const panel = document.getElementById('optOutPanel');
+        if (panel && panel.style.display !== 'none') { panel.style.display = 'none'; toggleOptOuts(); }
+    }
+
+    // Basket just this one and open the composer.
+    function emailJustThisRef(id) {
+        BASKET.clear();
+        basketAdd(id);
+        openCompose();
     }
 
     function toggleDetail(evt, id) {
@@ -2201,7 +2294,21 @@
         return traySet().filter(r => !cmpDropped.has(r.id));
     }
     const hasEmail    = r => !!(r.email && String(r.email).trim());
-    const optedOut    = r => r.email_opt_in === false;
+    // ⚠️ email_pref IS THE FIELD. Referee Management writes email_pref and
+    // never touches email_opt_in, and this gated on email_opt_in alone — so
+    // setting a referee to "No email at all" on their card did NOT stop them
+    // getting a blast. They showed in the Opt-outs panel (which checks both),
+    // the workstation badged them ✉ OFF, and the sender mailed them anyway.
+    // The only reason the current three are excluded is that they also carry
+    // the legacy boolean.
+    //
+    // 'none'        → never email, full stop.
+    // 'assignments' → no openings blasts, still told when given a game. This
+    //                 page IS the blast channel, so they are out here — which
+    //                 is exactly what the card promises them.
+    const optedOut    = r => r.email_opt_in === false
+                          || r.email_pref === 'none'
+                          || r.email_pref === 'assignments';
     const hasGuardian = r => !!(r['Guardian Email'] && String(r['Guardian Email']).trim());
     // A minor with no guardian on file cannot be emailed — not "gets it without
     // the copy", cannot. Tod, 2026-09-16: "if an email gets sent to a minor it
