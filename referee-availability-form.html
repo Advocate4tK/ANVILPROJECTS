@@ -295,8 +295,12 @@
 
                             </fieldset>
 
-                            <!-- Referee Profile — collected once alongside contact info -->
-                            <fieldset>
+                            <!-- Referee Profile — collected once alongside contact info.
+                                 Needs an id so hideFilledFields() can hide the whole
+                                 thing: every field inside gets hidden individually for
+                                 a returning referee, leaving a legend over an empty
+                                 white box. -->
+                            <fieldset id="profileFieldset">
                                 <legend>Referee Profile</legend>
                                 <div class="form-row">
                                     <div class="form-group">
@@ -1371,8 +1375,20 @@
                         document.getElementById('clubPayOnFile').style.display  = 'none';
                     }
                 }
-                // Nothing to listen to any more — it does not depend on which
-                // clubs are ticked. Set it once, now.
+                // ⚠️ IT DOES NOT DEPEND ON THE CLUBS, BUT IT DOES DEPEND ON THE
+                // LOGIN. Replacing the per-checkbox listeners with a single call
+                // here moved the decision to page-init — BEFORE runEmailLookup()
+                // sets window._clubPayOnFile — and nothing re-ran it afterwards.
+                // Tod has Venmo and a handle on file and was asked for them
+                // anyway, 2026-10-08: "not sure why its even asking for my
+                // payment preference... I've put it in before as well."
+                //
+                // The old per-checkbox version only got the right answer by
+                // accident: ticking a club happens after login, so it
+                // re-evaluated late. Removing the listeners removed the thing
+                // that was quietly saving it. Exposed so the lookup can call it
+                // the moment it knows.
+                window.updateClubPaySection = updateClubPaySection;
                 updateClubPaySection();
 
                 // ⚠️ ADD TO THE NOTE, DON'T REPLACE IT.
@@ -1698,6 +1714,18 @@
                     }
                 }
 
+                // A legend over nothing is not a section. Once every field inside
+                // the Referee Profile box has been hidden as already-filled, the
+                // box goes too.
+                {
+                    const pf = document.getElementById('profileFieldset');
+                    if (pf) {
+                        const anyVisible = [...pf.querySelectorAll('.form-group')]
+                            .some(g => g.style.display !== 'none');
+                        pf.style.display = anyVisible ? '' : 'none';
+                    }
+                }
+
                 // If all contact fields are on file, hide the whole Contact Details fieldset
                 // so returning refs don't see an empty "Contact Details" header
                 const fAge = f['Date of Birth'] ? window.calculateAge(f['Date of Birth']) : null;
@@ -1783,6 +1811,9 @@
                         } else {
                             window._clubPayOnFile = false;
                         }
+                        // Now that we know, repaint it — it was decided at page
+                        // load, before any of this was true.
+                        window.updateClubPaySection?.();
 
                         // Store for age recalculation, upcoming query, and submit
                         window._foundRefId   = referee.id;
@@ -1918,9 +1949,25 @@
                         }
                     }
                 } catch(e) {
+                    // ⚠️ THIS USED TO EAT THE ERROR AND LIE. It set no console
+                    // output at all, then showed "you're not in our system yet"
+                    // WITHOUT hiding the "welcome back" it may have just shown.
+                    // Tod, 2026-10-08, looking at both banners stacked: "its not
+                    // seeing that I've been in the system before? weird". It had
+                    // seen him. Something after the greeting threw, and the only
+                    // trace of it was a contradictory screen.
+                    console.error('[runEmailLookup]', e);
                     status.textContent = '';
-                    // On error, fall through to contact step like a new ref
-                    document.getElementById('newRefWelcome').style.display    = 'block';
+                    // If we already greeted them, they ARE in the system and
+                    // saying otherwise is worse than saying nothing. Keep the
+                    // greeting, open the contact step, and say plainly that
+                    // something went wrong.
+                    const greeted = document.getElementById('returningWelcome').style.display === 'block';
+                    if (!greeted) document.getElementById('newRefWelcome').style.display = 'block';
+                    else {
+                        const sub = document.getElementById('welcomeSubtitle');
+                        if (sub) sub.textContent = 'We found your profile, but something went wrong loading the rest of this page. Your details are below — please check them before you submit.';
+                    }
                     document.getElementById('entryFieldset').style.display    = 'none';
                     document.getElementById('contactSection').style.display   = 'block';
                     if (isReadyToUnlock()) unlockForm();
@@ -2258,6 +2305,9 @@
 
                     document.getElementById('mergePrompt').style.display        = 'none';
                     document.getElementById('returningWelcome').style.display   = 'block';
+                    // Its twin, one route over: this showed the welcome and left
+                    // the yellow "you're not in our system yet" standing.
+                    document.getElementById('newRefWelcome').style.display      = 'none';
                     document.getElementById('loggingName').textContent          = fullName;
                     document.getElementById('loggingBadge').style.display       = 'block';
 
