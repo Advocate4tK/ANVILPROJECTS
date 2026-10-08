@@ -172,7 +172,12 @@
                     <div id="returningWelcome" style="display:none; background:linear-gradient(135deg,#0f3460,#e94560); border-radius:12px; padding:20px 25px; margin-bottom:20px; color:white;">
                         <div style="font-size:1.3rem; font-weight:700;" id="welcomeName"></div>
                         <div style="font-size:0.95rem; opacity:0.9; margin-top:6px;" id="welcomeSubtitle">✅ We found your profile — your personal information has been confirmed and pre-filled. Just fill in your availability below.</div>
-                        <button type="button" id="notMeBtn" style="margin-top:10px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:white; border-radius:8px; padding:4px 12px; font-size:0.8rem; cursor:pointer;">Not me?</button>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+                            <button type="button" id="notMeBtn" style="background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:white; border-radius:8px; padding:4px 12px; font-size:0.8rem; cursor:pointer;">Not me?</button>
+                            <!-- The address we hold, shown so it can be noticed as wrong.
+                                 Cheques go to this. Filled in by the returning path. -->
+                            <button type="button" id="addrChangedBtn" style="display:none; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:white; border-radius:8px; padding:4px 12px; font-size:0.8rem; cursor:pointer; text-align:left;"></button>
+                        </div>
                     </div>
 
                     <!-- Prior availability panel — shown when ref has existing submissions -->
@@ -1677,6 +1682,63 @@
                 }
             };
 
+            // Put the address we hold into the welcome banner, as a button.
+            function showAddressOnFile(f) {
+                const btn = document.getElementById('addrChangedBtn');
+                if (!btn) return;
+                const line = [f['Address'], f['City'], f['State'], f['Zip Code']].filter(Boolean).join(' ');
+                btn.textContent = line ? `\uD83D\uDCCD ${line} \u2014 moved?` : '\uD83D\uDCCD No address on file \u2014 add one';
+                btn.title = line
+                    ? 'This is where cheques are posted. Click to change it.'
+                    : 'We have no address for you. Clubs that pay by cheque need one.';
+                btn.style.display = 'inline-block';
+                // No address at all is not a neutral state — say so. Catches the
+                // Central Assign imports, which never carried addresses.
+                if (!line) { btn.style.background = 'rgba(255,255,255,0.32)'; btn.style.fontWeight = '700'; }
+                btn.onclick = () => revealAddressFields();
+            }
+
+            // Undo hideFilledFields() for the address, and only the address.
+            // ⚠️ That function does TWO things per field — hides the group AND
+            // strips `required` — so showing the group back without restoring
+            // required would let them clear the address and submit it empty.
+            function revealAddressFields() {
+                document.getElementById('contactSection').style.display = 'block';
+                const fs = document.getElementById('contactFieldset');
+                if (fs) fs.style.display = '';
+
+                const addr = document.getElementById('refereeAddress');
+                const city = document.getElementById('refereeCity');
+                [addr, city, document.getElementById('refereeState'), document.getElementById('refereeZip')]
+                    .forEach(el => { if (el) el.setAttribute('required', ''); });
+
+                const group = addr?.closest('.form-group');
+                if (group) group.style.display = '';
+                const row = city?.closest('.form-row');
+                if (row) row.style.display = '';
+
+                // ⚠️ NOTHING IS SAVED UNTIL THEY SUBMIT. The address is written
+                // as part of the availability submission — there is no separate
+                // save on this field. A referee who types a new street and then
+                // closes the tab has changed nothing, and would have no way of
+                // knowing. Tod, 2026-10-08: "then I'll show the user that they
+                // need to submit it."
+                if (group && !document.getElementById('addrSaveNote')) {
+                    const note = document.createElement('div');
+                    note.id = 'addrSaveNote';
+                    note.style.cssText = 'background:#fff8e1; border:1.5px solid #f1c40f; border-radius:8px; padding:9px 13px; margin:10px 0 4px; font-size:0.84rem; color:#7a5c00; line-height:1.45;';
+                    note.innerHTML = '✏️ <b>Change it below, then submit your availability at the bottom of this page.</b> '
+                                   + 'Your new address is not saved until you do — and it is where cheques are posted, so it is worth getting right.';
+                    group.parentNode.insertBefore(note, group);
+                }
+
+                if (typeof window.checkFormReady === 'function') window.checkFormReady();
+                if (addr) {
+                    addr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => addr.focus(), 350);
+                }
+            }
+
             // Hide form groups for fields already on file so returning refs only see what's missing
             function hideFilledFields(f) {
                 const single = [
@@ -1814,6 +1876,19 @@
                         // Now that we know, repaint it — it was decided at page
                         // load, before any of this was true.
                         window.updateClubPaySection?.();
+
+                        // ── THE ADDRESS WE HOLD, WHERE THEY WILL SEE IT ──────────
+                        // hideFilledFields() hides the address once it is on file,
+                        // so until now a referee could not see it, let alone fix it
+                        // — their only route was emailing the assignor. Tod's own
+                        // record still says 175 Hill Rd, Thompson, which he left.
+                        //
+                        // NECONN pays by cheque. A stale address here is a cheque
+                        // posted to a house somebody moved out of, so this is money,
+                        // not tidiness. Central Assign has no API, so their copy and
+                        // ours will drift forever and this form is the only place a
+                        // referee reliably turns up to correct ours.
+                        showAddressOnFile(f);
 
                         // Store for age recalculation, upcoming query, and submit
                         window._foundRefId   = referee.id;
