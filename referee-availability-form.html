@@ -2169,11 +2169,27 @@
 
                     let savedRef;
                     if (phoneMatch) {
-                        // Existing ref found by phone — fill next email slot, update profile
+                        // Existing ref found by phone — update the profile, and only
+                        // take an email slot if this really is a NEW address.
                         savedRef = phoneMatch;
                         const newEmail   = document.getElementById('refereeEmail').value.trim();
-                        const emailSlot  = phoneMatch.fields['Email 2'] ? 'Email 3' : 'Email 2';
-                        const updates    = { [emailSlot]: newEmail };
+                        // ⚠️ THREE SLOTS FOR THREE DIFFERENT ADDRESSES, NOT THREE COPIES
+                        // OF ONE. This filled the next empty slot unconditionally, so a
+                        // returning referee who signed in with the address already on
+                        // their record spent a slot on a duplicate. Tod ended up with
+                        // todlsmith@gmail.com in Email, Email 2 AND Email 3 — every
+                        // merge slot gone, and the "all three email slots taken" branch
+                        // (which is a dead end in the UI) waiting for him next time.
+                        //
+                        // Tod, 2026-10-09: "the email 2 and email 3 should not be
+                        // allowed to be the same... if same then dont update".
+                        const _held = [phoneMatch.fields['Email'], phoneMatch.fields['email'],
+                                       phoneMatch.fields['Email 2'], phoneMatch.fields['Email 3']]
+                                      .filter(Boolean).map(e => String(e).trim().toLowerCase());
+                        const _isNew = newEmail && !_held.includes(newEmail.toLowerCase());
+                        const emailSlot = phoneMatch.fields['Email 2'] ? 'Email 3' : 'Email 2';
+                        const updates   = {};
+                        if (_isNew && !phoneMatch.fields['Email 3']) updates[emailSlot] = newEmail;
                         if (refereeRecord['Years Reffing']) updates['Years Reffing'] = refereeRecord['Years Reffing'];
                         if (refereeRecord['first_season'])  updates['first_season']  = refereeRecord['first_season'];
                         if (refereeRecord['Address'])       updates['Address']        = refereeRecord['Address'];
@@ -2189,7 +2205,10 @@
                         if (refereeRecord['Guardian Phone']) updates['Guardian Phone'] = refereeRecord['Guardian Phone'];
                         await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.REFEREES, phoneMatch.id, updates);
                         msgEl.className = 'form-message success';
-                        msgEl.textContent = '✅ Welcome back! Your new email has been saved to your profile.';
+                        // Do not claim to have saved an email we already had.
+                        msgEl.textContent = updates[emailSlot]
+                            ? '\u2705 Welcome back! Your new email has been saved to your profile.'
+                            : '\u2705 Saved. Your details are up to date.';
                     } else {
                         // ── DOB + last name check — catches changed name AND email ──
                         let dobMatch = null;
@@ -2225,6 +2244,22 @@
 
                     // Store ID so form submit can update Club Preference
                     if (savedRef?.id) window._foundRefId = savedRef.id;
+
+                    // ⚠️ REPAINT THE ADDRESS BUTTON. It is painted once, during the
+                    // lookup, from the record as it was then — so after saving a new
+                    // address the banner kept offering the OLD one until a manual
+                    // reload. Tod, 2026-10-09: "after refreshing manually it does
+                    // show the new address... but you should refresh the page". A
+                    // referee who has just corrected their address and still sees
+                    // the wrong one has no reason to believe it saved.
+                    try {
+                        showAddressOnFile({
+                            'Address':  refereeRecord['Address']  ?? phoneMatch?.fields['Address'],
+                            'City':     refereeRecord['City']     ?? phoneMatch?.fields['City'],
+                            'State':    refereeRecord['State']    ?? phoneMatch?.fields['State'],
+                            'Zip Code': refereeRecord['Zip Code'] ?? phoneMatch?.fields['Zip Code'],
+                        });
+                    } catch (e) { console.warn('[addressButton]', e); }
 
                     // Gender and Certification Level are now included in refereeRecord — saved via upsertReferee above
 
