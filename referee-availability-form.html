@@ -1358,6 +1358,37 @@
                 document.getElementById('tournamentFieldset').style.display = 'block';
             }
 
+            // ⚠️ DECLARED OUT HERE ON PURPOSE — IT HAS TWO CALLERS IN TWO SCOPES.
+            // This lived inside attachLocationListeners() (which runs 1361-1453)
+            // while unlockAvailability() also calls it. That second call threw
+            // ReferenceError: mergeNote is not defined — but ONLY when the URL
+            // carried a ?note=, which is to say only when a referee arrived by
+            // clicking an actual game on the openings board.
+            //
+            // The damage was invisible because runEmailLookup()'s catch swallowed
+            // the error and showed "you're not in our system yet" over the top of
+            // "welcome back". Tod, 2026-10-08: "its not seeing that I've been in
+            // the system before? weird". It had seen him. It then tripped over
+            // this and lied about it. The bare form always loaded fine, which is
+            // what made it look haunted.
+            //
+            // ⚠️ ADD TO THE NOTE, DON'T REPLACE IT.
+            // Both prefill paths assigned straight over notesEl.value. A referee
+            // who lined up a second game — or who already had a note loaded from
+            // their own record — lost the first one without being told. Games are
+            // separated by " | " so several read as a list rather than running
+            // together in the assignor's grid. Tod, 2026-09-22.
+            function mergeNote(existing, incoming) {
+                const cur = String(existing || '').trim();
+                const add = String(incoming || '').trim();
+                if (!add) return cur;
+                if (!cur) return add;
+                // The same game twice — a refresh, a back-button — must not double up.
+                const parts = cur.split(/\s*\|\s*|\n+/).map(x => x.trim()).filter(Boolean);
+                if (parts.some(p => p === add)) return cur;
+                return [...parts, add].join(' | ');
+            }
+
             function attachLocationListeners(PAY_CLUBS) {
                 // Clear any browser-restored checkbox state
                 document.querySelectorAll('input[name="locations"]').forEach(cb => cb.checked = false);
@@ -1395,23 +1426,6 @@
                 // the moment it knows.
                 window.updateClubPaySection = updateClubPaySection;
                 updateClubPaySection();
-
-                // ⚠️ ADD TO THE NOTE, DON'T REPLACE IT.
-                // Both prefill paths assigned straight over notesEl.value. A referee
-                // who lined up a second game — or who already had a note loaded from
-                // their own record — lost the first one without being told. Games
-                // are separated by " | " so several read as a list rather than
-                // running together in the assignor's grid. Tod, 2026-09-22.
-                function mergeNote(existing, incoming) {
-                    const cur = String(existing || '').trim();
-                    const add = String(incoming || '').trim();
-                    if (!add) return cur;
-                    if (!cur) return add;
-                    // The same game twice — a refresh, a back-button — must not double up.
-                    const parts = cur.split(/\s*\|\s*|\n+/).map(x => x.trim()).filter(Boolean);
-                    if (parts.some(p => p === add)) return cur;
-                    return [...parts, add].join(' | ');
-                }
 
                 // Pre-fill club + age + note from URL params (set by ref-openings.html).
                 // A referee who clicked a specific game should not have to re-enter what that
@@ -1686,7 +1700,13 @@
             function showAddressOnFile(f) {
                 const btn = document.getElementById('addrChangedBtn');
                 if (!btn) return;
-                const line = [f['Address'], f['City'], f['State'], f['Zip Code']].filter(Boolean).join(' ');
+                // ⚠️ referees."Zip Code" is int4, so 06277 comes back as 6277 and
+                // the button read "CT 6277". A Connecticut referee shown a mangled
+                // zip either distrusts the whole line or "corrects" an address that
+                // was right. The pay portal already pads this the same way.
+                const _z = String(f['Zip Code'] || '');
+                const zip = _z.length === 4 ? '0' + _z : _z;
+                const line = [f['Address'], f['City'], f['State'], zip].filter(Boolean).join(' ');
                 btn.textContent = line ? `\uD83D\uDCCD ${line} \u2014 moved?` : '\uD83D\uDCCD No address on file \u2014 add one';
                 btn.title = line
                     ? 'This is where cheques are posted. Click to change it.'
