@@ -203,22 +203,42 @@ class AirtableClient {
      */
     async findRefereeByEmail(email) {
         try {
-            // ⚠️ ALL THREE SLOTS. This searched Email and Email 2 only, so a
-            // referee whose address sat in the third slot was invisible at login
-            // — they fell through to the name match and were offered a merge
-            // onto the record they were already on.
+            // ⚠️ STRAIGHT TO SUPABASE. NO FORMULA.
+            // There is no Airtable here and has not been for a long time. This
+            // used to build an Airtable formula string purely so a regex inside
+            // the Supabase shim could take it apart again and rebuild it as a
+            // PostgREST filter. Tod, 2026-10-09: "yeah its not airtable."
             //
-            // It mattered little while the slots were full of duplicates of the
-            // primary (the bug fixed in 08aa931). Now that ~105 records have been
-            // cleaned and a third slot holds a genuinely distinct address, it
-            // matters.
-            const formula = `OR({Email} = "${email}", {Email 2} = "${email}", {Email 3} = "${email}")`;
-            const records = await this.getRecords(this.tables.REFEREES, {
-                filterByFormula: formula,
-                maxRecords: 1
-            });
-
-            return records.length > 0 ? records[0] : null;
+            // Both bugs this path has had were artefacts of that round trip and
+            // neither could exist here: the parser matched exactly TWO OR terms
+            // (a third silently dropped the whole filter and returned the first
+            // row of the referees table — at login, signing somebody in as a
+            // stranger), and it emitted "Email 2" unquoted, which PostgREST
+            // rejects, so the second slot had most likely never matched at all.
+            //
+            // ⚠️ THE QUOTES ON "Email 2"/"Email 3" ARE LOAD-BEARING — a column
+            // name with a space is a parse error on PostgREST's side without them.
+            //
+            // Every other caller still goes through getRecords/filterByFormula.
+            // Retiring that shim is 27 calls across 19 pages and belongs with the
+            // other post-season work, not in the middle of a season.
+            const e = String(email || '').trim();
+            if (!e) return null;
+            const { data, error } = await supabaseClient.client
+                .from('referees')
+                .select('*')
+                .or(`email.eq.${e},"Email 2".eq.${e},"Email 3".eq.${e}`)
+                .limit(1);
+            if (error) throw error;
+            if (!data || !data.length) return null;
+            // ⚠️ WRAP IT. _wrap() reverse-maps the column names — address →
+            // Address, phone → Phone, city → City — and the whole availability
+            // form reads f['Address'], f['Phone'], f['City']. Returning the raw
+            // row would leave every one of those undefined, so a returning
+            // referee would be greeted by name and then told their entire
+            // profile was missing. Shaping it by hand here would be a fourth
+            // copy of that mapping; the wrapper already owns it.
+            return supabaseClient._wrap(data[0]);
         } catch (error) {
             console.error('Error finding referee:', error);
             return null;
