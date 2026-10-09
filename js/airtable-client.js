@@ -203,7 +203,16 @@ class AirtableClient {
      */
     async findRefereeByEmail(email) {
         try {
-            const formula = `OR({Email} = "${email}", {Email 2} = "${email}")`;
+            // ⚠️ ALL THREE SLOTS. This searched Email and Email 2 only, so a
+            // referee whose address sat in the third slot was invisible at login
+            // — they fell through to the name match and were offered a merge
+            // onto the record they were already on.
+            //
+            // It mattered little while the slots were full of duplicates of the
+            // primary (the bug fixed in 08aa931). Now that ~105 records have been
+            // cleaned and a third slot holds a genuinely distinct address, it
+            // matters.
+            const formula = `OR({Email} = "${email}", {Email 2} = "${email}", {Email 3} = "${email}")`;
             const records = await this.getRecords(this.tables.REFEREES, {
                 filterByFormula: formula,
                 maxRecords: 1

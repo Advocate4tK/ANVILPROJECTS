@@ -193,14 +193,34 @@ class SupabaseClientWrapper {
             if (options.filterByFormula) {
                 const formula = options.filterByFormula;
 
-                // Handle OR({Email} = "x", {Email 2} = "x")
-                const orMatch = formula.match(/^OR\(\{(.+?)\}\s*=\s*"(.+?)",\s*\{(.+?)\}\s*=\s*"(.+?)"\)$/i);
-                if (orMatch) {
-                    const col1 = this._col(orMatch[1]);
-                    const val1 = orMatch[2];
-                    const col2 = this._col(orMatch[3]);
-                    const val2 = orMatch[4];
-                    query = query.or(`${col1}.eq.${val1},${col2}.eq.${val2}`);
+                // Handle OR({A} = "x", {B} = "x", ...) — ANY number of terms.
+                // ⚠️ THIS USED TO MATCH EXACTLY TWO. A formula with a third term
+                // failed the regex, no filter was applied at all, and getRecords
+                // happily returned the first row of the whole referees table —
+                // which at login would have signed somebody in as a stranger.
+                // Silent, and far worse than the gap it was asked to close.
+                const orWhole = formula.match(/^OR\((.+)\)$/is);
+                if (orWhole) {
+                    // ⚠️ QUOTE COLUMNS WITH SPACES. PostgREST needs "Email 2"
+                    // quoted inside an or() filter; unquoted it is a parse error
+                    // on their side, which means the original two-term version
+                    // was very likely only ever matching on {Email} and silently
+                    // dropping the {Email 2} half. Bare lowercase names are left
+                    // alone so the case that definitely worked keeps working.
+                    const terms = [...orWhole[1].matchAll(/\{(.+?)\}\s*=\s*"(.*?)"/g)]
+                        .map(m => {
+                            const c = this._col(m[1]);
+                            return `${/^[a-z0-9_]+$/.test(c) ? c : `"${c}"`}.eq.${m[2]}`;
+                        });
+                    // Only filter if every term parsed — never fall through to
+                    // an unfiltered table read.
+                    const commas = (orWhole[1].match(/",/g) || []).length + 1;
+                    if (terms.length && terms.length === commas) {
+                        query = query.or(terms.join(','));
+                    } else {
+                        console.warn('[getRecords] could not parse OR formula, refusing to run unfiltered:', formula);
+                        return [];
+                    }
                 }
 
                 // Handle {Field} = "value"
