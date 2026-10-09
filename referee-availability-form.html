@@ -1496,25 +1496,6 @@
         }
         document.getElementById('refereeBirthDate').addEventListener('change', updateGuardianSection);
 
-        // Resume session — skip entry step and go straight to availability
-            const session = sessionStorage.getItem('refSession');
-            if (session) {
-                try {
-                    const { firstName, lastName, email } = JSON.parse(session);
-                    document.getElementById('refereeFirstName').value = firstName;
-                    document.getElementById('refereeLastName').value  = lastName;
-                    document.getElementById('refereeEmail').value     = email;
-                    // Hide entry form, pre-fill fields, then run the full email lookup
-                    // so the profile check (missing fields, Griswold payment, etc.) runs identically
-                    // to the normal path — no duplicated logic, no unsafe fallbacks
-                    document.getElementById('entryFieldset').style.display = 'none';
-                    runEmailLookup();
-                } catch(e) {
-                    sessionStorage.removeItem('refSession');
-                }
-                return;
-            }
-
             document.getElementById('addDayBtn').addEventListener('click', function() {
                 const count = document.querySelectorAll('.day-row').length + 1;
                 container.appendChild(createDayRow(count));
@@ -2465,7 +2446,41 @@
                 document.getElementById('availabilitySection').style.opacity = '0';
                 if (isReadyToUnlock()) unlockForm();
             });
-        });
+
+        // ── Resume session — LAST, deliberately ────────────────────────────
+        // ⚠️ THIS USED TO SIT ~900 LINES HIGHER AND `return` OUT OF HERE.
+        // Everything below it is addEventListener calls, so on a resumed
+        // session — which is every referee who has logged in once — none of
+        // them were ever bound. Save & Continue, Add Another Day, Not me? and
+        // all four merge buttons were dead. Tod, 2026-10-09: "so I added my new
+        // address and clicked save and continue and it did nothing."
+        //
+        // Nothing is literally right: there was no handler on the button.
+        //
+        // The function DECLARATIONS above are hoisted, which is why the page
+        // worked at all and why this hid for so long — everything that renders
+        // kept working and only the things you click were missing.
+        //
+        // It runs at the end now. No return needed; nothing follows it.
+        {
+            const session = sessionStorage.getItem('refSession');
+            if (session) {
+                try {
+                    const { firstName, lastName, email } = JSON.parse(session);
+                    document.getElementById('refereeFirstName').value = firstName;
+                    document.getElementById('refereeLastName').value  = lastName;
+                    document.getElementById('refereeEmail').value     = email;
+                    // Hide entry form, pre-fill fields, then run the full email lookup
+                    // so the profile check (missing fields, payment preference, etc.)
+                    // runs identically to the normal path — no duplicated logic.
+                    document.getElementById('entryFieldset').style.display = 'none';
+                    runEmailLookup();
+                } catch(e) {
+                    sessionStorage.removeItem('refSession');
+                }
+            }
+        }
+    });
     </script>
 </body>
 </html>
