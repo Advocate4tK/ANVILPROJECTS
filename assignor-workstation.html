@@ -10939,7 +10939,27 @@ Reason (optional):`);
                 // How many referees DO have availability on what's on screen? If
                 // that is more than zero, "nobody submitted" would be a lie.
                 const _dates = gameDate ? [gameDate] : (dateFilter ? [dateFilter] : [...visibleGameDates]);
-                const _haveAvail = Object.entries(availByName).filter(([n, ds]) => _dates.some(d => ds.has(d))).length;
+                const _availNames = Object.entries(availByName)
+                    .filter(([n, ds]) => _dates.some(d => ds.has(d)))
+                    .map(([n]) => n);
+                const _haveAvail = _availNames.length;
+                // ⚠️ WHICH CLUBS DID THEY ACTUALLY PICK? "hidden by: club 3509" is
+                // true and useless — it names a gate and a number, when the only
+                // thing worth knowing is that these seven are free on Saturday and
+                // every one of them ticked somebody else. So ask the submissions.
+                const _elsewhere = {};
+                if (focusClubs.length) {
+                    _availNames.forEach(n => {
+                        const slots = _dates.flatMap(d => availTimeByName[n]?.[d] || []);
+                        const clubs = [...new Set(slots.flatMap(sl => sl.clubs || []))];
+                        if (clubs.length && !clubs.some(c => focusClubs.includes(c))) {
+                            clubs.forEach(c => { _elsewhere[c] = (_elsewhere[c] || 0) + 1; });
+                        }
+                    });
+                }
+                const _elseList = Object.entries(_elsewhere)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([c, n]) => `${c.replace(/\b\w/g, m => m.toUpperCase())} (${n})`);
                 const _hidden = filtered.length - displayRefs.length;   // passed the gates, hidden by classify (no avail on the date)
                 const _labels = { search: 'name search', club: 'club', years: 'experience filter', age: 'age filter', gender: 'gender filter', scope: 'assignor scope', date: 'date', time: 'time filter', noAvail: 'no availability' };
                 const _parts = Object.entries(_why).filter(([, n]) => n > 0).map(([k, n]) => `${_labels[k]} ${n}`);
@@ -10962,8 +10982,22 @@ Reason (optional):`);
                     setTimeout(() => { _refsRetried = false; renderRefs(query); }, 350);
                     return;
                 }
+                // ⚠️ ANSWER THE QUESTION, DON'T REPORT THE PLUMBING. This used to
+                // print "hidden by: club 3509 · date 2 · no availability 35. Tell
+                // Ralph." — gate names and raw counts, and an instruction to go and
+                // ask a human. Tod, 2026-10-09: "yeah I didnt understand that
+                // message", and it had already sent him to me three times.
+                //
+                // Nothing was ever wrong on those occasions. Referees were free
+                // that day and had submitted for a different club, which is the
+                // system doing exactly what he asked of it. The message just never
+                // said so.
                 const _why_line = _haveAvail > 0
-                    ? `<br><small style="color:#b45309;">${_haveAvail} referee${_haveAvail === 1 ? ' has' : 's have'} availability on ${gameDate ? 'this date' : 'these dates'}${_parts.length ? ' — hidden by: ' + _parts.join(' · ') : ''}. Tell Ralph.</small>`
+                    ? `<br><small style="color:#b45309;">${_haveAvail} referee${_haveAvail === 1 ? ' is' : 's are'} free on ${gameDate ? 'this date' : 'these dates'}`
+                      + (_elseList.length
+                          ? ` but submitted for other clubs — <strong>${_elseList.join(', ')}</strong>.`
+                          : _parts.length ? ` — held back by ${_parts.join(', ')}.` : '.')
+                      + `</small>`
                     : '';
                 wrap.innerHTML = showAllRefs
                     ? '<p class="hint">No refs found.</p>'
