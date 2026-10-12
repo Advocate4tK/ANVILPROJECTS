@@ -1663,10 +1663,24 @@
         return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
     }
 
-    function slotBadge(filled) {
-        return filled
-            ? `<span class="slot-filled">Filled</span>`
-            : `<span class="slot-open">Open</span>`;
+    // ⚠️ "FILLED" AND "EMPTY" ARE DIFFERENT ANSWERS. Both close a slot, so
+    // this page printed Filled for either — a lie about half of them. EMPTY
+    // means nobody covered it and the game ran short on purpose; FILLED means
+    // somebody is covering it outside this system. A referee is unaffected
+    // either way, neither being on offer, but an assignor reading his own board
+    // cannot otherwise tell a deliberately short crew from a covered one.
+    // Tod, 2026-10-12: "i forgot what each did".
+    function slotBadge(filled, marker) {
+        if (!filled) return `<span class="slot-open">Open</span>`;
+        if (String(marker || '').toUpperCase() === 'EMPTY') {
+            return `<span class="slot-filled" title="Nobody worked this position — the game ran short by choice.">Not used</span>`;
+        }
+        return `<span class="slot-filled">Filled</span>`;
+    }
+    // The raw cell value, so slotBadge can tell the two markers apart.
+    function slotMarker(g, col) {
+        const v = String(g[col] || '').trim().toUpperCase();
+        return (v === 'EMPTY' || v === 'FILLED') ? v : '';
     }
 
     function buildCard(g) {
@@ -1714,21 +1728,21 @@
             ? `<div class="slots-row one-slot">
                 <div class="slot-box">
                     <div class="slot-label">Center</div>
-                    ${slotBadge(crFilled)}
+                    ${slotBadge(crFilled, slotMarker(g, 'Center Referee'))}
                 </div>
                </div>`
             : `<div class="slots-row">
                 <div class="slot-box">
                     <div class="slot-label">Center</div>
-                    ${slotBadge(crFilled)}
+                    ${slotBadge(crFilled, slotMarker(g, 'Center Referee'))}
                 </div>
                 <div class="slot-box">
                     <div class="slot-label">AR 1</div>
-                    ${slotBadge(ar1Filled)}
+                    ${slotBadge(ar1Filled, slotMarker(g, 'AR 1'))}
                 </div>
                 ${noAr2 ? '' : `<div class="slot-box">
                     <div class="slot-label">AR 2</div>
-                    ${slotBadge(ar2Filled)}
+                    ${slotBadge(ar2Filled, slotMarker(g, 'AR 2'))}
                 </div>`}
                </div>`;
 
