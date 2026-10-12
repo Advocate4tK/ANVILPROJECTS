@@ -1501,6 +1501,13 @@
         return venueByCaId[k] || venueByRowId[k] || null;
     }
     let _singleRef = {}; // "Club Name|AgeGroup" -> true when single-ref (event crew rule ar1=ar2=false)
+    // ⚠️ THERE ARE THREE CREW SHAPES, NOT TWO. This page knew "one referee"
+    // and "three"; crew_rules also holds ar1 = true, ar2 = false — a centre and
+    // ONE assistant — and that rule was being thrown away, so the board
+    // advertised an AR 2 that does not exist and counted it as an opening.
+    // Tod, 2026-10-12: the workstation says "AR 2 — N/A" on the same fixture.
+    // A referee could put their name in for a position nobody will ever assign.
+    let _noAr2 = {};     // "Club Name|AgeGroup" -> true when the crew is centre + AR 1 only
 
     function isFilled(v) {
         return !!(v && String(v).trim() !== '' && v !== '—' && v !== '[]' && v !== 'null') || String(v).toUpperCase() === 'EMPTY';
@@ -1541,6 +1548,7 @@
 
     function hasOpenSlot(g) {
         if (isSingleRefGame(g)) return !slotClosed(g, 'Center Referee');
+        if (hasNoAr2(g)) return !slotClosed(g, 'Center Referee') || !slotClosed(g, 'AR 1');
         return !slotClosed(g, 'Center Referee') || !slotClosed(g, 'AR 1') || !slotClosed(g, 'AR 2');
     }
 
@@ -1570,6 +1578,14 @@
     // record — "NECONN" against "neconn" is the same club and used to miss.
     function crewKey(club, age) {
         return `${String(club || '').trim().toLowerCase()}|${String(age || '').trim().toUpperCase()}`;
+    }
+
+    // Centre + ONE assistant. Never true at the same time as isSingleRefGame().
+    function hasNoAr2(g) {
+        if (isSingleRefGame(g)) return false;
+        const src = g['Source Club'] || '';
+        const ageBase = (g['Age Group'] || '').replace(/\s*(Boys|Girls)$/i, '').replace(/[BG]$/, '').trim();
+        return !!_noAr2[crewKey(src, ageBase)];
     }
 
     // Single-ref game = U8 (always one ref) OR a crew rule with both ARs off.
@@ -1688,9 +1704,11 @@
         const ar1Filled = slotClosed(g, 'AR 1');
         const ar2Filled = slotClosed(g, 'AR 2');
 
+        const noAr2     = hasNoAr2(g);
+
         const openCount = u8
             ? (!crFilled ? 1 : 0)
-            : (!crFilled ? 1 : 0) + (!ar1Filled ? 1 : 0) + (!ar2Filled ? 1 : 0);
+            : (!crFilled ? 1 : 0) + (!ar1Filled ? 1 : 0) + (noAr2 ? 0 : (!ar2Filled ? 1 : 0));
 
         const slotsHtml = u8
             ? `<div class="slots-row one-slot">
@@ -1708,10 +1726,10 @@
                     <div class="slot-label">AR 1</div>
                     ${slotBadge(ar1Filled)}
                 </div>
-                <div class="slot-box">
+                ${noAr2 ? '' : `<div class="slot-box">
                     <div class="slot-label">AR 2</div>
                     ${slotBadge(ar2Filled)}
-                </div>
+                </div>`}
                </div>`;
 
         const isRec        = club === 'RECREATION';
@@ -2200,9 +2218,14 @@
                     namesById[c.id] = [c['Club Name'], c.name].filter(Boolean);
                 });
                 (crewRes.data || []).forEach(r => {
-                    if (r.ar1 !== false || r.ar2 !== false) return;
+                    if (!r.age_group) return;
+                    const bothOff = r.ar1 === false && r.ar2 === false;
+                    const ar2Off  = r.ar2 === false && r.ar1 !== false;
+                    if (!bothOff && !ar2Off) return;
                     (namesById[r.club_id] || []).forEach(nm => {
-                        if (nm && r.age_group) _singleRef[crewKey(nm, r.age_group)] = true;
+                        if (!nm) return;
+                        if (bothOff) _singleRef[crewKey(nm, r.age_group)] = true;
+                        else         _noAr2[crewKey(nm, r.age_group)]     = true;
                     });
                 });
             } catch(e) { console.warn('club crew rules unavailable', e); }
