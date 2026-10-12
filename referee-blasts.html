@@ -2635,6 +2635,7 @@
     // ── watch a blast until every row has left 'queued' ─────────────────────
     let _watchT = null;
     let _watchMeta = null;   // meta of the blast being watched, for Resume
+    let _watchVis  = null;   // visibilitychange handler for the running watch
 
     // Resume a stalled blast. The server re-sends only what is 'queued' or
     // 'failed'; the watcher is already running and picks the movement up.
@@ -2660,6 +2661,7 @@
     async function watchBlast(blastId, meta) {
         const res = document.getElementById('cmpResult');
         clearInterval(_watchT);
+        if (_watchVis) { document.removeEventListener('visibilitychange', _watchVis); _watchVis = null; }
         _watchMeta = meta;
         // blast_recipients is RLS'd to `authenticated`. The page's shared client
         // was built with the anon key at load and does not carry the login JWT,
@@ -2703,6 +2705,7 @@
                 return;
             }
             clearInterval(_watchT);
+            if (_watchVis) { document.removeEventListener('visibilitychange', _watchVis); _watchVis = null; }
             cmpSending = false;
             closeCompose();
             showSent({
@@ -2712,6 +2715,27 @@
         };
         await tick();
         _watchT = setInterval(tick, 3000);
+
+        // ⚠️ CHROME THROTTLES setInterval IN A BACKGROUND TAB, AND THIS WATCH
+        // IS THE ONLY THING THAT EVER CALLS showSent(). Tod, 2026-10-12, sent
+        // 631 addresses, switched to DBeaver, and the page sat on "488 of 631"
+        // while the server quietly finished all 630. It never said "Stalled"
+        // either, because the stall clock only advances inside tick() — a poll
+        // that is not running cannot notice that nothing is moving.
+        //
+        // The summary he wanted — who failed and why, with a Retry button — was
+        // built all along and simply never fired. He had to query the table to
+        // find out his own blast had worked.
+        //
+        // So: poll the instant the tab is looked at again, and forgive the time
+        // it spent hidden rather than counting it as silence from the server.
+        _watchVis = () => {
+            if (document.visibilityState !== 'visible') return;
+            lastMove = Date.now();   // hidden time is not the server's fault
+            stalled  = false;
+            tick();
+        };
+        document.addEventListener('visibilitychange', _watchVis);
     }
 
     // ── retry everything that failed on a blast ─────────────────────────────
