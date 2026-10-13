@@ -193,12 +193,24 @@ function footerFor(r: Recipient, sender?: { name?: string; mail?: string }): { t
 // the error says so, instead of Resend's generic "Invalid `to` field".
 const EMAIL_OK = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
 
+// What the referee actually receives. Pulled out so the preview and the
+// assignor's copy are rendered by the SAME code that does the sending — there
+// is no second version of the footer to drift.
+function renderFor(r: Recipient, subject: string, body: string, replyTo?: string, senderName?: string) {
+  const foot = footerFor(r, { name: senderName, mail: replyTo });
+  return {
+    subject: merge(subject, r),
+    text:    merge(body, r) + "\n\n--\n" + foot.text,
+    html:    toHtml(merge(body, r), foot.html),
+  };
+}
+
 async function sendOne(r: Recipient, subject: string, body: string, replyTo?: string, senderName?: string) {
   const to = (r.email || "").trim();
   if (!EMAIL_OK.test(to)) throw new Error(`bad address on the referee record: "${to}"`);
   // ⚠️ THE SAME ADDRESS THE HEADER USES. Whoever is logged in is who the
   // footer names, so Reply and "write to me at" can never point apart.
-  const foot = footerFor(r, { name: senderName, mail: replyTo });
+  const msg = renderFor(r, subject, body, replyTo, senderName);
   // A send that hangs would pin the isolate until its wall clock kills it —
   // and take the hop chain down with it. 20s is generous for Resend.
   const res = await fetch("https://api.resend.com/emails", {
@@ -209,9 +221,9 @@ async function sendOne(r: Recipient, subject: string, body: string, replyTo?: st
       from:     FROM_ADDRESS,
       to:       [to],
       reply_to: replyTo || undefined,
-      subject:  merge(subject, r),
-      text:     merge(body, r) + "\n\n--\n" + foot.text,
-      html:     toHtml(merge(body, r), foot.html),
+      subject:  msg.subject,
+      text:     msg.text,
+      html:     msg.html,
       headers:  r.token ? { "List-Unsubscribe": `<${SITE}/unsubscribe.html?t=${r.token}>` } : undefined,
     }),
   });
@@ -408,7 +420,28 @@ Deno.serve(async (req) => {
     return json({ ok: true, blast_id: log?.id, channel: "sms", sent, failed, skipped, refused, failures, sms_ready: smsReady(), note });
   }
 
-  // ── MODE 1: a new blast ─────────────────────────────────────────────────
+  // ── MODE 0: PREVIEW — what will this actually look like? ─────────────
+  // { preview: true, subject, body, recipient }
+  //
+  // ⚠️ The composer's preview pane rendered To, subject and body and nothing
+  // else, so the FOOTER was invisible everywhere in the product. That is how
+  // "You are receiving this because you are a registered referee in
+  // Connecticut" survived long enough to draw a complaint from the state
+  // referee program. Nobody could see it.
+  //
+  // Rendered here rather than in the page on purpose: a second copy of the
+  // footer in JavaScript would drift from this one. Writes nothing, sends
+  // nothing, and still requires a logged-in assignor because the footer names
+  // whoever is signed in.
+  if (p.preview) {
+    const r: Recipient = (p.recipient && p.recipient.email)
+      ? p.recipient
+      : { referee_id: null, email: replyTo || "preview@referee-tool.com", name: senderDisplay, town: "", token: null };
+    const msg = renderFor(r, (p.subject || "").trim(), (p.body || "").trim(), replyTo, senderDisplay);
+    return json({ ok: true, preview: true, to: r.email, subject: msg.subject, text: msg.text, html: msg.html });
+  }
+
+  // ── MODE 1: a new blast ───────────────────────────────────────
   const subject = (p.subject || "").trim();
   const body    = (p.body    || "").trim();
   const recips: Recipient[] = Array.isArray(p.recipients) ? p.recipients.filter((r: Recipient) => r && r.email) : [];
@@ -431,6 +464,51 @@ Deno.serve(async (req) => {
     }))
   ).select("id,email,is_guardian,merge");
   if (rErr || !rows) return json({ error: "Could not write blast_recipients: " + (rErr?.message || "?") }, 500);
+
+  // ── THE ASSIGNOR'S OWN COPY ────────────────────────────
+  // Tod, 2026-10-13: "I would also like to receive an actual copy of the email
+  // that goes out to my assignor email... I like to see the final product as
+  // well." Rendered from the FIRST recipient's merge values, through the same
+  // renderFor() the send uses, so what lands in his inbox is what they got.
+  //
+  // ⚠️ THE UNSUBSCRIBE LINK IS DEFANGED IN THIS COPY. It would otherwise
+  // carry a real referee's token, and one stray click from the assignor would
+  // opt THAT REFEREE out — silently, and from an email he was only reading.
+  // The address is shown as text so he can still check it is there and right.
+  //
+  // Never counted as a recipient: not in blast_recipients, not in the totals,
+  // and a failure here cannot affect the blast.
+  if (replyTo && rows.length) {
+    const first = rows[0] as Row;
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        const sample: Recipient = {
+          // Not a recipient of this copy — only the source of its merge values.
+          referee_id: null,
+          email: first.email, name: first.merge?.name || "", town: first.merge?.town || "",
+          token: first.merge?.token ?? null, is_guardian: !!first.is_guardian,
+          minor_name: first.merge?.minor_name || "",
+        };
+        const msg = renderFor(sample, subject, body, replyTo, senderDisplay);
+        const unsubLine = sample.token ? `${SITE}/unsubscribe.html?t=${sample.token}` : "(none — no token on that record)";
+        const header =
+          `This is your copy of the blast just sent to ${rows.length} address${rows.length === 1 ? "" : "es"}.\n` +
+          `Rendered exactly as it went to the first of them, ${sample.email}.\n` +
+          `Their unsubscribe link (shown as text so you cannot click it by accident):\n  ${unsubLine}\n` +
+          `${"-".repeat(60)}\n\n`;
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          signal: AbortSignal.timeout(20000),
+          headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: FROM_ADDRESS, to: [replyTo],
+            subject: `[copy] ${msg.subject}`,
+            text: header + msg.text.replace(/https?:\/\/[^\s]*unsubscribe\.html\?t=[^\s]+/g, "(each person's own unsubscribe link)"),
+          }),
+        });
+      } catch (e) { console.error("self-copy failed", e); }
+    })());
+  }
 
   // Answer NOW. The sending runs on after this response has gone out.
   EdgeRuntime.waitUntil(work(db, log.id, rows as Row[], subject, body, replyTo, senderDisplay));
