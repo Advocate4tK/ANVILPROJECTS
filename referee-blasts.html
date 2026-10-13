@@ -110,6 +110,12 @@
             padding: 0 2px; opacity: 0.5;
         }
         .pc-ren:hover { opacity: 1; }
+        .draft-open {
+            border: 1px solid #0f3460; background: #0f3460; color: #fff;
+            border-radius: 7px; padding: 3px 11px; margin-left: 10px;
+            font-family: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer;
+        }
+        .draft-open:hover { background: #163f73; }
         .btn-new-pool {
             background: #09142a;
             color: #00c853;
@@ -1182,24 +1188,46 @@
     // the moment the composer opens it is pre-filled.
     let PENDING_DRAFT = null;
     function pickUpDraft() {
-        if (!/[?&]draft=1\b/.test(location.search)) return;
+        // ⚠️ DO NOT REQUIRE ?draft=1 AND DO NOT CLEAR IT ON SIGHT. This
+        // deleted the draft from sessionStorage the instant the page saw it
+        // — "one use" — and stripped the query string so a refresh could not
+        // re-arm it. The draft then lived only in a JS variable, so ANY reload
+        // threw it away silently, bar and all. Tod, 2026-10-13: "nothing
+        // carries over." He had been told to hard refresh this page repeatedly
+        // that morning for other fixes, and every one destroyed a pending
+        // draft. One use means used by the COMPOSER, not glimpsed by the page.
         let d = null;
         try { d = JSON.parse(sessionStorage.getItem('blastDraft') || 'null'); } catch (e) {}
         if (!d || !d.body) return;
         PENDING_DRAFT = d;
-        sessionStorage.removeItem('blastDraft');          // one use
-        history.replaceState(null, '', location.pathname); // so a refresh doesn't re-arm it
+        // Stays in storage until it is applied or deliberately dropped, so the
+        // bar comes back on every load until one of those happens.
+        if (/[?&]draft=1\b/.test(location.search)) {
+            history.replaceState(null, '', location.pathname);
+        }
         const bar = document.getElementById('draftBar');
         bar.innerHTML = `✉ <b>Email from the workstation is ready</b> — “${esc(d.subject)}”. Pick who gets it (a pool, the map, a search + ＋ Basket), then <b>Email These Referees</b>.
+                         <button class="draft-open" onclick="openDraftNow()">Open the message</button>
                          <button onclick="dropDraft()" title="Discard this draft">✕</button>`;
         bar.style.display = '';
     }
+    // Straight to the composer without picking anybody first. The message is
+    // what he wants to see; recipients can be added with it open, and Send
+    // stays disabled until there is somebody to send to.
+    let _draftForceOpen = false;
+    function openDraftNow() {
+        _draftForceOpen = true;
+        try { openCompose(); } finally { _draftForceOpen = false; }
+    }
     function dropDraft() {
         PENDING_DRAFT = null;
+        try { sessionStorage.removeItem('blastDraft'); } catch (e) {}
         document.getElementById('draftBar').style.display = 'none';
     }
     function applyDraftToComposer() {
         if (!PENDING_DRAFT) return;
+        // Used for real — this is the "one use" the old code meant.
+        try { sessionStorage.removeItem('blastDraft'); } catch (e) {}
         document.getElementById('cmpSubject').value = PENDING_DRAFT.subject || '';
         document.getElementById('cmpBody').value    = PENDING_DRAFT.body || '';
         dropDraft();
@@ -2430,7 +2458,11 @@
     const sendable    = r => hasEmail(r) && !optedOut(r) && !isExpired(r) && !noGuardian(r);
 
     function openCompose() {
-        if (!traySet().length) { trayFlash('Nothing selected to email'); return; }
+        // ⚠️ An empty tray still blocks — EXCEPT from "Open the message" on
+        // the draft bar. Reading what the workstation sent should not require
+        // choosing recipients first; Send is disabled until somebody is in the
+        // list anyway.
+        if (!traySet().length && !_draftForceOpen) { trayFlash('Nothing selected to email'); return; }
         cmpDropped.clear();
         cmpSending = false;
         document.getElementById('cmpResult').innerHTML = '';
