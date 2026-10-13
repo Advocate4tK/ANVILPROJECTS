@@ -153,19 +153,30 @@ ${paras}
 // The honest fix is a PO box or a registered agent, and then it goes back in.
 // Until then the sender is identified by name, trading name and a working
 // reply address, which is what Ron actually asked for.
-const SENDER_NAME = "Tod L. Smith";
-const SENDER_ORG  = "Anvil Arts";
-const SENDER_MAIL = "nectassignor@gmail.com";
+// ⚠️ ANVIL ARTS IS CONSTANT. THE PERSON IS NOT.
+// Tod, 2026-10-12: "the footer should reply to who is actually in play but
+// always reference Anvil Arts." The trading name is what the tool is; the
+// address is whoever pressed Send. Hardcoding the address meant tonight's test
+// told the reader to write to nectassignor@gmail.com while Reply would have
+// gone to refassignor398@gmail.com, because he was logged in as admin — two
+// addresses in one email, disagreeing, in the very paragraph Ron asked to be
+// unambiguous about who to contact.
+const SENDER_ORG       = "Anvil Arts";
+const SENDER_MAIL_FALLBACK = "nectassignor@gmail.com";
 
-function footerFor(r: Recipient): { text: string; html: string } {
+function footerFor(r: Recipient, sender?: { name?: string; mail?: string }): { text: string; html: string } {
   const unsub = r.token ? `${SITE}/unsubscribe.html?t=${r.token}` : "";
+  // The address a Reply will actually reach. Falls back only if the profile
+  // has neither a reply_to nor an email on it.
+  const mail = (sender?.mail || "").trim() || SENDER_MAIL_FALLBACK;
+  const name = (sender?.name || "").trim() || "your assignor";
   const why = r.is_guardian && r.minor_name
     ? `You are receiving this because you are listed as the parent or guardian of ${r.minor_name}, a referee I assign games to.`
     : `You are receiving this because you are an official in or near the areas I assign, and this is an offer of games.`;
-  const whoFrom = `Sent by ${SENDER_NAME}, a youth soccer assignor, using Referee Tool (${SENDER_ORG}).`;
+  const whoFrom = `Sent by ${name}, a youth soccer assignor, using Referee Tool (${SENDER_ORG}).`;
   // ⚠️ Say the negative explicitly. Leaving it to be inferred is what caused
   // the complaint in the first place.
-  const notUs = `Referee Tool is not affiliated with, endorsed by, or operated by the Connecticut State Referee Program or any state association. Please send any questions about these emails to me at ${SENDER_MAIL} — not to them.`;
+  const notUs = `Referee Tool is not affiliated with, endorsed by, or operated by the Connecticut State Referee Program or any state association. Please send any questions about these emails to me at ${mail} — not to them.`;
   const lines = [whoFrom, why, notUs];
 
   return {
@@ -182,10 +193,12 @@ function footerFor(r: Recipient): { text: string; html: string } {
 // the error says so, instead of Resend's generic "Invalid `to` field".
 const EMAIL_OK = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
 
-async function sendOne(r: Recipient, subject: string, body: string, replyTo?: string) {
+async function sendOne(r: Recipient, subject: string, body: string, replyTo?: string, senderName?: string) {
   const to = (r.email || "").trim();
   if (!EMAIL_OK.test(to)) throw new Error(`bad address on the referee record: "${to}"`);
-  const foot = footerFor(r);
+  // ⚠️ THE SAME ADDRESS THE HEADER USES. Whoever is logged in is who the
+  // footer names, so Reply and "write to me at" can never point apart.
+  const foot = footerFor(r, { name: senderName, mail: replyTo });
   // A send that hangs would pin the isolate until its wall clock kills it —
   // and take the hop chain down with it. 20s is generous for Resend.
   const res = await fetch("https://api.resend.com/emails", {
@@ -213,7 +226,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 // Walks every row handed to it, sends, and updates the row. If Resend says
 // the daily quota is gone, every remaining row is marked failed with that
 // reason at once — no point burning two minutes finding out 56 times.
-async function work(db: ReturnType<typeof createClient>, blastId: number, rows: Row[], subject: string, body: string, replyTo?: string) {
+async function work(db: ReturnType<typeof createClient>, blastId: number, rows: Row[], subject: string, body: string, replyTo?: string, senderName?: string) {
   let quotaGone = false;
   const started = Date.now();
   let done = 0;
@@ -234,7 +247,7 @@ async function work(db: ReturnType<typeof createClient>, blastId: number, rows: 
       token: row.merge?.token ?? null, minor_name: row.merge?.minor_name || "",
     };
     try {
-      const pid = await sendOne(r, subject, body, replyTo);
+      const pid = await sendOne(r, subject, body, replyTo, senderName);
       await db.from("blast_recipients").update({ status: "sent", provider_id: pid ?? null, error: null }).eq("id", row.id);
     } catch (e) {
       const msg = (e as Error).message || String(e);
@@ -265,9 +278,15 @@ async function hop(blastId: number, done: number, of: number) {
 
 // Reply-to for a blast: the sender's ASSIGNOR address, looked up server-side.
 async function replyToFor(db: ReturnType<typeof createClient>, userId: string, fallback?: string | null) {
-  const { data: prof } = await db.from("assignor_profiles").select("username,email,reply_to_email").eq("id", userId).maybeSingle();
+  const { data: prof } = await db.from("assignor_profiles").select("username,name,email,reply_to_email").eq("id", userId).maybeSingle();
   return {
+    // What goes in blast_log — the login, unchanged, so the record of who
+    // sent a blast stays exactly what it has always been.
     senderName: prof?.username || fallback || userId,
+    // ⚠️ WHAT A REFEREE READS. The username is "tsmith"; nobody signs a
+    // letter to 3,500 people that way. Falls back to the login only if the
+    // profile has no name on it.
+    senderDisplay: (prof?.name && prof.name.trim()) || prof?.username || fallback || "your assignor",
     replyTo:    (prof?.reply_to_email && prof.reply_to_email.trim())
              || (prof?.email && prof.email.trim())
              || fallback || undefined,
@@ -294,8 +313,8 @@ Deno.serve(async (req) => {
     if (!log) return json({ error: `Blast #${blastId} not found` }, 404);
     const { data: rows } = await db.from("blast_recipients").select("id,email,is_guardian,merge").eq("blast_id", blastId).eq("status", "queued").order("id");
     if (!rows?.length) return json({ ok: true, blast_id: blastId, queued: 0, message: "Nothing left to send" });
-    const { replyTo } = await replyToFor(db, log.sent_by);
-    EdgeRuntime.waitUntil(work(db, blastId, rows as Row[], log.subject, log.body, replyTo));
+    const { senderDisplay, replyTo } = await replyToFor(db, log.sent_by);
+    EdgeRuntime.waitUntil(work(db, blastId, rows as Row[], log.subject, log.body, replyTo, senderDisplay));
     return json({ ok: true, blast_id: blastId, queued: rows.length, hop: true });
   }
 
@@ -323,7 +342,7 @@ Deno.serve(async (req) => {
   // whose account address is refassignor398@ — but replies belong at
   // nectassignor@. The two addresses are different things and coincided for
   // everyone else by luck. See sql/assignor-reply-to.sql.
-  const { senderName, replyTo } = await replyToFor(db, user.id, user.email);
+  const { senderName, senderDisplay, replyTo } = await replyToFor(db, user.id, user.email);
 
   // ── MODE 2: retry / resume an existing blast ────────────────────────────
   // 'failed' rows are re-sent. 'queued' rows are picked up too — that is
@@ -341,7 +360,7 @@ Deno.serve(async (req) => {
     // retry finished before a single email had gone.
     const { error: qErr } = await db.from("blast_recipients").update({ status: "queued", error: null }).in("id", rows.map(r => r.id));
     if (qErr) return json({ error: "Could not requeue: " + qErr.message }, 500);
-    EdgeRuntime.waitUntil(work(db, blastId, rows as Row[], log.subject, log.body, replyTo));
+    EdgeRuntime.waitUntil(work(db, blastId, rows as Row[], log.subject, log.body, replyTo, senderDisplay));
     return json({ ok: true, blast_id: blastId, queued: rows.length, reply_to: replyTo });
   }
 
@@ -414,7 +433,7 @@ Deno.serve(async (req) => {
   if (rErr || !rows) return json({ error: "Could not write blast_recipients: " + (rErr?.message || "?") }, 500);
 
   // Answer NOW. The sending runs on after this response has gone out.
-  EdgeRuntime.waitUntil(work(db, log.id, rows as Row[], subject, body, replyTo));
+  EdgeRuntime.waitUntil(work(db, log.id, rows as Row[], subject, body, replyTo, senderDisplay));
   return json({ ok: true, blast_id: log.id, queued: rows.length, reply_to: replyTo });
 });
 
