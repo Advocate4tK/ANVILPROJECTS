@@ -146,11 +146,15 @@ ${paras}
 //
 // So the footer now answers four questions it never answered: who sent this,
 // why you got it, who it is NOT from, and where to complain. The postal address
-// is there because commercial email in the US is required to carry one and this
-// had none.
+// ⚠️ NO STREET ADDRESS. US commercial email is meant to carry a physical
+// postal address, and this deliberately does not. Tod, 2026-10-12: "do not put
+// my personal address but simply list Anvil Arts." He is right to refuse — it
+// is his home, and it would go to ~3,500 officials and 169 parents of minors.
+// The honest fix is a PO box or a registered agent, and then it goes back in.
+// Until then the sender is identified by name, trading name and a working
+// reply address, which is what Ron actually asked for.
 const SENDER_NAME = "Tod L. Smith";
 const SENDER_ORG  = "Anvil Arts";
-const SENDER_POST = "29 Yorkshire Terrace Apt 02, Shrewsbury, MA 01545";
 const SENDER_MAIL = "nectassignor@gmail.com";
 
 function footerFor(r: Recipient): { text: string; html: string } {
@@ -162,7 +166,7 @@ function footerFor(r: Recipient): { text: string; html: string } {
   // ⚠️ Say the negative explicitly. Leaving it to be inferred is what caused
   // the complaint in the first place.
   const notUs = `Referee Tool is not affiliated with, endorsed by, or operated by the Connecticut State Referee Program or any state association. Please send any questions about these emails to me at ${SENDER_MAIL} — not to them.`;
-  const lines = [whoFrom, why, notUs, SENDER_POST];
+  const lines = [whoFrom, why, notUs];
 
   return {
     text: unsub
