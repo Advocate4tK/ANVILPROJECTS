@@ -2236,7 +2236,16 @@
         const colour = { assignments: '#1d4ed8', none: '#b91c1c' };
 
         const body = rows.length ? rows.map(r => {
-            const pref = r.email_pref || 'assignments';
+            // ⚠️ THIRD PLACE THAT ASKS THIS, AND IT ALSO HAS TO READ THE
+            // BOOLEAN. `|| 'assignments'` only catches a NULL email_pref — a
+            // referee who used the unsubscribe link has email_pref = 'all'
+            // untouched, so this panel listed Tod as opted out and then
+            // printed "all" beside his name. Same fix as the card control and
+            // the Referee Management card: the link sets email_opt_in, and
+            // what it promises is assignments-only.
+            const pref = (r.email_pref && r.email_pref !== 'all')
+                ? r.email_pref
+                : (r.email_opt_in === false ? 'assignments' : (r.email_pref || 'assignments'));
             const when = r.email_pref_at
                 ? new Date(r.email_pref_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
                 : '';
