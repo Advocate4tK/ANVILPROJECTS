@@ -104,6 +104,12 @@
             padding: 0 2px; opacity: 0.55;
         }
         .pc-del:hover { opacity: 1; }
+        .pc-ren {
+            border: none; background: none; cursor: pointer;
+            color: #0f3460; font-size: 0.86rem; line-height: 1;
+            padding: 0 2px; opacity: 0.5;
+        }
+        .pc-ren:hover { opacity: 1; }
         .btn-new-pool {
             background: #09142a;
             color: #00c853;
@@ -1305,6 +1311,7 @@
                 ${active
                     ? '<span class="pc-active-label">Active</span>'
                     : `<button class="pc-setactive" onclick="setActive(${p.id})">Set Active</button>`}
+                <button class="pc-ren" title="Rename pool" onclick="renamePool(${p.id}, '${esc(p.name).replace(/'/g,"\\'")}')">✎</button>
                 <button class="pc-del" title="Delete pool" onclick="deletePool(${p.id}, '${esc(p.name).replace(/'/g,"\\'")}')">×</button>
             </div>`;
         }).join('');
@@ -1732,6 +1739,25 @@
         applyFilters();
         const fb = document.querySelector('.filter-bar');
         if (fb) fb.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ⚠️ A POOL'S NAME IS THE ASSIGNOR'S, AND THEY CHANGE THEIR MIND.
+    // Tod, 2026-10-13: "an assignor can name it whatever they want... they
+    // should also have the ability to rename their pools as well." Until now
+    // the only way to fix a name was to delete the pool and build it again —
+    // and deleting cascades the members, so renaming a 696-referee pool meant
+    // losing 696 rows and re-adding every one.
+    async function renamePool(poolId, current) {
+        const name = (prompt('Rename this pool:', current) || '').trim();
+        if (!name || name === current) return;
+        const { error } = await supabaseClient.client
+            .from('referee_pools')
+            .update({ name })
+            .eq('id', poolId)
+            .eq('owner_uid', MY_UID);   // same guard as every other pool action
+        if (error) { alert('Could not rename pool: ' + error.message); return; }
+        await loadPools();
+        renderAll();
     }
 
     async function deletePool(poolId, name) {
