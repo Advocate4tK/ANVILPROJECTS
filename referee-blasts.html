@@ -1524,7 +1524,19 @@
         // It writes the same four columns the Referee Management card writes, so
         // it replicates: the Opt-outs panel here, the workstation's ✉ OFF badge,
         // and the card itself.
-        const pref = r.email_pref || 'all';
+        // ⚠️ THE LINK SETS A DIFFERENT COLUMN. unsubscribe_by_token() flips
+        // email_opt_in and never touches email_pref, so a referee who used the
+        // unsubscribe link shows "All email" on their own card — directly above
+        // the note saying they clicked unsubscribe. Tod hit this on his own
+        // record twice tonight.
+        //
+        // 'assignments' and not 'none' because that is what the page they
+        // clicked actually promises: "You'll no longer get blasts... This does
+        // not affect game assignments or your registration — only the group
+        // emails." Showing 'none' would claim they cut off their own games.
+        const pref = (r.email_pref && r.email_pref !== 'all')
+            ? r.email_pref
+            : (r.email_opt_in === false ? 'assignments' : 'all');
         const prefColour = pref === 'none' ? '#b91c1c' : pref === 'assignments' ? '#1d4ed8' : '#1a2e4a';
         const prefBorder = pref === 'all' ? 'rgba(0,0,0,0.2)' : prefColour;
         const prefWho = (pref !== 'all' && (r.email_pref_by || r.email_pref_at))
@@ -1573,7 +1585,18 @@
 
         const picked  = sel.value;
         const changed = picked !== (r.email_pref || 'all');
-        const updates = { email_pref: picked, email_pref_note: (note?.value || '').trim() || null };
+        // ⚠️ SET BOTH. The old boolean is still what the unsubscribe link
+        // writes and what optedOut() checks first, so changing only email_pref
+        // left a referee who had been switched back on still excluded from
+        // every send — silently. Tod opted himself back in earlier and had to
+        // reload to see anything, because nothing had actually changed for the
+        // sender. The control is the authority now: whatever it says, the
+        // boolean agrees.
+        const updates = {
+            email_pref: picked,
+            email_opt_in: picked === 'all',
+            email_pref_note: (note?.value || '').trim() || null,
+        };
         // Only restamp when the SETTING moved. Fixing a typo in the reason
         // should not rewrite the date somebody asked to be left alone.
         if (changed) {

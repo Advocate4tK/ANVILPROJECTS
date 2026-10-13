@@ -751,7 +751,15 @@
 
             // Card header
             {
-                const pref = f['email_pref'] || 'all';
+                // ⚠️ THE UNSUBSCRIBE LINK SETS A DIFFERENT COLUMN.
+                // unsubscribe_by_token() flips email_opt_in and never touches
+                // email_pref, so a referee who used the link shows "All email"
+                // here — next to a note saying they unsubscribed. 'assignments'
+                // because that is what the page they clicked promises: blasts
+                // stop, game assignments carry on.
+                const pref = (f['email_pref'] && f['email_pref'] !== 'all')
+                    ? f['email_pref']
+                    : (f['email_opt_in'] === false ? 'assignments' : 'all');
                 const el = document.getElementById('f_pref_' + pref) || document.getElementById('f_pref_all');
                 if (el) el.checked = true;
                 document.getElementById('f_prefNote').value = f['email_pref_note'] || '';
@@ -976,6 +984,11 @@
                 const wasPref = (_cur?.fields?.['email_pref']) || 'all';
                 const note = document.getElementById('f_prefNote').value.trim();
                 updates['email_pref'] = picked;
+                // ⚠️ AND THE OLD BOOLEAN, so they cannot drift apart from this
+                // side. optedOut() checks email_opt_in first, so writing only
+                // email_pref left someone switched back on still silently
+                // excluded from every send.
+                updates['email_opt_in'] = picked === 'all';
                 updates['email_pref_note'] = note || null;
                 if (picked !== wasPref) {
                     updates['email_pref_at'] = new Date().toISOString();
