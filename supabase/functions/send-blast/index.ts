@@ -129,14 +129,48 @@ ${paras}
 </div>`;
 }
 
+// Who is writing, why they have your address, and who to go to about it.
+//
+// ⚠️ THE OLD LINE CAUSED A FORMAL COMPLAINT. It read:
+//
+//     "You are receiving this because you are a registered referee in Connecticut."
+//
+// It named no sender and grounded the recipient's inclusion in their state
+// registration, so officials read it as mail from the Connecticut State Referee
+// Program and took their questions to the program's office. Ron Packard,
+// 2026-10-12, copying that office and four others: "ensure that it does not
+// leave the impression that the information is in any way tied to the
+// Connecticut State Referee program... It is tied to you (personally or through
+// a Corporate entity of some kind), and all questions should be referred to
+// you, and only you."
+//
+// So the footer now answers four questions it never answered: who sent this,
+// why you got it, who it is NOT from, and where to complain. The postal address
+// is there because commercial email in the US is required to carry one and this
+// had none.
+const SENDER_NAME = "Tod L. Smith";
+const SENDER_ORG  = "Anvil Arts";
+const SENDER_POST = "29 Yorkshire Terrace Apt 02, Shrewsbury, MA 01545";
+const SENDER_MAIL = "nectassignor@gmail.com";
+
 function footerFor(r: Recipient): { text: string; html: string } {
   const unsub = r.token ? `${SITE}/unsubscribe.html?t=${r.token}` : "";
-  const who   = r.is_guardian && r.minor_name
-    ? `You are receiving this because you are listed as the parent or guardian of ${r.minor_name}, a registered referee.`
-    : `You are receiving this because you are a registered referee in Connecticut.`;
+  const why = r.is_guardian && r.minor_name
+    ? `You are receiving this because you are listed as the parent or guardian of ${r.minor_name}, a referee I assign games to.`
+    : `You are receiving this because you are an official in or near the areas I assign, and this is an offer of games.`;
+  const whoFrom = `Sent by ${SENDER_NAME}, a youth soccer assignor, using Referee Tool (${SENDER_ORG}).`;
+  // ⚠️ Say the negative explicitly. Leaving it to be inferred is what caused
+  // the complaint in the first place.
+  const notUs = `Referee Tool is not affiliated with, endorsed by, or operated by the Connecticut State Referee Program or any state association. Please send any questions about these emails to me at ${SENDER_MAIL} — not to them.`;
+  const lines = [whoFrom, why, notUs, SENDER_POST];
+
   return {
-    text: unsub ? `${who}\nTo stop receiving these emails: ${unsub}` : who,
-    html: unsub ? `${esc(who)}<br><a href="${unsub}" style="color:#777">Unsubscribe</a>` : esc(who),
+    text: unsub
+      ? `${lines.join("\n")}\nTo stop receiving these emails: ${unsub}`
+      : lines.join("\n"),
+    html: unsub
+      ? `${lines.map(esc).join("<br>")}<br><a href="${unsub}" style="color:#777">Unsubscribe</a>`
+      : lines.map(esc).join("<br>"),
   };
 }
 
