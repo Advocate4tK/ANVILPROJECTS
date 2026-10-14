@@ -123,13 +123,31 @@ async function send(to: string, subject: string, text: string, html: string) {
 // RTCT10247 — games.game_no. Prefix mirrors RT_GAME_NO.prefix on the pages.
 const gameNo = (g: any) => g?.game_no ? `RTCT${g.game_no}` : "";
 
-async function sendWithReply(to: string, subject: string, text: string, html: string, replyTo?: string) {
+async function sendWithReply(to: string, subject: string, text: string, html: string, replyTo?: string, cc?: string[], bcc?: string[]) {
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: FROM, to: [to], subject, text, html, reply_to: replyTo || undefined }),
+    body: JSON.stringify({
+      from: FROM, to: [to], subject, text, html, reply_to: replyTo || undefined,
+      // Omitted entirely when empty — Resend rejects an empty array.
+      cc:  cc  && cc.length  ? cc  : undefined,
+      bcc: bcc && bcc.length ? bcc : undefined,
+    }),
   });
   if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.message || `Resend ${r.status}`);
+}
+
+// Addresses typed into the Cc/Bcc boxes on the workstation's message modal.
+// ⚠️ VALIDATED AGAIN HERE, not just in the page. The page is the only caller
+// today, but this function is reachable with a JWT and anything past the
+// browser is untrusted input.
+function _addrList(v: unknown, label: string): string[] {
+  const arr = Array.isArray(v) ? v : (typeof v === "string" && v.trim() ? v.split(/[,;]/) : []);
+  const out = arr.map(x => String(x).trim()).filter(Boolean);
+  if (out.length > 10) throw new Error(`Too many ${label} addresses (max 10)`);
+  const bad = out.filter(s => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+  if (bad.length) throw new Error(`${label} isn't a valid address: ${bad.join(", ")}`);
+  return out;
 }
 
 const fmtDate = (d: string) => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
@@ -454,6 +472,12 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
     if (ids.length > 200) return json({ error: "Too many at once (max 200) — use Referee Blasts" }, 400);
     if (!subject || !body) return json({ error: "Subject and message are required" }, 400);
 
+    // Tod, 2026-10-14: "I'd love to include Ed Conn." A typed address on the
+    // message modal, for looping in a mentor or a club contact.
+    let cc: string[], bcc: string[];
+    try { cc = _addrList(p.cc, "Cc"); bcc = _addrList(p.bcc, "Bcc"); }
+    catch (e) { return json({ error: (e as Error).message }, 400); }
+
     const { data: refs } = await db.from("referees").select('id,name,email,age,"Guardian Email","Guardian Name",unsubscribe_token').in("id", ids);
     const byId = new Map((refs || []).map(r => [Number(r.id), r]));
     const targets = ids.map(id => byId.get(id)).filter(Boolean) as any[];
@@ -463,9 +487,13 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
     const replyTo  = (prof?.reply_to_email || prof?.email || user.email || "").trim() || undefined;
     const fromName = prof?.name || prof?.username || "your assignor";
 
-    const where = targets.length === 1
+    // ⚠️ The copies go in the LOG. A message that quietly also went to an
+    // outsider has to be answerable later, the same as everything else here.
+    const copies = [cc.length ? `cc ${cc.join(", ")}` : "", bcc.length ? `bcc ${bcc.join(", ")}` : ""].filter(Boolean).join(" · ");
+    const where = (targets.length === 1
       ? `direct → ${targets[0].name}`
-      : `direct → ${targets.length} referees${p.game_id ? ` · game ${Number(p.game_id)}` : p.date ? ` · ${String(p.date)}` : ""}`;
+      : `direct → ${targets.length} referees${p.game_id ? ` · game ${Number(p.game_id)}` : p.date ? ` · ${String(p.date)}` : ""}`)
+      + (copies ? ` · ${copies}` : "");
     const { data: log } = await db.from("blast_log").insert({
       sent_by: user.id, sent_by_name: prof?.username || user.email, subject, body,
       where_text: where, recipient_count: targets.length, guardians_cc: true,
@@ -486,7 +514,11 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
 </div>`;
 
       let ok = false, err = "";
-      try { await sendWithReply(ref.email, subject, text(false), html(false), replyTo); ok = true; }
+      // ⚠️ Cc/Bcc ride on the REFEREE's copy only. The guardian's copy below
+      // is a separate email to a parent about their own child — copying an
+      // outsider onto it is not what "Cc Ed" means, and it would double every
+      // copy again on a crew of minors.
+      try { await sendWithReply(ref.email, subject, text(false), html(false), replyTo, cc, bcc); ok = true; }
       catch (e) { err = (e as Error).message; }
       if (ok) sent.push(ref.name); else failed.push({ name: ref.name, error: err });
       results.referee = ok ? "sent" : "failed: " + err;
@@ -509,7 +541,7 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
     const one = targets.length === 1 ? targets[0] : null;
     return json({
       ok: sent.length > 0,
-      sent, failed, no_email: noEmail, guardians, reply_to: replyTo, blast_id: log?.id ?? null,
+      sent, failed, no_email: noEmail, guardians, reply_to: replyTo, blast_id: log?.id ?? null, cc, bcc,
       // single-referee shape, as before
       referee: one?.name, email: one?.email, minor: one ? (one.age != null && Number(one.age) < 18) : undefined, results,
     });

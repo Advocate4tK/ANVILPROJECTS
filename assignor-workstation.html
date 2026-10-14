@@ -9934,6 +9934,13 @@ Reason (optional):`);
             document.getElementById('refMsgSubject').value = ctx.subject || '';
             document.getElementById('refMsgBody').value = '';
             document.getElementById('refMsgResult').innerHTML = '';
+            // ⚠️ Cleared and re-collapsed on EVERY open. A Cc left over from
+            // the last message would silently copy a stranger into the next
+            // one, and the box would be hidden while it did it.
+            document.getElementById('refMsgCc').value = '';
+            document.getElementById('refMsgBcc').value = '';
+            document.getElementById('refMsgCcWrap').style.display = 'none';
+            document.getElementById('refMsgCcToggle').style.display = '';
             const btn = document.getElementById('refMsgSend'); btn.disabled = false;
             renderRefMsgChips();
             document.getElementById('refMsgOverlay').style.display = 'flex';
@@ -10022,11 +10029,29 @@ Reason (optional):`);
             const g = allGames.find(x => String(x.id) === String(gameId));
             openRefComposer([_refMsgPerson(r)], g ? { game_id: g.id, subject: _gameSubject(g.fields) } : {});
         }
+        function refMsgShowCc() {
+            document.getElementById('refMsgCcWrap').style.display = '';
+            document.getElementById('refMsgCcToggle').style.display = 'none';
+            document.getElementById('refMsgCc').focus();
+        }
+        // Comma or semicolon separated. Returns null if anything in the box
+        // isn't an address — a typo'd Cc must stop the send, not be quietly
+        // dropped. If you typed it, you expect it to arrive.
+        function _ccList(id) {
+            const raw = (document.getElementById(id).value || '').trim();
+            if (!raw) return [];
+            const parts = raw.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+            const bad = parts.filter(s => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+            return bad.length ? { bad } : parts;
+        }
         async function sendRefMessage() {
             const ids = refMsgCtx.people.filter(p => p.checked && p.email).map(p => Number(p.id));
             const subject = document.getElementById('refMsgSubject').value.trim();
             const body = document.getElementById('refMsgBody').value.trim();
             const res = document.getElementById('refMsgResult');
+            const cc = _ccList('refMsgCc'), bcc = _ccList('refMsgBcc');
+            if (cc.bad)  { res.innerHTML = `<span style="color:#dc2626;">Cc isn't a valid address: ${cc.bad.join(', ')}</span>`; return; }
+            if (bcc.bad) { res.innerHTML = `<span style="color:#dc2626;">Bcc isn't a valid address: ${bcc.bad.join(', ')}</span>`; return; }
             if (!subject) { res.innerHTML = '<span style="color:#dc2626;">Add a subject.</span>'; return; }
             if (!body)    { res.innerHTML = '<span style="color:#dc2626;">Write the message.</span>'; return; }
             if (!ids.length) { res.innerHTML = '<span style="color:#dc2626;">Nobody selected.</span>'; return; }
@@ -10037,14 +10062,27 @@ Reason (optional):`);
                 const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/notify-assignor`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${jwt}` },
-                    body: JSON.stringify({ event: 'message_referee', referee_ids: ids, subject, body, game_id: refMsgCtx.game_id, date: refMsgCtx.date }),
+                    body: JSON.stringify({ event: 'message_referee', referee_ids: ids, subject, body, cc, bcc, game_id: refMsgCtx.game_id, date: refMsgCtx.date }),
                 });
                 const j = await r.json().catch(() => ({}));
                 if (!r.ok || !j.ok) throw new Error(j.error || j.reason || (j.failed?.[0] ? `${j.failed[0].name}: ${j.failed[0].error}` : `Server said ${r.status}`));
                 const sentN = (j.sent || []).length, gN = j.guardians || 0, fN = (j.failed || []).length;
                 const who = sentN <= 3 ? (j.sent || []).map(n => n.split(' ')[0]).join(', ') : `${sentN} referees`;
                 const g = gN ? ` + ${gN} parent${gN === 1 ? '' : 's'}` : '';
-                res.innerHTML = `<span style="color:#065f46; font-weight:700;">✅ Sent to ${who}${g}. Replies to ${j.reply_to || 'you'}.</span>`
+                // Say who else got it, by name. A copy that doesn't show up in
+                // the confirmation is a copy you forgot you sent.
+                const cN = (j.cc || []).concat(j.bcc || []);
+                // ⚠️ SAY SO IF THE COPY DIDN'T HAPPEN. An older deployed
+                // notify-assignor ignores cc/bcc entirely — the message sends,
+                // the box looked like it worked, and nobody was copied. The
+                // server echoes back what it actually used; if we asked for
+                // copies and got none back, that's a silent miss, not a quiet
+                // success.
+                const asked = cc.length + bcc.length;
+                const c = cN.length
+                    ? `<br><span style="color:#555;">Copied: ${cN.join(', ')}</span>`
+                    : (asked ? `<br><span style="color:#b45309; font-weight:700;">⚠ The Cc/Bcc was NOT sent — the mail function needs redeploying. The referees got the message.</span>` : '');
+                res.innerHTML = `<span style="color:#065f46; font-weight:700;">✅ Sent to ${who}${g}. Replies to ${j.reply_to || 'you'}.</span>` + c
                     + (fN ? `<br><span style="color:#dc2626;">Didn't reach: ${j.failed.map(f => `${f.name} (${f.error})`).join('; ')}</span>` : '');
                 btn.textContent = 'Sent';
                 showToast(`✉ Message sent to ${who}${g}`, false);
@@ -12923,6 +12961,23 @@ The game keeps its date on the board but reads POSTPONED — new date to come. T
                     <span style="margin-left:auto; font-size:0.72rem; color:#888;"><a href="#" onclick="refMsgAll(true); return false;" style="color:#0f3460;">all</a> · <a href="#" onclick="refMsgAll(false); return false;" style="color:#0f3460;">none</a></span>
                 </div>
                 <div id="refMsgChips" class="rm-chips"></div>
+                <!-- Collapsed by default. Most messages don't need it, and two
+                     empty boxes sitting open on a live send are an invitation
+                     to a typo'd address. Tod, 2026-10-14: "I'd love to include
+                     Ed Conn." -->
+                <div style="margin:2px 0 12px;">
+                    <a href="#" id="refMsgCcToggle" onclick="refMsgShowCc(); return false;" style="font-size:0.72rem; color:#0f3460; font-weight:700; text-decoration:none;">＋ Cc / Bcc</a>
+                </div>
+                <div id="refMsgCcWrap" style="display:none; margin-bottom:12px;">
+                    <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Cc</label>
+                    <input id="refMsgCc" type="text" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem; margin-bottom:10px;" placeholder="ed@example.com, someone@else.com">
+                    <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Bcc</label>
+                    <input id="refMsgBcc" type="text" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem;" placeholder="hidden from the referees">
+                    <div style="font-size:0.72rem; color:#777; margin-top:6px; line-height:1.45;">
+                        Each referee gets their own email, so a copy rides on every one of them — message 2 referees and a Cc gets 2 copies.
+                        Parents' copies are never Cc'd.
+                    </div>
+                </div>
                 <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Subject</label>
                 <input id="refMsgSubject" type="text" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem; margin-bottom:12px;" placeholder="Saturday's U12 game">
                 <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Message</label>
