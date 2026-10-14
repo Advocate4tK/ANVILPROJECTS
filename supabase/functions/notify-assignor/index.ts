@@ -503,22 +503,34 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
     let guardians = 0;
     const results: Record<string, string> = {};   // kept for the single-referee response shape
 
+    // ⚠️ A Cc IS STATED, NOT DELIVERED. Each referee gets their own separate
+    // email, so a real Cc header would have to sit on every one of them — and
+    // then the Cc'd person receives one copy per referee. Tod, 2026-10-14,
+    // after Cc'ing himself on a 3-referee message: "one copy should suffice."
+    //
+    // So the referees are TOLD, in the message, that Ed was copied — which is
+    // the whole point of a Cc — and Ed gets a single standalone copy below.
+    // ⛔ Reply-all does not reach him; he isn't really in the header. Tod
+    // agreed to that trade: "just state that Ed Conn was also copied to it."
+    //
+    // Bcc says nothing to anybody and still gets its one copy.
+    const ccNote = cc.length ? `Cc: ${cc.join(", ")}` : "";
+    let sample: { text: string; html: string } | null = null;
+
     for (const ref of targets) {
       if (!ref.email) { noEmail.push(ref.name); results.referee = `${ref.name} has no email on file`; continue; }
       const first = String(ref.name).split(/\s+/)[0];
-      const text  = (toParent: boolean) => `${toParent ? `A message from ${fromName} to ${ref.name}:` : `Hi ${first},`}\n\n${body}\n\n— ${fromName}${replyTo ? `\n${replyTo}` : ""}`;
+      const text  = (toParent: boolean) => `${toParent ? `A message from ${fromName} to ${ref.name}:` : `Hi ${first},`}\n\n${body}\n\n— ${fromName}${replyTo ? `\n${replyTo}` : ""}${ccNote ? `\n\n${ccNote}` : ""}`;
       const html  = (toParent: boolean) => `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:600px">
 <p>${toParent ? `A message from <b>${esc(fromName)}</b> to <b>${esc(ref.name)}</b>:` : `Hi ${esc(first)},`}</p>
 <div style="white-space:pre-wrap">${esc(body)}</div>
 <p style="color:#555;margin-top:18px">— ${esc(fromName)}${replyTo ? `<br><a href="mailto:${esc(replyTo)}" style="color:#0f3460">${esc(replyTo)}</a>` : ""}</p>
-</div>`;
+${ccNote ? `<p style="color:#777;font-size:13px;margin-top:14px">${esc(ccNote)}</p>` : ""}</div>`;
+      if (!sample) sample = { text: text(false), html: html(false) };
 
       let ok = false, err = "";
-      // ⚠️ Cc/Bcc ride on the REFEREE's copy only. The guardian's copy below
-      // is a separate email to a parent about their own child — copying an
-      // outsider onto it is not what "Cc Ed" means, and it would double every
-      // copy again on a crew of minors.
-      try { await sendWithReply(ref.email, subject, text(false), html(false), replyTo, cc, bcc); ok = true; }
+      // ⛔ NO cc/bcc ON THE DELIVERY. The copies are sent once, after the loop.
+      try { await sendWithReply(ref.email, subject, text(false), html(false), replyTo); ok = true; }
       catch (e) { err = (e as Error).message; }
       if (ok) sent.push(ref.name); else failed.push({ name: ref.name, error: err });
       results.referee = ok ? "sent" : "failed: " + err;
@@ -538,10 +550,51 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
       if (targets.length > 1) await new Promise(r => setTimeout(r, 550));   // Resend: 2 req/s
     }
 
+    // ── THE COPIES — one each, after everything has gone out ───────────────
+    // ⭐ THE SENDER ALWAYS GETS ONE, WITHOUT ASKING. Tod, 2026-10-14: "should
+    // be a copy to my assignor email but also the ability to CC someone."
+    // Same rule as the blast self-copy: every message the tool sends under an
+    // assignor's name puts one copy in that assignor's inbox. He should never
+    // have to type his own address to find out what went out under his name.
+    //
+    // Rendered from the FIRST referee's version, so it is the real thing and
+    // not a reconstruction. Never counted as a recipient, and a failure here
+    // cannot affect the message that already went.
+    const copyList = [...new Map(
+      [...cc.map(a => [a, "cc"]), ...bcc.map(a => [a, "bcc"]), ...(replyTo ? [[replyTo, "self"]] : [])]
+        .map(([a, kind]) => [String(a).toLowerCase(), { addr: String(a), kind }])
+    ).values()];
+    const copiesSent: string[] = [];
+    if (sample && copyList.length) {
+      const names = targets.map(t => t.name).join(", ");
+      const went  = `Sent to ${targets.length} referee${targets.length === 1 ? "" : "s"}: ${names}.`;
+      for (const c of copyList) {
+        // ⚠️ A Cc'd person is NEVER told about the Bcc. Only the sender's own
+        // copy lists both — that is the whole difference between the two.
+        const lead = c.kind === "self"
+          ? `Your copy of the message you just sent.\n${went}`
+            + (cc.length  ? `\nCc (stated in the message): ${cc.join(", ")}`   : "")
+            + (bcc.length ? `\nBcc (not shown to anyone): ${bcc.join(", ")}` : "")
+          : `${fromName} copied you on this message.\n${went}`;
+        const bar = "-".repeat(58);
+        try {
+          await sendWithReply(
+            c.addr, `[copy] ${subject}`,
+            `${lead}\n${bar}\n\n${sample.text}`,
+            `<div style="font-family:Arial,sans-serif;font-size:13px;color:#555;max-width:600px;white-space:pre-wrap;border-bottom:1px solid #ddd;padding-bottom:10px;margin-bottom:16px">${esc(lead)}</div>${sample.html}`,
+            replyTo,
+          );
+          copiesSent.push(c.addr);
+        } catch (e) { console.error("copy to " + c.addr + " failed", (e as Error).message); }
+        await new Promise(r => setTimeout(r, 550));   // Resend: 2 req/s
+      }
+    }
+
     const one = targets.length === 1 ? targets[0] : null;
     return json({
       ok: sent.length > 0,
-      sent, failed, no_email: noEmail, guardians, reply_to: replyTo, blast_id: log?.id ?? null, cc, bcc,
+      sent, failed, no_email: noEmail, guardians, reply_to: replyTo, blast_id: log?.id ?? null,
+      cc, bcc, copies: copiesSent,
       // single-referee shape, as before
       referee: one?.name, email: one?.email, minor: one ? (one.age != null && Number(one.age) < 18) : undefined, results,
     });

@@ -9967,7 +9967,10 @@ Reason (optional):`);
             let n = on.length === 1 ? `Goes to <b>${on[0].name}</b>.` : `Goes to <b>${on.length} referees</b>, each under their own name.`;
             if (minors.length) n += ` ${minors.length === 1 ? `${minors[0].name} is a minor — <b>their parent gets a copy.</b>` : `<b>${minors.length} are minors — their parents get a copy.</b>`}`;
             if (noG.length)   n += ` ⚠ No parent on file for ${noG.map(p => p.name).join(', ')}.`;
-            n += ' Replies come to you.';
+            // ⭐ Said on the face of the modal, not hidden behind the collapsed
+            // Cc panel. The copy is automatic and always on, so it has to be
+            // visible without opening anything.
+            n += ' Replies come to you, and a copy lands in your assignor inbox.';
             note.innerHTML = n;
             if (ppl.length > 1) document.getElementById('refMsgTo').textContent = `${on.length} of ${ppl.length} selected`;
         }
@@ -10071,16 +10074,16 @@ Reason (optional):`);
                 const g = gN ? ` + ${gN} parent${gN === 1 ? '' : 's'}` : '';
                 // Say who else got it, by name. A copy that doesn't show up in
                 // the confirmation is a copy you forgot you sent.
-                const cN = (j.cc || []).concat(j.bcc || []);
-                // ⚠️ SAY SO IF THE COPY DIDN'T HAPPEN. An older deployed
+                // ⚠️ SAY SO IF A COPY DIDN'T HAPPEN. An older deployed
                 // notify-assignor ignores cc/bcc entirely — the message sends,
                 // the box looked like it worked, and nobody was copied. The
-                // server echoes back what it actually used; if we asked for
-                // copies and got none back, that's a silent miss, not a quiet
-                // success.
+                // server echoes back the addresses it ACTUALLY sent a copy to;
+                // if we asked for copies and got none back, that's a silent
+                // miss, not a quiet success.
+                const cN = j.copies || [];
                 const asked = cc.length + bcc.length;
                 const c = cN.length
-                    ? `<br><span style="color:#555;">Copied: ${cN.join(', ')}</span>`
+                    ? `<br><span style="color:#555;">Copy sent to ${cN.join(', ')}</span>`
                     : (asked ? `<br><span style="color:#b45309; font-weight:700;">⚠ The Cc/Bcc was NOT sent — the mail function needs redeploying. The referees got the message.</span>` : '');
                 res.innerHTML = `<span style="color:#065f46; font-weight:700;">✅ Sent to ${who}${g}. Replies to ${j.reply_to || 'you'}.</span>` + c
                     + (fN ? `<br><span style="color:#dc2626;">Didn't reach: ${j.failed.map(f => `${f.name} (${f.error})`).join('; ')}</span>` : '');
@@ -12974,8 +12977,9 @@ The game keeps its date on the board but reads POSTPONED — new date to come. T
                     <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Bcc</label>
                     <input id="refMsgBcc" type="text" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem;" placeholder="hidden from the referees">
                     <div style="font-size:0.72rem; color:#777; margin-top:6px; line-height:1.45;">
-                        Each referee gets their own email, so a copy rides on every one of them — message 2 referees and a Cc gets 2 copies.
-                        Parents' copies are never Cc'd.
+                        <b>Cc</b> — the referees are told in the message that this person was copied, and they get one copy.<br>
+                        <b>Bcc</b> — nobody is told, and they get one copy.<br>
+                        A copy always goes to your own assignor email, whether you fill these in or not.
                     </div>
                 </div>
                 <label style="display:block; font-size:0.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Subject</label>
