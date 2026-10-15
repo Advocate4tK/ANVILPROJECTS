@@ -892,14 +892,14 @@
                          ⚠️ The list comes from the SAME pass that paints Entity
                          Status, never a second completeness check of its own. -->
                     <div id="continueWrap" style="display:none; margin-top:18px; padding-top:16px; border-top:1px dashed #e2d9ce;">
-                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.9rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:3px;">Or continue an unfinished one</div>
-                        <p style="font-size:0.84rem; color:#3f3a33; margin:0 0 10px;">Picks up in the wizard on just the sections that entity is still missing.</p>
+                        <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.9rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:3px;">Or work on one you already have</div>
+                        <p style="font-size:0.84rem; color:#3f3a33; margin:0 0 10px;">Unfinished ones first. Pick any entity to carry on in the wizard, or send its club a link to fill in and review.</p>
                         <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
                             <select id="continuePick" onchange="renderContinueHint()" style="flex:1 1 280px; min-width:240px; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem;"></select>
                             <!-- Two ways to fill the thing you just picked: do it
                                  yourself, or send it to whoever has the answers.
                                  Both also live on the entity's own row. -->
-                            <button type="button" onclick="continueUnfinished()" style="background:#09142a; color:#fff; border:none; padding:10px 22px; border-radius:8px; font-weight:800; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Continue in wizard →</button>
+                            <button type="button" id="continueBtn" onclick="continueUnfinished()" style="background:#09142a; color:#fff; border:none; padding:10px 22px; border-radius:8px; font-weight:800; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Continue in wizard →</button>
                             <button type="button" onclick="sendQuestionnaireForPicked()" style="background:#fff; border:1.5px solid #0f3460; color:#0f3460; padding:10px 20px; border-radius:8px; font-weight:800; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Send questionnaire →</button>
                         </div>
                         <div id="continueHint" style="font-size:0.84rem; color:#3f3a33; margin-top:8px;"></div>
@@ -1974,7 +1974,7 @@
             // picker must never compute "what's missing" a second way — that is
             // how two checklists end up disagreeing, which is already true of
             // this line and the CA badge. One computation, two readers.
-            _incomplete = [];
+            _entities = [];
             const clubHtml = clubs.map(c => {
                 // A LIVE club is the one you are MOST likely to need to change — it is the
                 // one with real games on it. This branch used to return a name, a LIVE
@@ -1985,11 +1985,19 @@
                 // pill and a checkbox and nothing else, so a working club had no route
                 // into the wizard and no way to change ownership.
                 if (c.enabled) {
+                    // ⚠️ A LIVE CLUB IS STILL CHECKED. Enabled is Tod's manual
+                    // switch, not a statement that everything is filled in — so
+                    // the picker must not report a live-but-incomplete club as
+                    // complete just because somebody ticked the box.
+                    const liveMissing = checkClub(c);
+                    _entities.push({ id: c.id, name: c.name, missing: liveMissing,
+                        missSteps: liveMissing.map(m => STATUS_STEP[m]).filter(Boolean).sort((a, b) => a - b), live: true });
                     return `<div style="padding:10px 14px; border:1px solid #bbf7d0; border-radius:8px; background:#f0fdf4;">
                         <div style="display:flex; align-items:center; justify-content:space-between;">
                             <span style="font-family:'DM Sans',sans-serif; font-size:0.92rem; color:#1f2328; font-weight:700;">${c.name}</span>
                             <div style="display:flex; align-items:center; gap:10px;">
                                 <span style="font-size:0.8rem; font-weight:800; font-family:'Barlow Condensed',sans-serif; letter-spacing:1px; text-transform:uppercase; color:#15803d;">● LIVE</span>
+                                <button onclick="sendQuestionnaire(${c.id}, '${String(c.name).replace(/'/g, "\\'")}')" title="Send this club a link to review and update their own details" style="background:#fff; border:1px solid #0f3460; color:#0f3460; padding:5px 12px; border-radius:6px; font-size:0.81rem; font-weight:700; cursor:pointer; font-family:inherit;">Send Questionnaire</button>
                                 <button onclick="openWizardForEdit(${c.id}, [])" title="Open the full wizard - contacts, venues, rates, crew, billing, ownership" style="background:#fff; border:1px solid #15803d; color:#15803d; padding:5px 12px; border-radius:6px; font-size:0.81rem; font-weight:700; cursor:pointer; font-family:inherit;">Edit</button>
                                 <input type="checkbox" data-club-id="${c.id}" checked style="width:18px;height:18px;cursor:pointer;accent-color:#00c853;">
                             </div>
@@ -2001,13 +2009,14 @@
                 const missing = checkClub(c);
                 const missSteps = missing.map(m => STATUS_STEP[m]).filter(Boolean).sort((a, b) => a - b);
                 const isReady = missing.length === 0;
-                if (!isReady) _incomplete.push({ id: c.id, name: c.name, missing, missSteps });
+                _entities.push({ id: c.id, name: c.name, missing, missSteps, live: false });
                 return `<div style="padding:10px 14px; border:1px solid ${isReady ? '#bfdbfe' : '#e2d9ce'}; border-radius:8px; background:${isReady ? '#eff6ff' : '#fafafa'};">
                     <div style="display:flex; align-items:center; justify-content:space-between;">
                         <span style="font-family:'DM Sans',sans-serif; font-size:0.92rem; color:#1f2328; font-weight:${isReady ? '700' : '400'};">${c.name}</span>
                         <div style="display:flex; align-items:center; gap:10px;">
                             ${isReady
                                 ? `<span style="font-size:0.8rem; font-weight:800; font-family:'Barlow Condensed',sans-serif; letter-spacing:1px; text-transform:uppercase; color:#1d4ed8;">◎ READY</span>
+                                   <button onclick="sendQuestionnaire(${c.id}, '${String(c.name).replace(/'/g, "\\'")}')" title="Send this club a link to review and update their own details" style="background:#fff; border:1px solid #0f3460; color:#0f3460; padding:5px 12px; border-radius:6px; font-size:0.81rem; font-weight:700; cursor:pointer; font-family:inherit;">Send Questionnaire</button>
                                    <button onclick="openWizardForEdit(${c.id}, [])" title="Open the full wizard to change contacts, venues, rates, crew, billing or ownership" style="background:#fff; border:1px solid #09142a; color:#09142a; padding:5px 12px; border-radius:6px; font-size:0.81rem; font-weight:700; cursor:pointer; font-family:inherit;">Edit</button>
                                    <input type="checkbox" data-club-id="${c.id}" style="width:18px;height:18px;cursor:pointer;accent-color:#00c853;">`
                                 : `<button onclick="sendQuestionnaire(${c.id}, '${String(c.name).replace(/'/g, "\\'")}')" title="Spin off a link for the club or the assignor to fill in" style="background:#fff; border:1px solid #0f3460; color:#0f3460; padding:5px 12px; border-radius:6px; font-weight:700; font-size:0.84rem; cursor:pointer; font-family:'DM Sans',sans-serif;">Send Questionnaire</button>
@@ -3837,36 +3846,57 @@
         }).catch(() => { document.execCommand('copy'); btn.textContent = '✓ Copied'; });
     }
 
-    // Entities with something still missing, captured by loadClubStatus as it
-    // paints the rows — see the note there about one computation, two readers.
-    let _incomplete = [];
+    // EVERY entity, complete or not, captured by loadClubStatus as it paints
+    // the rows — see the note there about one computation, two readers.
+    // ⭐ Complete ones are in here too. Tod, 2026-10-15: "should be able to
+    // send people even the complete ones so they can update items and review."
+    // A club's details go stale — a new treasurer, a field that closed — and
+    // the questionnaire is how they tell you without an email thread.
+    let _entities = [];
 
     function renderContinuePicker() {
         const wrap = document.getElementById('continueWrap');
         const sel  = document.getElementById('continuePick');
         if (!wrap || !sel) return;
-        if (!_incomplete.length) { wrap.style.display = 'none'; return; }
+        if (!_entities.length) { wrap.style.display = 'none'; return; }
         wrap.style.display = 'block';
         const keep = sel.value;
-        sel.innerHTML = '<option value="">— pick one —</option>' + _incomplete
-            .map(e => `<option value="${e.id}">${e.name} — ${e.missing.length} left</option>`).join('');
-        if (keep && _incomplete.some(e => String(e.id) === keep)) sel.value = keep;
+        // Unfinished first, and alphabetical inside each group — the ones
+        // needing work are why you opened this.
+        const sorted = [..._entities].sort((a, b) =>
+            (a.missing.length ? 0 : 1) - (b.missing.length ? 0 : 1) || a.name.localeCompare(b.name));
+        // ⚠️ option colour works in Chrome on Windows, which is what Tod uses,
+        // but is ignored by some browsers — so the WORDS carry the meaning and
+        // the colour only reinforces it. "complete" and "3 missing" read
+        // correctly in plain black.
+        sel.innerHTML = '<option value="">— pick one —</option>' + sorted.map(e => {
+            const bad = e.missing.length;
+            return `<option value="${e.id}" style="color:${bad ? '#b91c1c' : '#15803d'}; font-weight:700;">`
+                 + `${e.name} — ${bad ? bad + ' missing' : 'complete'}</option>`;
+        }).join('');
+        if (keep && _entities.some(e => String(e.id) === keep)) sel.value = keep;
         renderContinueHint();
     }
 
     function renderContinueHint() {
         const sel  = document.getElementById('continuePick');
         const hint = document.getElementById('continueHint');
+        const cont = document.getElementById('continueBtn');
         if (!sel || !hint) return;
-        const e = _incomplete.find(x => String(x.id) === sel.value);
+        const e = _entities.find(x => String(x.id) === sel.value);
+        if (!e) { hint.innerHTML = ''; if (cont) cont.textContent = 'Continue in wizard →'; return; }
         // Name what's missing before they commit, so the dropdown isn't a
         // guess — same wording as the row above.
-        hint.innerHTML = e ? `Still needed: <b>${e.missing.join(' · ')}</b>` : '';
+        hint.innerHTML = e.missing.length
+            ? `<span style="color:#b91c1c; font-weight:700;">Still needed:</span> <b>${e.missing.join(' · ')}</b>`
+            : `<span style="color:#15803d; font-weight:700;">Complete.</span> Send the questionnaire if they need to review or update anything.`;
+        // A complete entity isn't being "continued" — it's being edited.
+        if (cont) cont.textContent = e.missing.length ? 'Continue in wizard →' : 'Edit in wizard →';
     }
 
     // ⚠️ THE PICKER DEPENDS ON A SECTION FURTHER UP THE PAGE HAVING BEEN
     // OPENED. Entity Status is collapsible and loadClubStatus() — which is
-    // what fills _incomplete — only runs when it is expanded. So on a fresh
+    // what fills _entities — only runs when it is expanded. So on a fresh
     // page load the dropdown had nothing in it and hid itself, which looks
     // exactly like it was never built. Tod, 2026-10-15: "I dont see a drop
     // down."
@@ -3888,14 +3918,14 @@
     // places to reach it, so they can never behave differently.
     function sendQuestionnaireForPicked() {
         const sel = document.getElementById('continuePick');
-        const e   = _incomplete.find(x => String(x.id) === sel.value);
+        const e   = _entities.find(x => String(x.id) === sel.value);
         if (!e) { sel.focus(); return; }
         sendQuestionnaire(e.id, e.name);
     }
 
     function continueUnfinished() {
         const sel = document.getElementById('continuePick');
-        const e   = _incomplete.find(x => String(x.id) === sel.value);
+        const e   = _entities.find(x => String(x.id) === sel.value);
         if (!e) { sel.focus(); return; }
         // ⭐ EXACTLY what the row's own "Complete in Wizard →" button calls.
         // Two entry points, one behaviour.
