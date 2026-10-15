@@ -3835,6 +3835,26 @@
         hint.innerHTML = e ? `Still needed: <b>${e.missing.join(' · ')}</b>` : '';
     }
 
+    // ⚠️ THE PICKER DEPENDS ON A SECTION FURTHER UP THE PAGE HAVING BEEN
+    // OPENED. Entity Status is collapsible and loadClubStatus() — which is
+    // what fills _incomplete — only runs when it is expanded. So on a fresh
+    // page load the dropdown had nothing in it and hid itself, which looks
+    // exactly like it was never built. Tod, 2026-10-15: "I dont see a drop
+    // down."
+    //
+    // Load it once on open instead. Same guard the toggle uses, so expanding
+    // the section afterwards doesn't re-query.
+    function primeContinuePicker() {
+        if (_clubStatusLoaded) return;
+        _clubStatusLoaded = true;
+        loadClubStatus();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', primeContinuePicker);
+    } else {
+        primeContinuePicker();
+    }
+
     function continueUnfinished() {
         const sel = document.getElementById('continuePick');
         const e   = _incomplete.find(x => String(x.id) === sel.value);
