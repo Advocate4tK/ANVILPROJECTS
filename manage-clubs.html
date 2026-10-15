@@ -303,6 +303,23 @@
         }
         .section-toggle-btn:hover { border-color: #09142a; background: #f8f6f2; }
 
+        /* Entity-type picker on the Create Entity form — same look as the
+           wizard's own type buttons so the two read as one idea. */
+        .new-ent-type {
+            background: #fff;
+            border: 1.5px solid #e2d9ce;
+            color: #09142a;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .new-ent-type:hover { border-color: #09142a; }
+        .new-ent-type.is-on { border-color: #09142a; background: #09142a; color: #fff; }
+
         /* ── Entity type selector ── */
         .entity-type-btn {
             display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
@@ -802,6 +819,49 @@
                     </div>
                     <button class="section-toggle-btn" onclick="toggleWizard(this)">Show Wizard ▾</button>
                 </div>
+
+                <!-- ⭐ CREATE THE ENTITY FIRST — Tod, 2026-10-15: "initializing a new
+                     tenant... the entity should be initialized first. The wizard and
+                     the questionnaire page simply facilitate inputting the data."
+                     Name it, create it, and it appears in Entity Status above with
+                     everything in Still needed. THEN you fill it — by walking the
+                     wizard yourself or by sending the questionnaire out.
+                     ⚠️ Created DISABLED. Disabled entities are invisible on public
+                     surfaces, so a half-filled club can sit here safely until the
+                     enable box is ticked. -->
+                <div style="margin-top:18px; padding-top:18px; border-top:1px solid #e2d9ce;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.9rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:3px;">Create the entity first</div>
+                    <p style="font-size:0.78rem; color:#8a8378; margin:0 0 12px;">Name it and it appears in Entity Status above, switched off, with everything still to fill. Then complete it in the wizard or send the questionnaire.</p>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;" id="newEntTypes">
+                        <button type="button" class="new-ent-type is-on" data-type="club"        onclick="pickNewEntityType(this)">🏟 Club</button>
+                        <button type="button" class="new-ent-type"       data-type="tournament"  onclick="pickNewEntityType(this)">🏆 Tournament / Event</button>
+                        <button type="button" class="new-ent-type"       data-type="league"      onclick="pickNewEntityType(this)">📅 Organization / League</button>
+                    </div>
+                    <div id="newEntManagedRow" style="display:flex; align-items:center; gap:14px; margin-bottom:12px; font-size:0.82rem;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; color:#09142a;">
+                            <input type="radio" name="newEntManaged" value="managed" checked> Managed
+                        </label>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; color:#09142a;">
+                            <input type="radio" name="newEntManaged" value="reference"> Reference Only
+                        </label>
+                        <span style="color:#8a8378; font-size:0.76rem;">Managed entities get a portal &amp; workstation. Reference entities are contacts only.</span>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start;">
+                        <div style="flex:1 1 220px; min-width:200px;">
+                            <label style="display:block; font-size:0.72rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Name <span style="color:#e74c3c">*</span></label>
+                            <input type="text" id="newEntName" placeholder="e.g. VALE" onkeydown="if(event.key==='Enter'){event.preventDefault();createEntityShell();}" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem;">
+                            <div style="font-size:0.72rem; color:#8a8378; margin-top:4px;">Short operational name — used in URLs and system filters.</div>
+                        </div>
+                        <div style="flex:1 1 220px; min-width:200px;">
+                            <label style="display:block; font-size:0.72rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Display Name</label>
+                            <input type="text" id="newEntDisplay" placeholder="e.g. VALE Soccer Club" onkeydown="if(event.key==='Enter'){event.preventDefault();createEntityShell();}" style="width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px; font-family:inherit; font-size:0.9rem;">
+                            <div style="font-size:0.72rem; color:#8a8378; margin-top:4px;">Optional — leave blank to use the name above.</div>
+                        </div>
+                        <button type="button" id="newEntBtn" onclick="createEntityShell()" style="background:#09142a; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-weight:800; font-size:0.9rem; cursor:pointer; font-family:'DM Sans',sans-serif; margin-top:21px;">Create Entity</button>
+                    </div>
+                    <div id="newEntMsg" style="display:none; margin-top:12px; font-size:0.86rem; font-weight:600;"></div>
+                </div>
+
                 <div id="wizardContent" style="display:none; margin-top:20px; padding-top:20px; border-top:1px solid #e2d9ce;">
                     <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-bottom:10px;">
                         <span style="font-size:0.74rem; color:#8a8378;">Progress is kept in this browser until you create the club.</span>
@@ -3608,6 +3668,91 @@
 
         log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
         log(`✅ ${name} is live. Its pay now shows in Entity Status.`, 'ok');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // CREATE THE ENTITY SHELL
+    //
+    // Tod, 2026-10-15: "once the entity is created we can either complete it
+    // in the wizard or spin off the form to be filled out and send that to the
+    // club or to the assignor."
+    //
+    // ⭐ WHY THIS EXISTS. The wizard collects everything and writes NOTHING
+    // until Review & Create at step 7, so an abandoned wizard leaves no trace.
+    // That is why Portland, Valley and Haddam-Killingworth sit in Entity Status
+    // with contacts and nothing else — those came from Edit Contacts, not from
+    // the wizard, because nobody ever walked all seven steps. An entity that
+    // exists leaves a row with a "Still needed" line, which is a to-do list.
+    // An abandoned wizard leaves nothing.
+    //
+    // ⚠️ THE 9/4 DECISION STANDS. Per-step DB writes inside the wizard were
+    // deliberately decided against and this is NOT that. This is one admin act
+    // creating one row, up front, on purpose — after which the normal section
+    // editors do the filling, exactly as they already do today.
+    //
+    // ⚠️ enabled:false IS SET EXPLICITLY, not left to a column default. Being
+    // switched off is the whole safety story here — it is what lets a
+    // half-filled club sit in the list without reaching a public surface.
+    // ⛔ Competition / League-Cup is not offered: that path writes leagues and
+    // league_pay_rates and never creates an entity row at all, so there is no
+    // shell to make. Use the wizard for those.
+    function pickNewEntityType(btn) {
+        document.querySelectorAll('#newEntTypes .new-ent-type').forEach(b => b.classList.toggle('is-on', b === btn));
+        // Managed/Reference is a clubs-table idea only.
+        document.getElementById('newEntManagedRow').style.display = btn.dataset.type === 'club' ? 'flex' : 'none';
+    }
+
+    async function createEntityShell() {
+        const btn  = document.getElementById('newEntBtn');
+        const msg  = document.getElementById('newEntMsg');
+        const name = document.getElementById('newEntName').value.trim();
+        const disp = document.getElementById('newEntDisplay').value.trim();
+        const type = document.querySelector('#newEntTypes .new-ent-type.is-on')?.dataset.type || 'club';
+        const mode = document.querySelector('input[name="newEntManaged"]:checked')?.value || 'managed';
+        const say  = (t, ok) => { msg.style.display = 'block'; msg.style.color = ok ? '#0b7a3b' : '#dc2626'; msg.innerHTML = t; };
+
+        if (!name) { say('Give it a name first.', false); document.getElementById('newEntName').focus(); return; }
+
+        // Same slug rule the wizard uses, so a shell and a wizard-built entity
+        // can never end up with differently-shaped keys.
+        const slug = name.toLowerCase().replace(/[\s-]+/g, '-').replace(/[^a-z0-9-]/g, '');
+        if (!slug) { say('That name has no letters or numbers in it — pick something usable in a URL.', false); return; }
+
+        btn.disabled = true; btn.textContent = 'Creating…';
+        try {
+            // ⚠️ Refuse a duplicate rather than quietly making a second one.
+            // Two clubs with the same slug would collide in every URL and
+            // every filter in the tool.
+            const table = type === 'tournament' ? 'tournaments' : type === 'league' ? 'events' : 'clubs';
+            const col   = type === 'tournament' ? 'key' : 'name';
+            const { data: dupe } = await supabaseClient.client.from(table).select('id').eq(col, slug).maybeSingle();
+            if (dupe) { say(`A ${type} already exists with the name <b>${slug}</b>. Pick another, or finish that one from Entity Status.`, false); return; }
+
+            let row;
+            if (type === 'tournament') {
+                row = { key: slug, name: name, status: 'upcoming' };
+            } else if (type === 'league') {
+                row = { name: slug, slug: slug, 'Club Name': name, enabled: false };
+            } else {
+                row = { name: slug, 'Club Name': name, 'Display Name': disp || null, club_type: mode, enabled: false };
+            }
+
+            const { error } = await supabaseClient.client.from(table).insert(row);
+            if (error) throw new Error(error.message);
+
+            document.getElementById('newEntName').value = '';
+            document.getElementById('newEntDisplay').value = '';
+            say(`✅ <b>${name}</b> created and switched off. It's in Entity Status above — fill it in the wizard, or send the questionnaire.`, true);
+
+            // Repaint the list so the new row is there to look at, and refresh
+            // the dropdowns that every section on this page reads from.
+            await loadClubStatus();
+            try { await loadClubsForRemove(); } catch (e) { console.warn(e); }
+        } catch (e) {
+            say('Could not create it: ' + e.message, false);
+        } finally {
+            btn.disabled = false; btn.textContent = 'Create Entity';
+        }
     }
 
     async function createClub() {
