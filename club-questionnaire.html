@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Club Setup — Referee Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+        font-family:'DM Sans',sans-serif; background:#f0ece6; color:#1f2328;
+        line-height:1.5; padding:20px 16px 60px;
+    }
+    .wrap { max-width:860px; margin:0 auto; }
+
+    /* ── header ───────────────────────────────────────────────────────── */
+    .hdr {
+        background:#060e20; color:#fff; border-radius:14px;
+        padding:24px 28px; margin-bottom:18px;
+    }
+    .brand {
+        font-family:'Barlow Condensed',sans-serif; font-size:1.5rem; font-weight:800;
+        text-transform:uppercase; letter-spacing:1.2px;
+    }
+    .brand span { color:#00c853; }
+    .hdr h1 {
+        font-family:'Barlow Condensed',sans-serif; font-size:2rem; font-weight:800;
+        text-transform:uppercase; letter-spacing:0.8px; margin-top:10px; line-height:1.1;
+    }
+    .hdr p { color:#b9c2d0; font-size:0.9rem; margin-top:8px; }
+
+    /* ── progress ─────────────────────────────────────────────────────── */
+    .prog {
+        background:#fff; border-radius:12px; padding:14px 20px; margin-bottom:18px;
+        box-shadow:0 4px 15px rgba(0,0,0,0.07); position:sticky; top:12px; z-index:20;
+    }
+    .prog-bar { height:8px; background:#e8e2da; border-radius:5px; overflow:hidden; margin-bottom:8px; }
+    .prog-fill { height:100%; background:#00c853; width:0; transition:width 0.3s; }
+    .prog-row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .prog-txt { font-size:0.84rem; font-weight:700; color:#1f2328; }
+    .saved { font-size:0.78rem; color:#5a5349; font-family:'JetBrains Mono',monospace; }
+
+    /* ── sections ─────────────────────────────────────────────────────── */
+    .sec {
+        background:#fff; border-radius:12px; margin-bottom:16px;
+        box-shadow:0 4px 15px rgba(0,0,0,0.07); overflow:hidden;
+        border-left:5px solid #e2d9ce;
+    }
+    .sec.done { border-left-color:#00c853; }
+    .sec-hd {
+        display:flex; align-items:center; gap:12px; padding:16px 22px; cursor:pointer;
+        background:#fff; user-select:none;
+    }
+    .sec-hd:hover { background:#faf8f5; }
+    .sec-n {
+        width:28px; height:28px; border-radius:50%; background:#060e20; color:#fff;
+        display:flex; align-items:center; justify-content:center; flex-shrink:0;
+        font-weight:800; font-size:0.82rem;
+    }
+    .sec.done .sec-n { background:#00c853; color:#06210f; }
+    .sec-t {
+        font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; font-weight:800;
+        text-transform:uppercase; letter-spacing:0.7px; color:#09142a; flex:1;
+    }
+    .req { font-size:0.68rem; font-weight:800; color:#b45309; background:#fef3c7;
+           border-radius:4px; padding:2px 7px; letter-spacing:0.5px; }
+    .chev { color:#5a5349; font-size:0.9rem; transition:transform 0.2s; }
+    .sec.open .chev { transform:rotate(90deg); }
+    .sec-bd { display:none; padding:4px 22px 22px; border-top:1px solid #f0ece6; }
+    .sec.open .sec-bd { display:block; }
+    .sec-help { font-size:0.84rem; color:#5a5349; margin:14px 0 16px; }
+
+    /* ── fields ───────────────────────────────────────────────────────── */
+    label.lbl {
+        display:block; font-size:0.72rem; font-weight:700; color:#5a5349;
+        text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;
+    }
+    input[type=text], input[type=email], input[type=tel], input[type=number], select, textarea {
+        width:100%; padding:9px 11px; border:1.5px solid #dde3f0; border-radius:7px;
+        font-family:'DM Sans',sans-serif; font-size:0.9rem; background:#fff; color:#1f2328;
+    }
+    input:focus, select:focus, textarea:focus { outline:none; border-color:#00c853; }
+    .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .grid2 { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+    @media (max-width:640px) { .grid3, .grid2 { grid-template-columns:1fr; } }
+
+    .block {
+        border:1px solid #e8e2da; border-radius:9px; padding:14px 16px; margin-bottom:12px;
+        background:#faf8f5;
+    }
+    .block-t {
+        font-family:'Barlow Condensed',sans-serif; font-size:0.9rem; font-weight:800;
+        text-transform:uppercase; letter-spacing:0.7px; color:#09142a; margin-bottom:10px;
+        display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    }
+    .pill {
+        font-size:0.66rem; font-weight:800; letter-spacing:0.5px; border-radius:4px;
+        padding:2px 7px; background:#e0edff; color:#1d4ed8;
+    }
+    .tick { display:flex; align-items:center; gap:7px; font-size:0.84rem; font-weight:600; cursor:pointer; }
+    .tick input { width:16px; height:16px; cursor:pointer; accent-color:#00c853; }
+    .chips { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip {
+        border:1.5px solid #dde3f0; background:#fff; border-radius:20px; padding:7px 14px;
+        font-size:0.82rem; font-weight:700; cursor:pointer; font-family:inherit; color:#1f2328;
+    }
+    .chip.on { border-color:#060e20; background:#060e20; color:#fff; }
+
+    .btn {
+        background:#060e20; color:#fff; border:none; border-radius:8px; padding:10px 22px;
+        font-family:'DM Sans',sans-serif; font-weight:800; font-size:0.88rem; cursor:pointer;
+    }
+    .btn:hover { background:#102a4d; }
+    .btn.gr { background:#00c853; color:#06210f; }
+    .btn.sm { padding:6px 13px; font-size:0.8rem; font-weight:700; }
+    .btn.gh { background:#fff; border:1.5px solid #dde3f0; color:#1f2328; }
+    .btn:disabled { opacity:0.5; cursor:not-allowed; }
+    .btn-x {
+        background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:6px;
+        padding:6px 9px; cursor:pointer; font-weight:700; font-size:0.82rem;
+    }
+
+    table.rates { width:100%; border-collapse:collapse; font-size:0.86rem; }
+    table.rates th {
+        font-family:'Barlow Condensed',sans-serif; font-size:0.76rem; font-weight:800;
+        text-transform:uppercase; letter-spacing:0.6px; color:#5a5349;
+        text-align:left; padding:6px 8px; border-bottom:1.5px solid #e8e2da;
+    }
+    table.rates td { padding:5px 8px; border-bottom:1px solid #f0ece6; }
+    table.rates input { padding:6px 8px; font-size:0.85rem; text-align:center; }
+    .money { position:relative; }
+    .money::before {
+        content:'$'; position:absolute; left:7px; top:50%; transform:translateY(-50%);
+        color:#8a8378; font-size:0.82rem; pointer-events:none;
+    }
+    .money input { padding-left:17px; text-align:left; }
+
+    .sec-foot {
+        display:flex; align-items:center; justify-content:space-between; gap:12px;
+        flex-wrap:wrap; margin-top:18px; padding-top:14px; border-top:1px dashed #e2d9ce;
+    }
+    .note {
+        background:#f0f9ff; border:1px solid #bae6fd; border-left:4px solid #0369a1;
+        border-radius:7px; padding:10px 13px; font-size:0.82rem; color:#0c4a6e; margin-bottom:14px;
+    }
+    .warn {
+        background:#fffbeb; border:1px solid #fde68a; border-left:4px solid #f59e0b;
+        border-radius:7px; padding:10px 13px; font-size:0.82rem; color:#78350f; margin-bottom:14px;
+    }
+    .foot { text-align:center; color:#5a5349; font-size:0.78rem; margin-top:26px; }
+    .foot b { color:#09142a; }
+    .center-msg { background:#fff; border-radius:12px; padding:46px 28px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+    <div class="center-msg"><p style="color:#5a5349;">Loading…</p></div>
+</div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// CLUB SETUP QUESTIONNAIRE
+// 2026-10-15
+//
+// WHY THIS EXISTS
+//   Tod: "I'm begging people for information and going back and forth.
+//   Referee Tool is about streamlining getting data from people." Onboarding a
+//   club meant a Google Sheet with six headings on it — Contacts, Venues, Age
+//   Groups, Referee Pay, Crew Rules, Billing — and a club would answer the
+//   easy one and stop. Portland, Valley and Haddam-Killingworth are all sitting
+//   in the Command Center with contacts filled in and nothing else.
+//
+//   Headings are not questions. This asks the questions.
+//
+// WHO FILLS IT IN
+//   Whoever has the answers. Tod spins off a link, sends it to Eric; Eric
+//   fills what he knows and forwards the same link to the club president, who
+//   finishes it. ⚠️ So every keystroke saves SERVER-SIDE, not in the browser —
+//   two people on one link only works if the second one sees the first one's
+//   answers.
+//
+// ⚠️ THE TOKEN IS THE CREDENTIAL. There is no login, deliberately. The page
+//   can only ever reach its own row, through two SECURITY DEFINER functions
+//   that take the token — it has no rights on the table itself.
+//
+// ⛔ IT WRITES NOTHING REAL. Answers land in club_questionnaires and stay
+//   there until Tod promotes them. A club president's typo must not silently
+//   become the rate a referee gets paid.
+//
+// ⛔ BILLING IS NOT ON THIS PAGE. Tod: "that's what I charge them — my
+//   contract, not intake." Asking a club to fill in your pricing puts your
+//   pricing in their hands.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
+const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+
+let A = {};              // the answers, as they stand
+let DONE = new Set();    // sections marked complete
+let META = null;         // entity_kind / entity_name / status
+let LEAGUES = [];
+let _saveTimer = null, _saving = false, _dirty = false;
+
+// ── sections ────────────────────────────────────────────────────────────────
+// ⭐ ORDER MATTERS. Age Groups sits before Pay and Crew because both are
+// GENERATED from it — you can't be asked a U12 centre rate before you've said
+// you run U12. That is the thing a spreadsheet structurally cannot do, and
+// it's the whole reason this is a page.
+const SECTIONS = [
+    { key:'contacts',  title:'Who to contact',     req:true  },
+    { key:'leagues',   title:'Leagues & districts', req:true },
+    { key:'venues',    title:'Venues & fields',     req:true },
+    { key:'ages',      title:'Age groups',          req:true },
+    { key:'pay',       title:'Referee pay',         req:true },
+    { key:'crew',      title:'Crew rules',          req:true },
+    { key:'policy',    title:'Paying referees',     req:true },
+    { key:'portals',   title:'Pages you want',      req:false },
+];
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+// ── boot ────────────────────────────────────────────────────────────────────
+(async function boot() {
+    const wrap = document.getElementById('wrap');
+    if (!TOKEN) return bail('This link is missing its code. Ask whoever sent it for the full link.');
+    try {
+        const { data, error } = await sb.rpc('questionnaire_get', { p_token: TOKEN });
+        if (error) throw new Error(error.message);
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row) return bail('This link has expired, or the setup has already been completed. Ask for a fresh one.');
+        META  = row;
+        A     = row.answers || {};
+        DONE  = new Set(row.sections_done || []);
+        try {
+            const { data: lg } = await sb.from('leagues').select('name').order('name');
+            LEAGUES = (lg || []).map(l => l.name).filter(Boolean);
+        } catch (e) { console.warn('league list unavailable', e); }
+        render();
+    } catch (e) {
+        bail('Could not open this form: ' + e.message);
+    }
+    function bail(msg) {
+        wrap.innerHTML = `<div class="hdr"><div class="brand">REFEREE <span>TOOL</span></div></div>
+            <div class="center-msg">
+                <p style="font-size:1rem; color:#1f2328; font-weight:600;">${esc(msg)}</p>
+                <p class="foot" style="margin-top:18px;">Referee Tool by <b>Anvil Arts</b></p>
+            </div>`;
+    }
+})();
+
+// ── saving ──────────────────────────────────────────────────────────────────
+// ⚠️ Debounced, not on every keypress — but ALWAYS flushed before the tab
+// closes. Somebody typing three venues and closing the laptop must not lose
+// them; that is exactly the abandonment this page exists to stop.
+function touch() {
+    _dirty = true;
+    setSaved('Saving…');
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(save, 900);
+}
+
+async function save(submit = false) {
+    if (_saving) return;
+    _saving = true;
+    try {
+        const { data, error } = await sb.rpc('questionnaire_save', {
+            p_token: TOKEN, p_answers: A, p_done: [...DONE], p_submit: !!submit,
+        });
+        if (error) throw new Error(error.message);
+        if (data === false) throw new Error('this form is no longer accepting changes');
+        _dirty = false;
+        setSaved('Saved ' + new Date().toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }));
+        return true;
+    } catch (e) {
+        setSaved('⚠ Not saved — ' + e.message, true);
+        return false;
+    } finally { _saving = false; }
+}
+
+function setSaved(txt, bad) {
+    const el = document.getElementById('savedAt');
+    if (el) { el.textContent = txt; el.style.color = bad ? '#b91c1c' : '#5a5349'; }
+}
+
+// A last-chance flush. Can't await in beforeunload, so it's fire-and-hope —
+// but combined with the 900ms debounce it closes nearly the whole window.
+window.addEventListener('beforeunload', e => {
+    if (!_dirty) return;
+    save();
+    e.preventDefault();
+    e.returnValue = '';
+});
+
+// ── shell ───────────────────────────────────────────────────────────────────
+function render() {
+    const submitted = META.status === 'submitted';
+    document.getElementById('wrap').innerHTML = `
+        <div class="hdr">
+            <div class="brand">REFEREE <span>TOOL</span></div>
+            <h1>${esc(META.entity_name)} — Setup</h1>
+            <p>Everything we need to get your games assigned. It saves as you go, so you can stop
+               and come back, or pass this same link to somebody else to finish.</p>
+        </div>
+        <div class="prog">
+            <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+            <div class="prog-row">
+                <span class="prog-txt" id="progTxt"></span>
+                <span class="saved" id="savedAt">Saved</span>
+            </div>
+        </div>
+        ${submitted ? `<div class="note"><b>Sent in.</b> You can still change anything below and it
+            will be picked up — nothing is locked until we've set the club up.</div>` : ''}
+        <div id="secs"></div>
+        <div style="background:#fff; border-radius:12px; padding:20px 24px; box-shadow:0 4px 15px rgba(0,0,0,0.07); margin-top:16px;">
+            <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.7px; color:#09142a; margin-bottom:6px;">Finished?</div>
+            <p style="font-size:0.84rem; color:#5a5349; margin-bottom:14px;" id="submitHelp"></p>
+            <button class="btn gr" id="submitBtn" onclick="submitAll()">Send it in →</button>
+            <div id="submitMsg" style="margin-top:12px; font-size:0.86rem; font-weight:600;"></div>
+        </div>
+        <p class="foot">Referee Tool by <b>Anvil Arts</b> · this link is private to ${esc(META.entity_name)}</p>`;
+
+    document.getElementById('secs').innerHTML = SECTIONS.map((s, i) => `
+        <div class="sec ${DONE.has(s.key) ? 'done' : ''}" id="sec-${s.key}">
+            <div class="sec-hd" onclick="toggleSec('${s.key}')">
+                <div class="sec-n">${DONE.has(s.key) ? '✓' : i + 1}</div>
+                <div class="sec-t">${s.title}</div>
+                ${s.req && !DONE.has(s.key) ? '<span class="req">NEEDED</span>' : ''}
+                <span class="chev">›</span>
+            </div>
+            <div class="sec-bd" id="bd-${s.key}"></div>
+        </div>`).join('');
+
+    SECTIONS.forEach(s => paint(s.key));
+    // Open the first unfinished one so nobody lands on a wall of closed boxes.
+    const first = SECTIONS.find(s => !DONE.has(s.key));
+    if (first) toggleSec(first.key, true);
+    updateProgress();
+}
+
+function toggleSec(key, force) {
+    const el = document.getElementById('sec-' + key);
+    const open = el.classList.contains('open');
+    if (force && open) return;
+    el.classList.toggle('open', force ? true : !open);
+}
+
+function updateProgress() {
+    const req  = SECTIONS.filter(s => s.req);
+    const got  = req.filter(s => DONE.has(s.key)).length;
+    const pct  = Math.round(got / req.length * 100);
+    const fill = document.getElementById('progFill');
+    const txt  = document.getElementById('progTxt');
+    if (fill) fill.style.width = pct + '%';
+    if (txt)  txt.textContent = got === req.length
+        ? 'All sections done — send it in below.'
+        : `${got} of ${req.length} sections done`;
+    const help = document.getElementById('submitHelp');
+    if (help) {
+        const left = req.filter(s => !DONE.has(s.key)).map(s => s.title);
+        help.innerHTML = left.length
+            ? `Still to do: <b>${left.map(esc).join(' · ')}</b>. You can send it in anyway and we'll
+               follow up on the rest — but the more that's filled in, the faster you're live.`
+            : `Everything's filled in. Send it over and we'll build it out.`;
+    }
+}
+
+// Mark a section complete / not complete.
+function markDone(key, on) {
+    if (on) DONE.add(key); else DONE.delete(key);
+    document.getElementById('sec-' + key).classList.toggle('done', on);
+    const n = document.getElementById('sec-' + key).querySelector('.sec-n');
+    const i = SECTIONS.findIndex(s => s.key === key);
+    n.textContent = on ? '✓' : i + 1;
+    const badge = document.getElementById('sec-' + key).querySelector('.req');
+    if (badge) badge.style.display = on ? 'none' : '';
+    updateProgress();
+    touch();
+    // Completing one section opens the next unfinished one — momentum, and
+    // nobody has to hunt for where they were.
+    if (on) {
+        const next = SECTIONS.find(s => !DONE.has(s.key));
+        if (next && next.key !== key) {
+            document.getElementById('sec-' + key).classList.remove('open');
+            toggleSec(next.key, true);
+            document.getElementById('sec-' + next.key).scrollIntoView({ behavior:'smooth', block:'start' });
+        }
+    }
+}
+
+function secFoot(key) {
+    return `<div class="sec-foot">
+        <label class="tick"><input type="checkbox" ${DONE.has(key) ? 'checked' : ''}
+            onchange="markDone('${key}', this.checked)"> This section is complete</label>
+        <span style="font-size:0.78rem; color:#5a5349;">Saves automatically</span>
+    </div>`;
+}
+
+// ── generic binding ─────────────────────────────────────────────────────────
+// Every input writes straight into A at a dotted path. One helper instead of
+// forty handlers, and it means the saved shape and the rendered shape can't
+// drift apart.
+function setVal(path, v) {
+    const bits = path.split('.');
+    let o = A;
+    for (let i = 0; i < bits.length - 1; i++) o = (o[bits[i]] ??= {});
+    o[bits[bits.length - 1]] = v;
+    touch();
+}
+function getVal(path, dflt = '') {
+    return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), A) ?? dflt;
+}
+function fld(path, label, ph = '', type = 'text') {
+    return `<div><label class="lbl">${label}</label>
+        <input type="${type}" placeholder="${esc(ph)}" value="${esc(getVal(path))}"
+               oninput="setVal('${path}', this.value)"></div>`;
+}
+
+function paint(key) { ({ contacts:pContacts, leagues:pLeagues, venues:pVenues, ages:pAges,
+    pay:pPay, crew:pCrew, policy:pPolicy, portals:pPortals }[key])(); }
+
+// ── 1 · contacts ────────────────────────────────────────────────────────────
+// ⭐ FOUR ROLES, and two of them are logins rather than names: the scheduling
+// contact submits games and change requests, and the payment coordinator gets
+// into the pay portal. Griswold has Ed Conn as both president AND admin,
+// entered twice and spelled differently — hence "same as president".
+const ROLES = [
+    { k:'president', t:'Club President', hint:'Signs the season contract and sees the audit page.' },
+    { k:'admin',     t:'Scheduling Contact', hint:'Submits your games and asks for changes. <b>They will need a login.</b>' },
+    { k:'payment',   t:'Payment Coordinator', hint:'Pays the referees. Only needed if you want the payment page.' },
+    { k:'assignor',  t:'Assignor', hint:'Who assigns your referees today, if anyone.' },
+];
+function pContacts() {
+    document.getElementById('bd-contacts').innerHTML = `
+        <p class="sec-help">Four roles. One person can hold more than one — plenty of clubs have the
+            same person as president and scheduling contact.</p>
+        ${ROLES.map((r, i) => `
+            <div class="block">
+                <div class="block-t">${r.t}
+                    ${i > 0 ? `<label class="tick" style="font-weight:600; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif;">
+                        <input type="checkbox" ${getVal('contacts.' + r.k + '.same') ? 'checked' : ''}
+                               onchange="sameAsPres('${r.k}', this.checked)"> same as president</label>` : ''}
+                </div>
+                <p style="font-size:0.8rem; color:#5a5349; margin-bottom:10px;">${r.hint}</p>
+                <div class="grid3" id="c-${r.k}">
+                    ${fld('contacts.' + r.k + '.name',  'Name',  'Jane Smith')}
+                    ${fld('contacts.' + r.k + '.email', 'Email', 'jane@club.org', 'email')}
+                    ${fld('contacts.' + r.k + '.phone', 'Phone', '(860) 555-1234', 'tel')}
+                </div>
+            </div>`).join('')}
+        ${secFoot('contacts')}`;
+}
+function sameAsPres(k, on) {
+    setVal('contacts.' + k + '.same', on);
+    if (on) {
+        const p = getVal('contacts.president', {});
+        ['name','email','phone'].forEach(f => setVal(`contacts.${k}.${f}`, p[f] || ''));
+    }
+    pContacts();
+}
+
+// ── 2 · leagues ─────────────────────────────────────────────────────────────
+// ⚠️ MULTI-SELECT WITH ONE PRIMARY, and it must come off the known list, never
+// free text — Central Assign matches leagues by name, and a club with no
+// primary is what caused the CT Cup mislabel.
+function pLeagues() {
+    const picked  = getVal('leagues.list', []);
+    const primary = getVal('leagues.primary', '');
+    const opts = LEAGUES.length ? LEAGUES : picked;
+    document.getElementById('bd-leagues').innerHTML = `
+        <p class="sec-help">Which leagues, districts or cups do your teams play in? Tick every one,
+            then mark the main one — the league most of your games belong to.</p>
+        ${!LEAGUES.length ? `<div class="warn">We couldn't load the league list. Type them in below,
+            one per line, and we'll match them up.</div>
+            <textarea rows="4" placeholder="CT Northeast District Travel League"
+                oninput="setVal('leagues.freetext', this.value)">${esc(getVal('leagues.freetext'))}</textarea>` : `
+            <div class="chips" style="margin-bottom:14px;">
+                ${opts.map(n => `<button type="button" class="chip ${picked.includes(n) ? 'on' : ''}"
+                    onclick="toggleLeague('${esc(n).replace(/'/g, "\\'")}')">${esc(n)}</button>`).join('')}
+            </div>
+            ${picked.length ? `<label class="lbl">Which is the main one?</label>
+                <select onchange="setVal('leagues.primary', this.value)">
+                    <option value="">— pick the primary —</option>
+                    ${picked.map(n => `<option value="${esc(n)}" ${n === primary ? 'selected' : ''}>${esc(n)}</option>`).join('')}
+                </select>` : ''}`}
+        ${secFoot('leagues')}`;
+}
+function toggleLeague(n) {
+    const list = [...getVal('leagues.list', [])];
+    const i = list.indexOf(n);
+    if (i >= 0) list.splice(i, 1); else list.push(n);
+    setVal('leagues.list', list);
+    if (!list.includes(getVal('leagues.primary'))) setVal('leagues.primary', list.length === 1 ? list[0] : '');
+    pLeagues();
+}
+
+// ── 3 · venues ──────────────────────────────────────────────────────────────
+// ⛔ A VENUE WITH NO FIELDS IS NORMAL. Central Assign's own directory shows
+// "no fields" for a large share of its venues. Never demand one.
+function pVenues() {
+    const vs = getVal('venues.list', []);
+    document.getElementById('bd-venues').innerHTML = `
+        <p class="sec-help">Where do you play? Give the full address — referees navigate to these,
+            and some of them are driving an hour.</p>
+        <div class="note">If a site has named fields, list them. If it's just one pitch with no
+            name, leave the fields blank — that's normal and perfectly fine.</div>
+        <div id="venueList">${vs.map((v, i) => venueBlock(v, i)).join('')}</div>
+        <button class="btn gh sm" onclick="addVenue()">+ Add a venue</button>
+        ${secFoot('venues')}`;
+}
+function venueBlock(v, i) {
+    return `<div class="block">
+        <div class="block-t">Venue ${i + 1}
+            <button class="btn-x" style="margin-left:auto;" onclick="delVenue(${i})">✕</button></div>
+        <div style="margin-bottom:10px;">
+            <label class="lbl">Name</label>
+            <input type="text" value="${esc(v.name || '')}" placeholder="e.g. Lebanon Elementary"
+                   oninput="setVenue(${i},'name',this.value)"></div>
+        <div class="grid2" style="margin-bottom:10px;">
+            <div><label class="lbl">Street address</label>
+                <input type="text" value="${esc(v.addr || '')}" placeholder="49 Randolph Rd"
+                       oninput="setVenue(${i},'addr',this.value)"></div>
+            <div><label class="lbl">Town</label>
+                <input type="text" value="${esc(v.town || '')}" placeholder="Middletown"
+                       oninput="setVenue(${i},'town',this.value)"></div>
+        </div>
+        <label class="lbl">Fields at this venue — name and size</label>
+        ${(v.fields || []).map((f, j) => `
+            <div style="display:grid; grid-template-columns:1fr 120px 36px; gap:8px; margin-bottom:7px;">
+                <input type="text" value="${esc(f.name || '')}" placeholder="Forge Field"
+                       oninput="setField(${i},${j},'name',this.value)">
+                <input type="text" value="${esc(f.size || '')}" placeholder="11v11"
+                       oninput="setField(${i},${j},'size',this.value)">
+                <button class="btn-x" onclick="delField(${i},${j})">✕</button>
+            </div>`).join('')}
+        <button class="btn gh sm" onclick="addField(${i})">+ Add a field</button>
+    </div>`;
+}
+function addVenue() { const v = [...getVal('venues.list', [])]; v.push({ name:'', addr:'', town:'', fields:[] }); setVal('venues.list', v); pVenues(); }
+function delVenue(i) { const v = [...getVal('venues.list', [])]; v.splice(i, 1); setVal('venues.list', v); pVenues(); }
+function setVenue(i, k, val) { const v = [...getVal('venues.list', [])]; v[i] = { ...v[i], [k]: val }; setVal('venues.list', v); }
+function addField(i) { const v = [...getVal('venues.list', [])]; v[i].fields = [...(v[i].fields || []), { name:'', size:'' }]; setVal('venues.list', v); pVenues(); }
+function delField(i, j) { const v = [...getVal('venues.list', [])]; v[i].fields.splice(j, 1); setVal('venues.list', v); pVenues(); }
+function setField(i, j, k, val) { const v = [...getVal('venues.list', [])]; v[i].fields[j] = { ...v[i].fields[j], [k]: val }; setVal('venues.list', v); }
+
+// ── 4 · age groups ──────────────────────────────────────────────────────────
+// ⭐ THE KEYSTONE. Pay and Crew are both generated from this list. Get it
+// wrong and everything downstream is wrong, which is why it's asked as rows
+// rather than the sentence Lebanon sent us: "U8, U10/12/15 rec, U9/10/11/12/15
+// comp."
+const COMMON_AGES = ['U8','U9','U10','U11','U12','U13','U14','U15','U16','U17','U18','U19'];
+function pAges() {
+    const ags = getVal('ages.list', []);
+    document.getElementById('bd-ages').innerHTML = `
+        <p class="sec-help">Which age groups do you run? Add a row for each — and separate rows for
+            rec and travel if you run both, because they're usually paid differently.</p>
+        <div class="chips" style="margin-bottom:14px;">
+            ${COMMON_AGES.map(a => `<button type="button" class="chip" onclick="quickAge('${a}')">+ ${a}</button>`).join('')}
+        </div>
+        ${ags.length ? `<table class="rates"><thead><tr>
+            <th style="width:110px;">Age</th><th style="width:110px;">Type</th>
+            <th style="width:110px;">Format</th><th style="width:110px;">Half (min)</th><th style="width:36px;"></th>
+        </tr></thead><tbody>
+        ${ags.map((a, i) => `<tr>
+            <td><input type="text" value="${esc(a.name || '')}" placeholder="U12" oninput="setAge(${i},'name',this.value)"></td>
+            <td><select onchange="setAge(${i},'type',this.value)">
+                    <option value="rec"  ${a.type === 'rec'  ? 'selected' : ''}>Rec</option>
+                    <option value="comp" ${a.type === 'comp' ? 'selected' : ''}>Travel / Comp</option>
+                </select></td>
+            <td><input type="text" value="${esc(a.format || '')}" placeholder="9v9" oninput="setAge(${i},'format',this.value)"></td>
+            <td><input type="number" value="${esc(a.half || '')}" placeholder="30" min="1" max="90" oninput="setAge(${i},'half',this.value)"></td>
+            <td><button class="btn-x" onclick="delAge(${i})">✕</button></td>
+        </tr>`).join('')}</tbody></table>` : `<p style="color:#5a5349; font-size:0.86rem;">Nothing added yet — tap an age above, or add a row.</p>`}
+        <button class="btn gh sm" style="margin-top:12px;" onclick="addAge()">+ Add a row</button>
+        ${secFoot('ages')}`;
+}
+function ageList() { return [...getVal('ages.list', [])]; }
+function quickAge(n) { const a = ageList(); a.push({ name:n, type:'rec', format:'', half:'' }); setVal('ages.list', a); pAges(); repaintDerived(); }
+function addAge()    { const a = ageList(); a.push({ name:'', type:'rec', format:'', half:'' }); setVal('ages.list', a); pAges(); repaintDerived(); }
+function delAge(i)   { const a = ageList(); a.splice(i, 1); setVal('ages.list', a); pAges(); repaintDerived(); }
+function setAge(i, k, v) {
+    const a = ageList(); a[i] = { ...a[i], [k]: v }; setVal('ages.list', a);
+    // Renaming an age group has to carry through to the pay and crew tables,
+    // or somebody fills in rates against a row that no longer exists.
+    if (k === 'name' || k === 'type') repaintDerived();
+}
+function repaintDerived() { pPay(); pCrew(); }
+function ageKey(a, i) { return (a.name || ('row' + i)) + '|' + (a.type || 'rec'); }
+function ageLabel(a) { return `${a.name || '—'} ${a.type === 'comp' ? 'Travel' : 'Rec'}`; }
+
+// ── 5 · pay ─────────────────────────────────────────────────────────────────
+// ⚠️ THREE COLUMNS, NOT TWO. Centre, AR, and SOLO CENTRE — the rate when one
+// referee works the game alone. Griswold comp U13–U15 is $60 / $35 / $95.
+// The solo rate is real money and it has to be asked for, not derived.
+function pPay() {
+    const ags = getVal('ages.list', []);
+    const el = document.getElementById('bd-pay'); if (!el) return;
+    el.innerHTML = `
+        <p class="sec-help">What you pay a referee per game, per position. Leave a box blank if
+            that position isn't paid for that age group.</p>
+        ${!ags.length ? `<div class="warn">Fill in <b>Age groups</b> first — this table is built from it.</div>` : `
+        <div class="note"><b>Solo centre</b> is what you pay when one referee covers the whole game
+            on their own, with no assistants. It's usually more than the normal centre rate.</div>
+        <table class="rates"><thead><tr>
+            <th>Age group</th><th style="width:110px;">Centre</th><th style="width:110px;">AR</th><th style="width:110px;">Solo centre</th>
+        </tr></thead><tbody>
+        ${ags.map((a, i) => { const k = ageKey(a, i); return `<tr>
+            <td style="font-weight:700;">${esc(ageLabel(a))}</td>
+            <td><div class="money"><input type="number" min="0" step="1" value="${esc(getVal('pay.' + k + '.center'))}"
+                 oninput="setVal('pay.${k}.center', this.value)"></div></td>
+            <td><div class="money"><input type="number" min="0" step="1" value="${esc(getVal('pay.' + k + '.ar'))}"
+                 oninput="setVal('pay.${k}.ar', this.value)"></div></td>
+            <td><div class="money"><input type="number" min="0" step="1" value="${esc(getVal('pay.' + k + '.solo'))}"
+                 oninput="setVal('pay.${k}.solo', this.value)"></div></td>
+        </tr>`; }).join('')}</tbody></table>`}
+        ${secFoot('pay')}`;
+}
+
+// ── 6 · crew rules ──────────────────────────────────────────────────────────
+// ⛔ ONE AR IS A REAL ANSWER, NOT A MISTAKE. East Haddam runs U10 with a centre
+// and exactly ONE assistant, deliberately, for training. Any wording here that
+// treats that as an error will get it "corrected" into something wrong.
+function pCrew() {
+    const ags = getVal('ages.list', []);
+    const el = document.getElementById('bd-crew'); if (!el) return;
+    el.innerHTML = `
+        <p class="sec-help">How many officials on a game, by age group?</p>
+        ${!ags.length ? `<div class="warn">Fill in <b>Age groups</b> first — this is built from it.</div>` : `
+        <div class="note">Three is the usual full crew: a centre and two assistants. Some clubs run
+            a centre and <b>one</b> assistant on their youngest groups on purpose, for training —
+            if that's you, pick 2.</div>
+        <table class="rates"><thead><tr>
+            <th>Age group</th><th style="width:220px;">Officials per game</th>
+        </tr></thead><tbody>
+        ${ags.map((a, i) => { const k = ageKey(a, i); return `<tr>
+            <td style="font-weight:700;">${esc(ageLabel(a))}</td>
+            <td><select onchange="setVal('crew.${k}', this.value)">
+                <option value="">— not set —</option>
+                <option value="3" ${getVal('crew.' + k) === '3' ? 'selected' : ''}>3 — centre + 2 assistants</option>
+                <option value="2" ${getVal('crew.' + k) === '2' ? 'selected' : ''}>2 — centre + 1 assistant</option>
+                <option value="1" ${getVal('crew.' + k) === '1' ? 'selected' : ''}>1 — centre only</option>
+            </select></td>
+        </tr>`; }).join('')}</tbody></table>`}
+        ${secFoot('crew')}`;
+}
+
+// ── 7 · paying referees ─────────────────────────────────────────────────────
+// ⭐ CHECK HAS A TAIL: if a club pays by check, referees need postal addresses
+// on file before their first game. Saying so here is cheaper than finding out
+// in November.
+const PAY_METHODS = ['Venmo','Check','Cash App','Cash at Field','Direct Deposit','Zelle'];
+const CUTOFFS = [
+    ['thursday','Thursday midnight'], ['friday','Friday midnight'],
+    ['24h','24 hours before kick-off'], ['none','We always pay for a cancelled game'],
+    ['never','We never pay for a cancelled game'],
+];
+function pPolicy() {
+    const ms = getVal('policy.methods', []);
+    document.getElementById('bd-policy').innerHTML = `
+        <p class="sec-help">How referees actually get their money, and what happens when a game is
+            called off.</p>
+        <label class="lbl">How do you pay referees? Tick all that apply.</label>
+        <div class="chips" style="margin-bottom:8px;">
+            ${PAY_METHODS.map(m => `<button type="button" class="chip ${ms.includes(m) ? 'on' : ''}"
+                onclick="toggleMethod('${m}')">${m}</button>`).join('')}
+        </div>
+        ${ms.includes('Check') ? `<div class="warn"><b>Paying by check?</b> We'll need a postal
+            address on file for every referee before their first game, so the checks can actually
+            reach them. We handle collecting those — just so you know it's coming.</div>` : ''}
+        <div style="margin-top:16px;">
+            <label class="lbl">If a game is called off late — not for weather — do the referees still get paid?</label>
+            <select onchange="setVal('policy.cutoff', this.value)">
+                <option value="">— not set —</option>
+                ${CUTOFFS.map(([v, t]) => `<option value="${v}" ${getVal('policy.cutoff') === v ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+            <p style="font-size:0.8rem; color:#5a5349; margin-top:6px;">Most clubs pick a point in
+                the week after which a cancellation still gets paid, because the referee has
+                already turned down other work.</p>
+        </div>
+        ${secFoot('policy')}`;
+}
+function toggleMethod(m) {
+    const ms = [...getVal('policy.methods', [])];
+    const i = ms.indexOf(m); if (i >= 0) ms.splice(i, 1); else ms.push(m);
+    setVal('policy.methods', ms); pPolicy();
+}
+
+// ── 8 · pages ───────────────────────────────────────────────────────────────
+// ⛔ THE CLUB ADMIN PAGE AND THE PUBLIC SCHEDULE ARE NOT QUESTIONS. Every club
+// gets both. Only these two are optional.
+function pPortals() {
+    document.getElementById('bd-portals').innerHTML = `
+        <p class="sec-help">Two of these are optional. The other two you get either way.</p>
+        <div class="note"><b>You'll get these automatically:</b> a page where your scheduling
+            contact submits games and asks for changes, and a public schedule page families can
+            check — no logins, no referee names, no pay.</div>
+        <div class="block">
+            <label class="tick"><input type="checkbox" ${getVal('portals.audit') ? 'checked' : ''}
+                onchange="setVal('portals.audit', this.checked)">
+                <span><b>Audit page</b> — read-only oversight for your president: what's been paid,
+                what's still owed, the season invoice, and the contract to sign.</span></label>
+        </div>
+        <div class="block">
+            <label class="tick"><input type="checkbox" ${getVal('portals.payment') ? 'checked' : ''}
+                onchange="setVal('portals.payment', this.checked)">
+                <span><b>Payment page</b> — where your payment coordinator actually pays referees.
+                Needs the payment coordinator filled in above.</span></label>
+        </div>
+        <div style="margin-top:14px;">
+            <label class="lbl">Anything else we should know?</label>
+            <textarea rows="3" placeholder="Field closures, a second season, anything unusual…"
+                oninput="setVal('portals.notes', this.value)">${esc(getVal('portals.notes'))}</textarea>
+        </div>
+        ${secFoot('portals')}`;
+}
+
+// ── submit ──────────────────────────────────────────────────────────────────
+// ⚠️ NEVER BLOCKS ON MISSING SECTIONS. A half-filled submission is worth far
+// more than an abandoned one — the whole problem this page exists to fix is
+// people giving up partway and nothing arriving at all.
+async function submitAll() {
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('submitMsg');
+    btn.disabled = true; btn.textContent = 'Sending…';
+    const ok = await save(true);
+    btn.disabled = false; btn.textContent = 'Send it in →';
+    if (ok) {
+        META.status = 'submitted';
+        msg.style.color = '#0b7a3b';
+        msg.innerHTML = '✅ Got it — thank you. We\'ll take it from here and come back to you if anything\'s unclear. You can keep editing this page if you need to.';
+    } else {
+        msg.style.color = '#b91c1c';
+        msg.textContent = 'That didn\'t send. Your answers are still here — try again in a moment.';
+    }
+}
+</script>
+</body>
+</html>
