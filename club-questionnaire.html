@@ -206,6 +206,7 @@ let A = {};              // the answers, as they stand
 let DONE = new Set();    // sections marked complete
 let META = null;         // entity_kind / entity_name / status
 let LEAGUES = [];
+let POOL = [];           // every venue in Referee Tool, with its fields
 let _saveTimer = null, _saving = false, _dirty = false;
 
 // ── sections ────────────────────────────────────────────────────────────────
@@ -243,6 +244,24 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
             const { data: lg } = await sb.from('leagues').select('name').order('name');
             LEAGUES = (lg || []).map(l => l.name).filter(Boolean);
         } catch (e) { console.warn('league list unavailable', e); }
+        // ⭐ THE WHOLE VENUE POOL. Tod, 2026-10-15: "the FORM doesn't allow you
+        // to pick from ALL the venues we have in REFEREE TOOL... should have a
+        // drop down that allows you to pull and select from our pool."
+        // Clubs share sites constantly — a high school is one venue whoever is
+        // playing on it — and a typed name that doesn't match ours fails on the
+        // Central Assign export weeks later.
+        try {
+            const [{ data: vs }, { data: fs }] = await Promise.all([
+                sb.from('venues').select('id,"Venue Name","Venue ID",address,city,state').order('"Venue Name"'),
+                sb.from('fields').select('"Field Name","Venue ID"'),
+            ]);
+            const byVid = {};
+            (fs || []).forEach(f => { (byVid[f['Venue ID']] ||= []).push(f['Field Name'] || ''); });
+            POOL = (vs || []).map(v => ({
+                id: v.id, name: v['Venue Name'] || '', addr: v.address || '', town: v.city || '',
+                fields: (byVid[v['Venue ID']] || []).filter(Boolean),
+            })).filter(v => v.name);
+        } catch (e) { console.warn('venue pool unavailable', e); }
         render();
     } catch (e) {
         bail('Could not open this form: ' + e.message);
@@ -372,8 +391,84 @@ function updateProgress() {
     }
 }
 
+// ⚠️ "COMPLETE" WAS A CLAIM, NOT A CHECK. Eric ticked Venues on Stonington's
+// form with one entirely blank venue row in it, and the page then told Tod
+// "All sections done — send it in below." It reported a club as fully answered
+// while carrying nothing. That is worse than asking badly: it is asserting
+// something untrue.
+//
+// ⛔ These check for EMPTINESS, not correctness. Nobody gets blocked for an
+// unusual answer — one AR, a venue with no fields, a blank AR rate — because
+// those are all real and the form must not argue with a club about its own
+// arrangements.
+function sectionGap(key) {
+    const empty = o => !o || !String(o).trim();
+    switch (key) {
+        case 'contacts': {
+            const c = getVal('contacts', {});
+            if (empty(c.president?.name) && empty(c.admin?.name)) return 'a president or a scheduling contact';
+            if (empty(c.admin?.name))  return 'the scheduling contact — they are the one who submits your games';
+            if (empty(c.admin?.email)) return 'an email for the scheduling contact, since they need a login';
+            return null;
+        }
+        case 'leagues':
+            return (getVal('leagues.list', []).length || !empty(getVal('leagues.freetext')))
+                ? null : 'at least one league or district';
+        case 'venues': {
+            const vs = getVal('venues.list', []);
+            if (!vs.length) return 'at least one venue';
+            if (vs.some(v => empty(v.name))) return 'a name on every venue — one is still blank';
+            return null;
+        }
+        case 'ages':
+            return getVal('ages.list', []).some(a => !empty(a.name)) ? null : 'at least one age group';
+        case 'pay': {
+            const ags = getVal('ages.list', []).filter(a => !empty(a.name));
+            if (!ags.length) return 'your age groups first';
+            // Only the centre rate is required — AR and solo are legitimately
+            // blank when a club doesn't use them.
+            const miss = ags.filter((a, i) => empty(getVal('pay.' + ageKey(a, i) + '.center')));
+            return miss.length ? `a centre rate for ${miss.map(ageLabel).join(', ')}` : null;
+        }
+        case 'crew': {
+            const ags = getVal('ages.list', []).filter(a => !empty(a.name));
+            if (!ags.length) return 'your age groups first';
+            const miss = ags.filter((a, i) => empty(getVal('crew.' + ageKey(a, i))));
+            return miss.length ? `how many officials for ${miss.map(ageLabel).join(', ')}` : null;
+        }
+        case 'policy':
+            return getVal('policy.methods', []).length ? null : 'how you pay referees';
+        default:
+            return null;   // portals is genuinely optional — two unticked boxes is an answer
+    }
+}
+
 // Mark a section complete / not complete.
 function markDone(key, on) {
+    if (on) {
+        const gap = sectionGap(key);
+        if (gap) {
+            const box = document.querySelector(`#sec-${key} .sec-foot input[type=checkbox]`);
+            if (box) box.checked = false;
+            const foot = document.querySelector(`#sec-${key} .sec-foot`);
+            let w = document.getElementById('gap-' + key);
+            if (!w) {
+                w = document.createElement('div');
+                w.id = 'gap-' + key;
+                w.className = 'warn';
+                w.style.cssText = 'width:100%; margin:10px 0 0;';
+                foot.appendChild(w);
+            }
+            w.innerHTML = `Still needs <b>${esc(gap)}</b> before this counts as done. Leave it unticked and send it anyway if you can't answer it — we'll follow up.`;
+            return;
+        }
+        const w = document.getElementById('gap-' + key);
+        if (w) w.remove();
+    }
+    markDoneReal(key, on);
+}
+
+function markDoneReal(key, on) {
     if (on) DONE.add(key); else DONE.delete(key);
     document.getElementById('sec-' + key).classList.toggle('done', on);
     const n = document.getElementById('sec-' + key).querySelector('.sec-n');
@@ -516,10 +611,22 @@ function pVenues() {
         ${secFoot('venues')}`;
 }
 function venueBlock(v, i) {
+    // Already-chosen venues from our own records show as a named, confirmed
+    // block. Only a genuinely new one gets the typing fields.
+    const picked = POOL.find(p => p.id === v.venue_id);
     return `<div class="block">
         <div class="block-t">Venue ${i + 1}
+            ${picked ? '<span class="pill">ON FILE</span>' : ''}
             <button class="btn-x" style="margin-left:auto;" onclick="delVenue(${i})">✕</button></div>
-        <div style="margin-bottom:10px;">
+        ${POOL.length ? `<div style="margin-bottom:10px;">
+            <label class="lbl">Pick from the venues we already have</label>
+            <select onchange="pickVenue(${i}, this.value)">
+                <option value="">— choose a venue —</option>
+                ${POOL.map(p => `<option value="${p.id}" ${v.venue_id === p.id ? 'selected' : ''}>${esc(p.name)}${p.town ? ' · ' + esc(p.town) : ''}</option>`).join('')}
+                <option value="__new">➕ It isn't in the list — let me type it</option>
+            </select>
+        </div>` : ''}
+        <div style="margin-bottom:10px; ${picked ? 'display:none;' : ''}">
             <label class="lbl">Name</label>
             <input type="text" value="${esc(v.name || '')}" placeholder="e.g. Lebanon Elementary"
                    oninput="setVenue(${i},'name',this.value)"></div>
@@ -542,6 +649,20 @@ function venueBlock(v, i) {
             </div>`).join('')}
         <button class="btn gh sm" onclick="addField(${i})">+ Add a field</button>
     </div>`;
+}
+// Choosing from the pool carries the venue's real name, address and known
+// fields across — so the club confirms rather than retypes, and the name
+// matches what Central Assign expects.
+function pickVenue(i, val) {
+    const v = [...getVal('venues.list', [])];
+    if (val === '__new') { v[i] = { name:'', addr:'', town:'', fields:[] }; }
+    else {
+        const p = POOL.find(x => String(x.id) === String(val));
+        if (!p) { v[i] = { ...v[i], venue_id: null }; }
+        else v[i] = { venue_id: p.id, name: p.name, addr: p.addr, town: p.town,
+                      fields: p.fields.map(n => ({ name: n, size: '' })) };
+    }
+    setVal('venues.list', v); pVenues();
 }
 function addVenue() { const v = [...getVal('venues.list', [])]; v.push({ name:'', addr:'', town:'', fields:[] }); setVal('venues.list', v); pVenues(); }
 function delVenue(i) { const v = [...getVal('venues.list', [])]; v.splice(i, 1); setVal('venues.list', v); pVenues(); }
@@ -574,8 +695,14 @@ function pAges() {
                     <option value="rec"  ${a.type === 'rec'  ? 'selected' : ''}>Rec</option>
                     <option value="comp" ${a.type === 'comp' ? 'selected' : ''}>Travel / Comp</option>
                 </select></td>
-            <td><input type="text" value="${esc(a.format || '')}" placeholder="9v9" oninput="setAge(${i},'format',this.value)"></td>
-            <td><input type="number" value="${esc(a.half || '')}" placeholder="30" min="1" max="90" oninput="setAge(${i},'half',this.value)"></td>
+            <td><select onchange="setAge(${i},'format',this.value)">
+                    <option value="">— pick —</option>
+                    ${['4v4','5v5','7v7','9v9','11v11'].map(f => `<option value="${f}" ${a.format === f ? 'selected' : ''}>${f}</option>`).join('')}
+                </select></td>
+            <td><select onchange="setAge(${i},'half',this.value)">
+                    <option value="">— pick —</option>
+                    ${['20','25','30','35','40','45'].map(h => `<option value="${h}" ${String(a.half) === h ? 'selected' : ''}>${h} min</option>`).join('')}
+                </select></td>
             <td><button class="btn-x" onclick="delAge(${i})">✕</button></td>
         </tr>`).join('')}</tbody></table>` : `<p style="color:#3f3a33; font-size:0.86rem;">Nothing added yet — tap an age above, or add a row.</p>`}
         <button class="btn gh sm" style="margin-top:12px;" onclick="addAge()">+ Add a row</button>
@@ -725,10 +852,23 @@ function pPortals() {
 // ⚠️ NEVER BLOCKS ON MISSING SECTIONS. A half-filled submission is worth far
 // more than an abandoned one — the whole problem this page exists to fix is
 // people giving up partway and nothing arriving at all.
+// ⭐ CONFIRMED OR CHANGED? A pre-filled form can be ticked straight through
+// without a word being read, and it would come back looking reviewed. Diffed
+// against the snapshot taken when the link was made, so Tod's view can say
+// "confirmed as-is" versus "changed the treasurer and added a field".
+function changedSections() {
+    const base = A._baseline;
+    if (!base) return null;          // sent before snapshots existed
+    const same = (x, y) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
+    return SECTIONS.map(s => s.key).filter(k => !same(A[k], base[k]));
+}
+
 async function submitAll() {
     const btn = document.getElementById('submitBtn');
     const msg = document.getElementById('submitMsg');
     btn.disabled = true; btn.textContent = 'Sending…';
+    const ch = changedSections();
+    if (ch) A._changed = ch;
     const ok = await save(true);
     btn.disabled = false; btn.textContent = 'Send it in →';
     if (ok) {

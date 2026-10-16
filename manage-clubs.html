@@ -3773,6 +3773,117 @@
     //
     // ⚠️ The link is the credential. It is a uuid precisely so that knowing a
     // club's name gets you nowhere.
+    // Everything the club already has, shaped exactly like the questionnaire's
+    // own answers so the page can render it without translating anything.
+    // ⭐ _baseline is a frozen copy of the same thing. The page diffs against
+    // it so a returned form can say "confirmed as-is" versus "changed the
+    // treasurer and added a field" — otherwise a pre-filled form is a rubber
+    // stamp and you cannot tell the difference.
+    async function buildQuestionnairePrefill(clubId) {
+        const blank = {};
+        try {
+            const [clubRes, payRes, crewRes, cvRes] = await Promise.all([
+                supabaseClient.client.from('clubs').select('*').eq('id', clubId).single(),
+                supabaseClient.client.from('pay_rates').select('*').eq('club_id', clubId),
+                supabaseClient.client.from('crew_rules').select('*').eq('club_id', clubId),
+                supabaseClient.client.from('club_venues').select('venue_id').eq('club_id', clubId),
+            ]);
+            const c = clubRes.data;
+            if (!c) return blank;
+
+            // Venues the club is already linked to, with their fields.
+            let venues = [];
+            const ids = (cvRes.data || []).map(r => r.venue_id).filter(Boolean);
+            if (ids.length) {
+                const { data: vs } = await supabaseClient.client
+                    .from('venues').select('id,"Venue Name","Venue ID",address,city,state,zip').in('id', ids);
+                const vids = (vs || []).map(v => v['Venue ID']).filter(v => v != null);
+                let fieldsBy = {};
+                if (vids.length) {
+                    const { data: fs } = await supabaseClient.client
+                        .from('fields').select('"Field Name","Venue ID"').in('"Venue ID"', vids);
+                    (fs || []).forEach(f => {
+                        (fieldsBy[f['Venue ID']] ||= []).push({ name: f['Field Name'] || '', size: '' });
+                    });
+                }
+                venues = (vs || []).map(v => ({
+                    venue_id: v.id,
+                    name: v['Venue Name'] || '',
+                    addr: v.address || '',
+                    town: v.city || '',
+                    fields: fieldsBy[v['Venue ID']] || [],
+                }));
+            }
+
+            // ⚠️ pay_rates.game_type is lowercase 'rec'/'comp'; crew_rules uses
+            // 'Rec'/'Comp'. Same idea, two spellings, and mixing them up puts a
+            // club's rates against age groups that look identical and aren't.
+            const ages = [];
+            const seen = new Set();
+            const addAge = (name, type) => {
+                const k = name + '|' + type;
+                if (!name || seen.has(k)) return;
+                seen.add(k);
+                ages.push({ name, type, format: '', half: '' });
+            };
+            (payRes.data || []).forEach(r => addAge(r.age_group, String(r.game_type || 'rec').toLowerCase() === 'comp' ? 'comp' : 'rec'));
+            (crewRes.data || []).forEach(r => addAge(r.age_group, String(r.game_type || 'Rec').toLowerCase() === 'comp' ? 'comp' : 'rec'));
+            (Array.isArray(c.age_groups) ? c.age_groups : []).forEach(a => {
+                if (typeof a === 'string') addAge(a, 'rec');
+                else if (a && a.age_group) addAge(a.age_group, String(a.game_type || 'rec').toLowerCase() === 'comp' ? 'comp' : 'rec');
+                else if (a && a.name) addAge(a.name, String(a.type || 'rec').toLowerCase() === 'comp' ? 'comp' : 'rec');
+            });
+
+            const key = (n, t) => n + '|' + t;
+            const pay = {}, crew = {};
+            (payRes.data || []).forEach(r => {
+                const t = String(r.game_type || 'rec').toLowerCase() === 'comp' ? 'comp' : 'rec';
+                pay[key(r.age_group, t)] = {
+                    center: r.center ?? '', ar: r.ar ?? '', solo: r.solo ?? '',
+                };
+            });
+            (crewRes.data || []).forEach(r => {
+                const t = String(r.game_type || 'Rec').toLowerCase() === 'comp' ? 'comp' : 'rec';
+                // ar1+ar2 = 3 officials, ar1 only = 2, neither = 1.
+                crew[key(r.age_group, t)] = r.ar1 && r.ar2 ? '3' : r.ar1 ? '2' : '1';
+            });
+
+            const nameOf = v => String(v || '').trim();
+            const a = {
+                contacts: {
+                    president: { name: nameOf(c.president), email: nameOf(c['President Email']), phone: nameOf(c['President Phone']) },
+                    admin:     { name: nameOf(c['Club Admin']), email: nameOf(c['Club Admin Email']), phone: nameOf(c['Club Admin Phone']) },
+                    payment:   { name: nameOf(c['Payment Coordinator']), email: nameOf(c['Payment Coordinator Email']), phone: nameOf(c['Payment Coordinator Phone']) },
+                    assignor:  { name: nameOf(c.assignor), email: nameOf(c['Assignor Email']), phone: nameOf(c['Assignor Phone']) },
+                },
+                leagues: {
+                    list: Array.isArray(c.ca_league) ? c.ca_league : (c.ca_league ? [c.ca_league] : []),
+                    primary: nameOf(c.ca_league_primary),
+                },
+                venues: { list: venues },
+                ages:   { list: ages },
+                pay, crew,
+                policy: {
+                    methods: Array.isArray(c.payment_methods) ? c.payment_methods : [],
+                    cutoff:  nameOf(c.cancellation_cutoff_day),
+                },
+                portals: {
+                    audit:   !!c.presidents_portal_enabled,
+                    payment: !!c.payment_portal_enabled,
+                    notes:   '',
+                },
+            };
+            a._baseline = JSON.parse(JSON.stringify(a));
+            return a;
+        } catch (e) {
+            // ⛔ A snapshot that fails must NOT stop the link being made. A blank
+            // questionnaire is worse than a pre-filled one, but far better than
+            // none at all.
+            console.warn('prefill failed — sending a blank questionnaire', e);
+            return blank;
+        }
+    }
+
     async function sendQuestionnaire(clubId, clubName) {
         try {
             const { data: open } = await supabaseClient.client
@@ -3784,9 +3895,28 @@
 
             let row = open;
             if (!row) {
+                // ⭐ OPEN IT HOLDING WHAT WE ALREADY KNOW. Tod, 2026-10-15, after
+                // Eric returned Stonington's form with an empty venue row ticked
+                // "complete": "if there are already venues in the system and
+                // selected for Stonington it should show the ones that are
+                // currently in... occasionally we might want to send the template
+                // to clubs to confirm what they currently have."
+                //
+                // Stonington already had three venues and thirteen fields on
+                // record. The blank form asked Eric to type them again, he had
+                // nothing to add, and he marked the section done — correctly, from
+                // where he was sitting. The form was the thing that was wrong.
+                //
+                // ⚠️ SNAPSHOT AT SEND TIME, not a live read from the page. The
+                // questionnaire is anonymous and holds only a token; letting it
+                // query clubs, pay_rates and crew_rules directly would hand one
+                // link the run of the database. This is gathered HERE, where
+                // somebody is logged in, and travels inside the row.
+                const prefill = await buildQuestionnairePrefill(clubId);
                 const { data: made, error } = await supabaseClient.client
                     .from('club_questionnaires')
-                    .insert({ entity_kind: 'club', entity_id: clubId, entity_name: clubName })
+                    .insert({ entity_kind: 'club', entity_id: clubId, entity_name: clubName,
+                              answers: prefill })
                     .select('token,status,updated_at,sent_to').single();
                 if (error) throw new Error(error.message);
                 row = made;
