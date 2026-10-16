@@ -4548,16 +4548,15 @@
                     <button onclick="sheet3ToggleMissingFilter()" class="s3btn danger ${sheet3MissingFilter ? 'on' : ''}" style="margin-left:8px;" title="Show only games missing at least one referee">⚠ Missing Refs${sheet3MissingFilter ? ' ✕' : ''}</button>
                 </div>
                 <div id="s3gamesPane" style="max-height:${sheet3SplitGamesH}px; overflow:auto; border:2px solid #d0d7de; direction:rtl;">
-                    <table id="s3gamesTable" style="border-collapse:collapse; font-family:${(SHEET3_FONTS[sheet3FontGames]||SHEET3_FONTS.mono).css}; font-weight:${sheet3BoldGames ? '700' : 'normal'}; width:max-content; min-width:0; margin-right:auto;
-                        /* ⚠️ margin-right:auto IS LOAD-BEARING. The pane is
-                           direction:rtl so the scrollbar sits on the left, and a
-                           box narrower than an rtl container is placed at ITS
-                           start — the RIGHT edge. So shrinking the table to
-                           max-content parked it hard right with a band of empty
-                           space down the left. The auto margin eats the slack on
-                           the right instead, putting the table where it is read
-                           from. No effect once the content is wider than the
-                           pane, which is the normal case. */
+                    <table id="s3gamesTable" style="border-collapse:collapse; font-family:${(SHEET3_FONTS[sheet3FontGames]||SHEET3_FONTS.mono).css}; font-weight:${sheet3BoldGames ? '700' : 'normal'}; width:max-content; min-width:100%;
+                        /* ⚠️ BOTH, AND IN THIS ORDER. width:max-content keeps the
+                           columns no wider than their contents. min-width:100%
+                           then stops a narrow table leaving a band of empty space
+                           beside it — the pane is direction:rtl, so a short table
+                           parks at the RIGHT edge and the gap lands on the left.
+                           Tod saw that gap, I "fixed" it with margin-right:auto
+                           and simply moved the gap to the other side. Filling the
+                           pane is the only answer that has no gap at all. */
                         zoom:${sheet3ZoomGames}; direction:ltr;">
                         <thead style="position:sticky; top:0; z-index:2;"><tr><th style="${hdr} width:22px; min-width:22px; max-width:22px; padding:2px; text-align:center;" title="Click a dot to filter the ref pane for that game">◉</th>${headerCells}</tr></thead>
                         <tbody>${gameRowsHtml}</tbody>
@@ -5069,21 +5068,36 @@
                 // _prevPane is null on the FIRST render, which is exactly "just
                 // opened" — that is the case that must land hard left. A later
                 // re-render keeps wherever the assignor had scrolled to.
+                // ⚠️ RTL: scrollLeft 0 is the RIGHT edge, large negative is the
+                // left. Tod, 2026-10-16: "when the page opens I want the whole
+                // page to open scrolled all the way to the right" — which is
+                // where the referee slots are. Centre, AR1 and AR2 are the last
+                // columns, and they are the whole reason an assignor opens this
+                // sheet; the game details to their left are reference.
+                // ⛔ Tournament mode keeps opening LEFT. That was asked for
+                // separately and deliberately — its Date/Time columns matter
+                // more than its crew columns.
                 const _firstOpen = !_prevPane;
-                const targetScroll = (window.tournamentMode || _firstOpen) ? -99999 : _scrollLeft;
+                const targetScroll = window.tournamentMode ? -99999 : (_firstOpen ? 0 : _scrollLeft);
                 _newPane.scrollLeft = targetScroll;
                 _newPane.scrollTop  = _scrollTop;
+                // Re-apply after paint — the browser can discard the first set.
                 if (window.tournamentMode || _firstOpen) {
-                    requestAnimationFrame(() => { const p = document.getElementById('s3gamesPane'); if (p) p.scrollLeft = -99999; });
+                    requestAnimationFrame(() => {
+                        const p = document.getElementById('s3gamesPane');
+                        if (p) p.scrollLeft = window.tournamentMode ? -99999 : 0;
+                    });
                 }
             }
             // Refs pane: RTL means scrollLeft=0 is rightmost — force to leftmost on every render; restore vertical scroll
             const _refsPane = document.getElementById('s3refsPane');
             if (_refsPane) {
+                // ⛔ THE REFS PANE STAYS LEFT. Its first column is the referee's
+                // NAME — scrolling it right would open on whatever trails the
+                // row and hide the one thing it is read for. "Both panes to the
+                // right" would break this one.
                 _refsPane.scrollLeft = -99999;
                 _refsPane.scrollTop  = _refsScrollTop;
-                // Same post-paint re-apply as the games pane above — this one
-                // set it once and could be reset by the browser just the same.
                 requestAnimationFrame(() => { const p = document.getElementById('s3refsPane'); if (p) p.scrollLeft = -99999; });
             }
         }
