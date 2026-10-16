@@ -2802,8 +2802,15 @@
             code:   { label: 'Code',   css: "Consolas,'JetBrains Mono','SF Mono',monospace" },
             sans:   { label: 'Sans',   css: "'DM Sans',system-ui,sans-serif" },
         };
-        let sheet3Font = 'mono';   // what it has always been — nobody's layout changes on upgrade
-        let sheet3Bold = false;
+        // ⭐ ONE SETTING PER PANE. Tod, 2026-10-16: "you should be able to
+        // change the font on the top pane and the bottom pane to different
+        // fonts." They are read differently — the games pane scanned down a
+        // column for a date and a venue, the referees pane across for names —
+        // so Eric may well want Arial in one and monospace alignment in the
+        // other. Both start on mono, which is what the sheet has always been,
+        // so nobody's layout moves on upgrade.
+        let sheet3FontGames = 'mono', sheet3BoldGames = false;
+        let sheet3FontRefs  = 'mono', sheet3BoldRefs  = false;
         let sheet3ZoomGames       = 1.0;
         let sheet3ZoomRefs        = 1.0;
         let sheet3LastFiltered    = null;
@@ -2873,8 +2880,10 @@
                     splitH:       sheet3SplitGamesH,
                     zoomGames:    sheet3ZoomGames,
                     zoomRefs:     sheet3ZoomRefs,
-                    font:         sheet3Font,
-                    bold:         sheet3Bold,
+                    fontGames:    sheet3FontGames,
+                    boldGames:    sheet3BoldGames,
+                    fontRefs:     sheet3FontRefs,
+                    boldRefs:     sheet3BoldRefs,
                     baseColOrder: baseColOrder,
                     hiddenCols:      sheet3HiddenCols,
                     refHiddenCols:   sheet3RefHiddenCols,
@@ -2888,13 +2897,21 @@
             try {
                 const saved = localStorage.getItem(SHEET3_STATE_KEY);
                 if (!saved) return;
-                const { cleared, colors, roles, splitH, zoomGames, zoomRefs, font, bold, baseColOrder, colOrder, hiddenCols, refHiddenCols, seedOrder, seedSeed, sort } = JSON.parse(saved);
+                const { cleared, colors, roles, splitH, zoomGames, zoomRefs, font, bold, fontGames, boldGames, fontRefs, boldRefs, baseColOrder, colOrder, hiddenCols, refHiddenCols, seedOrder, seedSeed, sort } = JSON.parse(saved);
                 // ⚠️ Only a font we still offer. A saved key from a build that
-                // named them differently would leave the tables with no
+                // named them differently would leave a table with no
                 // font-family at all, which renders as the browser default and
                 // looks like a bug nobody can explain.
-                if (font && SHEET3_FONTS[font]) sheet3Font = font;
-                sheet3Bold = !!bold;
+                // ⚠️ `font`/`bold` are the ONE-SETTING shape from earlier today.
+                // Read first, as the starting value for both panes, so anyone
+                // who already picked Arial keeps it instead of silently
+                // reverting to mono.
+                if (font && SHEET3_FONTS[font]) { sheet3FontGames = font; sheet3FontRefs = font; }
+                if (bold != null) { sheet3BoldGames = !!bold; sheet3BoldRefs = !!bold; }
+                if (fontGames && SHEET3_FONTS[fontGames]) sheet3FontGames = fontGames;
+                if (fontRefs  && SHEET3_FONTS[fontRefs])  sheet3FontRefs  = fontRefs;
+                if (boldGames != null) sheet3BoldGames = !!boldGames;
+                if (boldRefs  != null) sheet3BoldRefs  = !!boldRefs;
                 if (cleared)    sheet3ClearedAssigned = cleared;
                 if (colors)     sheet3OptColors       = colors;
                 if (roles)      sheet3OptRoles        = roles;
@@ -2977,31 +2994,34 @@
         // Applied to BOTH tables. Games and referees sitting side by side in
         // different typefaces would look like a rendering fault.
         function sheet3ApplyFont() {
-            const css = (SHEET3_FONTS[sheet3Font] || SHEET3_FONTS.mono).css;
-            ['s3gamesTable', 's3refsTable'].forEach(id => {
+            const put = (id, key, bold) => {
                 const t = document.getElementById(id);
                 if (!t) return;
-                t.style.fontFamily = css;
+                t.style.fontFamily = (SHEET3_FONTS[key] || SHEET3_FONTS.mono).css;
                 // ⚠️ Weight is the actual complaint, not the family. Courier at
-                // 500 is thin whatever else changes, so Bold is its own switch
-                // rather than being baked into one of the font choices.
-                t.style.fontWeight = sheet3Bold ? '700' : '';
-            });
+                // normal weight stays thin whatever else changes, so Bold is
+                // its own switch rather than baked into one of the choices.
+                t.style.fontWeight = bold ? '700' : 'normal';
+            };
+            put('s3gamesTable', sheet3FontGames, sheet3BoldGames);
+            put('s3refsTable',  sheet3FontRefs,  sheet3BoldRefs);
         }
 
-        function sheet3SetFont(key) {
+        function sheet3SetFont(which, key) {
             if (!SHEET3_FONTS[key]) return;
-            sheet3Font = key;
+            if (which === 'refs') sheet3FontRefs = key; else sheet3FontGames = key;
             sheet3ApplyFont();
             sheet3SaveLocalState();
         }
 
-        function sheet3ToggleBold() {
-            sheet3Bold = !sheet3Bold;
-            const btn = document.getElementById('s3boldBtn');
+        function sheet3ToggleBold(which) {
+            const refs = which === 'refs';
+            if (refs) sheet3BoldRefs = !sheet3BoldRefs; else sheet3BoldGames = !sheet3BoldGames;
+            const on  = refs ? sheet3BoldRefs : sheet3BoldGames;
+            const btn = document.getElementById(refs ? 's3boldRefsBtn' : 's3boldGamesBtn');
             if (btn) {
-                btn.style.background = sheet3Bold ? '#09142a' : '';
-                btn.style.color      = sheet3Bold ? '#fff'    : '';
+                btn.style.background = on ? '#09142a' : '';
+                btn.style.color      = on ? '#fff'    : '';
             }
             sheet3ApplyFont();
             sheet3SaveLocalState();
@@ -4465,12 +4485,12 @@
                          thing: how this sheet looks to the person reading it,
                          saved per browser so Eric's choice never changes Tod's. -->
                     <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em; margin-left:8px;">FONT</span>
-                    <select onchange="sheet3SetFont(this.value)" class="s3btn" style="padding:2px 4px; cursor:pointer;" title="Typeface for the games and referees tables">
+                    <select onchange="sheet3SetFont('games', this.value)" class="s3btn" style="padding:2px 4px; cursor:pointer;" title="Typeface for this games table">
                         ${Object.entries(SHEET3_FONTS).map(([k, f]) =>
-                            `<option value="${k}" ${sheet3Font === k ? 'selected' : ''}>${f.label}</option>`).join('')}
+                            `<option value="${k}" ${sheet3FontGames === k ? 'selected' : ''}>${f.label}</option>`).join('')}
                     </select>
-                    <button id="s3boldBtn" onclick="sheet3ToggleBold()" class="s3btn" title="Bolder text"
-                            style="font-weight:800; ${sheet3Bold ? 'background:#09142a; color:#fff;' : ''}">B</button>
+                    <button id="s3boldGamesBtn" onclick="sheet3ToggleBold('games')" class="s3btn" title="Bolder text in the games table"
+                            style="font-weight:800; ${sheet3BoldGames ? 'background:#09142a; color:#fff;' : ''}">B</button>
                     <span style="font-size:0.7rem; color:#aaa; margin-left:6px;">${displayGames.length}${displayGames.length !== allFilteredGames.length ? ` of ${allFilteredGames.length}` : ''} games</span>
                     ${showAllBtn}
                     <span class="s3seedwrap">
@@ -4528,7 +4548,7 @@
                     <button onclick="sheet3ToggleMissingFilter()" class="s3btn danger ${sheet3MissingFilter ? 'on' : ''}" style="margin-left:8px;" title="Show only games missing at least one referee">⚠ Missing Refs${sheet3MissingFilter ? ' ✕' : ''}</button>
                 </div>
                 <div id="s3gamesPane" style="max-height:${sheet3SplitGamesH}px; overflow:auto; border:2px solid #d0d7de; direction:rtl;">
-                    <table id="s3gamesTable" style="border-collapse:collapse; font-family:${(SHEET3_FONTS[sheet3Font]||SHEET3_FONTS.mono).css}; font-weight:${sheet3Bold ? '700' : 'normal'}; min-width:100%; zoom:${sheet3ZoomGames}; direction:ltr;">
+                    <table id="s3gamesTable" style="border-collapse:collapse; font-family:${(SHEET3_FONTS[sheet3FontGames]||SHEET3_FONTS.mono).css}; font-weight:${sheet3BoldGames ? '700' : 'normal'}; min-width:100%; zoom:${sheet3ZoomGames}; direction:ltr;">
                         <thead style="position:sticky; top:0; z-index:2;"><tr><th style="${hdr} width:22px; min-width:22px; max-width:22px; padding:2px; text-align:center;" title="Click a dot to filter the ref pane for that game">◉</th>${headerCells}</tr></thead>
                         <tbody>${gameRowsHtml}</tbody>
                     </table>
@@ -4983,6 +5003,13 @@
                     <button onclick="sheet3SetZoomRefs(-0.05)" class="s3btn s3btn-step">−</button>
                     <span id="s3refsZoomLbl" style="${zoomLbl}">${Math.round(sheet3ZoomRefs*100)}%</span>
                     <button onclick="sheet3SetZoomRefs(0.05)" class="s3btn s3btn-step">+</button>
+                    <span style="font-size:0.7rem; color:#666; font-weight:600; letter-spacing:0.03em; margin-left:8px;">FONT</span>
+                    <select onchange="sheet3SetFont('refs', this.value)" class="s3btn" style="padding:2px 4px; cursor:pointer;" title="Typeface for this referees table">
+                        ${Object.entries(SHEET3_FONTS).map(([k, f]) =>
+                            `<option value="${k}" ${sheet3FontRefs === k ? 'selected' : ''}>${f.label}</option>`).join('')}
+                    </select>
+                    <button id="s3boldRefsBtn" onclick="sheet3ToggleBold('refs')" class="s3btn" title="Bolder text in the referees table"
+                            style="font-weight:800; ${sheet3BoldRefs ? 'background:#09142a; color:#fff;' : ''}">B</button>
                     <span style="font-size:0.78rem; font-weight:700; color:${sheet3SelectedGameId ? '#00c853' : '#1f2328'}; margin-left:6px;">${sheet3CachedRefRows.length} refs</span>
                     ${window.tournamentMode ? `<button onclick="refreshTournamentRefs()" class="s3btn" style="margin-left:10px; background:linear-gradient(#6d28d9,#8b5cf6); color:#fff; border-color:#5b21b6;">↻ Refresh</button>` : ''}
                     ${window.tournamentMode ? `<button onclick="sheet3AutoSeedTournament()" class="s3btn" style="margin-left:6px; background:linear-gradient(#b45309,#f59e0b); color:#fff; border-color:#92400e;" title="AI-rank and pre-fill opt cells for unseeded games">Auto-Seed Opts</button>` : ''}
@@ -4999,7 +5026,7 @@
                 <div id="s3refsPane" style="max-height:${sheet3SplitGamesH}px; overflow-y:auto; overflow-x:scroll; border:2px solid #d0d7de; direction:rtl;"
                     ondragover="if(window.sheet3DragData&&window.sheet3DragData.type==='assigned')event.preventDefault();"
                     ondrop="sheet3RefPaneDrop(event);">
-                    <table id="s3refsTable" style="border-collapse:collapse; font-family:${(SHEET3_FONTS[sheet3Font]||SHEET3_FONTS.mono).css}; font-weight:${sheet3Bold ? '700' : 'normal'}; min-width:100%; zoom:${sheet3ZoomRefs}; table-layout:fixed; direction:ltr;">
+                    <table id="s3refsTable" style="border-collapse:collapse; font-family:${(SHEET3_FONTS[sheet3FontRefs]||SHEET3_FONTS.mono).css}; font-weight:${sheet3BoldRefs ? '700' : 'normal'}; min-width:100%; zoom:${sheet3ZoomRefs}; table-layout:fixed; direction:ltr;">
                         <thead style="position:sticky; top:0; z-index:2;">${refsHeader}</thead>
                         <tbody id="s3refTbody">${refRowsHtml}</tbody>
                     </table>
