@@ -5009,6 +5009,24 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 else needsPaymentGames.push(...wk.games);
             });
 
+            // ⚠️ allowPay GATES PAYING, NOT PRICING. Two different facts, and
+            // conflating them switched off the one control that matters most
+            // before a game is played.
+            //
+            // Upcoming games are drawn with allowPay=false, which used to
+            // disable the amount box outright. But agreeing a rate is exactly
+            // what you do BEFORE a game — Tod, 2026-10-03: "we made a special
+            // offer to a referee to pay them $80, where normally they would
+            // make $50, because I couldn't get the game assigned." That game
+            // had not happened yet. sql/pay-overrides.sql says the same thing:
+            // an override "exists BEFORE anyone pays". So the one moment the
+            // rate most needs setting was the one moment the box was switched
+            // off, and on 2026-10-19 Ed Conn hit exactly that in Griswold's
+            // portal with the PIN Tod had given him.
+            //
+            // ⛔ The pay controls below STAY gated. You cannot pay for a game
+            // nobody has refereed yet — the checkbox and Mark Paid are still
+            // off for upcoming games. Price now, pay after.
             function buildGameRows(gameList, allowPay, forceCollapsed) {
                 // Group by week
                 const byWeek = {};
@@ -5180,7 +5198,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                                 <td>${idx === 0 ? age : ''}</td>
                                 <td>${refNameCell}</td>
                                 <td>${posBadge}</td>
-                                <td>${incident ? `<span style="color:#b91c1c; font-size:0.82rem; font-weight:800; white-space:nowrap;" title="${incident === 'no_show' ? 'Did not show' : 'Bailed inside 24 hours'}">$0 <span style="font-weight:600;">· ${incident === 'no_show' ? 'no show' : 'late scratch'}</span></span>` : gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" data-band="${_r.band}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>${ovrChip}`}</td>
+                                <td>${incident ? `<span style="color:#b91c1c; font-size:0.82rem; font-weight:800; white-space:nowrap;" title="${incident === 'no_show' ? 'Did not show' : 'Bailed inside 24 hours'}">$0 <span style="font-weight:600;">· ${incident === 'no_show' ? 'no show' : 'late scratch'}</span></span>` : gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap"><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" data-band="${_r.band}" min="0" step="1" title="${allowPay ? 'Change what this slot is worth' : "Agree a rate now — you can't pay it until the game has been played"}"></span>${ovrChip}`}</td>
                                 <td>${venmoHtml}</td>
                                 <td style="text-align:center;">${cbHtml}</td>
                             </tr>
@@ -5663,6 +5681,19 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
         if (amount === was) return;                       // nothing changed
 
         const refName = (row.querySelector('td:nth-child(4)')?.textContent || '').trim();
+
+        // ⚠️ ALREADY PAID IS A DIFFERENT DECISION. ref_payments.amount recorded
+        // what actually left the account; changing the override afterwards
+        // leaves the invoice disagreeing with the payment. Sometimes that is
+        // precisely what you want — you underpaid and are correcting the
+        // record — so it is a question, not a refusal.
+        if (row.querySelector('.pay-slot-cb.paid') || row.classList.contains('row-paid')) {
+            const ok = confirm(
+                `This slot is already marked paid at $${was}.\n\n` +
+                `Changing it to $${amount} updates what the club is BILLED, but not what was already paid out. ` +
+                `Carry on?`);
+            if (!ok) { input.value = was; return; }
+        }
 
         try {
             // ⭐ BACK TO THE BAND RATE MEANS REMOVE THE OVERRIDE, not store a
