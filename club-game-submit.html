@@ -4767,7 +4767,10 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
             // Same CR/AR1/AR2 keys as _incidentSlots, from the same column
             // names, so the two can be read side by side without translating
             // twice.
-            const _ovrSlots = {};        // `${game_id}|CR` → row
+            // ⚠️ Hoisted onto window so the save handler below can update it
+            // after a write, instead of forcing a full reload of the portal to
+            // see your own edit.
+            const _ovrSlots = window._ovrSlots = {};        // `${game_id}|CR` → row
             (overrideResult?.data || []).forEach(o => {
                 const pos = o.slot === 'Center Referee' ? 'CR' : o.slot === 'AR 1' ? 'AR1' : 'AR2';
                 _ovrSlots[`${o.game_id}|${pos}`] = o;
@@ -5177,7 +5180,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                                 <td>${idx === 0 ? age : ''}</td>
                                 <td>${refNameCell}</td>
                                 <td>${posBadge}</td>
-                                <td>${incident ? `<span style="color:#b91c1c; font-size:0.82rem; font-weight:800; white-space:nowrap;" title="${incident === 'no_show' ? 'Did not show' : 'Bailed inside 24 hours'}">$0 <span style="font-weight:600;">· ${incident === 'no_show' ? 'no show' : 'late scratch'}</span></span>` : gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>${ovrChip}`}</td>
+                                <td>${incident ? `<span style="color:#b91c1c; font-size:0.82rem; font-weight:800; white-space:nowrap;" title="${incident === 'no_show' ? 'Did not show' : 'Bailed inside 24 hours'}">$0 <span style="font-weight:600;">· ${incident === 'no_show' ? 'no show' : 'late scratch'}</span></span>` : gameOutsourced ? `<span style="color:#9ca3af; font-size:0.82rem; font-weight:700; white-space:nowrap;">$0 <span style="font-weight:500;">(other)</span></span>` : `<span class="pay-amount-wrap" ${!allowPay ? 'style="opacity:0.5;"' : ''}><span class="pay-prefix">$</span><input class="pay-amount" type="number" value="${rate}" data-band="${_r.band}" min="0" step="1" ${!allowPay ? 'disabled' : ''}></span>${ovrChip}`}</td>
                                 <td>${venmoHtml}</td>
                                 <td style="text-align:center;">${cbHtml}</td>
                             </tr>
@@ -5572,6 +5575,128 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
         });
     }
     _refreshSeasonBadges();
+
+    // ══════════════════════════════════════════════════════════════════════
+    // EDITING THE AMOUNT ACTUALLY SAVES IT
+    //
+    // Tod, 2026-10-19: "it looks like you can make modifications to the
+    // amounts, but they don't remain after you log off the page... when Jeff
+    // Green logged in again, he sees them as the base rate."
+    //
+    // ⚠️ THE BOX WAS NEVER WIRED TO SAVE AT ALL. It was read at exactly one
+    // moment — when somebody marked the slot paid — and otherwise lived in the
+    // browser and nowhere else. The Oct 3 header of sql/pay-overrides.sql
+    // describes this precise bug, the table was built for it, and this page
+    // already READS overrides and draws the chip. Nobody ever wired the write.
+    //
+    // ⚠️ THE REASON IS REQUIRED BY THE DATABASE, not by this page.
+    // pay_overrides.reason is NOT NULL with a non-blank CHECK, deliberately, so
+    // that no later UI can quietly allow an unexplained number. Tod, 2026-10-03:
+    // an unexplained $80 in November is the thing that causes the argument.
+    //
+    // ⭐ Anyone holding the PIN may do this. Tod: "anyone that logs in with the
+    // PIN should be able to modify amounts and they stay the same until the
+    // next person logs in." There is no auth user on this page, so set_by stays
+    // null and set_by_name records the door they came through.
+    const SLOT_DB_NAME = { CR: 'Center Referee', AR1: 'AR 1', AR2: 'AR 2' };
+
+    function _ovrAskReason(amount, band, refName) {
+        return new Promise(resolve => {
+            const up = Number(amount) >= Number(band);
+            const el = document.createElement('div');
+            el.style.cssText = 'position:fixed; inset:0; background:rgba(4,10,22,0.7); z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px;';
+            el.innerHTML = `
+                <div style="background:#fff; border-radius:14px; max-width:460px; width:100%; box-shadow:0 30px 80px rgba(0,0,0,0.5); overflow:hidden;">
+                    <div style="background:#0f3460; color:#fff; padding:13px 18px; font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.6px;">
+                        ${up ? '&#9650;' : '&#9660;'} $${amount} instead of $${band}
+                    </div>
+                    <div style="padding:18px;">
+                        <p style="font-size:0.86rem; color:#3f3a33; margin:0 0 12px;">
+                            ${refName ? `<b>${refName}</b> &mdash; w` : 'W'}hy is this slot worth $${amount}?
+                            This shows on the club's invoice and on the audit page, so it needs to read well in November.
+                        </p>
+                        <input id="ovrReason" type="text" maxlength="160" placeholder="e.g. short notice cover, 90 minute round trip"
+                               style="width:100%; padding:10px 12px; border:1.5px solid #a2978a; border-radius:7px; font-family:'DM Sans',sans-serif; font-size:0.9rem; background:#fffcf7;">
+                        <div id="ovrErr" style="display:none; color:#b91c1c; font-size:0.8rem; font-weight:700; margin-top:7px;"></div>
+                        <div style="display:flex; gap:9px; justify-content:flex-end; margin-top:16px;">
+                            <button id="ovrCancel" style="background:#f0ece6; color:#09142a; border:1px solid #ddd3c6; border-radius:8px; padding:9px 18px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">Cancel</button>
+                            <button id="ovrOk" style="background:#00c853; color:#06210f; border:none; border-radius:8px; padding:9px 20px; font-weight:800; cursor:pointer; font-family:'DM Sans',sans-serif;">Save this rate</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(el);
+            const input = el.querySelector('#ovrReason');
+            input.focus();
+            const done = v => { el.remove(); resolve(v); };
+            el.querySelector('#ovrCancel').onclick = () => done(null);
+            el.querySelector('#ovrOk').onclick = () => {
+                const v = input.value.trim();
+                // Mirrors the database CHECK rather than trusting it to error —
+                // a blank reason should be caught here, in front of the person
+                // who can still type one.
+                if (!v) { const e = el.querySelector('#ovrErr'); e.style.display = 'block'; e.textContent = 'A reason is required — the database will refuse it without one.'; input.focus(); return; }
+                done(v);
+            };
+            input.onkeydown = e => { if (e.key === 'Enter') el.querySelector('#ovrOk').click();
+                                     if (e.key === 'Escape') done(null); };
+            el.onclick = e => { if (e.target === el) done(null); };
+        });
+    }
+
+    // Delegated, because the table is rebuilt on every draw and per-input
+    // listeners would be lost each time.
+    document.addEventListener('change', async (ev) => {
+        const input = ev.target;
+        if (!input.classList || !input.classList.contains('pay-amount')) return;
+        const row = input.closest('tr');
+        if (!row) return;
+        const gameId = Number(row.dataset.game);
+        const pos    = row.dataset.slot;
+        const slot   = SLOT_DB_NAME[pos];
+        if (!gameId || !slot) return;
+
+        const band   = Number(input.dataset.band);
+        const amount = Number(input.value);
+        const prev   = window._ovrSlots?.[`${gameId}|${pos}`] || null;
+        const was    = prev ? Number(prev.amount) : band;
+        if (!Number.isFinite(amount) || amount < 0) { input.value = was; return; }
+        if (amount === was) return;                       // nothing changed
+
+        const refName = (row.querySelector('td:nth-child(4)')?.textContent || '').trim();
+
+        try {
+            // ⭐ BACK TO THE BAND RATE MEANS REMOVE THE OVERRIDE, not store a
+            // second number equal to it. Otherwise the chip would sit there
+            // claiming an agreed rate that is simply the normal one.
+            if (amount === band) {
+                const { error } = await supabaseClient.client
+                    .from('pay_overrides').delete().eq('game_id', gameId).eq('slot', slot);
+                if (error) throw new Error(error.message);
+                delete window._ovrSlots[`${gameId}|${pos}`];
+            } else {
+                const reason = await _ovrAskReason(amount, band, refName);
+                if (reason === null) { input.value = was; return; }   // cancelled — put it back
+                const rowData = {
+                    game_id: gameId, slot, amount, reason,
+                    set_by_name: 'Pay portal',
+                    set_at: new Date().toISOString(),
+                };
+                const { error } = await supabaseClient.client
+                    .from('pay_overrides').upsert(rowData, { onConflict: 'game_id,slot' });
+                if (error) throw new Error(error.message);
+                window._ovrSlots[`${gameId}|${pos}`] = { ...rowData };
+            }
+            // Redraw so the chip, the game total and the season total all
+            // agree with what was just saved. ⚠️ loadPaymentSection is the only
+            // thing that rebuilds this table — without it the number sits
+            // there looking saved while the totals beneath it still say the
+            // old figure, which is the same class of lie we are fixing.
+            if (typeof loadPaymentSection === 'function') await loadPaymentSection();
+        } catch (e) {
+            input.value = was;
+            alert('That rate did not save:\n\n' + e.message);
+        }
+    });
     </script>
 
 <!-- ══ BULK CHANGE REQUEST ═══════════════════════════════════════════════════
