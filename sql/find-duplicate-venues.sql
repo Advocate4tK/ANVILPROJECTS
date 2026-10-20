@@ -58,24 +58,29 @@ ORDER  BY lower(btrim(v."Venue Name")), v.id;
 
 
 -- 3. ⚠️ ARE ANY GAMES POINTING AT THE DUPLICATES?
---    games stores the venue by NAME in a LOWERCASE column (games.venue --
---    js/supabase-client.js maps 'Venue' -> 'venue'), so this counts fixtures
---    per name — if a
---    name has games AND two venue rows, the games are ambiguous today.
+--    games has NO venue-name column — it carries "Venue ID" (real), which is
+--    CENTRAL ASSIGN's id, not venues.id. So the join is on that.
+--    ⭐ THIS IS THE QUESTION THAT DECIDES THE CLEANUP:
+--      · both rows share one "Venue ID"  → pure redundancy, safe to collapse
+--      · different "Venue ID"s           → CA has two venues too, and the games
+--                                          are genuinely split between them
 WITH dupes AS (
-    SELECT lower(btrim("Venue Name")) AS name_key, btrim("Venue Name") AS nm
+    SELECT lower(btrim("Venue Name")) AS name_key
     FROM   venues
     WHERE  btrim(coalesce("Venue Name", '')) <> ''
-    GROUP  BY 1, 2 HAVING count(*) > 1
+    GROUP  BY 1 HAVING count(*) > 1
 )
-SELECT d.nm                                           AS venue_name,
-       count(g.id)                                    AS games,
-       min(g.date)                                    AS first_game,
-       max(g.date)                                    AS last_game
-FROM   dupes d
-LEFT   JOIN games g ON btrim(coalesce(g.venue, '')) ILIKE d.nm
-GROUP  BY d.nm
-ORDER  BY count(g.id) DESC, d.nm;
+SELECT v.id,
+       v."Venue Name",
+       v."Venue ID"                       AS ca_venue_id,
+       count(g.id)                        AS games,
+       min(g.date)                        AS first_game,
+       max(g.date)                        AS last_game
+FROM   venues v
+JOIN   dupes d ON d.name_key = lower(btrim(v."Venue Name"))
+LEFT   JOIN games g ON g."Venue ID" = v."Venue ID"
+GROUP  BY v.id, v."Venue Name", v."Venue ID"
+ORDER  BY lower(btrim(v."Venue Name")), v.id;
 
 
 -- 4. Lebanon specifically — the one Tod saw.
@@ -97,5 +102,7 @@ ORDER  BY v."Venue Name", v.id;
 --        -- then de-dupe any club that now has the survivor twice
 --   3. Only then remove the empty row:
 --        DELETE FROM venues WHERE id = <drop>;
--- ⚠️ games reference the venue by NAME, not id, so they follow automatically —
--- which is exactly why two rows with one name was invisible until now.
+-- ⚠️ games reference the venue by CENTRAL ASSIGN's "Venue ID", not by
+-- venues.id and not by name. So if both rows carry the same "Venue ID" the
+-- games follow automatically and only the spare row needs removing. If they
+-- carry different ones, moving games means changing their "Venue ID" too.
