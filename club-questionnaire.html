@@ -616,10 +616,28 @@ function toggleLeague(n) {
 // So: tick the venues we already hold, tick which of that venue's known fields
 // they use. Anything missing goes in the notes as a message to Tod, who adds it
 // properly in the Command Center where the CA name can be checked.
+// ⛔ SELECTION ONLY. NOTHING HERE CREATES, EDITS OR DELETES A VENUE OR A FIELD.
+//
+// Tod, 2026-10-20: "I don't even want them to have the ability to create a new
+// venue. That would break our system." And: "I don't want them being able to
+// create fields on existing venues."
+//
+// ⚠️ Central Assign owns venue and field NAMES and our records mirror CA
+// verbatim. A club typing "Stonington MS" where CA says "Stonington Middle
+// School" produces a record rejected on export weeks later. A field is not a
+// club's to invent either — it is a physical thing already catalogued from CA.
+//
+// ⚠️ AND IT IS A SHORT LIST, NOT THE WHOLE STATE. The first lockdown drew a
+// tickbox for every venue in the system: Tod swept the page and was still in
+// the B's — Bolton HS, Botelle Elementary, Brandeis University in Waltham —
+// after fifty frames. Eric would have scrolled a minute to find three
+// Stonington grounds. Tod: "provide the venues that already have been chosen
+// and a drop down menu to chose a venue rather than a full million pages."
+//
+// So: what this club already has, listed. A dropdown to add another from what
+// we hold. Nothing typed, nothing invented.
 function pVenues() {
     const chosen = getVal('venues.list', []);
-    const byId   = {};
-    chosen.forEach(v => { if (v.venue_id != null) byId[v.venue_id] = v; });
     const el = document.getElementById('bd-venues');
     if (!el) return;
 
@@ -627,52 +645,69 @@ function pVenues() {
         el.innerHTML = `
             <p class="sec-help">Where do you play?</p>
             <div class="warn">We couldn't load the venue list just now. Skip this section and tell us
-                in the notes at the bottom — we'll set your venues up at our end.</div>
+                in the notes at the bottom — we'll set your grounds up at our end.</div>
             ${secFoot('venues')}`;
         return;
     }
 
+    const have = new Set(chosen.map(v => v.venue_id));
+    const rest = POOL.filter(p => !have.has(p.id));
+
     el.innerHTML = `
-        <p class="sec-help">Tick the grounds you play at. These come from our records, which match
-            what the state assigning system holds — so referees get sent to the right place.</p>
-        <div class="note">Can't find one of your grounds, or a pitch missing from a ground that is
-            listed? <b>Don't worry about it here</b> — put it in the notes at the bottom of this form
-            and we'll add it properly for you.</div>
-        <div>${POOL.map(p => {
-            const picked = byId[p.id];
-            const on     = !!picked;
-            const used   = new Set((picked?.fields || []).map(f => f.name));
-            return `<div class="block" style="${on ? '' : 'background:#fff;'}">
-                <label class="tick" style="font-weight:700;">
-                    <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleVenue(${p.id}, this.checked)">
-                    <span>${esc(p.name)}${p.town ? ` <span style="font-weight:500; color:#3f3a33;">· ${esc(p.town)}</span>` : ''}</span>
-                </label>
-                ${on && p.fields.length ? `
-                    <div style="margin:10px 0 0 24px;">
-                        <div style="font-size:0.78rem; font-weight:700; color:#3f3a33; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Which pitches do you use here?</div>
-                        <div style="display:flex; flex-wrap:wrap; gap:10px 18px;">
-                            ${p.fields.map(fn => `<label class="tick" style="font-weight:500;">
-                                <input type="checkbox" ${used.has(fn) ? 'checked' : ''} onchange="toggleField(${p.id}, '${esc(fn).replace(/'/g, "\'")}', this.checked)">
-                                <span>${esc(fn)}</span></label>`).join('')}
-                        </div>
-                    </div>` : ''}
-                ${on && !p.fields.length ? `
-                    <div style="margin:8px 0 0 24px; font-size:0.82rem; color:#3f3a33;">
-                        No separate pitches listed here — that's normal for a single-field site.
-                    </div>` : ''}
+        <p class="sec-help">These are the grounds we have for you. Add any that are missing, and
+            untick a pitch you don't actually use.</p>
+        <div class="note">Can't find one of your grounds in the list, or a pitch missing from a
+            ground that is there? <b>Don't add it here</b> — put it in the notes at the bottom of
+            this form and we'll set it up properly for you.</div>
+
+        ${chosen.length ? chosen.map(v => {
+            const p = POOL.find(x => x.id === v.venue_id);
+            const used = new Set((v.fields || []).map(f => f.name));
+            return `<div class="block">
+                <div class="block-t">${esc(v.name || p?.name || 'Venue')}
+                    ${v.town || p?.town ? `<span style="font-weight:500; text-transform:none; letter-spacing:0; color:#3f3a33;">· ${esc(v.town || p.town)}</span>` : ''}
+                    <button class="btn gh sm" style="margin-left:auto;" onclick="toggleVenue(${v.venue_id}, false)"
+                            title="We don't play here — takes it off your list, nothing is deleted">Not ours</button>
+                </div>
+                ${(p?.fields || []).length ? `
+                    <div style="font-size:0.8rem; font-weight:700; color:#3f3a33; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Pitches you use here</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:10px 18px;">
+                        ${p.fields.map(fn => `<label class="tick" style="font-weight:500;">
+                            <input type="checkbox" ${used.has(fn) ? 'checked' : ''} onchange="toggleField(${v.venue_id}, '${esc(fn).replace(/'/g, "\'")}', this.checked)">
+                            <span>${esc(fn)}</span></label>`).join('')}
+                    </div>`
+                : `<div style="font-size:0.84rem; color:#3f3a33;">No separate pitches listed — normal for a single-field site.</div>`}
             </div>`;
-        }).join('')}</div>
+        }).join('') : `<div class="warn">We don't have any grounds on file for you yet. Add them from the list below.</div>`}
+
+        <div style="margin-top:14px;">
+            <label class="lbl">Add a ground</label>
+            <div style="display:flex; gap:9px; flex-wrap:wrap;">
+                <select id="venuePick" style="flex:1 1 260px; min-width:220px;">
+                    <option value="">— choose from our list —</option>
+                    ${rest.map(p => `<option value="${p.id}">${esc(p.name)}${p.town ? ' · ' + esc(p.town) : ''}</option>`).join('')}
+                </select>
+                <button class="btn" onclick="addChosenVenue()">Add</button>
+            </div>
+            <div style="font-size:0.8rem; color:#3f3a33; margin-top:6px;">${rest.length} ground${rest.length === 1 ? '' : 's'} in our list. Start typing with the list open to jump to one.</div>
+        </div>
         ${secFoot('venues')}`;
+}
+
+function addChosenVenue() {
+    const sel = document.getElementById('venuePick');
+    const id  = Number(sel?.value);
+    if (!id) { sel?.focus(); return; }
+    toggleVenue(id, true);
 }
 
 function toggleVenue(id, on) {
     const list = [...getVal('venues.list', [])].filter(v => v.venue_id !== id);
     if (on) {
         const p = POOL.find(x => x.id === id);
+        // Every known pitch ticked by default — a club using the whole site
+        // shouldn't tick eight boxes; unticking the odd one is the smaller job.
         if (p) list.push({ venue_id: p.id, name: p.name, addr: p.addr, town: p.town,
-                           // Every known pitch ticked by default — a club that uses
-                           // the whole site shouldn't have to tick eight boxes, and
-                           // unticking the ones they don't use is the smaller job.
                            fields: p.fields.map(n => ({ name: n })) });
     }
     setVal('venues.list', list);
