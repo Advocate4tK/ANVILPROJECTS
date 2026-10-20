@@ -414,12 +414,8 @@ function sectionGap(key) {
         case 'leagues':
             return (getVal('leagues.list', []).length || !empty(getVal('leagues.freetext')))
                 ? null : 'at least one league or district';
-        case 'venues': {
-            const vs = getVal('venues.list', []);
-            if (!vs.length) return 'at least one venue';
-            if (vs.some(v => empty(v.name))) return 'a name on every venue — one is still blank';
-            return null;
-        }
+        case 'venues':
+            return getVal('venues.list', []).length ? null : 'at least one ground ticked';
         case 'ages':
             return getVal('ages.list', []).some(a => !empty(a.name)) ? null : 'at least one age group';
         case 'pay': {
@@ -599,77 +595,103 @@ function toggleLeague(n) {
 // ── 3 · venues ──────────────────────────────────────────────────────────────
 // ⛔ A VENUE WITH NO FIELDS IS NORMAL. Central Assign's own directory shows
 // "no fields" for a large share of its venues. Never demand one.
+// ⛔ SELECTION ONLY. NOTHING HERE CREATES, EDITS OR DELETES A VENUE OR A FIELD.
+//
+// Tod, 2026-10-20: "I don't even want them to have the ability to create a new
+// venue. That would break our system." And: "I don't want them being able to
+// create fields on existing venues."
+//
+// ⚠️ WHY IT MATTERS: Central Assign owns venue and field NAMES, and our
+// records mirror CA verbatim. A club typing "Stonington MS" where CA says
+// "Stonington Middle School" produces a record that is rejected on export weeks
+// later, by which point nobody remembers where it came from. A field is not a
+// club's to invent either — it is a physical thing already catalogued from CA.
+//
+// The first version of this section let them type a new venue, type field names
+// and sizes, and ✕ away both. Those deletes only touched their own submission,
+// never the real tables — but it read as though it did, and it would have
+// carried into anything promoted. It should never have been built that way; the
+// CA-owns-the-names rule was known before a line of it was written.
+//
+// So: tick the venues we already hold, tick which of that venue's known fields
+// they use. Anything missing goes in the notes as a message to Tod, who adds it
+// properly in the Command Center where the CA name can be checked.
 function pVenues() {
-    const vs = getVal('venues.list', []);
-    document.getElementById('bd-venues').innerHTML = `
-        <p class="sec-help">Where do you play? Give the full address — referees navigate to these,
-            and some of them are driving an hour.</p>
-        <div class="note">If a site has named fields, list them. If it's just one pitch with no
-            name, leave the fields blank — that's normal and perfectly fine.</div>
-        <div id="venueList">${vs.map((v, i) => venueBlock(v, i)).join('')}</div>
-        <button class="btn gh sm" onclick="addVenue()">+ Add a venue</button>
+    const chosen = getVal('venues.list', []);
+    const byId   = {};
+    chosen.forEach(v => { if (v.venue_id != null) byId[v.venue_id] = v; });
+    const el = document.getElementById('bd-venues');
+    if (!el) return;
+
+    if (!POOL.length) {
+        el.innerHTML = `
+            <p class="sec-help">Where do you play?</p>
+            <div class="warn">We couldn't load the venue list just now. Skip this section and tell us
+                in the notes at the bottom — we'll set your venues up at our end.</div>
+            ${secFoot('venues')}`;
+        return;
+    }
+
+    el.innerHTML = `
+        <p class="sec-help">Tick the grounds you play at. These come from our records, which match
+            what the state assigning system holds — so referees get sent to the right place.</p>
+        <div class="note">Can't find one of your grounds, or a pitch missing from a ground that is
+            listed? <b>Don't worry about it here</b> — put it in the notes at the bottom of this form
+            and we'll add it properly for you.</div>
+        <div>${POOL.map(p => {
+            const picked = byId[p.id];
+            const on     = !!picked;
+            const used   = new Set((picked?.fields || []).map(f => f.name));
+            return `<div class="block" style="${on ? '' : 'background:#fff;'}">
+                <label class="tick" style="font-weight:700;">
+                    <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleVenue(${p.id}, this.checked)">
+                    <span>${esc(p.name)}${p.town ? ` <span style="font-weight:500; color:#3f3a33;">· ${esc(p.town)}</span>` : ''}</span>
+                </label>
+                ${on && p.fields.length ? `
+                    <div style="margin:10px 0 0 24px;">
+                        <div style="font-size:0.78rem; font-weight:700; color:#3f3a33; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Which pitches do you use here?</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:10px 18px;">
+                            ${p.fields.map(fn => `<label class="tick" style="font-weight:500;">
+                                <input type="checkbox" ${used.has(fn) ? 'checked' : ''} onchange="toggleField(${p.id}, '${esc(fn).replace(/'/g, "\'")}', this.checked)">
+                                <span>${esc(fn)}</span></label>`).join('')}
+                        </div>
+                    </div>` : ''}
+                ${on && !p.fields.length ? `
+                    <div style="margin:8px 0 0 24px; font-size:0.82rem; color:#3f3a33;">
+                        No separate pitches listed here — that's normal for a single-field site.
+                    </div>` : ''}
+            </div>`;
+        }).join('')}</div>
         ${secFoot('venues')}`;
 }
-function venueBlock(v, i) {
-    // Already-chosen venues from our own records show as a named, confirmed
-    // block. Only a genuinely new one gets the typing fields.
-    const picked = POOL.find(p => p.id === v.venue_id);
-    return `<div class="block">
-        <div class="block-t">Venue ${i + 1}
-            ${picked ? '<span class="pill">ON FILE</span>' : ''}
-            <button class="btn-x" style="margin-left:auto;" onclick="delVenue(${i})">✕</button></div>
-        ${POOL.length ? `<div style="margin-bottom:10px;">
-            <label class="lbl">Pick from the venues we already have</label>
-            <select onchange="pickVenue(${i}, this.value)">
-                <option value="">— choose a venue —</option>
-                ${POOL.map(p => `<option value="${p.id}" ${v.venue_id === p.id ? 'selected' : ''}>${esc(p.name)}${p.town ? ' · ' + esc(p.town) : ''}</option>`).join('')}
-                <option value="__new">➕ It isn't in the list — let me type it</option>
-            </select>
-        </div>` : ''}
-        <div style="margin-bottom:10px; ${picked ? 'display:none;' : ''}">
-            <label class="lbl">Name</label>
-            <input type="text" value="${esc(v.name || '')}" placeholder="e.g. Lebanon Elementary"
-                   oninput="setVenue(${i},'name',this.value)"></div>
-        <div class="grid2" style="margin-bottom:10px;">
-            <div><label class="lbl">Street address</label>
-                <input type="text" value="${esc(v.addr || '')}" placeholder="49 Randolph Rd"
-                       oninput="setVenue(${i},'addr',this.value)"></div>
-            <div><label class="lbl">Town</label>
-                <input type="text" value="${esc(v.town || '')}" placeholder="Middletown"
-                       oninput="setVenue(${i},'town',this.value)"></div>
-        </div>
-        <label class="lbl">Fields at this venue — name and size</label>
-        ${(v.fields || []).map((f, j) => `
-            <div style="display:grid; grid-template-columns:1fr 120px 36px; gap:8px; margin-bottom:7px;">
-                <input type="text" value="${esc(f.name || '')}" placeholder="Forge Field"
-                       oninput="setField(${i},${j},'name',this.value)">
-                <input type="text" value="${esc(f.size || '')}" placeholder="11v11"
-                       oninput="setField(${i},${j},'size',this.value)">
-                <button class="btn-x" onclick="delField(${i},${j})">✕</button>
-            </div>`).join('')}
-        <button class="btn gh sm" onclick="addField(${i})">+ Add a field</button>
-    </div>`;
-}
-// Choosing from the pool carries the venue's real name, address and known
-// fields across — so the club confirms rather than retypes, and the name
-// matches what Central Assign expects.
-function pickVenue(i, val) {
-    const v = [...getVal('venues.list', [])];
-    if (val === '__new') { v[i] = { name:'', addr:'', town:'', fields:[] }; }
-    else {
-        const p = POOL.find(x => String(x.id) === String(val));
-        if (!p) { v[i] = { ...v[i], venue_id: null }; }
-        else v[i] = { venue_id: p.id, name: p.name, addr: p.addr, town: p.town,
-                      fields: p.fields.map(n => ({ name: n, size: '' })) };
+
+function toggleVenue(id, on) {
+    const list = [...getVal('venues.list', [])].filter(v => v.venue_id !== id);
+    if (on) {
+        const p = POOL.find(x => x.id === id);
+        if (p) list.push({ venue_id: p.id, name: p.name, addr: p.addr, town: p.town,
+                           // Every known pitch ticked by default — a club that uses
+                           // the whole site shouldn't have to tick eight boxes, and
+                           // unticking the ones they don't use is the smaller job.
+                           fields: p.fields.map(n => ({ name: n })) });
     }
-    setVal('venues.list', v); pVenues();
+    setVal('venues.list', list);
+    pVenues();
 }
-function addVenue() { const v = [...getVal('venues.list', [])]; v.push({ name:'', addr:'', town:'', fields:[] }); setVal('venues.list', v); pVenues(); }
-function delVenue(i) { const v = [...getVal('venues.list', [])]; v.splice(i, 1); setVal('venues.list', v); pVenues(); }
-function setVenue(i, k, val) { const v = [...getVal('venues.list', [])]; v[i] = { ...v[i], [k]: val }; setVal('venues.list', v); }
-function addField(i) { const v = [...getVal('venues.list', [])]; v[i].fields = [...(v[i].fields || []), { name:'', size:'' }]; setVal('venues.list', v); pVenues(); }
-function delField(i, j) { const v = [...getVal('venues.list', [])]; v[i].fields.splice(j, 1); setVal('venues.list', v); pVenues(); }
-function setField(i, j, k, val) { const v = [...getVal('venues.list', [])]; v[i].fields[j] = { ...v[i].fields[j], [k]: val }; setVal('venues.list', v); }
+
+function toggleField(id, fieldName, on) {
+    const list = [...getVal('venues.list', [])];
+    const v = list.find(x => x.venue_id === id);
+    if (!v) return;
+    const fields = (v.fields || []).filter(f => f.name !== fieldName);
+    // ⚠️ Only ever a name WE supplied — taken from POOL, never typed.
+    if (on && (POOL.find(x => x.id === id)?.fields || []).includes(fieldName)) {
+        fields.push({ name: fieldName });
+    }
+    v.fields = fields;
+    setVal('venues.list', list);
+    pVenues();
+}
 
 // ── 4 · age groups ──────────────────────────────────────────────────────────
 // ⭐ THE KEYSTONE. Pay and Crew are both generated from this list. Get it
