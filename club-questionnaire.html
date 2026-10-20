@@ -415,7 +415,7 @@ function sectionGap(key) {
             return (getVal('leagues.list', []).length || !empty(getVal('leagues.freetext')))
                 ? null : 'at least one league or district';
         case 'venues':
-            return getVal('venues.list', []).length ? null : 'at least one ground ticked';
+            return getVal('venues.list', []).length ? null : 'at least one venue';
         case 'ages':
             return getVal('ages.list', []).some(a => !empty(a.name)) ? null : 'at least one age group';
         case 'pay': {
@@ -636,6 +636,32 @@ function toggleLeague(n) {
 //
 // So: what this club already has, listed. A dropdown to add another from what
 // we hold. Nothing typed, nothing invented.
+// ⛔ ADD ONLY. NOTHING HERE CREATES, EDITS OR DELETES A VENUE OR A FIELD.
+//
+// Tod, 2026-10-20, three times over: "I don't even want them to have the
+// ability to create a new venue. That would break our system." · "I don't want
+// them being able to create fields on existing venues." · "I don't want you to
+// give them an option to remove fields."
+//
+// ⚠️ Central Assign owns venue and field NAMES and our records mirror CA
+// verbatim. A club typing "Stonington MS" where CA says "Stonington Middle
+// School" produces a record rejected on export weeks later.
+//
+// ⚠️ FIELDS ARE SHOWN, NEVER TOUCHED. They were tickboxes headed "pitches you
+// use here" — which is still an edit, and an unticked field is indistinguishable
+// from a field we got wrong. If a club genuinely does not use one, that is a
+// note to Tod, not a box they clear.
+//
+// ⚠️ AND NO REMOVING VENUES EITHER. Tod: "we're not giving them the ability to
+// delete." A venue on their list that they do not use goes in the notes.
+//
+// ⚠️ A SHORT LIST, NOT THE WHOLE STATE. The first lockdown drew a tickbox for
+// every venue in the system; Tod swept the page and was still in the B's after
+// fifty frames. The long list lives in a select now.
+//
+// ⛔ SAY "VENUE" AND "FIELD". Not ground, not pitch — that is the word used
+// everywhere else in the tool and in Central Assign, and a club should not have
+// to translate.
 function pVenues() {
     const chosen = getVal('venues.list', []);
     const el = document.getElementById('bd-venues');
@@ -645,7 +671,7 @@ function pVenues() {
         el.innerHTML = `
             <p class="sec-help">Where do you play?</p>
             <div class="warn">We couldn't load the venue list just now. Skip this section and tell us
-                in the notes at the bottom — we'll set your grounds up at our end.</div>
+                in the notes at the bottom — we'll set your venues up at our end.</div>
             ${secFoot('venues')}`;
         return;
     }
@@ -654,34 +680,29 @@ function pVenues() {
     const rest = POOL.filter(p => !have.has(p.id));
 
     el.innerHTML = `
-        <p class="sec-help">These are the grounds we have for you. Add any that are missing, and
-            untick a pitch you don't actually use.</p>
-        <div class="note">Can't find one of your grounds in the list, or a pitch missing from a
-            ground that is there? <b>Don't add it here</b> — put it in the notes at the bottom of
-            this form and we'll set it up properly for you.</div>
+        <p class="sec-help">These are the venues we have for you. Add any that are missing.</p>
+        <div class="note">Anything wrong here — a venue you don't use, one we've missed, or a field
+            that isn't listed — <b>put it in the notes at the bottom</b> of this form and we'll sort
+            it out properly at our end.</div>
 
         ${chosen.length ? chosen.map(v => {
             const p = POOL.find(x => x.id === v.venue_id);
-            const used = new Set((v.fields || []).map(f => f.name));
+            const fields = (p?.fields || []);
             return `<div class="block">
                 <div class="block-t">${esc(v.name || p?.name || 'Venue')}
                     ${v.town || p?.town ? `<span style="font-weight:500; text-transform:none; letter-spacing:0; color:#3f3a33;">· ${esc(v.town || p.town)}</span>` : ''}
-                    <button class="btn gh sm" style="margin-left:auto;" onclick="toggleVenue(${v.venue_id}, false)"
-                            title="We don't play here — takes it off your list, nothing is deleted">Not ours</button>
                 </div>
-                ${(p?.fields || []).length ? `
-                    <div style="font-size:0.8rem; font-weight:700; color:#3f3a33; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Pitches you use here</div>
-                    <div style="display:flex; flex-wrap:wrap; gap:10px 18px;">
-                        ${p.fields.map(fn => `<label class="tick" style="font-weight:500;">
-                            <input type="checkbox" ${used.has(fn) ? 'checked' : ''} onchange="toggleField(${v.venue_id}, '${esc(fn).replace(/'/g, "\'")}', this.checked)">
-                            <span>${esc(fn)}</span></label>`).join('')}
-                    </div>`
-                : `<div style="font-size:0.84rem; color:#3f3a33;">No separate pitches listed — normal for a single-field site.</div>`}
+                ${fields.length
+                    ? `<div style="font-size:0.8rem; font-weight:700; color:#3f3a33; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Fields</div>
+                       <div style="display:flex; flex-wrap:wrap; gap:7px;">
+                           ${fields.map(fn => `<span class="pill" style="background:#eef2f8; color:#1f2937; font-weight:600;">${esc(fn)}</span>`).join('')}
+                       </div>`
+                    : `<div style="font-size:0.84rem; color:#3f3a33;">No separate fields listed — normal for a single-field venue.</div>`}
             </div>`;
-        }).join('') : `<div class="warn">We don't have any grounds on file for you yet. Add them from the list below.</div>`}
+        }).join('') : `<div class="warn">We don't have any venues on file for you yet. Add them from the list below.</div>`}
 
         <div style="margin-top:14px;">
-            <label class="lbl">Add a ground</label>
+            <label class="lbl">Add a venue</label>
             <div style="display:flex; gap:9px; flex-wrap:wrap;">
                 <select id="venuePick" style="flex:1 1 260px; min-width:220px;">
                     <option value="">— choose from our list —</option>
@@ -689,7 +710,7 @@ function pVenues() {
                 </select>
                 <button class="btn" onclick="addChosenVenue()">Add</button>
             </div>
-            <div style="font-size:0.8rem; color:#3f3a33; margin-top:6px;">${rest.length} ground${rest.length === 1 ? '' : 's'} in our list. Start typing with the list open to jump to one.</div>
+            <div style="font-size:0.8rem; color:#3f3a33; margin-top:6px;">${rest.length} venue${rest.length === 1 ? '' : 's'} in our list. Open it and start typing to jump to one.</div>
         </div>
         ${secFoot('venues')}`;
 }
@@ -698,32 +719,14 @@ function addChosenVenue() {
     const sel = document.getElementById('venuePick');
     const id  = Number(sel?.value);
     if (!id) { sel?.focus(); return; }
-    toggleVenue(id, true);
-}
-
-function toggleVenue(id, on) {
-    const list = [...getVal('venues.list', [])].filter(v => v.venue_id !== id);
-    if (on) {
-        const p = POOL.find(x => x.id === id);
-        // Every known pitch ticked by default — a club using the whole site
-        // shouldn't tick eight boxes; unticking the odd one is the smaller job.
-        if (p) list.push({ venue_id: p.id, name: p.name, addr: p.addr, town: p.town,
-                           fields: p.fields.map(n => ({ name: n })) });
-    }
-    setVal('venues.list', list);
-    pVenues();
-}
-
-function toggleField(id, fieldName, on) {
+    const p = POOL.find(x => x.id === id);
+    if (!p) return;
     const list = [...getVal('venues.list', [])];
-    const v = list.find(x => x.venue_id === id);
-    if (!v) return;
-    const fields = (v.fields || []).filter(f => f.name !== fieldName);
-    // ⚠️ Only ever a name WE supplied — taken from POOL, never typed.
-    if (on && (POOL.find(x => x.id === id)?.fields || []).includes(fieldName)) {
-        fields.push({ name: fieldName });
-    }
-    v.fields = fields;
+    if (list.some(v => v.venue_id === id)) return;
+    // ⚠️ Fields come straight from our own record, whole. The club is saying
+    // "we play here", not choosing which parts of it exist.
+    list.push({ venue_id: p.id, name: p.name, addr: p.addr, town: p.town,
+                fields: p.fields.map(n => ({ name: n })) });
     setVal('venues.list', list);
     pVenues();
 }
