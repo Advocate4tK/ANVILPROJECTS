@@ -98,6 +98,15 @@
     }
     .req { font-size:0.68rem; font-weight:800; color:#b45309; background:#fef3c7;
            border-radius:4px; padding:2px 7px; letter-spacing:0.5px; }
+    /* ⭐ REQUIRED SHOWN ON THE FIELD, not just the section. Tod, 2026-10-21:
+       "the sections that I asked to be mandatory need to be updated... payment
+       coordinator for instance." The header said NEEDED while four contact
+       blocks sat underneath with nothing saying which of them had to be filled. */
+    .must { color:#dc2626; font-weight:800; margin-left:3px; }
+    .reqpill { font-size:0.66rem; font-weight:800; color:#b45309; background:#fef3c7;
+               border-radius:4px; padding:2px 7px; letter-spacing:0.5px; text-transform:uppercase; }
+    .done-pill { font-size:0.66rem; font-weight:800; color:#0b7a3b; background:#dcfce7;
+                 border-radius:4px; padding:2px 7px; letter-spacing:0.5px; text-transform:uppercase; }
     .chev { color:#3f3a33; font-size:0.9rem; transition:transform 0.2s; }
     .sec.open .chev { transform:rotate(90deg); }
     .sec-bd { display:none; padding:4px 22px 22px; border-top:1px solid #f0ece6; }
@@ -622,10 +631,23 @@ function setVal(path, v) {
 function getVal(path, dflt = '') {
     return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), A) ?? dflt;
 }
-function fld(path, label, ph = '', type = 'text') {
-    return `<div><label class="lbl">${label}</label>
-        <input type="${type}" placeholder="${esc(ph)}" value="${esc(getVal(path))}"
-               oninput="setVal('${path}', this.value)"></div>`;
+function fld(path, label, ph = '', type = 'text', required = false) {
+    // A red asterisk on the label, and the box itself outlined while it is
+    // empty — so a required field that has not been filled is visible without
+    // reading anything.
+    const empty = String(getVal(path) || '').trim() === '';
+    const mark  = required ? '<span class="must">*</span>' : '';
+    const ring  = required && empty ? ' style="border-color:#dc2626;"' : '';
+    return `<div><label class="lbl">${label}${mark}</label>
+        <input type="${type}"${ring} placeholder="${esc(ph)}" value="${esc(getVal(path))}"
+               oninput="setVal('${path}', this.value); markRequired(this, ${required});"></div>`;
+}
+
+// Clears the red ring the moment something is typed, without a full repaint
+// that would steal focus mid-word.
+function markRequired(el, required) {
+    if (!required) return;
+    el.style.borderColor = el.value.trim() === '' ? '#dc2626' : '';
 }
 
 function paint(key) { ({ contacts:pContacts, leagues:pLeagues, venues:pVenues, ages:pAges,
@@ -644,20 +666,25 @@ const ROLES = [
 ];
 function pContacts() {
     document.getElementById('bd-contacts').innerHTML = `
-        <p class="sec-help"><b>All four are needed.</b> One person can hold more than one — plenty of
+        <p class="sec-help"><b>All four are needed — name and email on each.</b> One person can hold more than one — plenty of
             clubs have the same person as president and scheduling contact, so tick "same as president"
             rather than typing it again.</p>
         ${ROLES.map((r, i) => `
             <div class="block">
                 <div class="block-t">${r.t}
-                    ${i > 0 ? `<label class="tick" style="font-weight:600; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif;">
+                    ${(() => {
+                        const c = getVal('contacts.' + r.k, {});
+                        const ok = String(c.name || '').trim() && String(c.email || '').trim();
+                        return ok ? '<span class="done-pill">\u2713 done</span>' : '<span class="reqpill">required</span>';
+                    })()}
+                    ${i > 0 ? `<label class="tick" style="font-weight:600; text-transform:none; letter-spacing:0; font-family:'DM Sans',sans-serif; margin-left:auto;">
                         <input type="checkbox" ${getVal('contacts.' + r.k + '.same') ? 'checked' : ''}
                                onchange="sameAsPres('${r.k}', this.checked)"> same as president</label>` : ''}
                 </div>
                 <p style="font-size:0.85rem; color:#3f3a33; margin-bottom:10px;">${r.hint}</p>
                 <div class="grid3" id="c-${r.k}">
-                    ${fld('contacts.' + r.k + '.name',  'Name',  'Jane Smith')}
-                    ${fld('contacts.' + r.k + '.email', 'Email', 'jane@club.org', 'email')}
+                    ${fld('contacts.' + r.k + '.name',  'Name',  'Jane Smith', 'text', true)}
+                    ${fld('contacts.' + r.k + '.email', 'Email', 'jane@club.org', 'email', true)}
                     ${fld('contacts.' + r.k + '.phone', 'Phone', '(860) 555-1234', 'tel')}
                 </div>
             </div>`).join('')}
@@ -691,7 +718,7 @@ function pLeagues() {
                 ${opts.map(n => `<button type="button" class="chip ${picked.includes(n) ? 'on' : ''}"
                     onclick="toggleLeague('${esc(n).replace(/'/g, "\\'")}')">${esc(n)}</button>`).join('')}
             </div>
-            ${picked.length ? `<label class="lbl">Which is the main one?</label>
+            ${picked.length ? `<label class="lbl">Which is the main one?<span class="must">*</span></label>
                 <select onchange="setVal('leagues.primary', this.value)">
                     <option value="">— pick the primary —</option>
                     ${picked.map(n => `<option value="${esc(n)}" ${n === primary ? 'selected' : ''}>${esc(n)}</option>`).join('')}
