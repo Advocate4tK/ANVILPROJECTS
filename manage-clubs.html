@@ -1909,7 +1909,7 @@
         const wrap = document.getElementById('clubStatusList');
         wrap.innerHTML = '<p style="color:#4a443c; font-size:0.85rem;">Checking completeness…</p>';
         try {
-            const [clubsRes, tournsRes, eventsRes, payRes, crewRes, venueRes, billingRes, assignorRes] = await Promise.all([
+            const [clubsRes, tournsRes, eventsRes, payRes, crewRes, venueRes, billingRes, questRes, assignorRes] = await Promise.all([
                 supabaseClient.client.from('clubs').select('id, name, "Club Name", enabled, president, "Club Admin", assignor, age_groups, ca_league, ca_league_primary').order('name'),
                 supabaseClient.client.from('tournaments').select('id, name, status').order('name'),
                 supabaseClient.client.from('events').select('id, name, "Club Name", enabled, assignor, start_date, end_date').order('name'),
@@ -1917,6 +1917,13 @@
                 supabaseClient.client.from('crew_rules').select('club_id'),
                 supabaseClient.client.from('venues').select('club_name'),
                 supabaseClient.client.from('club_contracts').select('club_id, rate_tiers, contract_signed_at'),
+                // ⭐ So a row can say "questionnaire out" or "sent in" without
+                // opening each one to find out. ⚠️ Failure is tolerated — an
+                // older database may not have the table, and a missing marker
+                // must never take the whole status list down with it.
+                supabaseClient.client.from('club_questionnaires')
+                    .select('entity_id,status,updated_at').eq('entity_kind', 'club')
+                    .then(r => r, () => ({ data: [] })),
                 supabaseClient.client.from('assignors').select('id, name, clubs, auth_user_id').order('name'),
             ]);
             if (clubsRes.error) throw clubsRes.error;
@@ -1974,6 +1981,16 @@
             // picker must never compute "what's missing" a second way — that is
             // how two checklists end up disagreeing, which is already true of
             // this line and the CA badge. One computation, two readers.
+            // entity_id → its questionnaire row, for the badge below.
+            const _questBy = {};
+            (questRes && questRes.data ? questRes.data : []).forEach(q => { _questBy[q.entity_id] = q; });
+            const questBadge = (id) => {
+                const q = _questBy[id];
+                if (!q) return '';
+                const sent = q.status === 'submitted';
+                const when = q.updated_at ? new Date(q.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+                return `<span title="${sent ? 'They have sent their questionnaire back' : 'A questionnaire link is out with them'}" style="font-size:0.72rem; font-weight:800; letter-spacing:0.4px; border-radius:4px; padding:2px 7px; white-space:nowrap; background:${sent ? '#dcfce7' : '#e0edff'}; color:${sent ? '#0b7a3b' : '#1d4ed8'};">${sent ? '✓ SENT IN' : '✉ OUT'}${when ? ' · ' + when : ''}</span>`;
+            };
             _entities = [];
             const clubHtml = clubs.map(c => {
                 // A LIVE club is the one you are MOST likely to need to change — it is the
@@ -1996,6 +2013,7 @@
                         <div style="display:flex; align-items:center; justify-content:space-between;">
                             <span style="font-family:'DM Sans',sans-serif; font-size:0.92rem; color:#1f2328; font-weight:700;">${c.name}</span>
                             <div style="display:flex; align-items:center; gap:10px;">
+                                ${questBadge(c.id)}
                                 <span style="font-size:0.8rem; font-weight:800; font-family:'Barlow Condensed',sans-serif; letter-spacing:1px; text-transform:uppercase; color:#15803d;">● LIVE</span>
                                 <button onclick="sendQuestionnaire(${c.id}, '${String(c.name).replace(/'/g, "\\'")}')" title="Send this club a link to review and update their own details" style="background:#fff; border:1px solid #0f3460; color:#0f3460; padding:5px 12px; border-radius:6px; font-size:0.81rem; font-weight:700; cursor:pointer; font-family:inherit;">Send Questionnaire</button>
                                 <button onclick="openWizardForEdit(${c.id}, [])" title="Open the full wizard - contacts, venues, rates, crew, billing, ownership" style="background:#fff; border:1px solid #15803d; color:#15803d; padding:5px 12px; border-radius:6px; font-size:0.81rem; font-weight:700; cursor:pointer; font-family:inherit;">Edit</button>
@@ -2014,6 +2032,7 @@
                     <div style="display:flex; align-items:center; justify-content:space-between;">
                         <span style="font-family:'DM Sans',sans-serif; font-size:0.92rem; color:#1f2328; font-weight:${isReady ? '700' : '400'};">${c.name}</span>
                         <div style="display:flex; align-items:center; gap:10px;">
+                            ${questBadge(c.id)}
                             ${isReady
                                 ? `<span style="font-size:0.8rem; font-weight:800; font-family:'Barlow Condensed',sans-serif; letter-spacing:1px; text-transform:uppercase; color:#1d4ed8;">◎ READY</span>
                                    <button onclick="sendQuestionnaire(${c.id}, '${String(c.name).replace(/'/g, "\\'")}')" title="Send this club a link to review and update their own details" style="background:#fff; border:1px solid #0f3460; color:#0f3460; padding:5px 12px; border-radius:6px; font-size:0.81rem; font-weight:700; cursor:pointer; font-family:inherit;">Send Questionnaire</button>
@@ -3888,7 +3907,7 @@
         try {
             const { data: open } = await supabaseClient.client
                 .from('club_questionnaires')
-                .select('token,status,updated_at,sent_to')
+                .select('token,status,updated_at,sent_to,answers,sections_done')
                 .eq('entity_kind', 'club').eq('entity_id', clubId)
                 .in('status', ['open', 'submitted'])
                 .maybeSingle();
@@ -3917,7 +3936,7 @@
                     .from('club_questionnaires')
                     .insert({ entity_kind: 'club', entity_id: clubId, entity_name: clubName,
                               answers: prefill })
-                    .select('token,status,updated_at,sent_to').single();
+                    .select('token,status,updated_at,sent_to,answers,sections_done').single();
                 if (error) throw new Error(error.message);
                 row = made;
             }
@@ -3926,6 +3945,142 @@
             alert('Could not create the questionnaire link:\n\n' + e.message
                 + '\n\nIf it mentions club_questionnaires, the table SQL has not been run yet.');
         }
+    }
+
+    // ⭐ WHAT THEY ACTUALLY FILLED IN.
+    //
+    // Tod, 2026-10-15: "I'd like to be able to see the actual questionnaire
+    // information that he filled out... the system assumed that I know what he
+    // put in." Eric returned Stonington and the only way to read it was to open
+    // his own link.
+    //
+    // ⚠️ BLANKS ARE SHOWN AS BLANKS, never hidden. The point is seeing where
+    // somebody ran out of road — a section that quietly renders nothing looks
+    // identical to one they finished, which is the exact confusion this ends.
+    const _qEsc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const _qBlank = '<span style="color:#9a9289; font-style:italic;">not answered</span>';
+    const _qVal = v => (v == null || String(v).trim() === '') ? _qBlank : _qEsc(v);
+    const _qRow = (k, v) => '<div style="display:flex; gap:10px; padding:2px 0;">'
+        + '<span style="min-width:132px; color:#3f3a33; font-weight:600;">' + _qEsc(k) + '</span><span>' + v + '</span></div>';
+
+    function _qSection(title, done, bodyHtml, isEmpty) {
+        const badge = done
+            ? '<span style="font-size:0.72rem; font-weight:800; color:#0b7a3b; background:#dcfce7; border-radius:4px; padding:2px 8px;">MARKED DONE</span>'
+            : '<span style="font-size:0.72rem; font-weight:800; color:#b45309; background:#fef3c7; border-radius:4px; padding:2px 8px;">NOT DONE</span>';
+        // ⚠️ "Marked done but empty" is called out loudly. Eric ticked
+        // Stonington's venues complete with one blank row in it, and the page
+        // then told Tod every section was finished. A tick is a claim, not a check.
+        const lie = (done && isEmpty)
+            ? '<div style="background:#fff1f2; border-left:3px solid #e11d48; color:#9f1239; font-size:0.82rem; padding:6px 10px; margin-top:7px; border-radius:5px;">Ticked complete, but nothing was entered.</div>'
+            : '';
+        return '<div style="border:1px solid #e2d9ce; border-radius:9px; padding:12px 14px; margin-bottom:10px; background:#fff;">'
+            + '<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">'
+            + '<div style="font-family:\'Barlow Condensed\',sans-serif; font-size:0.95rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.7px;">' + title + '</div>'
+            + '<span style="margin-left:auto;">' + badge + '</span></div>'
+            + '<div style="font-size:0.86rem; color:#1f2328;">' + bodyHtml + '</div>' + lie + '</div>';
+    }
+
+    function questionnaireAnswersHtml(row) {
+        const a = (row && row.answers) || {};
+        const done = new Set((row && row.sections_done) || []);
+        const out = [];
+
+        // Contacts
+        const C = a.contacts || {};
+        const roles = [['president', 'President'], ['admin', 'Scheduling contact'],
+                       ['payment', 'Payment coordinator'], ['assignor', 'Assignor']];
+        const cEmpty = roles.every(r => !String((C[r[0]] || {}).name || '').trim());
+        out.push(_qSection('Who to contact', done.has('contacts'),
+            roles.map(function (r) {
+                const v = C[r[0]] || {};
+                const bits = [v.name, v.email, v.phone].map(x => String(x || '').trim()).filter(Boolean);
+                return _qRow(r[1], bits.length ? _qEsc(bits.join(' · ')) : _qBlank);
+            }).join(''), cEmpty));
+
+        // Leagues
+        const L = a.leagues || {};
+        const lList = Array.isArray(L.list) ? L.list : [];
+        out.push(_qSection('Leagues &amp; districts', done.has('leagues'),
+            _qRow('Plays in', lList.length ? _qEsc(lList.join(', ')) : _qBlank)
+            + _qRow('Primary', _qVal(L.primary))
+            + (String(L.freetext || '').trim() ? _qRow('Typed in', _qEsc(L.freetext)) : ''),
+            !lList.length && !String(L.freetext || '').trim()));
+
+        // Venues
+        const V = Array.isArray(a.venues && a.venues.list) ? a.venues.list : [];
+        out.push(_qSection('Venues &amp; fields', done.has('venues'),
+            V.length ? V.map(function (v) {
+                const f = (v.fields || []).map(x => x.name).filter(Boolean);
+                return _qRow(v.name || '(no name)',
+                    f.length ? _qEsc(f.join(', ')) : '<span style="color:#3f3a33;">no fields listed</span>');
+            }).join('') : _qBlank, !V.length));
+
+        // Age groups
+        const G = Array.isArray(a.ages && a.ages.list) ? a.ages.list : [];
+        const named = G.filter(x => String(x.name || '').trim());
+        out.push(_qSection('Age groups', done.has('ages'),
+            named.length ? named.map(function (g) {
+                const fmt = g.format ? _qEsc(g.format) : '<span style="color:#9a9289;">format?</span>';
+                const hlf = g.half ? _qEsc(g.half) + ' min halves' : '<span style="color:#9a9289;">half length?</span>';
+                return _qRow(_qEsc(g.name) + ' ' + (g.type === 'comp' ? 'Travel' : 'Rec'), fmt + ' · ' + hlf);
+            }).join('') : _qBlank, !named.length));
+
+        // Pay — keys are "name|type", the shape the form writes
+        const P = a.pay || {};
+        const pKeys = Object.keys(P).filter(k =>
+            ['center', 'ar', 'solo'].some(f => String((P[k] || {})[f] == null ? '' : P[k][f]).trim() !== ''));
+        out.push(_qSection('Referee pay', done.has('pay'),
+            pKeys.length ? pKeys.map(function (k) {
+                const parts = k.split('|'), r = P[k] || {};
+                const money = x => String(x == null ? '' : x).trim() === '' ? '—' : '$' + _qEsc(x);
+                return _qRow(_qEsc(parts[0]) + ' ' + (parts[1] === 'comp' ? 'Travel' : 'Rec'),
+                    'centre ' + money(r.center) + ' · AR ' + money(r.ar) + ' · solo ' + money(r.solo));
+            }).join('') : _qBlank, !pKeys.length));
+
+        // Crew rules
+        const CR = a.crew || {};
+        const cKeys = Object.keys(CR).filter(k => String(CR[k] == null ? '' : CR[k]).trim() !== '');
+        out.push(_qSection('Crew rules', done.has('crew'),
+            cKeys.length ? cKeys.map(function (k) {
+                const parts = k.split('|'), n = String(CR[k]);
+                const label = n === '3' ? '3 — centre + 2 ARs'
+                            : n === '2' ? '2 — centre + 1 AR'
+                            : n === '1' ? '1 — centre only' : n;
+                return _qRow(_qEsc(parts[0]) + ' ' + (parts[1] === 'comp' ? 'Travel' : 'Rec'), _qEsc(label));
+            }).join('') : _qBlank, !cKeys.length));
+
+        // Paying referees
+        const PO = a.policy || {};
+        const methods = Array.isArray(PO.methods) ? PO.methods : [];
+        // ⭐ CHECK HAS A TAIL: their referees need postal addresses on file
+        // before a first game, and collecting those is Tod's job, not theirs.
+        const checkWarn = methods.indexOf('Check') >= 0
+            ? '<div style="background:#fffbeb; border-left:3px solid #f59e0b; color:#78350f; font-size:0.82rem; padding:6px 10px; margin-top:7px; border-radius:5px;">Pays by check — their referees need postal addresses on file.</div>'
+            : '';
+        out.push(_qSection('Paying referees', done.has('policy'),
+            _qRow('Methods', methods.length ? _qEsc(methods.join(', ')) : _qBlank)
+            + _qRow('Late-cancel cutoff', _qVal(PO.cutoff)) + checkWarn,
+            !methods.length && !String(PO.cutoff || '').trim()));
+
+        // Pages
+        const PG = a.portals || {};
+        const notes = String(PG.notes || '').trim();
+        out.push(_qSection('Pages they want', done.has('portals'),
+            _qRow('Audit page', PG.audit ? 'yes' : 'no')
+            + _qRow('Payment page', PG.payment ? 'yes' : 'no')
+            + (notes
+                ? '<div style="background:#f0f9ff; border-left:3px solid #0369a1; color:#0c4a6e; font-size:0.84rem; padding:8px 11px; margin-top:8px; border-radius:5px; white-space:pre-wrap;">✎ ' + _qEsc(notes) + '</div>'
+                : ''), false));
+
+        return out.join('');
+    }
+
+    // Has anything actually been typed? A row minted with a pre-fill snapshot
+    // is not the same as a club having answered — but the snapshot IS worth
+    // showing, because it is what they are being asked to confirm.
+    function _qHasAnswers(row) {
+        const a = row && row.answers;
+        return !!(a && typeof a === 'object' && Object.keys(a).some(k => k !== '_baseline'));
     }
 
     function showQuestionnaireLink(clubName, row) {
@@ -3937,12 +4092,12 @@
         box.id = 'qLinkOverlay';
         box.style.cssText = 'position:fixed; inset:0; background:rgba(4,10,22,0.7); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;';
         box.innerHTML = `
-            <div style="background:#fff; border-radius:14px; max-width:620px; width:100%; box-shadow:0 30px 80px rgba(0,0,0,0.5); overflow:hidden;">
-                <div style="background:#0f3460; color:#fff; padding:14px 20px; display:flex; align-items:center; gap:10px;">
+            <div style="background:#fff; border-radius:14px; max-width:760px; width:100%; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 30px 80px rgba(0,0,0,0.5); overflow:hidden;">
+                <div style="background:#0f3460; color:#fff; padding:14px 20px; display:flex; align-items:center; gap:10px; flex-shrink:0;">
                     <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.2rem; font-weight:800; text-transform:uppercase; letter-spacing:0.6px;">Questionnaire — ${clubName}</div>
                     <button onclick="document.getElementById('qLinkOverlay').remove()" style="margin-left:auto; background:none; border:none; color:#fff; font-size:1.3rem; cursor:pointer;">✕</button>
                 </div>
-                <div style="padding:20px;">
+                <div style="padding:20px; overflow-y:auto;">
                     ${existing ? `<div style="background:#fffbeb; border:1px solid #fde68a; border-left:4px solid #f59e0b; border-radius:7px; padding:10px 13px; font-size:0.84rem; color:#78350f; margin-bottom:14px;">
                         This club already had a link out — last touched <b>${when}</b>${row.status === 'submitted' ? ', and it has been <b>sent in</b>' : ''}.
                         Here it is again. A second link would split the answers in two, so there is only ever one.
@@ -3961,6 +4116,17 @@
                     <div style="margin-top:16px; padding-top:14px; border-top:1px dashed #e2d9ce;">
                         <a href="${url}" target="_blank" rel="noopener" style="font-size:0.84rem; color:#0f3460; font-weight:700;">Open it as they'll see it ↗</a>
                     </div>
+                    ${_qHasAnswers(row) ? `
+                    <div style="margin-top:18px; padding-top:16px; border-top:1px solid #e2d9ce;">
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                            <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.05rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px;">What they've filled in</div>
+                            <span style="margin-left:auto; font-size:0.8rem; color:#3f3a33;">${row.status === 'submitted' ? 'Sent in' : 'Still open'}${when ? ' · last touched ' + when : ''}</span>
+                        </div>
+                        ${questionnaireAnswersHtml(row)}
+                    </div>` : `
+                    <div style="margin-top:18px; padding-top:16px; border-top:1px solid #e2d9ce; font-size:0.85rem; color:#3f3a33;">
+                        Nothing filled in yet — this is what they'll see when they open the link.
+                    </div>`}
                 </div>
             </div>`;
         document.body.appendChild(box);
