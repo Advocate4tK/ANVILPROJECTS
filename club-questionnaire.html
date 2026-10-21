@@ -472,17 +472,32 @@ function sectionGap(key) {
     const empty = o => !o || !String(o).trim();
     switch (key) {
         case 'contacts': {
+            // ⭐ ALL FOUR ARE MANDATORY. Tod, 2026-10-21: "contact info is key...
+            // they must put in payment coordinator, club president, scheduling
+            // contact and assignor as mandatory fields."
+            //
+            // Each one has a job nobody else can do:
+            //   president  — signs the season contract, reads the audit page
+            //   admin      — submits the games and asks for changes (a LOGIN)
+            //   payment    — the only person who can pay a referee (a LOGIN)
+            //   assignor   — who actually puts referees on their games
+            //
+            // ⚠️ Asked one at a time, in that order, so the message names the
+            // one thing missing instead of "fill in your contacts".
+            // ⚠️ "Same as president" makes one person holding three roles three
+            // clicks rather than three retypings — that is what keeps this from
+            // being onerous for a small club.
             const c = getVal('contacts', {});
-            if (empty(c.president?.name) && empty(c.admin?.name)) return 'a president or a scheduling contact';
-            if (empty(c.admin?.name))  return 'the scheduling contact — they are the one who submits your games';
-            if (empty(c.admin?.email)) return 'an email for the scheduling contact, since they need a login';
-            // ⭐ THE PAYMENT COORDINATOR IS REQUIRED TOO. Tod, 2026-10-21: "it
-            // seems to make sense that we would require the payment coordinator
-            // as well." They are the only person who can actually pay a referee
-            // — the audit page is read-only by design — so a club without one
-            // has nobody who can settle up at the end of the season.
-            if (empty(c.payment?.name))  return 'the payment coordinator — they are the only person who can pay your referees';
-            if (empty(c.payment?.email)) return 'an email for the payment coordinator, since they need a login';
+            const want = [
+                ['president', 'the club president'],
+                ['admin',     'the scheduling contact — they are the one who submits your games'],
+                ['payment',   'the payment coordinator — nobody else can pay your referees'],
+                ['assignor',  'who assigns your referees'],
+            ];
+            for (const [k, label] of want) {
+                if (empty(c[k]?.name))  return label;
+                if (empty(c[k]?.email)) return `an email for ${k === 'assignor' ? 'your assignor' : label.split(' — ')[0]}`;
+            }
             return null;
         }
         case 'leagues':
@@ -600,12 +615,13 @@ const ROLES = [
     { k:'president', t:'Club President', hint:'Signs the season contract and sees the audit page.' },
     { k:'admin',     t:'Scheduling Contact', hint:'Submits your games and asks for changes. <b>They will need a login.</b>' },
     { k:'payment',   t:'Payment Coordinator', hint:'Pays the referees. <b>They will need a login.</b> Nobody else can settle up — the audit page is read-only.' },
-    { k:'assignor',  t:'Assignor', hint:'Who assigns your referees today, if anyone.' },
+    { k:'assignor',  t:'Assignor', hint:'Who puts referees on your games. If that is us, say so — name and email still needed so we know who to talk to.' },
 ];
 function pContacts() {
     document.getElementById('bd-contacts').innerHTML = `
-        <p class="sec-help">Four roles. One person can hold more than one — plenty of clubs have the
-            same person as president and scheduling contact.</p>
+        <p class="sec-help"><b>All four are needed.</b> One person can hold more than one — plenty of
+            clubs have the same person as president and scheduling contact, so tick "same as president"
+            rather than typing it again.</p>
         ${ROLES.map((r, i) => `
             <div class="block">
                 <div class="block-t">${r.t}
