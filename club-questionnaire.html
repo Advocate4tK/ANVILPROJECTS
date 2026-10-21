@@ -500,9 +500,28 @@ function sectionGap(key) {
             }
             return null;
         }
-        case 'leagues':
-            return (getVal('leagues.list', []).length || !empty(getVal('leagues.freetext')))
-                ? null : 'at least one league or district';
+        case 'leagues': {
+            // ⭐ A MAIN ONE IS REQUIRED, not just a list. Tod, 2026-10-21: "they
+            // must provide a main district... make it mandatory that they
+            // provide one as their main."
+            //
+            // ⚠️ A club with no primary is what produced the CT Cup mislabel —
+            // with nothing marked main, whatever sat first in the list got
+            // treated as the league, and games came out labelled wrong.
+            //
+            // ⛔ It is never inferred from order. One picked league auto-sets
+            // itself as main (there is no ambiguity); two or more must be
+            // chosen deliberately.
+            const list = getVal('leagues.list', []);
+            const free = getVal('leagues.freetext');
+            if (!list.length && empty(free)) return 'at least one league or district';
+            // The typed fallback only appears when our league list failed to
+            // load, so there is no dropdown to pick a main from. Accept it and
+            // sort it out at our end rather than trapping them.
+            if (!list.length) return null;
+            if (empty(getVal('leagues.primary'))) return 'which league is your main one';
+            return null;
+        }
         case 'venues':
             return getVal('venues.list', []).length ? null : 'at least one venue';
         case 'ages':
