@@ -4027,15 +4027,23 @@
 
         // Pay — keys are "name|type", the shape the form writes
         const P = a.pay || {};
-        const pKeys = Object.keys(P).filter(k =>
+        // ⚠️ no_rec / no_comp live in the same object as the rate rows. They are
+        // booleans, not age groups, and would otherwise render as a nameless row.
+        const pKeys = Object.keys(P).filter(k => k !== 'no_rec' && k !== 'no_comp').filter(k =>
             ['center', 'ar', 'solo'].some(f => String((P[k] || {})[f] == null ? '' : P[k][f]).trim() !== ''));
+        // ⭐ A DECLARED "we don't run these" is an ANSWER, shown as one — not a
+        // silent gap. Matches the tick on the form itself.
+        const noRec  = !!(P && P.no_rec);
+        const noComp = !!(P && P.no_comp);
+        const decl = (noRec ? _qRow('Rec', '<span style="color:#3f3a33; font-style:italic;">they don't run rec games</span>') : '')
+                   + (noComp ? _qRow('Comp/Travel', '<span style="color:#3f3a33; font-style:italic;">they don't run comp/travel games</span>') : '');
         out.push(_qSection('Referee pay', done.has('pay'),
             pKeys.length ? pKeys.map(function (k) {
                 const parts = k.split('|'), r = P[k] || {};
                 const money = x => String(x == null ? '' : x).trim() === '' ? '—' : '$' + _qEsc(x);
                 return _qRow(_qEsc(parts[0]) + ' ' + (parts[1] === 'comp' ? 'Comp/Travel' : 'Rec'),
                     'centre ' + money(r.center) + ' · AR ' + money(r.ar) + ' · solo ' + money(r.solo));
-            }).join('') : _qBlank, !pKeys.length));
+            }).join('') + decl : (decl || _qBlank), !pKeys.length && !decl));
 
         // Crew rules
         const CR = a.crew || {};
