@@ -14,7 +14,40 @@
     }
     .wrap { max-width:860px; margin:0 auto; }
 
-    /* ── header ───────────────────────────────────────────────────────── */
+    /* ⭐ THE LOGO MARK — lifted VERBATIM from unsubscribe.html, which took it
+       from logo-preview.html. Tod, 2026-10-21: "we should have our referee tool
+       red and yellow card icon on this as well. That's standard."
+       ⛔ Never redraw it by hand. The master lives in logo-preview.html and
+       every page that needs it copies that, so they cannot drift apart. */
+.logo-mark { --sz: 65px; position: relative; width: var(--sz); height: var(--sz); flex-shrink: 0; margin: 0 auto 20px; }
+        .lcard { position: absolute; border-radius: calc(var(--sz) * 0.065); }
+        .lcard-red {
+            width: calc(var(--sz)*0.58); height: calc(var(--sz)*0.82);
+            background: linear-gradient(145deg,#f87171 0%,#ef4444 55%,#b91c1c 100%);
+            box-shadow: 0 calc(var(--sz)*0.02) calc(var(--sz)*0.12) rgba(239,68,68,0.45);
+            top: calc(var(--sz)*0.21); left: calc(var(--sz)*0.32); transform: rotate(22deg);
+        }
+        .lcard-yellow {
+            width: calc(var(--sz)*0.64); height: calc(var(--sz)*0.88);
+            background: linear-gradient(145deg,#fde047 0%,#f59e0b 55%,#b45309 100%);
+            box-shadow: 0 0 calc(var(--sz)*0.2) rgba(245,158,11,0.6), 0 0 calc(var(--sz)*0.4) rgba(245,158,11,0.2), 0 calc(var(--sz)*0.05) calc(var(--sz)*0.18) rgba(0,0,0,0.5);
+            top: calc(var(--sz)*0.12); left: calc(var(--sz)*0.18); transform: rotate(10deg);
+        }
+        .lcard-yellow::before {
+            content:''; position:absolute; top:8%; left:10%; width:14%; height:52%;
+            background:linear-gradient(180deg,rgba(255,255,255,0.38) 0%,rgba(255,255,255,0) 100%); border-radius:3px;
+        }
+        .logo-text {
+            position:absolute; inset:0; display:flex; flex-direction:column;
+            align-items:center; justify-content:center; padding-top:calc(var(--sz)*0.10);
+            font-family:'Barlow Condensed',sans-serif; font-weight:800;
+            text-transform:uppercase; text-align:center; z-index:10; line-height:0.88; letter-spacing:2px;
+        }
+        .logo-line1 { color:#fff; font-size:calc(var(--sz)*0.2); text-shadow:0 2px 12px rgba(0,0,0,0.95),0 0 24px rgba(0,0,0,0.7); }
+        .logo-line2 { color:#00c853; font-size:calc(var(--sz)*0.32); text-shadow:0 2px 12px rgba(0,0,0,0.95),0 0 28px rgba(0,200,83,0.5); margin-top:calc(var(--sz)*-0.01); transform:skewX(-14deg); display:block; }
+        .logo-underline { display:block; height:calc(var(--sz)*0.022); width:calc(var(--sz)*0.58); margin-top:calc(var(--sz)*0.025); background:#ef4444; border-radius:calc(var(--sz)*0.01); box-shadow:0 0 calc(var(--sz)*0.012) #ef4444,0 0 calc(var(--sz)*0.04) rgba(239,68,68,0.85),0 0 calc(var(--sz)*0.08) rgba(239,68,68,0.5); transform:skewX(-14deg); }
+
+    /* —— header —— */
     .hdr {
         background:#060e20; color:#fff; border-radius:14px;
         padding:24px 28px; margin-bottom:18px;
@@ -199,6 +232,10 @@
 //   pricing in their hands.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ⛔ ONLY `t` IS READ. The link also carries ?c=<club-slug> so a human can
+// tell three of these apart in an email draft, but it is a LABEL and nothing
+// here may ever consult it — the moment a name decides what loads, guessing
+// slugs becomes a way to read other clubs' submissions.
 const TOKEN = new URLSearchParams(location.search).get('t') || '';
 const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
@@ -240,6 +277,20 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
         META  = row;
         A     = row.answers || {};
         DONE  = new Set(row.sections_done || []);
+        // ⚠️ RE-CHECK EVERY TICK ON LOAD. A section marked complete under an
+        // older, looser rule stays complete forever otherwise. Eric ticked
+        // Stonington's venues when the form let him add a blank row; the row
+        // was later cleaned out of the database and his claim survived both —
+        // the page still said "All sections done" with no venues at all.
+        //
+        // ⭐ This also means tightening a rule re-tests old answers instead of
+        // grandfathering them in.
+        const _stale = [...DONE].filter(k => sectionGap(k));
+        if (_stale.length) {
+            _stale.forEach(k => DONE.delete(k));
+            // Saved straight away so Tod's review agrees with what they see.
+            _dirty = true;
+        }
         try {
             const { data: lg } = await sb.from('leagues').select('name').order('name');
             LEAGUES = (lg || []).map(l => l.name).filter(Boolean);
@@ -263,11 +314,16 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
             })).filter(v => v.name);
         } catch (e) { console.warn('venue pool unavailable', e); }
         render();
+        if (_dirty) save();
     } catch (e) {
         bail('Could not open this form: ' + e.message);
     }
     function bail(msg) {
-        wrap.innerHTML = `<div class="hdr"><div class="brand">REFEREE <span>TOOL</span></div></div>
+        wrap.innerHTML = `<div class="hdr"><div style="display:flex; align-items:center; gap:14px;">
+                <div class="logo-mark" style="--sz:54px; margin:0;">
+                    <div class="lcard lcard-red"></div><div class="lcard lcard-yellow"></div>
+                    <div class="logo-text"><span class="logo-line1">Referee</span><span class="logo-line2">Tool</span><span class="logo-underline"></span></div>
+                </div><div class="brand">REFEREE <span>TOOL</span></div></div></div>
             <div class="center-msg">
                 <p style="font-size:1rem; color:#1f2328; font-weight:600;">${esc(msg)}</p>
                 <p class="foot" style="margin-top:18px;">Referee Tool by <b>Anvil Arts</b></p>
@@ -323,7 +379,18 @@ function render() {
     const submitted = META.status === 'submitted';
     document.getElementById('wrap').innerHTML = `
         <div class="hdr">
-            <div class="brand">REFEREE <span>TOOL</span></div>
+            <div style="display:flex; align-items:center; gap:14px;">
+                <div class="logo-mark" style="--sz:54px; margin:0;">
+                    <div class="lcard lcard-red"></div>
+                    <div class="lcard lcard-yellow"></div>
+                    <div class="logo-text">
+                        <span class="logo-line1">Referee</span>
+                        <span class="logo-line2">Tool</span>
+                        <span class="logo-underline"></span>
+                    </div>
+                </div>
+                <div class="brand">REFEREE <span>TOOL</span></div>
+            </div>
             <h1>${esc(META.entity_name)} — Setup</h1>
             <p>Everything we need to get your games assigned. It saves as you go, so you can stop
                and come back, or pass this same link to somebody else to finish.</p>
@@ -409,6 +476,13 @@ function sectionGap(key) {
             if (empty(c.president?.name) && empty(c.admin?.name)) return 'a president or a scheduling contact';
             if (empty(c.admin?.name))  return 'the scheduling contact — they are the one who submits your games';
             if (empty(c.admin?.email)) return 'an email for the scheduling contact, since they need a login';
+            // ⭐ THE PAYMENT COORDINATOR IS REQUIRED TOO. Tod, 2026-10-21: "it
+            // seems to make sense that we would require the payment coordinator
+            // as well." They are the only person who can actually pay a referee
+            // — the audit page is read-only by design — so a club without one
+            // has nobody who can settle up at the end of the season.
+            if (empty(c.payment?.name))  return 'the payment coordinator — they are the only person who can pay your referees';
+            if (empty(c.payment?.email)) return 'an email for the payment coordinator, since they need a login';
             return null;
         }
         case 'leagues':
@@ -525,7 +599,7 @@ function paint(key) { ({ contacts:pContacts, leagues:pLeagues, venues:pVenues, a
 const ROLES = [
     { k:'president', t:'Club President', hint:'Signs the season contract and sees the audit page.' },
     { k:'admin',     t:'Scheduling Contact', hint:'Submits your games and asks for changes. <b>They will need a login.</b>' },
-    { k:'payment',   t:'Payment Coordinator', hint:'Pays the referees. Only needed if you want the payment page.' },
+    { k:'payment',   t:'Payment Coordinator', hint:'Pays the referees. <b>They will need a login.</b> Nobody else can settle up — the audit page is read-only.' },
     { k:'assignor',  t:'Assignor', hint:'Who assigns your referees today, if anyone.' },
 ];
 function pContacts() {
