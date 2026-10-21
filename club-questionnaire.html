@@ -849,8 +849,9 @@ const COMMON_AGES = ['U8','U9','U10','U11','U12','U13','U14','U15','U16','U17','
 function pAges() {
     const ags = getVal('ages.list', []);
     document.getElementById('bd-ages').innerHTML = `
-        <p class="sec-help">Which age groups do you run? Add a row for each — and separate rows for
-            rec and travel if you run both, because they're usually paid differently.</p>
+        <p class="sec-help">Which age groups do you run? Add a row for each. <b>If you run an age
+            both rec and comp/travel, add it twice</b> — once as each — because they are almost always
+            paid differently.</p>
         <div class="chips" style="margin-bottom:14px;">
             ${COMMON_AGES.map(a => `<button type="button" class="chip" onclick="quickAge('${a}')">+ ${a}</button>`).join('')}
         </div>
@@ -862,7 +863,7 @@ function pAges() {
             <td><input type="text" value="${esc(a.name || '')}" placeholder="U12" oninput="setAge(${i},'name',this.value)"></td>
             <td><select onchange="setAge(${i},'type',this.value)">
                     <option value="rec"  ${a.type === 'rec'  ? 'selected' : ''}>Rec</option>
-                    <option value="comp" ${a.type === 'comp' ? 'selected' : ''}>Travel / Comp</option>
+                    <option value="comp" ${a.type === 'comp' ? 'selected' : ''}>Comp / Travel</option>
                 </select></td>
             <td><select onchange="setAge(${i},'format',this.value)">
                     <option value="">— pick —</option>
@@ -889,33 +890,70 @@ function setAge(i, k, v) {
 }
 function repaintDerived() { pPay(); pCrew(); }
 function ageKey(a, i) { return (a.name || ('row' + i)) + '|' + (a.type || 'rec'); }
-function ageLabel(a) { return `${a.name || '—'} ${a.type === 'comp' ? 'Travel' : 'Rec'}`; }
+function ageLabel(a) { return `${a.name || '—'} ${a.type === 'comp' ? 'Comp/Travel' : 'Rec'}`; }
 
 // ── 5 · pay ─────────────────────────────────────────────────────────────────
 // ⚠️ THREE COLUMNS, NOT TWO. Centre, AR, and SOLO CENTRE — the rate when one
 // referee works the game alone. Griswold comp U13–U15 is $60 / $35 / $95.
 // The solo rate is real money and it has to be asked for, not derived.
 function pPay() {
-    const ags = getVal('ages.list', []);
+    const ags = getVal('ages.list', []).filter(a => String(a.name || '').trim());
     const el = document.getElementById('bd-pay'); if (!el) return;
+
+    // ⭐ SPLIT UNDER REC AND COMP/TRAVEL, like Griswold's own pay page.
+    //
+    // Tod, 2026-10-21, looking at Stonington's form: "for ref pay shouldn't we
+    // offer them rec and comp areas to fill out?" The table WAS rec/comp aware
+    // — every row carried the word — but Eric had only ever added travel age
+    // groups, so it read as a plain list of ages and the missing half was
+    // completely silent.
+    //
+    // ⚠️ AN EMPTY HALF SAYS SO OUT LOUD. The point is seeing the hole. A
+    // section that renders nothing looks identical to one that is finished.
+    //
+    // ⛔ NO ROWS ARE INVENTED. A club that genuinely runs no rec games should
+    // not be asked for rec rates — it only points them back at Age Groups.
+    const grid = (list, kind) => {
+        if (!list.length) {
+            return `<div style="background:#fffbeb; border:1px solid #fde68a; border-left:4px solid #f59e0b;
+                        border-radius:7px; padding:10px 13px; font-size:0.84rem; color:#78350f;">
+                    No <b>${kind}</b> age groups added, so there are no ${kind.toLowerCase()} rates to set.
+                    If you do run ${kind.toLowerCase()} games, add them in <b>Age groups</b> above and they will appear here.
+                </div>`;
+        }
+        return `<table class="rates"><thead><tr>
+                <th>Age group</th><th style="width:110px;">Centre</th><th style="width:110px;">AR</th><th style="width:110px;">Solo centre</th>
+            </tr></thead><tbody>
+            ${list.map(({ a, i }) => { const k = ageKey(a, i); return `<tr>
+                <td style="font-weight:700;">${esc(a.name)}</td>
+                <td><div class="money"><input type="number" min="0" step="1" value="${esc(getVal('pay.' + k + '.center'))}"
+                     oninput="setVal('pay.${k}.center', this.value)"></div></td>
+                <td><div class="money"><input type="number" min="0" step="1" value="${esc(getVal('pay.' + k + '.ar'))}"
+                     oninput="setVal('pay.${k}.ar', this.value)"></div></td>
+                <td><div class="money"><input type="number" min="0" step="1" value="${esc(getVal('pay.' + k + '.solo'))}"
+                     oninput="setVal('pay.${k}.solo', this.value)"></div></td>
+            </tr>`; }).join('')}</tbody></table>`;
+    };
+
+    // ⚠️ The index must be the one from the FULL list — ageKey(a, i) is what
+    // the saved answers are keyed on, so filtering first and re-indexing would
+    // silently detach every rate already entered.
+    const all  = getVal('ages.list', []).map((a, i) => ({ a, i })).filter(x => String(x.a.name || '').trim());
+    const rec  = all.filter(x => x.a.type !== 'comp');
+    const comp = all.filter(x => x.a.type === 'comp');
+
     el.innerHTML = `
-        <p class="sec-help">What you pay a referee per game, per position. Leave a box blank if
-            that position isn't paid for that age group.</p>
-        ${!ags.length ? `<div class="warn">Fill in <b>Age groups</b> first — this table is built from it.</div>` : `
-        <div class="note"><b>Solo centre</b> is what you pay when one referee covers the whole game
-            on their own, with no assistants. It's usually more than the normal centre rate.</div>
-        <table class="rates"><thead><tr>
-            <th>Age group</th><th style="width:110px;">Centre</th><th style="width:110px;">AR</th><th style="width:110px;">Solo centre</th>
-        </tr></thead><tbody>
-        ${ags.map((a, i) => { const k = ageKey(a, i); return `<tr>
-            <td style="font-weight:700;">${esc(ageLabel(a))}</td>
-            <td><div class="money"><input type="number" min="0" step="1" value="${esc(getVal('pay.' + k + '.center'))}"
-                 oninput="setVal('pay.${k}.center', this.value)"></div></td>
-            <td><div class="money"><input type="number" min="0" step="1" value="${esc(getVal('pay.' + k + '.ar'))}"
-                 oninput="setVal('pay.${k}.ar', this.value)"></div></td>
-            <td><div class="money"><input type="number" min="0" step="1" value="${esc(getVal('pay.' + k + '.solo'))}"
-                 oninput="setVal('pay.${k}.solo', this.value)"></div></td>
-        </tr>`; }).join('')}</tbody></table>`}
+        <p class="sec-help">What you pay a referee per game, per position. Leave a box blank if that
+            position isn't paid for that age group.</p>
+        ${!ags.length ? `<div class="warn">Fill in <b>Age groups</b> first — these tables are built from it.</div>` : `
+        <div class="note"><b>Solo centre</b> is what you pay when one referee covers the whole game on
+            their own, with no assistants. It's usually more than the normal centre rate.</div>
+        <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#09142a;
+                    text-transform:uppercase; letter-spacing:0.8px; margin:16px 0 8px;">Rec</div>
+        ${grid(rec, 'Rec')}
+        <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#09142a;
+                    text-transform:uppercase; letter-spacing:0.8px; margin:20px 0 8px;">Comp / Travel</div>
+        ${grid(comp, 'Comp/Travel')}`}
         ${secFoot('pay')}`;
 }
 
