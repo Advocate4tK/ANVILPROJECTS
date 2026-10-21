@@ -116,6 +116,43 @@ function merge(text: string, r: Recipient): string {
     .replace(/\{\{\s*town\s*\}\}/gi,  r.town || "your area");
 }
 
+// ⭐ ONE RULE FOR "IS THIS A MINOR?", because it decides whether a parent is
+// told their child has a game.
+//
+// ⚠️ THE age COLUMN IS A SCRAPE, NOT A CALCULATION. On 2026-10-21: 324 of
+// 3,550 referees have a real Date of Birth; 3,209 have only an age lifted from
+// Central Assign's directory on 2 October (that directory shows "13y" and
+// nothing finer); 17 have neither.
+//
+// So the stored number drifts a year every season, and — worse — the old test
+// `age != null && age < 18` read NO AGE AS AN ADULT. Kaleb Espinoza and Sierra
+// Hurst-Ruales both have a guardian on file, no age, and had therefore never
+// had a guardian copied on anything. Sierra's own address is a school account.
+//
+// Order:
+//   1. Date of birth — compute it. Always right, never needs maintaining.
+//   2. No DOB but a stored age — use it. It is all we have for most of them.
+//   3. Neither, but a GUARDIAN ON FILE — treat as a minor. An adult does not
+//      have a guardian recorded, and copying a parent who did not need it is a
+//      far smaller harm than a child's games going only to the child.
+//   4. Nothing at all — adult.
+function refIsMinor(r: { age?: unknown; "Date of Birth"?: unknown; "Guardian Email"?: unknown; "Guardian Phone"?: unknown }): boolean {
+  const dob = String(r?.["Date of Birth"] ?? "").trim();
+  if (dob) {
+    const b = new Date(dob + "T00:00:00");
+    if (!isNaN(b.getTime())) {
+      const t = new Date();
+      let a = t.getFullYear() - b.getFullYear();
+      const m = t.getMonth() - b.getMonth();
+      if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
+      if (a >= 0 && a < 120) return a < 18;
+    }
+  }
+  const n = r?.age == null || r?.age === "" ? NaN : Number(r.age);
+  if (Number.isFinite(n) && n >= 0 && n < 120) return n < 18;
+  return !!(String(r?.["Guardian Email"] ?? "").trim() || String(r?.["Guardian Phone"] ?? "").trim());
+}
+
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -391,11 +428,11 @@ Deno.serve(async (req) => {
 
     // Re-verify consent server-side against the referee rows.
     const ids = [...new Set(recips.map((r: any) => Number(r.referee_id)).filter(Boolean))];
-    const { data: rows } = await db.from("referees").select('id,age,phone,"Guardian Phone",sms_consent_at,guardian_sms_consent_at').in("id", ids);
+    const { data: rows } = await db.from("referees").select('id,age,"Date of Birth",phone,"Guardian Phone","Guardian Email",sms_consent_at,guardian_sms_consent_at').in("id", ids);
     const byId = new Map((rows || []).map(r => [r.id, r]));
     const allowed = recips.filter((r: any) => {
       const row = byId.get(Number(r.referee_id)); if (!row) return false;
-      return r.is_guardian ? !!(row.guardian_sms_consent_at && row.age != null && Number(row.age) < 18) : !!row.sms_consent_at;
+      return r.is_guardian ? !!(row.guardian_sms_consent_at && refIsMinor(row)) : !!row.sms_consent_at;
     });
     const refused = recips.length - allowed.length;
 

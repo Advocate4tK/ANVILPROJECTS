@@ -150,6 +150,44 @@ function _addrList(v: unknown, label: string): string[] {
   return out;
 }
 
+
+// ⭐ ONE RULE FOR "IS THIS A MINOR?", because it decides whether a parent is
+// told their child has a game.
+//
+// ⚠️ THE age COLUMN IS A SCRAPE, NOT A CALCULATION. On 2026-10-21: 324 of
+// 3,550 referees have a real Date of Birth; 3,209 have only an age lifted from
+// Central Assign's directory on 2 October (that directory shows "13y" and
+// nothing finer); 17 have neither.
+//
+// So the stored number drifts a year every season, and — worse — the old test
+// `age != null && age < 18` read NO AGE AS AN ADULT. Kaleb Espinoza and Sierra
+// Hurst-Ruales both have a guardian on file, no age, and had therefore never
+// had a guardian copied on anything. Sierra's own address is a school account.
+//
+// Order:
+//   1. Date of birth — compute it. Always right, never needs maintaining.
+//   2. No DOB but a stored age — use it. It is all we have for most of them.
+//   3. Neither, but a GUARDIAN ON FILE — treat as a minor. An adult does not
+//      have a guardian recorded, and copying a parent who did not need it is a
+//      far smaller harm than a child's games going only to the child.
+//   4. Nothing at all — adult.
+function refIsMinor(r: { age?: unknown; "Date of Birth"?: unknown; "Guardian Email"?: unknown; "Guardian Phone"?: unknown }): boolean {
+  const dob = String(r?.["Date of Birth"] ?? "").trim();
+  if (dob) {
+    const b = new Date(dob + "T00:00:00");
+    if (!isNaN(b.getTime())) {
+      const t = new Date();
+      let a = t.getFullYear() - b.getFullYear();
+      const m = t.getMonth() - b.getMonth();
+      if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
+      if (a >= 0 && a < 120) return a < 18;
+    }
+  }
+  const n = r?.age == null || r?.age === "" ? NaN : Number(r.age);
+  if (Number.isFinite(n) && n >= 0 && n < 120) return n < 18;
+  return !!(String(r?.["Guardian Email"] ?? "").trim() || String(r?.["Guardian Phone"] ?? "").trim());
+}
+
 const fmtDate = (d: string) => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
 const fmtTime = (t: string) => { if (!t) return ""; const [h, m] = t.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
 
@@ -370,7 +408,7 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
     try { await sendWithReply(ref.email, subject, bodyText(false), bodyHtml(false), replyTo); results.referee = "sent"; await logRow(ref.email, false, true); }
     catch (e) { results.referee = "failed: " + (e as Error).message; await logRow(ref.email, false, false, (e as Error).message); }
 
-    const isMinor = ref.age != null && Number(ref.age) < 18;
+    const isMinor = refIsMinor(ref);
     const gEmail  = String(ref["Guardian Email"] || "").trim();
     // ⚠️ ONE INBOX GETS ONE EMAIL. 25 of the minors on the roster have their
     // guardian's address in BOTH fields — a 13-year-old using their mother's
@@ -478,7 +516,7 @@ ${maps ? `<div style="margin-top:8px"><a href="${maps}" style="color:#0f3460">Op
     try { cc = _addrList(p.cc, "Cc"); bcc = _addrList(p.bcc, "Bcc"); }
     catch (e) { return json({ error: (e as Error).message }, 400); }
 
-    const { data: refs } = await db.from("referees").select('id,name,email,age,"Guardian Email","Guardian Name",unsubscribe_token').in("id", ids);
+    const { data: refs } = await db.from("referees").select('id,name,email,age,"Date of Birth","Guardian Email","Guardian Phone","Guardian Name",unsubscribe_token').in("id", ids);
     const byId = new Map((refs || []).map(r => [Number(r.id), r]));
     const targets = ids.map(id => byId.get(id)).filter(Boolean) as any[];
     if (!targets.length) return json({ error: "Referee not found" }, 404);
@@ -536,7 +574,7 @@ ${ccNote ? `<p style="color:#777;font-size:13px;margin-top:14px">${esc(ccNote)}<
       results.referee = ok ? "sent" : "failed: " + err;
       if (log) await db.from("blast_recipients").insert({ blast_id: log.id, referee_id: ref.id, email: ref.email, is_guardian: false, status: ok ? "sent" : "failed", error: ok ? null : err });
 
-      const isMinor = ref.age != null && Number(ref.age) < 18;
+      const isMinor = refIsMinor(ref);
       const gEmail  = String(ref["Guardian Email"] || "").trim();
       if (isMinor && gEmail) {
         let gok = false, gerr = "";
@@ -596,7 +634,7 @@ ${ccNote ? `<p style="color:#777;font-size:13px;margin-top:14px">${esc(ccNote)}<
       sent, failed, no_email: noEmail, guardians, reply_to: replyTo, blast_id: log?.id ?? null,
       cc, bcc, copies: copiesSent,
       // single-referee shape, as before
-      referee: one?.name, email: one?.email, minor: one ? (one.age != null && Number(one.age) < 18) : undefined, results,
+      referee: one?.name, email: one?.email, minor: one ? refIsMinor(one) : undefined, results,
     });
   }
 

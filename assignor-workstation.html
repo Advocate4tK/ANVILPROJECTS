@@ -3035,6 +3035,43 @@
             sheet3SaveLocalState();
         }
 
+        // ⭐ ONE AGE RULE FOR THE WHOLE WORKSTATION.
+        //
+        // Tod, 2026-10-21: "every referee's age should be listed on sheet 3 and
+        // in Standard 2 when providing details for the referee."
+        //
+        // ⚠️ BOTH PANES READ THE STORED age COLUMN, and that column is a
+        // SCRAPE, not a calculation. On 2026-10-21: 324 referees of 3,550 have a
+        // real Date of Birth; 3,209 have only an age lifted from Central Assign's
+        // directory on 2 October ("13y" is all CA shows); 17 have neither.
+        //
+        // So the stored number is blank for anyone without one — including
+        // people whose DOB we hold and could work out exactly — and for the
+        // 3,209 it is frozen at the day of the scrape and drifts a year every
+        // season.
+        //
+        // Date of birth wins wherever we have one. The column is the fallback,
+        // and only because the scrape is all we have for most of the roster.
+        // Same shape as window.calculateAge on the availability form, which has
+        // always done this correctly — it is the MAIL and the PANES that read
+        // the stale number.
+        function refAgeFrom(fields) {
+            const dob = String(fields?.['Date of Birth'] || '').trim();
+            if (dob) {
+                const b = new Date(dob + 'T00:00:00');
+                if (!isNaN(b)) {
+                    const t = new Date();
+                    let a = t.getFullYear() - b.getFullYear();
+                    const m = t.getMonth() - b.getMonth();
+                    if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
+                    if (a >= 0 && a < 120) return a;
+                }
+            }
+            const stored = fields?.['Age'];
+            const n = stored === '' || stored == null ? NaN : Number(stored);
+            return Number.isFinite(n) && n >= 0 && n < 120 ? Math.floor(n) : null;
+        }
+
         function sheet3SetZoomGames(delta) {
             sheet3ZoomGames = Math.round(Math.max(0.6, Math.min(1.5, sheet3ZoomGames + delta)) * 20) / 20;
             const tbl = document.getElementById('s3gamesTable');
@@ -6181,7 +6218,8 @@
             const color  = yrsNum >= 0 ? expColor(yrsNum) : '#aaa';
             const yrsText = yrsNum === 0 ? 'Seas 1' : yrsNum === 1 ? 'Seas 2' : yrsNum > 1 ? `Yr ${yrsNum}` : '—';
             const gender  = f['Gender'] || '';
-            const age     = f['Age'] ? `Age ${f['Age']}` : '';
+            const _ageN   = refAgeFrom(f);
+            const age     = _ageN != null ? `Age ${_ageN}` : '';
             const cert    = f['Certification Level'] || '';
             const rating  = parseInt(f['Rating'] || 0);
             const stars   = [1,2,3,4,5].map(i => i <= rating ? '★' : '☆').join('');
@@ -11292,7 +11330,8 @@ Reason (optional):`);
                 const distBadge = (sortMode === 'proximity' && distMi !== null)
                     ? `<span style="font-size:0.68rem; font-weight:700; color:#fff; background:#e94560; border-radius:4px; padding:1px 6px; white-space:nowrap; flex-shrink:0;">~${distMi} mi</span>`
                     : '';
-                const age   = r.fields['Age'] ? `age ${r.fields['Age']}` : '';
+                const _ageN = refAgeFrom(r.fields);
+                const age   = _ageN != null ? `age ${_ageN}` : '';
                 const refNameKey = (r.fields['Name'] || '').trim().toLowerCase();
                 const lookupDate = gameDate || document.getElementById('dateFilter').value;
                 const fmtT = t => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; };
