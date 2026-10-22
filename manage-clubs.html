@@ -4911,6 +4911,35 @@
         };
 
         try {
+            // ⭐ CANCEL ANY QUESTIONNAIRE FIRST. Tod removed CMSOA with this tool
+            // and the entity went, but its questionnaire link stayed live —
+            // still openable, still saving, pointing at an entity that no longer
+            // exists. Nothing in the Command Center shows it, which is exactly
+            // why nobody would find it until someone opened the link months on.
+            //
+            // ⚠️ club_questionnaires has NO foreign key to the entity, and that
+            // is deliberate: three different tables can own a submission
+            // (clubs / tournaments / events) and Postgres cannot foreign-key a
+            // union. So nothing cascades and this has to be done by hand.
+            //
+            // ⛔ CANCELLED, NOT DELETED. The record that a questionnaire was sent
+            // and what came back is worth keeping; the page refuses anything
+            // that is not open or submitted, so the link dies immediately.
+            try {
+                const { error: qErr } = await supabaseClient.client
+                    .from('club_questionnaires')
+                    .update({ status: 'cancelled' })
+                    .eq('entity_kind', isTournament ? 'tournament' : 'club')
+                    .eq('entity_id', entityId)
+                    .in('status', ['open', 'submitted']);
+                if (qErr) log(`⚠ Could not cancel its questionnaire: ${qErr.message}`, 'err');
+                else      log('✓ Any questionnaire link for this entity is now dead.', 'ok');
+            } catch (qe) {
+                // ⛔ Never let this stop the removal — a stale link is a smaller
+                // problem than a half-deleted entity.
+                log(`⚠ Questionnaire cleanup skipped: ${qe.message}`, 'err');
+            }
+
             if (isTournament) {
                 log(`Deleting tournament: ${entityName}…`, 'info');
                 const { error } = await supabaseClient.client.from('tournaments').delete().eq('id', entityId);
