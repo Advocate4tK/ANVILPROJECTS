@@ -861,7 +861,13 @@
                         <button type="button" class="new-ent-type is-on" data-type="club"        onclick="pickNewEntityType(this)">🏟 Club</button>
                         <button type="button" class="new-ent-type"       data-type="tournament"  onclick="pickNewEntityType(this)">🏆 Tournament / Event</button>
                         <button type="button" class="new-ent-type"       data-type="league"      onclick="pickNewEntityType(this)">📅 Organization / League</button>
+                        <!-- ⭐ NFHS — a regional officials association: CMSOA, ECSOA.
+                             Not a club. Its assignors deal with an athletic director
+                             at each member school, the state sets the pay, and
+                             Central Assign has nothing to do with any of it. -->
+                        <button type="button" class="new-ent-type"       data-type="nfhs"        onclick="pickNewEntityType(this)">🏫 NFHS / Officials Association</button>
                     </div>
+                    <div id="newEntTypeNote" style="display:none; background:#f0f9ff; border:1px solid #bae6fd; border-left:4px solid #0369a1; border-radius:7px; padding:9px 12px; font-size:0.84rem; color:#0c4a6e; margin-bottom:12px;"></div>
                     <div id="newEntManagedRow" style="display:flex; align-items:center; gap:14px; margin-bottom:12px; font-size:0.82rem;">
                         <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; color:#09142a;">
                             <input type="radio" name="newEntManaged" value="managed" checked> Managed
@@ -1664,6 +1670,22 @@
     }
 
     function leagueRow(c) {
+        // ⛔ CENTRAL ASSIGN IS A CONNECTICUT YOUTH SYSTEM. An entity that does
+        // not reach it has no district to set and must not be told it is
+        // incomplete for not having one. Tod created CMSOA — a Massachusetts
+        // officials association running on Arbiter — and Entity Status
+        // immediately reported "CA UPLOAD INCOMPLETE" against it.
+        //
+        // ⚠️ Read from the FLAG, never guessed from state or entity type. A
+        // guess gets it wrong the first time a Rhode Island club does use
+        // something CA-like, or a Connecticut organisation does not.
+        if (c.uses_central_assign === false) {
+            return `<div style="margin-top:8px; padding-top:8px; border-top:1px dashed #e2d9ce; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <span style="font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#09142a;">Rule set</span>
+                <span style="font-size:0.84rem; font-weight:700; color:#1f2328;">${c.rule_set === 'nfhs' ? 'NFHS — high school' : 'USSF'}</span>
+                <span title="This entity does not export to Central Assign, so no district is needed." style="font-size:0.68rem; font-weight:800; letter-spacing:0.4px; border-radius:4px; padding:2px 7px; background:#eef2f8; color:#3f3a33;">NOT CENTRAL ASSIGN</span>
+            </div>`;
+        }
         const sel = parseClubLeagues(c.ca_league);
         const prim = primaryLeague(c);
         // ★ on the one a club actually belongs to. With three districts listed
@@ -1910,7 +1932,7 @@
         wrap.innerHTML = '<p style="color:#4a443c; font-size:0.85rem;">Checking completeness…</p>';
         try {
             const [clubsRes, tournsRes, eventsRes, payRes, crewRes, venueRes, billingRes, questRes, assignorRes] = await Promise.all([
-                supabaseClient.client.from('clubs').select('id, name, "Club Name", enabled, president, "Club Admin", assignor, age_groups, ca_league, ca_league_primary').order('name'),
+                supabaseClient.client.from('clubs').select('id, name, "Club Name", enabled, president, "Club Admin", assignor, age_groups, ca_league, ca_league_primary, rule_set, uses_central_assign').order('name'),
                 supabaseClient.client.from('tournaments').select('id, name, status').order('name'),
                 supabaseClient.client.from('events').select('id, name, "Club Name", enabled, assignor, start_date, end_date').order('name'),
                 supabaseClient.client.from('pay_rates').select('club_id'),
@@ -1953,6 +1975,20 @@
 
             const checkClub = c => {
                 const missing = [];
+                // ⭐ AN OFFICIALS ASSOCIATION IS NOT A CLUB. CMSOA has no age
+                // groups of its own, no pay grid — the state sets the rate and
+                // revises it most seasons — and no venues, because the venues
+                // belong to its member schools. Asking for them would leave it
+                // permanently incomplete against questions it can never answer,
+                // which is exactly what the CA badge did on day one.
+                //
+                // What it DOES need: somebody to talk to, and assignors.
+                // Member schools come next, once there is somewhere to put them.
+                if (c.rule_set === 'nfhs') {
+                    if (!c.president && !c["Club Admin"]) missing.push('Contacts');
+                    if (!c.assignor) missing.push('Assignors');
+                    return missing;
+                }
                 if (!c.president && !c.assignor) missing.push('Contacts');
                 // A club with pay rates on file demonstrably HAS age groups —
                 // pay_rates stores age_group and game_type, which is exactly what
@@ -1971,7 +2007,10 @@
                 if (!billingClubIds.has(c.id)) missing.push('Billing');
                 return missing;
             };
-            const STATUS_STEP = { 'Contacts': 1, 'Venues': 2, 'Age Groups': 3, 'Referee Pay': 4, 'Crew Rules': 5, 'Billing': 6 };
+            // ⚠️ 'Assignors' maps to step 1 — the wizard collects assignors on
+            // the same step as contacts, and an unmapped bucket would hand
+            // openWizardForEdit an empty step list and silently open on nothing.
+            const STATUS_STEP = { 'Contacts': 1, 'Assignors': 1, 'Venues': 2, 'Age Groups': 3, 'Referee Pay': 4, 'Crew Rules': 5, 'Billing': 6 };
 
             const tourns = (tournsRes.data || []);
             const statusColor = s => s === 'active' ? '#bbf7d0' : s === 'completed' ? '#e2e8f0' : '#fde68a';
@@ -4249,8 +4288,21 @@
 
     function pickNewEntityType(btn) {
         document.querySelectorAll('#newEntTypes .new-ent-type').forEach(b => b.classList.toggle('is-on', b === btn));
-        // Managed/Reference is a clubs-table idea only.
-        document.getElementById('newEntManagedRow').style.display = btn.dataset.type === 'club' ? 'flex' : 'none';
+        const t = btn.dataset.type;
+        // Managed/Reference is a clubs-table idea only. An NFHS association is
+        // always managed — it exists to be worked in, not as a contact card.
+        document.getElementById('newEntManagedRow').style.display = t === 'club' ? 'flex' : 'none';
+        const note = document.getElementById('newEntTypeNote');
+        if (note) {
+            // ⭐ Say what the choice actually changes, before it is made. The
+            // first NFHS entity Tod created was a club, and Entity Status
+            // immediately told him "CA UPLOAD INCOMPLETE" for a Massachusetts
+            // association that will never touch Central Assign.
+            note.innerHTML = t === 'nfhs'
+                ? '⚠️ A high school officials association — CMSOA, ECSOA. <b>Central Assign does not apply</b>, so no district is asked for and no CA badge appears. Member schools are added underneath it.'
+                : '';
+            note.style.display = t === 'nfhs' ? 'block' : 'none';
+        }
     }
 
     async function createEntityShell() {
@@ -4274,6 +4326,12 @@
             // ⚠️ Refuse a duplicate rather than quietly making a second one.
             // Two clubs with the same slug would collide in every URL and
             // every filter in the tool.
+            // ⚠️ AN NFHS ASSOCIATION LIVES IN clubs. It needs everything a club
+            // row already has — contacts, assignors, venues, portal settings, the
+            // enabled switch, a place in Entity Status — and a separate table
+            // would duplicate all of it and force a second code path onto every
+            // page. The two flags say how it BEHAVES, which is the part that
+            // actually differs. See sql/nfhs-entity.sql.
             const table = type === 'tournament' ? 'tournaments' : type === 'league' ? 'events' : 'clubs';
             const col   = type === 'tournament' ? 'key' : 'name';
             const { data: dupe } = await supabaseClient.client.from(table).select('id').eq(col, slug).maybeSingle();
@@ -4284,6 +4342,13 @@
                 row = { key: slug, name: name, status: 'upcoming' };
             } else if (type === 'league') {
                 row = { name: slug, slug: slug, 'Club Name': name, enabled: false };
+            } else if (type === 'nfhs') {
+                // ⛔ uses_central_assign:false is the whole point. Without it Entity
+                // Status measures a Massachusetts association against a Connecticut
+                // youth system and reports it incomplete forever.
+                row = { name: slug, 'Club Name': name, 'Display Name': disp || null,
+                        club_type: 'managed', enabled: false,
+                        rule_set: 'nfhs', uses_central_assign: false };
             } else {
                 row = { name: slug, 'Club Name': name, 'Display Name': disp || null, club_type: mode, enabled: false };
             }
