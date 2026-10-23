@@ -12913,15 +12913,31 @@ The game keeps its date on the board but reads POSTPONED — new date to come. T
             renderGames();
         }
 
+        // ⚠️ RESTORING MUST CLEAR THE CANCELLATION STAMPS, NOT JUST THE STATUS.
+        // This cleared 'Game Status' and left cancelled_at and
+        // cancellation_type sitting there. caNeedsUpdate() on the Schedule
+        // Changes page returns true on cancelled_at ALONE — so a restored game
+        // stayed on the open change list forever, and Dismiss could not shift
+        // it because Dismiss only touched the status too. RTCT10359 (NECONN
+        // Campbell vs Bolton) was stuck exactly that way on 2026-10-23.
+        //
+        // ⛔ A game that is active again is not a cancelled game with a
+        // different label. Everything the cancellation wrote comes off.
         async function restoreGame(gameId) {
             cancelledGameIds.delete(gameId);
             const game = allGames.find(g => String(g.id) === String(gameId));
-            if (game) game.fields['Game Status'] = '';
+            if (game) {
+                game.fields['Game Status']       = '';
+                game.fields['cancellation_type'] = null;
+                game.fields['cancelled_at']      = null;
+            }
             renderGames();
             renderRefs(document.getElementById('refSearch').value.toLowerCase());
             try {
                 const _rTable = window.tournamentMode ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
-                await airtableClient.updateRecord(_rTable, gameId, { 'Game Status': '' });
+                await airtableClient.updateRecord(_rTable, gameId, {
+                    'Game Status': '', cancellation_type: null, cancelled_at: null,
+                });
             } catch(e) {
                 console.warn('Could not persist restore to Airtable:', e.message);
             }

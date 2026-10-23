@@ -1007,12 +1007,30 @@
         }
     }
 
+    // ⛔ DISMISS MEANS DISMISS. Tod, 2026-10-23: "if I want to dismiss a
+    // prompt I should be able to."
+    //
+    // ⚠️ IT USED TO CLEAR THE STATUS AND NOTHING ELSE, so the card came
+    // straight back and said nothing about why. caNeedsUpdate() keeps a game on
+    // the open list — deliberately, behind no toggle — while Central Assign
+    // still holds the old details, and it returns true on `cancelled_at` ALONE.
+    // RTCT10359 had been cancelled and then put back to active; the status
+    // changed, the timestamp stayed, and the card became permanently
+    // un-dismissable.
+    //
+    // So a dismiss now also stamps ca_change_synced_at. The assignor looking at
+    // the card is the person who would do the CA update by hand, and they have
+    // just said there is nothing left to do here. Deciding that for them and
+    // then not saying so is the worst of both.
     async function dismissRequest(gameId) {
-        if (!confirm('Dismiss this change request without resolving? The game status will revert to Submitted.')) return;
+        if (!confirm('Dismiss this change request? It comes off the list, and the Central Assign reminder with it.')) return;
         const msgEl = document.getElementById('msg_' + gameId);
         msgEl.textContent = 'Saving…'; msgEl.style.color = '#555';
         try {
-            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, { 'Game Status': null });
+            await airtableClient.updateRecord(CONFIG.AIRTABLE_TABLES.GAMES, gameId, {
+                'Game Status': null,
+                'ca_change_synced_at': new Date().toISOString(),
+            });
             msgEl.textContent = 'Dismissed';
             msgEl.style.color = '#888';
             setTimeout(loadChanges, 1000);
