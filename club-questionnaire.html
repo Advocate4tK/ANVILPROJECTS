@@ -254,6 +254,11 @@ let META = null;         // entity_kind / entity_name / status
 let LEAGUES = [];
 let POOL = [];           // every venue in Referee Tool, with its fields
 let _saveTimer = null, _saving = false, _dirty = false;
+// ⭐ WHICH SECTIONS THIS TAB HAS TOUCHED. The save sends only these, so a
+// second person holding the same link — which is how the link is meant to be
+// used — cannot have their section overwritten by ours. See
+// sql/questionnaire-section-save.sql.
+const _dirtySecs = new Set();
 
 // ── sections ────────────────────────────────────────────────────────────────
 // ⭐ ORDER MATTERS. Age Groups sits before Pay and Crew because both are
@@ -296,7 +301,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
         // grandfathering them in.
         const _stale = [...DONE].filter(k => sectionGap(k));
         if (_stale.length) {
-            _stale.forEach(k => DONE.delete(k));
+            _stale.forEach(k => { DONE.delete(k); _dirtySecs.add(k); });
             // Saved straight away so Tod's review agrees with what they see.
             _dirty = true;
         }
@@ -344,7 +349,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 // ⚠️ Debounced, not on every keypress — but ALWAYS flushed before the tab
 // closes. Somebody typing three venues and closing the laptop must not lose
 // them; that is exactly the abandonment this page exists to stop.
-function touch() {
+function touch(section) {
+    if (section) _dirtySecs.add(section);
     _dirty = true;
     setSaved('Saving…');
     clearTimeout(_saveTimer);
@@ -354,12 +360,25 @@ function touch() {
 async function save(submit = false) {
     if (_saving) return;
     _saving = true;
+    // ⭐ ONLY WHAT THIS TAB CHANGED. A submit flushes everything, because the
+    // button means "this is my answer" and the whole form should land.
+    const keys = submit ? SECTIONS.map(x => x.key) : [..._dirtySecs];
+    const sections = {};
+    keys.forEach(k => { if (A[k] !== undefined) sections[k] = A[k]; });
+    // ⚠️ The ticks are asserted ONLY for sections we touched. Sending the whole
+    // set back would race on the ticks exactly the way the answers used to.
+    const doneAdd = keys.filter(k =>  DONE.has(k));
+    const doneRem = keys.filter(k => !DONE.has(k));
     try {
-        const { data, error } = await sb.rpc('questionnaire_save', {
-            p_token: TOKEN, p_answers: A, p_done: [...DONE], p_submit: !!submit,
+        const { data, error } = await sb.rpc('questionnaire_save_sections', {
+            p_token: TOKEN, p_sections: sections,
+            p_done_add: doneAdd, p_done_remove: doneRem, p_submit: !!submit,
         });
         if (error) throw new Error(error.message);
         if (data === false) throw new Error('this form is no longer accepting changes');
+        // ⛔ Cleared only once the server has taken them. A failed save must
+        // leave the sections dirty or the next keystroke saves half the form.
+        keys.forEach(k => _dirtySecs.delete(k));
         _dirty = false;
         setSaved('Saved ' + new Date().toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }));
         return true;
@@ -597,7 +616,7 @@ function markDoneReal(key, on) {
     const badge = document.getElementById('sec-' + key).querySelector('.req');
     if (badge) badge.style.display = on ? 'none' : '';
     updateProgress();
-    touch();
+    touch(key);
     // Completing one section opens the next unfinished one — momentum, and
     // nobody has to hunt for where they were.
     if (on) {
@@ -627,7 +646,9 @@ function setVal(path, v) {
     let o = A;
     for (let i = 0; i < bits.length - 1; i++) o = (o[bits[i]] ??= {});
     o[bits[bits.length - 1]] = v;
-    touch();
+    // ⚠️ The first segment of every path is the section key ('contacts.president.name'),
+    // which is also the top-level key in answers. One truth, no lookup table.
+    touch(bits[0]);
 }
 function getVal(path, dflt = '') {
     return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), A) ?? dflt;
