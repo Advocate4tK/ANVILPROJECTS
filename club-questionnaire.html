@@ -830,8 +830,21 @@ function toggleLeague(n) {
 // from a field we got wrong. If a club genuinely does not use one, that is a
 // note to Tod, not a box they clear.
 //
-// ⚠️ AND NO REMOVING VENUES EITHER. Tod: "we're not giving them the ability to
-// delete." A venue on their list that they do not use goes in the notes.
+// ⭐ REMOVING A VENUE FROM THEIR LIST IS NOW ALLOWED — REVERSED 2026-10-24.
+// It was not, and the reason it changed matters. The link stopped being a
+// one-off onboarding form and became the club's standing way to keep their own
+// details right. Tod: "it's not just to build a new club, it's sometimes so
+// that we can make adjustments... so that they can move a venue from their club
+// if they don't want to use it anymore or even add one."
+//
+// ⛔ AND IT STILL DELETES NOTHING. Tod, the same day: "it's not actually
+// removing a venue from our system, it's just removing it from their pool of
+// wanting to use it." The venue stays in the 546 for every other club; this
+// club simply stops claiming it. Nothing below weakens the rules above it —
+// creating a venue, editing a field and clearing a field all remain impossible.
+//
+// ⚠️ And it is still a REQUEST. Taking it off here changes nothing until the
+// row is promoted in the Command Center, where it shows as "drop the link".
 //
 // ⚠️ A SHORT LIST, NOT THE WHOLE STATE. The first lockdown drew a tickbox for
 // every venue in the system; Tod swept the page and was still in the B's after
@@ -867,8 +880,13 @@ function pVenues() {
             const p = POOL.find(x => x.id === v.venue_id);
             const fields = (p?.fields || []);
             return `<div class="block">
-                <div class="block-t">${esc(v.name || p?.name || 'Venue')}
-                    ${v.town || p?.town ? `<span style="font-weight:500; text-transform:none; letter-spacing:0; color:#3f3a33;">· ${esc(v.town || p.town)}</span>` : ''}
+                <div class="block-t" style="display:flex; align-items:center; gap:8px;">
+                    <span>${esc(v.name || p?.name || 'Venue')}
+                        ${v.town || p?.town ? `<span style="font-weight:500; text-transform:none; letter-spacing:0; color:#3f3a33;">· ${esc(v.town || p.town)}</span>` : ''}
+                    </span>
+                    <button onclick="dropChosenVenue(${v.venue_id})"
+                        title="We don't play here — take it off our list"
+                        style="margin-left:auto; background:#fff; border:1.5px solid #e5c9c9; color:#b91c1c; padding:3px 11px; border-radius:7px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:inherit; text-transform:none; letter-spacing:0;">We don't play here</button>
                 </div>
                 ${fields.length
                     ? `<div style="font-size:0.8rem; font-weight:700; color:#3f3a33; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Fields</div>
@@ -891,6 +909,19 @@ function pVenues() {
             <div style="font-size:0.8rem; color:#3f3a33; margin-top:6px;">${rest.length} venue${rest.length === 1 ? '' : 's'} in our list. Open it and start typing to jump to one.</div>
         </div>
         ${secFoot('venues')}`;
+}
+
+// ⛔ TAKES THE VENUE OFF THIS CLUB'S LIST. Nothing else. The venue, its fields
+// and every other club's use of it are untouched — and even this is only a
+// request until it is promoted.
+function dropChosenVenue(venueId) {
+    const list = getVal('venues.list', []);
+    const v = list.find(x => x.venue_id === venueId);
+    if (!v) return;
+    if (!confirm('Take ' + (v.name || 'this venue') + ' off your list?\n\n'
+        + 'It stays in our records — you are telling us you do not play there.')) return;
+    setVal('venues.list', list.filter(x => x.venue_id !== venueId));
+    pVenues();
 }
 
 function addChosenVenue() {
