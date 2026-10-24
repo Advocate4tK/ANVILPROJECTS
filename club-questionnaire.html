@@ -365,6 +365,11 @@ async function save(submit = false) {
     const keys = submit ? SECTIONS.map(x => x.key) : [..._dirtySecs];
     const sections = {};
     keys.forEach(k => { if (A[k] !== undefined) sections[k] = A[k]; });
+    // ⚠️ _changed is not a section, so saving by section dropped it — and it
+    // is what tells the review which answers actually moved since the link was
+    // sent. _baseline needs no such help: it already sits in the stored row and
+    // a section merge never touches it.
+    if (submit && A._changed !== undefined) sections._changed = A._changed;
     // ⚠️ The ticks are asserted ONLY for sections we touched. Sending the whole
     // set back would race on the ticks exactly the way the answers used to.
     const doneAdd = keys.filter(k =>  DONE.has(k));
@@ -437,7 +442,8 @@ function render() {
         <div style="background:#fff; border-radius:12px; padding:20px 24px; box-shadow:0 4px 15px rgba(0,0,0,0.07); margin-top:16px;">
             <div style="font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.7px; color:#09142a; margin-bottom:6px;">Finished?</div>
             <p style="font-size:0.84rem; color:#3f3a33; margin-bottom:14px;" id="submitHelp"></p>
-            <button class="btn gr" id="submitBtn" onclick="submitAll()">Send it in →</button>
+            <button class="btn gr" id="submitBtn" onclick="submitAll()" ${submitted ? 'disabled' : ''}
+                    >${submitted ? '✓ Sent' : 'Send it in →'}</button>
             <div id="submitMsg" style="margin-top:12px; font-size:0.86rem; font-weight:600;"></div>
         </div>
         <p class="foot">Referee Tool by <b>Anvil Arts</b> · this link is private to ${esc(META.entity_name)}</p>`;
@@ -1159,12 +1165,17 @@ async function submitAll() {
     const ch = changedSections();
     if (ch) A._changed = ch;
     const ok = await save(true);
-    btn.disabled = false; btn.textContent = 'Send it in →';
     if (ok) {
+        // ⭐ A green "Send it in" sitting under a message saying we have it
+        // reads as though it never went. Tod, 2026-10-24: "that sent it in
+        // button should say sent rather than send it in."
+        btn.textContent = '✓ Sent';
+        btn.disabled = true;
         META.status = 'submitted';
         msg.style.color = '#0b7a3b';
         msg.innerHTML = '✅ Got it — thank you. We\'ll take it from here and come back to you if anything\'s unclear. You can keep editing this page if you need to.';
     } else {
+        btn.disabled = false; btn.textContent = 'Send it in →';
         msg.style.color = '#b91c1c';
         msg.textContent = 'That didn\'t send. Your answers are still here — try again in a moment.';
     }
