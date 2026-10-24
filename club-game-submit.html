@@ -399,6 +399,7 @@
         .pay-venmo { font-family:'JetBrains Mono',monospace; font-size:0.78rem; color:#2563eb; }
         .pay-pos-badge { font-size:0.68rem; font-weight:800; padding:2px 7px; border-radius:8px; white-space:nowrap; }
         .pay-pos-cr { background:rgba(9,20,42,0.1); color:var(--deep); }
+        .pay-pos-solo { background:#fef3c7; color:#92400e; margin-left:4px; letter-spacing:0.4px; }
         .pay-pos-ar { background:rgba(0,200,83,0.13); color:#145b27; }
         .btn-mark-paid { padding:5px 13px; border:1.5px solid var(--accent); border-radius:6px; background:white; color:#14532d; font-size:0.76rem; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; }
         .btn-mark-paid:hover:not([disabled]) { background:var(--accent); color:white; }
@@ -5145,6 +5146,21 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                         // plain truthy test is the whole rule.
                         const _present = _manned.filter(s => !_incidentSlots[`${r.id}|${s.pos}`]);
                         const isSolo = _present.length === 1 && _present[0].pos === 'CR';
+
+                        // ⭐ AND SAY SO ON THE ROW. Solo is a different number, and a
+                        // club looking at a U12 wants to know why one man is being
+                        // paid more than the grid says. Tod, 2026-10-23: "it should
+                        // say something like Solo next to his name... U12 should have
+                        // three referees." The tooltip carries the reason, because
+                        // "he was alone" and "the AR didn't turn up" are not the same
+                        // conversation with the club.
+                        const _absent = _manned
+                            .filter(s => _incidentSlots[`${r.id}|${s.pos}`])
+                            .map(s => `${s.pos} ${_incidentSlots[`${r.id}|${s.pos}`] === 'no_show' ? 'no-showed' : 'scratched late'}`);
+                        const soloWhy = _absent.length
+                            ? `Refereed alone — ${_absent.join(', ')}. Paid at the solo rate.`
+                            : 'Refereed alone — no assistant referees on this game. Paid at the solo rate.';
+
                         // ⛔ Billing still runs off _manned, not _present — the no-show
                         // keeps its own row at $0 so the club can see who didn't turn up.
                         const slots  = _manned.filter(s => s.name.toUpperCase() !== 'FILLED');
@@ -5171,7 +5187,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                                     : `<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#94a3b8;font-size:0.68rem;font-weight:600;letter-spacing:0.3px;">No info</span>`);
 
                             const posBadge = slot.pos === 'CR'
-                                ? `<span class="pay-pos-badge pay-pos-cr">CR</span>`
+                                ? `<span class="pay-pos-badge pay-pos-cr">CR</span>${isSolo ? `<span class="pay-pos-badge pay-pos-solo" title="${soloWhy}">SOLO</span>` : ''}`
                                 : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
 
                             const slotAlreadyPaid = !!(slotPaidMap[r.id] && slotPaidMap[r.id][slot.pos]);
@@ -5388,7 +5404,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
 
                         cards += `<div class="pay-card-m${slotPaid ? ' paid' : ''}" id="${cardId}">
                             <div class="pay-card-m-date">${dateDisplay}</div>
-                            ${isCheck ? `<div style="flex:1; min-width:120px;">${actionHtml}</div>` : `<div class="pay-card-m-ref">${refDisplay}</div>`}
+                            ${isCheck ? `<div style="flex:1; min-width:120px;">${actionHtml}</div>` : `<div class="pay-card-m-ref">${refDisplay}${isSolo && slot.pos === 'CR' ? ` <span class="pay-pos-badge pay-pos-solo" title="Refereed alone — paid at the solo rate.">SOLO</span>` : ''}</div>`}
                             <div class="pay-card-m-amount">$${rate}${mOvrChip}</div>
                             <div class="pay-card-m-actions">${isCheck ? '' : actionHtml}${cbHtml}</div>
                         </div>`;
