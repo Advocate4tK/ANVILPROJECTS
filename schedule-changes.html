@@ -415,11 +415,24 @@
     // never imported to CA at all — their change rides out on the next export
     // by itself. Asking about those would be noise, and noise is exactly how a
     // real one gets ignored.
+    // ⛔ cancelled_at IS A TIMESTAMP, NOT A STATE. It records WHEN a game was
+    // cancelled, and it survives the game being put back — so reading it as
+    // "this game is cancelled" made a restored game contradict itself: status
+    // said active, timestamp said cancelled. RTCT10359 was stuck on this list
+    // permanently and could not be dismissed.
+    //
+    // ⚠️ THE SAME SHAPE AS EVERY OTHER BUG THIS MONTH — email_pref against
+    // email_opt_in, the readiness line against the CA badge, three places
+    // asking "has this person opted out". One fact, two stores, no rule about
+    // which wins.
+    //
+    // ⭐ 'Game Status' IS THE STATE. cancelled_at answers "when", and only
+    // after the state has already been established by something else.
     function caNeedsUpdate(f) {
         if (!f['ca_imported_at']) return false;      // CA never had it
         if (f['ca_change_synced_at']) return false;   // already done by hand
         const status = String(f['Game Status'] || '');
-        return status === 'Change Resolved' || status === 'Cancelled' || !!f['cancelled_at'];
+        return status === 'Change Resolved' || status === 'Cancelled';
     }
 
     function caSyncBlock(r) {
@@ -432,7 +445,8 @@
             </div>`;
         }
         if (!caNeedsUpdate(f)) return '';
-        const isCancel = String(f['Game Status'] || '') === 'Cancelled' || !!f['cancelled_at'];
+        // Status only — see the note on caNeedsUpdate.
+        const isCancel = String(f['Game Status'] || '') === 'Cancelled';
         const what = isCancel
             ? 'This game is cancelled here, but Central Assign still has it live.'
             : 'Central Assign still shows the old date, time or venue.';
