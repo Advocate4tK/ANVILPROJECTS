@@ -4707,7 +4707,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 ? `venmo://paycharge?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`
                 : `https://venmo.com/?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`;
             const _clubId = currentClubRecord?.id || null;
-            const [rawGrisGames, ratesResult, refPayResult, clubResult, invoiceResult, incidentResult, overrideResult, reschedResult] = await Promise.all([
+            const [rawGrisGames, ratesResult, refPayResult, clubResult, invoiceResult, incidentResult, overrideResult, reschedResult, crewResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', _sourceClub).limit(2000),
                 _clubId
                     ? supabaseClient.client.from('pay_rates').select('*').eq('club_id', _clubId).order('sort_order')
@@ -4750,7 +4750,22 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 // and a missing section must never take the pay portal down.
                 supabaseClient.client.from('reschedule_pay')
                     .select('id, game_id, game_no, slot, referee_id, referee_name, original_date, moved_to_date, amount, reason, paid_at, paid_amount')
-                    .then(r => r, () => ({ data: [] }))
+                    .then(r => r, () => ({ data: [] })),
+                // ── WAS THIS GAME EVER SUPPOSED TO HAVE ARs? ──────────────
+                // Tod, 2026-10-23: "in NECONN's case, we have U8 and U10 games
+                // that are already supposed to be solo. You shouldn't state
+                // that on there." A SOLO chip is only worth saying when solo is
+                // the EXCEPTION — it exists to explain why one man is being paid
+                // above the crew rate. On an age group that never has ARs it is
+                // just noise on every row.
+                //
+                // ⚠️ assignor-workstation.html already carries the warning this
+                // is the third instance of: "Crew rules must reach EVERY
+                // consumer; this one was missed." The pay portal was another.
+                _clubId
+                    ? supabaseClient.client.from('crew_rules').select('age_group, ar1, ar2, game_type').eq('club_id', _clubId)
+                        .then(r => r, () => ({ data: [] }))
+                    : Promise.resolve({ data: [] })
             ]);
             // ⚠️ ONLY ATTENDANCE AFFECTS PAY. A no-show or a late scratch is a
             // statement that somebody did not work, so $0 is right. A
@@ -4788,6 +4803,24 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
             // about seventy lines below this with const — touching it here
             // threw "Cannot access 'games' before initialization" and took the
             // whole pay portal down. Filtered at the point of use instead.
+            // ── Crew rules: what the club STAFFS this age group with ─────────
+            // ⚠️ Lifted verbatim from assignor-workstation.html's _crewSoloOnly,
+            // key shape and all, so the two cannot drift. A typed rule
+            // (age|Comp, age|Rec) beats the legacy untyped one; with no rule at
+            // all only U8 is assumed solo, which is how every other consumer
+            // already behaves.
+            const _crewRules = {};
+            (crewResult?.data || []).forEach(r => {
+                const key = r.game_type ? `${r.age_group}|${r.game_type}` : r.age_group;
+                _crewRules[key] = { ar1: r.ar1, ar2: r.ar2 };
+            });
+            const _crewSoloOnly = (age, gameType) => {
+                const ageBase = String(age || '').replace(/\s+(Girls?|Boys?|Coed)$/i, '').replace(/[BG]$/, '').trim();
+                const gt      = String(gameType || '').trim().toUpperCase() === 'COMP' ? 'Comp' : 'Rec';
+                const crew    = _crewRules[ageBase + '|' + gt] || _crewRules[ageBase];
+                return crew ? (!crew.ar1 && !crew.ar2) : (ageBase === 'U8');
+            };
+
             const _reschedRaw = (reschedResult?.data || []);
 
             (overrideResult?.data || []).forEach(o => {
@@ -5160,6 +5193,11 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                         const soloWhy = _absent.length
                             ? `Refereed alone — ${_absent.join(', ')}. Paid at the solo rate.`
                             : 'Refereed alone — no assistant referees on this game. Paid at the solo rate.';
+                        // ⛔ ONLY WHEN SOLO IS THE EXCEPTION. NECONN's U8 and U10 are
+                        // staffed solo by design; a chip on every one of those rows
+                        // says nothing and buries the games where it matters. The rate
+                        // is untouched either way — this governs the label alone.
+                        const soloNotable = isSolo && !_crewSoloOnly(age, f['game_type']);
 
                         // ⛔ Billing still runs off _manned, not _present — the no-show
                         // keeps its own row at $0 so the club can see who didn't turn up.
@@ -5187,7 +5225,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                                     : `<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#94a3b8;font-size:0.68rem;font-weight:600;letter-spacing:0.3px;">No info</span>`);
 
                             const posBadge = slot.pos === 'CR'
-                                ? `<span class="pay-pos-badge pay-pos-cr">CR</span>${isSolo ? `<span class="pay-pos-badge pay-pos-solo" title="${soloWhy}">SOLO</span>` : ''}`
+                                ? `<span class="pay-pos-badge pay-pos-cr">CR</span>${soloNotable ? `<span class="pay-pos-badge pay-pos-solo" title="${soloWhy}">SOLO</span>` : ''}`
                                 : `<span class="pay-pos-badge pay-pos-ar">${slot.pos}</span>`;
 
                             const slotAlreadyPaid = !!(slotPaidMap[r.id] && slotPaidMap[r.id][slot.pos]);
@@ -5404,7 +5442,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
 
                         cards += `<div class="pay-card-m${slotPaid ? ' paid' : ''}" id="${cardId}">
                             <div class="pay-card-m-date">${dateDisplay}</div>
-                            ${isCheck ? `<div style="flex:1; min-width:120px;">${actionHtml}</div>` : `<div class="pay-card-m-ref">${refDisplay}${isSolo && slot.pos === 'CR' ? ` <span class="pay-pos-badge pay-pos-solo" title="Refereed alone — paid at the solo rate.">SOLO</span>` : ''}</div>`}
+                            ${isCheck ? `<div style="flex:1; min-width:120px;">${actionHtml}</div>` : `<div class="pay-card-m-ref">${refDisplay}${isSolo && slot.pos === 'CR' && !_crewSoloOnly(age, f['game_type']) ? ` <span class="pay-pos-badge pay-pos-solo" title="Refereed alone — paid at the solo rate.">SOLO</span>` : ''}</div>`}
                             <div class="pay-card-m-amount">$${rate}${mOvrChip}</div>
                             <div class="pay-card-m-actions">${isCheck ? '' : actionHtml}${cbHtml}</div>
                         </div>`;
