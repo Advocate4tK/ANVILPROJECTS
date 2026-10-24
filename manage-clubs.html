@@ -2026,9 +2026,17 @@
             const questBadge = (id) => {
                 const q = _questBy[id];
                 if (!q) return '';
+                // ⚠️ THREE STATES, NOT TWO. This read "submitted or not", so a
+                // club whose answers had been taken into the record showed the same
+                // blue "OUT" badge as one that never replied. Tod spotted it on
+                // Stonington within minutes of the first promotion.
                 const sent = q.status === 'submitted';
+                const done = q.status === 'promoted';
                 const when = q.updated_at ? new Date(q.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-                return `<span title="${sent ? 'They have sent their questionnaire back' : 'A questionnaire link is out with them'}" style="font-size:0.72rem; font-weight:800; letter-spacing:0.4px; border-radius:4px; padding:2px 7px; white-space:nowrap; background:${sent ? '#dcfce7' : '#e0edff'}; color:${sent ? '#0b7a3b' : '#1d4ed8'};">${sent ? '✓ SENT IN' : '✉ OUT'}${when ? ' · ' + when : ''}</span>`;
+                const look = done ? { bg: '#eef1f6', ink: '#4a443c', word: '✓ PROMOTED', tip: 'Their answers are in the club record' }
+                           : sent ? { bg: '#dcfce7', ink: '#0b7a3b', word: '✓ SENT IN',  tip: 'They have sent their questionnaire back' }
+                                  : { bg: '#e0edff', ink: '#1d4ed8', word: '✉ OUT',      tip: 'A questionnaire link is out with them' };
+                return `<span title="${look.tip}" style="font-size:0.72rem; font-weight:800; letter-spacing:0.4px; border-radius:4px; padding:2px 7px; white-space:nowrap; background:${look.bg}; color:${look.ink};">${look.word}${when ? ' · ' + when : ''}</span>`;
             };
             _entities = [];
             const clubHtml = clubs.map(c => {
@@ -4630,6 +4638,9 @@
             + '<p style="font-size:0.82rem; color:#3f3a33; margin:-2px 0 12px;">Nothing here is in the club\'s record yet. Promote a section and it is written; leave it and nothing happens. Anything they left blank is never used to erase what you already hold.</p>'
             + blocks
             + '<div id="promoteMsg" style="font-size:0.85rem; font-weight:700; margin-top:4px;"></div>';
+        // ⭐ What is still waiting. promoteSection uses it to decide whether this
+        // club is finished with or still belongs in the queue.
+        return total;
     }
 
     async function promoteSection(key, btn) {
@@ -4645,14 +4656,25 @@
             // ⭐ Stamped on the submission, not the section — per-section tracking
             // needs a column that does not exist yet, and that is what the
             // "changed since you last promoted" badge will be built on.
-            await supabaseClient.client.from('club_questionnaires')
-                .update({ status: 'promoted', promoted_at: new Date().toISOString() })
-                .eq('id', _promoCtx.row.id);
-            _promoCtx.row.status = 'promoted';
             note = '✓ ' + sec.title + ' written to the club — ' + n + ' value' + (n === 1 ? '' : 's') + '.';
             // ⭐ Re-read the record rather than assuming. The block proves it
             // landed by coming back saying there is nothing left to apply.
-            await renderPromote(_promoCtx.row);
+            const left = await renderPromote(_promoCtx.row);
+
+            // ⛔ A CLUB LEAVES THE QUEUE WHEN NOTHING IS LEFT, NOT WHEN ONE
+            // SECTION HAS BEEN TAKEN. Stamping 'promoted' on the first write
+            // dropped Stonington out of the list on 2026-10-24 with six sections
+            // still waiting — Tod: "its review isnt even available as a button
+            // any longer". The count is already computed to paint the panel, so
+            // the queue can simply be told the truth.
+            const _done = left === 0;
+            await supabaseClient.client.from('club_questionnaires')
+                .update(_done
+                    ? { status: 'promoted', promoted_at: new Date().toISOString() }
+                    : { status: 'submitted' })
+                .eq('id', _promoCtx.row.id);
+            _promoCtx.row.status = _done ? 'promoted' : 'submitted';
+            if (!_done) note += ' ' + left + ' still waiting in other sections.';
             const m = document.getElementById('promoteMsg');
             if (m) { m.style.color = '#0b7a3b'; m.textContent = note; }
         } catch (e) {
