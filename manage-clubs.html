@@ -3944,7 +3944,12 @@
                     assignor:  { name: nameOf(c.assignor), email: nameOf(c['Assignor Email']), phone: nameOf(c['Assignor Phone']) },
                 },
                 leagues: {
-                    list: Array.isArray(c.ca_league) ? c.ca_league : (c.ca_league ? [c.ca_league] : []),
+                    // ⚠️ ca_league is TEXT HOLDING A JSON ARRAY (see the note above
+                    // parseClubLeagues). Array.isArray on a string is false, so this
+                    // used to hand the form a single league whose name was the raw
+                    // JSON text — the third pre-fill field broken the same way as
+                    // the payment coordinator and the payment methods.
+                    list: parseClubLeagues(c.ca_league),
                     primary: nameOf(c.ca_league_primary),
                 },
                 venues: { list: venues },
@@ -4321,7 +4326,13 @@
         {
             key: 'leagues', title: 'Leagues & districts',
             rows(cur, sub) {
-                const j = o => (Array.isArray(o && o.list) ? o.list : []).join(', ');
+                // Flattened for display too, or the row shows the raw JSON a
+                // pre-fix answer may still be carrying.
+                const j = o => (Array.isArray(o && o.list) ? o.list : []).flatMap(x => {
+                    const v = _pStr(x);
+                    if (v.charAt(0) === '[') { try { return JSON.parse(v).map(_pStr); } catch (_e) { return [v]; } }
+                    return v ? [v] : [];
+                }).filter((v, i, a) => a.indexOf(v) === i).join(', ');
                 return [
                     _pRow('Plays in', j(cur.leagues), j(sub.leagues)),
                     _pRow('Primary', _pStr((cur.leagues || {}).primary), _pStr((sub.leagues || {}).primary)),
@@ -4330,7 +4341,23 @@
             async write(clubId, sub) {
                 const L = sub.leagues || {};
                 const upd = {};
-                if (Array.isArray(L.list) && L.list.length) upd.ca_league = L.list;
+                // ⚠️ JSON.stringify, not the array — ca_league is TEXT. Handing
+                // PostgREST a raw array is what made this section refuse to promote.
+                // ⛔ And flatten first: answers captured before the pre-fill was
+                // fixed can hold one "league" that is itself the whole JSON array,
+                // and promoting that would write the bug into the club record.
+                const _flat = [];
+                (Array.isArray(L.list) ? L.list : []).forEach(x => {
+                    const v = _pStr(x);
+                    if (!v) return;
+                    if (v.charAt(0) === '[') {
+                        try { JSON.parse(v).forEach(y => { if (_pStr(y)) _flat.push(_pStr(y)); }); return; }
+                        catch (_e) { /* not JSON after all — keep it as typed */ }
+                    }
+                    _flat.push(v);
+                });
+                const _uniq = [...new Set(_flat)];
+                if (_uniq.length) upd.ca_league = JSON.stringify(_uniq);
                 if (_pStr(L.primary)) upd.ca_league_primary = _pStr(L.primary);
                 if (!Object.keys(upd).length) return 0;
                 const { error } = await supabaseClient.client.from('clubs').update(upd).eq('id', clubId);
