@@ -4398,13 +4398,16 @@
                 const want = new Set(((sub.venues && sub.venues.list) || [])
                     .map(v => v.venue_id).filter(v => v != null));
                 if (!want.size) return 0;
+                // ⚠️ club_venues HAS NO id COLUMN — its primary key is
+                // (club_id, venue_id). Selecting and deleting by id is what made
+                // this section refuse to promote on 2026-10-24.
                 const { data: have, error: e1 } = await supabaseClient.client
-                    .from('club_venues').select('id,venue_id').eq('club_id', clubId);
+                    .from('club_venues').select('venue_id').eq('club_id', clubId);
                 if (e1) throw new Error(e1.message);
                 const haveIds = new Set((have || []).map(r => r.venue_id));
                 const add = [...want].filter(id => !haveIds.has(id))
                     .map(id => ({ club_id: clubId, venue_id: id, source: 'questionnaire' }));
-                const drop = (have || []).filter(r => !want.has(r.venue_id)).map(r => r.id);
+                const drop = (have || []).map(r => r.venue_id).filter(id => !want.has(id));
                 let n = 0;
                 if (add.length) {
                     const { error } = await supabaseClient.client.from('club_venues').insert(add);
@@ -4414,7 +4417,8 @@
                 // ⚠️ The LINK goes, never the venue. Lewis Mills stays in the pool
                 // for every other club — Portland just stops claiming it.
                 if (drop.length) {
-                    const { error } = await supabaseClient.client.from('club_venues').delete().in('id', drop);
+                    const { error } = await supabaseClient.client.from('club_venues')
+                        .delete().eq('club_id', clubId).in('venue_id', drop);
                     if (error) throw new Error(error.message);
                     n += drop.length;
                 }
