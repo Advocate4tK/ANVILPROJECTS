@@ -3995,7 +3995,19 @@
                 .from('club_questionnaires')
                 .select('id,entity_id,token,status,updated_at,sent_to,answers,sections_done')
                 .eq('entity_kind', 'club').eq('entity_id', clubId)
-                .in('status', ['open', 'submitted'])
+                // ⭐ 'promoted' BELONGS HERE. Tod and Eric, 2026-10-24: the link
+                // never expires — "it would save us a lot of work if we just
+                // always left that link the same... if a club wanted to edit,
+                // to pay rates or the crew rules or the venues or the contacts,
+                // it would always just remain the same, unexpiring."
+                //
+                // ⚠️ Without it, pressing Send Questionnaire on a club whose
+                // answers had been promoted found nothing and minted a NEW token,
+                // orphaning everything they had filled in. Stonington lost its
+                // link that way within an hour of the first promotion.
+                .in('status', ['open', 'submitted', 'promoted'])
+                .order('created_at', { ascending: true })
+                .limit(1)
                 .maybeSingle();
 
             let row = open;
