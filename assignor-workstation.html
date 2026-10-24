@@ -12266,8 +12266,80 @@ Assign anyway?`)) return;
                     updates['ca_change_synced_at'] = null;
                 }
 
+                // ── THE CREW LOSES THE DATE THE GAME LEAVES ──────────────────
+                // Tod, 2026-10-23, with a game kicking off the next day: "I'm
+                // afraid to approve the change control because then the game
+                // gets moved forward and the referee gets lost."
+                //
+                // A CANCELLATION inside the club's cutoff already lands on the
+                // pay portal — the referee turned other work down, so they are
+                // owed. A RESCHEDULE never did. The row simply moved, the crew
+                // was carried across, and nothing recorded that somebody had
+                // held a Saturday that evaporated.
+                //
+                // ⛔ ASKED, NOT DECIDED. The cutoff rule lives in the pay portal
+                // and nowhere else, and this file already says why: "NO SECOND
+                // RATE CALCULATOR LIVES HERE... one long lesson in what two
+                // copies of one rule do." So the workstation puts the question
+                // in front of the one person who knows the answer, at the one
+                // moment they know it, and records what they say.
+                //
+                // ⚠️ BEFORE the update, so the crew read is the crew that held
+                // the ORIGINAL date — afterwards they belong to the new one.
+                let _lostDateCrew = null;
+                if (!window.tournamentMode && cur['Date'] && newDate !== cur['Date']) {
+                    const crew = ['Center Referee', 'AR 1', 'AR 2']
+                        .map(pos => ({ pos, name: String(cur[pos] || '').trim() }))
+                        .filter(x => x.name && !['EMPTY', 'FILLED'].includes(x.name.toUpperCase()));
+                    if (crew.length) {
+                        const who = crew.map(c => c.name).join(', ');
+                        const wasDate = new Date(cur['Date'] + 'T12:00:00')
+                            .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        if (confirm(
+                            `This game is moving off ${wasDate}.\n\n` +
+                            `${who} ${crew.length === 1 ? 'is' : 'are'} on it and held that date.\n\n` +
+                            `Should ${crew.length === 1 ? 'they' : 'they'} still be PAID for ${wasDate}?\n\n` +
+                            `OK = yes, show it on the pay portal as RESCHEDULED.\n` +
+                            `Cancel = no, they are not owed for it.`)) {
+                            _lostDateCrew = { crew, date: cur['Date'] };
+                        }
+                    }
+                }
+
                 const _gTable2 = window.tournamentMode ? 'tournament_games' : CONFIG.AIRTABLE_TABLES.GAMES;
                 await airtableClient.updateRecord(_gTable2, gameId, updates);
+
+                // ⛔ AFTER the game update, and never allowed to undo it. If this
+                // write fails the move has still happened; losing the move as
+                // well would be worse than a missing pay row somebody can add.
+                if (_lostDateCrew) {
+                    try {
+                        const who = (await supabaseClient.client.auth.getUser())?.data?.user || null;
+                        const rows = _lostDateCrew.crew.map(c => ({
+                            game_id:       Number(gameId),
+                            game_no:       cur['game_no'] ?? null,
+                            slot:          c.pos,
+                            referee_id:    refLookupByName[c.name.toLowerCase()]?.id ?? null,
+                            referee_name:  c.name,
+                            original_date: _lostDateCrew.date,
+                            moved_to_date: newDate,
+                            // ⛔ amount deliberately omitted — the pay portal works
+                            // it out, including the solo bump and any override.
+                            reason:        `Game moved off ${_lostDateCrew.date} after the crew had taken it`,
+                            set_by:        who?.id ?? null,
+                            set_by_name:   who?.email ?? null,
+                        }));
+                        const { error: _rpErr } = await supabaseClient.client
+                            .from('reschedule_pay')
+                            .upsert(rows, { onConflict: 'game_id,slot,original_date' });
+                        if (_rpErr) throw new Error(_rpErr.message);
+                        showToast(`✓ ${_lostDateCrew.crew.length === 1 ? 'Referee' : 'Referees'} marked owed for the original date`, false);
+                    } catch (_rpE) {
+                        console.error('reschedule_pay write failed', _rpE);
+                        alert('The game was moved, but recording the referee as owed FAILED:\n\n'
+                            + _rpE.message + '\n\nAdd it by hand or the pay will be missed.');
+                    }
+                }
 
                 // Update local state
                 const game = allGames.find(g => String(g.id) === String(gameId));

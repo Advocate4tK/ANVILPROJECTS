@@ -4706,7 +4706,7 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 ? `venmo://paycharge?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`
                 : `https://venmo.com/?txn=pay&recipients=${handle}&amount=${amount}&note=${encodedNote}`;
             const _clubId = currentClubRecord?.id || null;
-            const [rawGrisGames, ratesResult, refPayResult, clubResult, invoiceResult, incidentResult, overrideResult] = await Promise.all([
+            const [rawGrisGames, ratesResult, refPayResult, clubResult, invoiceResult, incidentResult, overrideResult, reschedResult] = await Promise.all([
                 supabaseClient.client.from('games').select('*').eq('Source Club', _sourceClub).limit(2000),
                 _clubId
                     ? supabaseClient.client.from('pay_rates').select('*').eq('club_id', _clubId).order('sort_order')
@@ -4737,7 +4737,19 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 // ⚠️ NO VIEW, unlike game_incident_slots. That one exists
                 // because game_incidents carries referee names and this page
                 // reads under the anon key. There is no name in pay_overrides.
-                supabaseClient.client.from('pay_overrides').select('game_id, slot, amount, reason, set_by_name, set_at')
+                supabaseClient.client.from('pay_overrides').select('game_id, slot, amount, reason, set_by_name, set_at'),
+                // ── OWED FOR A DATE THE GAME LEFT ────────────────────────
+                // A cancellation inside the cutoff already shows here. A
+                // RESCHEDULE did not — the row moved, the crew went with it, and
+                // the Saturday somebody held vanished without trace. The
+                // workstation now asks at the moment of the move and writes a
+                // row here. See sql/reschedule-pay.sql.
+                //
+                // ⚠️ Tolerated if it fails — an older database has no such table,
+                // and a missing section must never take the pay portal down.
+                supabaseClient.client.from('reschedule_pay')
+                    .select('id, game_id, game_no, slot, referee_id, referee_name, original_date, moved_to_date, amount, reason, paid_at, paid_amount')
+                    .then(r => r, () => ({ data: [] }))
             ]);
             // ⚠️ ONLY ATTENDANCE AFFECTS PAY. A no-show or a late scratch is a
             // statement that somebody did not work, so $0 is right. A
@@ -4771,6 +4783,14 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
             // after a write, instead of forcing a full reload of the portal to
             // see your own edit.
             const _ovrSlots = window._ovrSlots = {};        // `${game_id}|CR` → row
+            // ⚠️ Only this club's, and only what is still OWED or settled — the
+            // rows arrive unfiltered because reschedule_pay has no club column;
+            // the game it points at is what places it.
+            const _reschedOwed = (reschedResult?.data || []).filter(o => {
+                const g = games.find(x => String(x.id) === String(o.game_id));
+                return g && _matchesClub(g);
+            }).sort((a, b) => String(a.original_date).localeCompare(String(b.original_date)));
+
             (overrideResult?.data || []).forEach(o => {
                 const pos = o.slot === 'Center Referee' ? 'CR' : o.slot === 'AR 1' ? 'AR1' : 'AR2';
                 _ovrSlots[`${o.game_id}|${pos}`] = o;
@@ -5367,6 +5387,56 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                 html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#b91c1c; text-transform:uppercase; letter-spacing:1px; margin:${upcomingGames.length && !_isMobile ? '14px' : '0'} 0 12px; display:flex; align-items:center; gap:8px;">📋 Cancelled — Refs Due Payment</div>`;
                 html += _isMobile ? buildGameCardsMobile(cancelledPayGames, true) : buildGameRows(cancelledPayGames, true, false);
             }
+            // ── RESCHEDULED — REFS DUE FOR THE DATE THEY LOST ─────────────
+            // ⭐ The amount is worked out HERE, not stored by the workstation.
+            // The band rate, the age bands and the solo bump live in getRate()
+            // and nowhere else — the workstation records who is owed and this
+            // page says how much, the same split as pay_overrides.
+            if (_reschedOwed.length) {
+                html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#b45309; text-transform:uppercase; letter-spacing:1px; margin:14px 0 12px; display:flex; align-items:center; gap:8px;">\u{1F504} Rescheduled — Refs Due For The Date They Lost</div>`;
+                html += `<table class="pay-table"><thead><tr>
+                        <th>Date lost</th><th>Game</th><th>Referee</th><th>Position</th><th>Amount</th><th>Moved to</th><th style="text-align:center;">Paid</th>
+                    </tr></thead><tbody>`;
+                _reschedOwed.forEach(o => {
+                    const g = games.find(x => String(x.id) === String(o.game_id));
+                    const f = g?.fields || {};
+                    const label = f['Home Team'] ? `${f['Home Team']} vs ${f['Away Team'] || ''}` : (o.game_no ? 'RTCT' + o.game_no : 'Game');
+                    const pos   = o.slot === 'Center Referee' ? 'CR' : o.slot === 'AR 1' ? 'AR1' : 'AR2';
+                    // ⚠️ SOLO IS JUDGED ON THE CREW THAT HELD THE LOST DATE, which
+                    // is every slot that has an owed row — not the game's crew
+                    // now, which belongs to the new date. Jackson Durand was the
+                    // only one on RTCT10343, so he is owed the SOLO rate.
+                    const sameGame = _reschedOwed.filter(x => String(x.game_id) === String(o.game_id)
+                                                           && x.original_date === o.original_date);
+                    const wasSolo  = sameGame.length === 1 && o.slot === 'Center Referee';
+                    const slotObj  = { pos, rateKey: pos === 'CR' ? 'CR' : 'AR' };
+                    const band     = getRate(slotObj.rateKey, f['Age Group'] || '', wasSolo);
+                    // A stored amount overrides the calculation; a settled one wins outright.
+                    const due      = o.paid_amount != null ? Number(o.paid_amount)
+                                   : o.amount != null      ? Number(o.amount)
+                                   : band;
+                    const lost     = o.original_date ? new Date(o.original_date + 'T12:00:00')
+                                        .toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '—';
+                    const moved    = o.moved_to_date ? new Date(o.moved_to_date + 'T12:00:00')
+                                        .toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '—';
+                    const isPaid   = !!o.paid_at;
+                    html += `<tr class="${isPaid ? 'row-paid' : ''}" data-resched="${o.id}">
+                        <td style="font-weight:700;">${lost}</td>
+                        <td style="font-size:0.82rem;">${label}${f['Age Group'] ? ' · ' + f['Age Group'] : ''}</td>
+                        <td style="font-weight:600;">${o.referee_name || ''}</td>
+                        <td><span class="pos-badge">${pos}${wasSolo ? ' solo' : ''}</span></td>
+                        <td><span class="pay-amount-wrap"><span class="pay-prefix">$</span>
+                            <span style="display:inline-block; width:50px; text-align:right; font-weight:700; padding-right:7px;">${due}</span></span></td>
+                        <td style="font-size:0.82rem; color:#3f3a33;">${moved}</td>
+                        <td style="text-align:center;">
+                            <button class="pay-slot-cb${isPaid ? ' paid' : ''}" onclick="markReschedPaid(${o.id}, ${due}, this)"
+                                title="${isPaid ? 'Paid — click to undo' : 'Mark this as paid'}">${isPaid ? '✓' : ''}</button>
+                        </td>
+                    </tr>`;
+                });
+                html += `</tbody></table>`;
+            }
+
             if (needsPaymentGames.length) {
                 html += _hdr('Needs Payment', (cancelledPayGames.length || (upcomingGames.length && !_isMobile)) ? '20px' : '0');
                 html += _isMobile ? buildGameCardsMobile(needsPaymentGames, true) : buildGameRows(needsPaymentGames, true, false);
@@ -5585,6 +5655,30 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
     // Fixed by calling this again once the real club record is in, right
     // after loadPaymentSection() below wires up. This first call stays as a
     // harmless placeholder so the badge isn't blank while that load runs.
+    // ⭐ SETTLED SEPARATELY FROM ref_payments, because it is a separate debt —
+    // that table is UNIQUE on (game_id, slot) and the game still owes for the
+    // date it actually gets played on.
+    //
+    // ⚠️ paid_amount is frozen at the moment of payment. A rate change later
+    // must not rewrite what was actually handed over.
+    async function markReschedPaid(id, due, btn) {
+        const wasPaid = btn.classList.contains('paid');
+        btn.disabled = true;
+        try {
+            const patch = wasPaid
+                ? { paid_at: null, paid_amount: null }
+                : { paid_at: new Date().toISOString(), paid_amount: due };
+            const { error } = await supabaseClient.client
+                .from('reschedule_pay').update(patch).eq('id', id);
+            if (error) throw new Error(error.message);
+            btn.classList.toggle('paid', !wasPaid);
+            btn.textContent = wasPaid ? '' : '✓';
+            btn.closest('tr')?.classList.toggle('row-paid', !wasPaid);
+        } catch (e) {
+            alert('Could not save that— ' + e.message);
+        } finally { btn.disabled = false; }
+    }
+
     function _refreshSeasonBadges() {
         const season = (currentClubRecord?.fields?.active_season) || getCurrentSeason();
         ['scheduledSeasonBadge','historySeasonBadge'].forEach(id => {

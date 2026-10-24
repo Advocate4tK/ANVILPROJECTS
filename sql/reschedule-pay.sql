@@ -51,7 +51,13 @@ CREATE TABLE IF NOT EXISTS reschedule_pay (
     -- Where it went, recorded so the portal can say "moved to 7 Nov".
     moved_to_date  date,
 
-    amount         numeric(8,2) NOT NULL CHECK (amount >= 0),
+    -- ⛔ NULLABLE, AND USUALLY NULL. The workstation records WHO is owed; the
+    -- pay portal works out HOW MUCH, because the band rates, the age bands and
+    -- the solo bump live there and nowhere else. assignor-workstation.html says
+    -- so in as many words: "NO SECOND RATE CALCULATOR LIVES HERE... this
+    -- session has been one long lesson in what two copies of one rule do."
+    -- Set it only to override what the portal would otherwise calculate.
+    amount         numeric(8,2) CHECK (amount IS NULL OR amount >= 0),
     -- ⭐ Why they are owed. Same reasoning as pay_overrides.reason: an
     -- unexplained payment in November is the thing that causes the argument.
     reason         text        NOT NULL CHECK (btrim(reason) <> ''),
@@ -62,6 +68,8 @@ CREATE TABLE IF NOT EXISTS reschedule_pay (
     set_at         timestamptz NOT NULL DEFAULT now(),
 
     -- Settled separately from ref_payments, because it is a separate debt.
+    -- ⭐ paid_amount IS THE AUTHORITATIVE FIGURE once settled — what actually
+    -- left the account, frozen, so a later rate change cannot rewrite history.
     paid_at        timestamptz,
     paid_amount    numeric(8,2),
 
