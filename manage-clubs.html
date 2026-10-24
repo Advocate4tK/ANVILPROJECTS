@@ -2141,7 +2141,31 @@
                   ${assignorRow({ id: 'e' + e.id, name: e['Club Name'] || e.name })}
                 </div>`;}).join('')}` : '';
 
-            wrap.innerHTML = (clubs.length ? clubHtml : '<p style="color:#4a443c; font-size:0.85rem;">No clubs found.</p>') + tournHtml + eventsHtml;
+            // ⭐ SOMEBODY HAS SENT YOU SOMETHING. Tod, 2026-10-24: "the
+            // questionnaire area should have somewhere where somebody submitted you
+            // data. Would you like to promote this?" Without this the only way to
+            // find a returned form is to open clubs one at a time and guess.
+            //
+            // ⭐ status IS the queue, and it maintains itself: 'submitted' means
+            // waiting on Tod, 'promoted' means dealt with, and a club editing the
+            // standing link afterwards puts it straight back to 'submitted'.
+            const _waiting = clubs.filter(c => (_questBy[c.id] || {}).status === 'submitted');
+            const waitingHtml = _waiting.length ? `
+                <div style="border:1.5px solid #bbf7d0; background:#f0fdf4; border-radius:10px; padding:12px 15px; margin-bottom:14px;">
+                    <div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.7px; color:#0b7a3b; margin-bottom:4px;">
+                        ✉ ${_waiting.length} ${_waiting.length === 1 ? 'club has' : 'clubs have'} sent their details in
+                    </div>
+                    <p style="font-size:0.83rem; color:#3f3a33; margin:0 0 9px;">
+                        Nothing they sent is in the system until you promote it — open one to see what would change.
+                    </p>
+                    <div style="display:flex; flex-wrap:wrap; gap:7px;">
+                        ${_waiting.map(c => `<button onclick="sendQuestionnaire(${c.id}, '${String(c.name).replace(/'/g, "\'")}')"
+                            style="background:#fff; border:1.5px solid #0b7a3b; color:#0b7a3b; padding:5px 13px; border-radius:7px; font-size:0.84rem; font-weight:800; cursor:pointer; font-family:inherit;">
+                            ${c.name} → review</button>`).join('')}
+                    </div>
+                </div>` : '';
+
+            wrap.innerHTML = waitingHtml + (clubs.length ? clubHtml : '<p style="color:#4a443c; font-size:0.85rem;">No clubs found.</p>') + tournHtml + eventsHtml;
             try { renderContinuePicker(); } catch (e) { console.warn(e); }
 
         } catch(e) {
@@ -3927,7 +3951,12 @@
                 ages:   { list: ages },
                 pay, crew,
                 policy: {
-                    methods: Array.isArray(c.payment_methods) ? c.payment_methods : [],
+                    // ⚠️ COMMA-SEPARATED TEXT, NOT AN ARRAY. club-game-submit.html
+                    // and avail-form-settings.html both do .split(',') on it, so it
+                    // has always been a string — and this Array.isArray test meant
+                    // the payment methods came back EMPTY in every pre-fill ever
+                    // sent, exactly like the payment coordinator above.
+                    methods: String(c.payment_methods || '').split(',').map(x => x.trim()).filter(Boolean),
                     cutoff:  nameOf(c.cancellation_cutoff_day),
                 },
                 portals: {
@@ -3951,7 +3980,7 @@
         try {
             const { data: open } = await supabaseClient.client
                 .from('club_questionnaires')
-                .select('token,status,updated_at,sent_to,answers,sections_done')
+                .select('id,entity_id,token,status,updated_at,sent_to,answers,sections_done')
                 .eq('entity_kind', 'club').eq('entity_id', clubId)
                 .in('status', ['open', 'submitted'])
                 .maybeSingle();
@@ -3980,7 +4009,7 @@
                     .from('club_questionnaires')
                     .insert({ entity_kind: 'club', entity_id: clubId, entity_name: clubName,
                               answers: prefill })
-                    .select('token,status,updated_at,sent_to,answers,sections_done').single();
+                    .select('id,entity_id,token,status,updated_at,sent_to,answers,sections_done').single();
                 if (error) throw new Error(error.message);
                 row = made;
             }
@@ -4186,7 +4215,8 @@
                             <span style="margin-left:auto; font-size:0.8rem; color:#3f3a33;">${row.status === 'submitted' ? 'Sent in' : 'Still open'}${when ? ' · last touched ' + when : ''}</span>
                         </div>
                         ${questionnaireAnswersHtml(row)}
-                    </div>` : `
+                    </div>
+                    <div id="promoteWrap" style="margin-top:18px; padding-top:16px; border-top:1px solid #e2d9ce;"></div>` : `
                     <div style="margin-top:18px; padding-top:16px; border-top:1px solid #e2d9ce; font-size:0.85rem; color:#3f3a33;">
                         Nothing filled in yet — this is what they'll see when they open the link.
                     </div>`}
@@ -4194,6 +4224,416 @@
             </div>`;
         document.body.appendChild(box);
         box.addEventListener('click', e => { if (e.target === box) box.remove(); });
+        // ⚠️ After the node is in the document — it reads the club record over the
+        // network and paints into #promoteWrap, which has to exist first.
+        if (_qHasAnswers(row)) renderPromote(row);
+    }
+
+
+    // ══ PROMOTION ═══════════════════════════════════════════════════════════
+    // Turning a club's answers into the club's record.
+    //
+    // Tod, 2026-10-24, on finding Portland's form fully answered and its record
+    // empty: "you built something and it provides data but nothing's actually
+    // being updated into the system officially. It's just sitting on a holding
+    // pad somewhere, correct?" It was. Every answer any club has given sat in
+    // club_questionnaires.answers and nothing had ever written a byte of it into
+    // clubs, pay_rates, crew_rules or club_venues.
+    //
+    // ⛔ NOTHING WRITES WITHOUT A CLICK. club-questionnaire.sql says why: "a club
+    // president's typo silently becomes the pay rate a referee gets paid."
+    //
+    // ⭐ SECTION BY SECTION. A club can have good venues and a suspect pay grid,
+    // and you must be able to take one without the other.
+    //
+    // ⭐ THE DIFF COSTS NOTHING TO BUILD, because buildQuestionnairePrefill
+    // already renders the club's RECORD in the same shape the answers use. Two
+    // objects of one shape, compared key by key — no second mapping to drift.
+    //
+    // ⛔ A BLANK FROM THEM NEVER ERASES SOMETHING YOU HOLD. They are telling you
+    // what they know, not declaring everything else untrue. The one deliberate
+    // exception is venues: dropping one is the POINT of the standing link —
+    // "it's not actually removing a venue from our system, it's just removing it
+    // from their pool" — and even that only once they have named at least one.
+    let _promoCtx = null;
+
+    const _pStr = v => String(v == null ? '' : v).trim();
+    const _pMoney = x => _pStr(x) === '' ? '—' : '$' + _pStr(x);
+    // ⚠️ pay_rates.game_type is lowercase 'rec'/'comp'; crew_rules uses
+    // 'Rec'/'Comp'. buildQuestionnairePrefill carries the same warning. Mixing
+    // them puts a club's rates against age groups that look identical and are not.
+    const _pGtPay  = t => String(t || 'rec').toLowerCase() === 'comp' ? 'comp' : 'rec';
+    const _pGtCrew = t => String(t || 'rec').toLowerCase() === 'comp' ? 'Comp' : 'Rec';
+    const _pTypeLabel = t => t === 'comp' ? 'Comp/Travel' : 'Rec';
+    const _pCrewLabel = n => n === '3' ? '3 — centre + 2 ARs'
+                           : n === '2' ? '2 — centre + 1 AR'
+                           : n === '1' ? '1 — centre only' : _pStr(n);
+
+    // A row is 'same' when there is nothing to do — INCLUDING when they left it
+    // blank, because blank is not an instruction.
+    const _pRow = (label, now, sub) => {
+        const n = _pStr(now), s = _pStr(sub);
+        const state = !s ? 'same' : s === n ? 'same' : n ? 'change' : 'add';
+        return { label, now: n, sub: s, state };
+    };
+
+    // ⚠️ no_rec / no_comp sit in the same object as the rate rows. They are
+    // booleans — "we don't run these" — and would otherwise promote as a
+    // nameless age band.
+    function _pPayKeys(P) {
+        return Object.keys(P || {}).filter(k => k !== 'no_rec' && k !== 'no_comp')
+            .filter(k => ['center', 'ar', 'solo'].some(f => _pStr((P[k] || {})[f]) !== ''));
+    }
+
+    const _PROMO = [
+        {
+            key: 'contacts', title: 'Who to contact',
+            rows(cur, sub) {
+                const fmt = o => [o && o.name, o && o.email, o && o.phone].map(_pStr).filter(Boolean).join(' · ');
+                return [['president', 'President'], ['admin', 'Scheduling contact'],
+                        ['payment', 'Payment coordinator'], ['assignor', 'Assignor']]
+                    .map(r => _pRow(r[1], fmt((cur.contacts || {})[r[0]]), fmt((sub.contacts || {})[r[0]])));
+            },
+            async write(clubId, sub) {
+                const C = sub.contacts || {};
+                const get = (k, f) => _pStr((C[k] || {})[f]);
+                const upd = {};
+                // ⛔ Only non-empty values go in. See the note at the top.
+                const put = (col, v) => { if (v) upd[col] = v; };
+                put('president', get('president', 'name'));
+                put('President Email', get('president', 'email'));
+                put('President Phone', get('president', 'phone'));
+                put('Club Admin', get('admin', 'name'));
+                put('Club Admin Email', get('admin', 'email'));
+                put('Club Admin Phone', get('admin', 'phone'));
+                put('payment_coordinator', get('payment', 'name'));
+                put('payment_coordinator_email', get('payment', 'email'));
+                put('payment_coordinator_phone', get('payment', 'phone'));
+                put('assignor', get('assignor', 'name'));
+                put('Assignor Email', get('assignor', 'email'));
+                put('Assignor Phone', get('assignor', 'phone'));
+                if (!Object.keys(upd).length) return 0;
+                const { error } = await supabaseClient.client.from('clubs').update(upd).eq('id', clubId);
+                if (error) throw new Error(error.message);
+                return Object.keys(upd).length;
+            },
+        },
+        {
+            key: 'leagues', title: 'Leagues & districts',
+            rows(cur, sub) {
+                const j = o => (Array.isArray(o && o.list) ? o.list : []).join(', ');
+                return [
+                    _pRow('Plays in', j(cur.leagues), j(sub.leagues)),
+                    _pRow('Primary', _pStr((cur.leagues || {}).primary), _pStr((sub.leagues || {}).primary)),
+                ];
+            },
+            async write(clubId, sub) {
+                const L = sub.leagues || {};
+                const upd = {};
+                if (Array.isArray(L.list) && L.list.length) upd.ca_league = L.list;
+                if (_pStr(L.primary)) upd.ca_league_primary = _pStr(L.primary);
+                if (!Object.keys(upd).length) return 0;
+                const { error } = await supabaseClient.client.from('clubs').update(upd).eq('id', clubId);
+                if (error) throw new Error(error.message);
+                return Object.keys(upd).length;
+            },
+        },
+        {
+            key: 'venues', title: 'Venues & fields',
+            rows(cur, sub) {
+                const want = (sub.venues && sub.venues.list) || [];
+                const have = (cur.venues && cur.venues.list) || [];
+                const by = {};
+                have.forEach(v => { by[v.venue_id] = { name: v.name, have: true }; });
+                want.forEach(v => {
+                    by[v.venue_id] = by[v.venue_id] || { name: v.name };
+                    by[v.venue_id].want = true;
+                    by[v.venue_id].name = by[v.venue_id].name || v.name;
+                });
+                // ⛔ An empty answer removes nothing — they simply have not filled it in.
+                const anyWant = want.length > 0;
+                return Object.keys(by).map(id => {
+                    const r = by[id];
+                    const state = r.have && r.want ? 'same' : r.want ? 'add' : anyWant ? 'remove' : 'same';
+                    return { label: r.name || ('venue ' + id), now: r.have ? 'linked' : 'not linked',
+                             sub: state === 'add' ? 'link it' : state === 'remove' ? 'drop the link' : 'keep', state };
+                });
+            },
+            async write(clubId, sub) {
+                const want = new Set(((sub.venues && sub.venues.list) || [])
+                    .map(v => v.venue_id).filter(v => v != null));
+                if (!want.size) return 0;
+                const { data: have, error: e1 } = await supabaseClient.client
+                    .from('club_venues').select('id,venue_id').eq('club_id', clubId);
+                if (e1) throw new Error(e1.message);
+                const haveIds = new Set((have || []).map(r => r.venue_id));
+                const add = [...want].filter(id => !haveIds.has(id))
+                    .map(id => ({ club_id: clubId, venue_id: id, source: 'questionnaire' }));
+                const drop = (have || []).filter(r => !want.has(r.venue_id)).map(r => r.id);
+                let n = 0;
+                if (add.length) {
+                    const { error } = await supabaseClient.client.from('club_venues').insert(add);
+                    if (error) throw new Error(error.message);
+                    n += add.length;
+                }
+                // ⚠️ The LINK goes, never the venue. Lewis Mills stays in the pool
+                // for every other club — Portland just stops claiming it.
+                if (drop.length) {
+                    const { error } = await supabaseClient.client.from('club_venues').delete().in('id', drop);
+                    if (error) throw new Error(error.message);
+                    n += drop.length;
+                }
+                return n;
+            },
+        },
+        {
+            key: 'ages', title: 'Age groups',
+            rows(cur, sub) {
+                const k = a => _pStr(a.name) + '|' + (a.type === 'comp' ? 'comp' : 'rec');
+                const have = new Set((((cur.ages || {}).list) || []).filter(a => _pStr(a.name)).map(k));
+                return (((sub.ages || {}).list) || []).filter(a => _pStr(a.name)).map(a => ({
+                    label: _pStr(a.name) + ' ' + _pTypeLabel(a.type),
+                    now: have.has(k(a)) ? 'on record' : '—',
+                    sub: have.has(k(a)) ? 'keep' : 'add it',
+                    state: have.has(k(a)) ? 'same' : 'add',
+                }));
+            },
+            async write(clubId, sub) {
+                const list = (((sub.ages || {}).list) || []).filter(a => _pStr(a.name));
+                if (!list.length) return 0;
+                // ⚠️ clubs.age_groups is the duplicate every other reader ignores —
+                // the real bands come from pay_rates. It is written anyway because
+                // Entity Status still reads it, and a stale copy sitting next to a
+                // fresh one is the exact shape of bug this project keeps paying for.
+                const rows = list.map(a => ({ age_group: _pStr(a.name), game_type: _pGtPay(a.type) }));
+                const { error } = await supabaseClient.client
+                    .from('clubs').update({ age_groups: rows }).eq('id', clubId);
+                if (error) throw new Error(error.message);
+                return rows.length;
+            },
+        },
+        {
+            key: 'pay', title: 'Referee pay',
+            rows(cur, sub) {
+                const P = sub.pay || {}, D = cur.pay || {};
+                const fmt = r => r ? ('centre ' + _pMoney(r.center) + ' · AR ' + _pMoney(r.ar) + ' · solo ' + _pMoney(r.solo)) : '';
+                return _pPayKeys(P).map(key => {
+                    const b = key.split('|');
+                    return _pRow(b[0] + ' ' + _pTypeLabel(b[1]), fmt(D[key]), fmt(P[key]));
+                });
+            },
+            async write(clubId, sub) {
+                const P = sub.pay || {};
+                const keys = _pPayKeys(P);
+                if (!keys.length) return 0;
+                const { data: have, error: e1 } = await supabaseClient.client
+                    .from('pay_rates').select('id,age_group,game_type').eq('club_id', clubId);
+                if (e1) throw new Error(e1.message);
+                const idx = {};
+                (have || []).forEach(r => { idx[r.age_group + '|' + _pGtPay(r.game_type)] = r.id; });
+                const num = x => _pStr(x) === '' ? null : Number(x);
+                const ins = [];
+                let n = 0;
+                for (const key of keys) {
+                    const b = key.split('|'), ag = b[0], gt = _pGtPay(b[1]);
+                    const body = { center: num(P[key].center), ar: num(P[key].ar), solo: num(P[key].solo) };
+                    const id = idx[ag + '|' + gt];
+                    if (id) {
+                        const { error } = await supabaseClient.client.from('pay_rates').update(body).eq('id', id);
+                        if (error) throw new Error(error.message);
+                        n++;
+                    } else {
+                        // ⚠️ sort_order drives the order the pay portal lists bands in.
+                        // Taken from the age number so U8 comes before U19 without
+                        // anybody maintaining a list.
+                        const dig = parseInt(ag.replace(/\D/g, ''), 10);
+                        ins.push({ club_id: clubId, age_group: ag, game_type: gt,
+                                   sort_order: isNaN(dig) ? null : dig,
+                                   center: body.center, ar: body.ar, solo: body.solo });
+                    }
+                }
+                if (ins.length) {
+                    const { error } = await supabaseClient.client.from('pay_rates').insert(ins);
+                    if (error) throw new Error(error.message);
+                    n += ins.length;
+                }
+                return n;
+            },
+        },
+        {
+            key: 'crew', title: 'Crew rules',
+            rows(cur, sub) {
+                const C = sub.crew || {}, D = cur.crew || {};
+                return Object.keys(C).filter(k => _pStr(C[k]) !== '').map(key => {
+                    const b = key.split('|');
+                    return _pRow(b[0] + ' ' + _pTypeLabel(b[1]),
+                        _pStr(D[key]) ? _pCrewLabel(_pStr(D[key])) : '', _pCrewLabel(_pStr(C[key])));
+                });
+            },
+            async write(clubId, sub) {
+                const C = sub.crew || {};
+                const keys = Object.keys(C).filter(k => _pStr(C[k]) !== '');
+                if (!keys.length) return 0;
+                const { data: have, error: e1 } = await supabaseClient.client
+                    .from('crew_rules').select('id,age_group,game_type').eq('club_id', clubId);
+                if (e1) throw new Error(e1.message);
+                const idx = {};
+                (have || []).forEach(r => { idx[r.age_group + '|' + _pGtCrew(r.game_type)] = r.id; });
+                const ins = [];
+                let n = 0;
+                for (const key of keys) {
+                    const b = key.split('|'), ag = b[0], gt = _pGtCrew(b[1]);
+                    const v = _pStr(C[key]);
+                    // ar1 + ar2 = 3 officials, ar1 only = 2, neither = 1. The same
+                    // reading as the pre-fill, in reverse.
+                    const body = { ar1: v === '3' || v === '2', ar2: v === '3' };
+                    const id = idx[ag + '|' + gt];
+                    if (id) {
+                        const { error } = await supabaseClient.client.from('crew_rules').update(body).eq('id', id);
+                        if (error) throw new Error(error.message);
+                        n++;
+                    } else {
+                        ins.push({ club_id: clubId, age_group: ag, game_type: gt, ar1: body.ar1, ar2: body.ar2 });
+                    }
+                }
+                if (ins.length) {
+                    const { error } = await supabaseClient.client.from('crew_rules').insert(ins);
+                    if (error) throw new Error(error.message);
+                    n += ins.length;
+                }
+                return n;
+            },
+        },
+        {
+            key: 'policy', title: 'Paying referees',
+            rows(cur, sub) {
+                const j = o => (Array.isArray(o && o.methods) ? o.methods : []).join(', ');
+                return [
+                    _pRow('Payment methods', j(cur.policy), j(sub.policy)),
+                    _pRow('Late-cancel cutoff', _pStr((cur.policy || {}).cutoff), _pStr((sub.policy || {}).cutoff)),
+                ];
+            },
+            async write(clubId, sub) {
+                const P = sub.policy || {};
+                const upd = {};
+                // ⚠️ TEXT, comma separated — every reader does .split(','). Storing
+                // an array here would break the pay portal's payment buttons.
+                if (Array.isArray(P.methods) && P.methods.length) upd.payment_methods = P.methods.join(',');
+                if (_pStr(P.cutoff)) upd.cancellation_cutoff_day = _pStr(P.cutoff);
+                if (!Object.keys(upd).length) return 0;
+                const { error } = await supabaseClient.client.from('clubs').update(upd).eq('id', clubId);
+                if (error) throw new Error(error.message);
+                return Object.keys(upd).length;
+            },
+        },
+        {
+            key: 'portals', title: 'Pages they want',
+            rows(cur, sub) {
+                const P = sub.portals || {}, D = cur.portals || {};
+                return [['audit', 'Audit page'], ['payment', 'Payment page']].map(r => {
+                    const a = P[r[0]] ? 'yes' : 'no', b = D[r[0]] ? 'yes' : 'no';
+                    return { label: r[1], now: b, sub: a, state: a === b ? 'same' : 'change' };
+                });
+            },
+            async write(clubId, sub) {
+                const P = sub.portals || {};
+                const { error } = await supabaseClient.client.from('clubs')
+                    .update({ presidents_portal_enabled: !!P.audit, payment_portal_enabled: !!P.payment })
+                    .eq('id', clubId);
+                if (error) throw new Error(error.message);
+                return 2;
+            },
+        },
+    ];
+
+    async function renderPromote(row) {
+        const wrap = document.getElementById('promoteWrap');
+        if (!wrap) return;
+        const clubId = row.entity_id;
+        if (!clubId) { wrap.innerHTML = ''; return; }
+        wrap.innerHTML = '<div style="font-size:0.85rem; color:#3f3a33;">Reading the club record…</div>';
+        let cur;
+        try {
+            cur = await buildQuestionnairePrefill(clubId);
+        } catch (e) {
+            wrap.innerHTML = '<div style="color:#b91c1c; font-size:0.85rem;">Could not read the club record — ' + _qEsc(e.message) + '</div>';
+            return;
+        }
+        const sub = row.answers || {};
+        _promoCtx = { row, clubId, cur, sub };
+
+        let total = 0;
+        const blocks = _PROMO.map(sec => {
+            const rows = sec.rows(cur, sub) || [];
+            const live = rows.filter(r => r.state !== 'same');
+            total += live.length;
+            const head = live.length ? live.length + ' to apply'
+                       : rows.length ? 'nothing to apply' : 'nothing filled in';
+            const body = rows.map(r => {
+                const tint = r.state === 'change' ? '#fffbeb'
+                           : r.state === 'add'    ? '#f0fdf4'
+                           : r.state === 'remove' ? '#fef2f2' : 'transparent';
+                const ink  = r.state === 'change' ? '#92400e'
+                           : r.state === 'add'    ? '#0b7a3b'
+                           : r.state === 'remove' ? '#b91c1c' : '#6b6459';
+                return '<tr style="background:' + tint + ';">'
+                    + '<td style="padding:5px 9px; font-weight:700; color:#1f2328;">' + _qEsc(r.label) + '</td>'
+                    + '<td style="padding:5px 9px; color:#6b6459;">' + _qEsc(r.now || '—') + '</td>'
+                    + '<td style="padding:5px 9px; color:' + ink + '; font-weight:' + (r.state === 'same' ? '400' : '700') + ';">' + _qEsc(r.sub || '—') + '</td>'
+                    + '</tr>';
+            }).join('');
+            return '<div style="border:1px solid #e2d9ce; border-radius:9px; margin-bottom:10px; overflow:hidden;">'
+                + '<div style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:#faf8f5;' + (rows.length ? ' border-bottom:1px solid #efe8df;' : '') + '">'
+                + '<span style="font-family:\'Barlow Condensed\',sans-serif; font-size:0.98rem; font-weight:800; text-transform:uppercase; letter-spacing:0.6px; color:#09142a;">' + _qEsc(sec.title) + '</span>'
+                + '<span style="font-size:0.74rem; font-weight:800; border-radius:4px; padding:2px 7px; background:' + (live.length ? '#fef3c7' : '#eef1f6') + '; color:' + (live.length ? '#92400e' : '#4a443c') + ';">' + head + '</span>'
+                + '<button onclick="promoteSection(\'' + sec.key + '\', this)"' + (live.length ? '' : ' disabled')
+                + ' style="margin-left:auto; background:' + (live.length ? '#0f3460' : '#e8e4de') + '; color:' + (live.length ? '#fff' : '#9a9289') + '; border:none; padding:6px 14px; border-radius:7px; font-weight:800; font-size:0.8rem; cursor:' + (live.length ? 'pointer' : 'default') + '; font-family:\'DM Sans\',sans-serif; white-space:nowrap;">'
+                + (live.length ? 'Promote ' + live.length : 'Nothing to do') + '</button></div>'
+                + (rows.length ? '<table style="width:100%; border-collapse:collapse; font-size:0.83rem;"><thead><tr style="color:#6b6459; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px;">'
+                    + '<th style="text-align:left; padding:5px 9px; font-weight:700;">Field</th>'
+                    + '<th style="text-align:left; padding:5px 9px; font-weight:700;">On record now</th>'
+                    + '<th style="text-align:left; padding:5px 9px; font-weight:700;">They said</th>'
+                    + '</tr></thead><tbody>' + body + '</tbody></table>' : '')
+                + '</div>';
+        }).join('');
+
+        wrap.innerHTML = '<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">'
+            + '<div style="font-family:\'Barlow Condensed\',sans-serif; font-size:1.05rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px;">Review &amp; promote</div>'
+            + '<span style="margin-left:auto; font-size:0.8rem; color:#3f3a33;">' + (total ? total + ' waiting to be applied' : 'the record already matches') + '</span></div>'
+            + '<p style="font-size:0.82rem; color:#3f3a33; margin:-2px 0 12px;">Nothing here is in the club\'s record yet. Promote a section and it is written; leave it and nothing happens. Anything they left blank is never used to erase what you already hold.</p>'
+            + blocks
+            + '<div id="promoteMsg" style="font-size:0.85rem; font-weight:700; margin-top:4px;"></div>';
+    }
+
+    async function promoteSection(key, btn) {
+        if (!_promoCtx) return;
+        const sec = _PROMO.find(s => s.key === key);
+        if (!sec) return;
+        const was = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Writing…';
+        let note = '';
+        try {
+            const n = await sec.write(_promoCtx.clubId, _promoCtx.sub);
+            // ⭐ Stamped on the submission, not the section — per-section tracking
+            // needs a column that does not exist yet, and that is what the
+            // "changed since you last promoted" badge will be built on.
+            await supabaseClient.client.from('club_questionnaires')
+                .update({ status: 'promoted', promoted_at: new Date().toISOString() })
+                .eq('id', _promoCtx.row.id);
+            _promoCtx.row.status = 'promoted';
+            note = '✓ ' + sec.title + ' written to the club — ' + n + ' value' + (n === 1 ? '' : 's') + '.';
+            // ⭐ Re-read the record rather than assuming. The block proves it
+            // landed by coming back saying there is nothing left to apply.
+            await renderPromote(_promoCtx.row);
+            const m = document.getElementById('promoteMsg');
+            if (m) { m.style.color = '#0b7a3b'; m.textContent = note; }
+        } catch (e) {
+            btn.disabled = false;
+            btn.textContent = was;
+            const m = document.getElementById('promoteMsg');
+            if (m) { m.style.color = '#b91c1c'; m.textContent = 'Did not write — ' + e.message; }
+        }
     }
 
     function copyQLink(btn) {
