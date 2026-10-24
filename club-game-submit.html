@@ -4783,13 +4783,11 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
             // after a write, instead of forcing a full reload of the portal to
             // see your own edit.
             const _ovrSlots = window._ovrSlots = {};        // `${game_id}|CR` → row
-            // ⚠️ Only this club's, and only what is still OWED or settled — the
-            // rows arrive unfiltered because reschedule_pay has no club column;
-            // the game it points at is what places it.
-            const _reschedOwed = (reschedResult?.data || []).filter(o => {
-                const g = games.find(x => String(x.id) === String(o.game_id));
-                return g && _matchesClub(g);
-            }).sort((a, b) => String(a.original_date).localeCompare(String(b.original_date)));
+            // ⚠️ HELD RAW. The club filter needs `games`, which is declared
+            // about seventy lines below this with const — touching it here
+            // threw "Cannot access 'games' before initialization" and took the
+            // whole pay portal down. Filtered at the point of use instead.
+            const _reschedRaw = (reschedResult?.data || []);
 
             (overrideResult?.data || []).forEach(o => {
                 const pos = o.slot === 'Center Referee' ? 'CR' : o.slot === 'AR 1' ? 'AR1' : 'AR2';
@@ -5392,6 +5390,13 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
             // The band rate, the age bands and the solo bump live in getRate()
             // and nowhere else — the workstation records who is owed and this
             // page says how much, the same split as pay_overrides.
+            // Only this club's — reschedule_pay has no club column, so the game
+            // it points at is what places it. Safe here: `games` exists by now.
+            const _reschedOwed = _reschedRaw.filter(o => {
+                const g = games.find(x => String(x.id) === String(o.game_id));
+                return g && _matchesClub(g);
+            }).sort((a, b) => String(a.original_date).localeCompare(String(b.original_date)));
+
             if (_reschedOwed.length) {
                 html += `<div style="font-family:'Barlow Condensed',sans-serif; font-size:1rem; font-weight:800; color:#b45309; text-transform:uppercase; letter-spacing:1px; margin:14px 0 12px; display:flex; align-items:center; gap:8px;">\u{1F504} Rescheduled — Refs Due For The Date They Lost</div>`;
                 html += `<table class="pay-table"><thead><tr>
