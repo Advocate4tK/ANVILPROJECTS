@@ -5132,7 +5132,21 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                             { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
                         ].filter(s => s.name && s.name.toUpperCase() !== 'EMPTY');
 
-                        const isSolo = _manned.length === 1 && _manned[0].pos === 'CR';
+                        // ⛔ BUT A NO-SHOW IS NOT A BODY. "Filled" means somebody is
+                        // covering the slot; a name that never turned up means the
+                        // centre refereed the game by himself. Tod, 2026-10-23: "if a
+                        // referee is working the game alone... he is working it alone
+                        // and is paid as if alone... solo." Ross Sward took Putnam vs
+                        // Canterbury U12 on 17 Oct on his own because Wyatt Matulis
+                        // no-showed, and the portal paid him the two-man centre rate.
+                        //
+                        // ⚠️ _incidentSlots only ever holds no_show and late_scratch
+                        // (PAY_AFFECTING, above) — both mean nobody stood there, so a
+                        // plain truthy test is the whole rule.
+                        const _present = _manned.filter(s => !_incidentSlots[`${r.id}|${s.pos}`]);
+                        const isSolo = _present.length === 1 && _present[0].pos === 'CR';
+                        // ⛔ Billing still runs off _manned, not _present — the no-show
+                        // keeps its own row at $0 so the club can see who didn't turn up.
                         const slots  = _manned.filter(s => s.name.toUpperCase() !== 'FILLED');
                         let gameTotal = 0;
                         slots.forEach((slot, idx) => {
@@ -5327,7 +5341,11 @@ Requested Field: ${allFields.find(x => parseFloat(x.numId) === parseFloat(newFie
                         { name: (f['AR 1']           || '').trim(), pos: 'AR1', rateKey: 'AR' },
                         { name: (f['AR 2']           || '').trim(), pos: 'AR2', rateKey: 'AR' }
                     ].filter(s => s.name && s.name.toUpperCase() !== 'EMPTY');
-                    const isSolo = _manned.length === 1 && _manned[0].pos === 'CR';
+                    // ⚠️ Same no-show rule as the desktop table. The phone is where
+                    // Tod actually pays, so a solo rate honoured only on the big
+                    // screen would be worse than none at all.
+                    const _present = _manned.filter(s => !_incidentSlots[`${r.id}|${s.pos}`]);
+                    const isSolo = _present.length === 1 && _present[0].pos === 'CR';
                     const slots  = _manned.filter(s => s.name.toUpperCase() !== 'FILLED');
                     slots.forEach(slot => {
                         const rf         = resolveRef(slot.name);
