@@ -1968,6 +1968,22 @@
                     ⚠ ${n} game${n === 1 ? '' : 's'} not yet in CA</span>
                     <div style="font-size:0.72rem;color:#8a8a8a;margin-top:4px;">${clubs}</div>`;
                 if (banner) {
+                    // ⭐ DISMISSIBLE, BUT NOT SILENCEABLE. Tod, 2026-10-26: "I want
+                    // to be able to have the warning for the Central Assign 40 NOT
+                    // IN CA to be able to dismiss that."
+                    //
+                    // ⛔ It is hidden only for THIS COUNT and only for TODAY. A
+                    // dismissal that lasted would turn a growing backlog into
+                    // silence, which is the opposite of what the bar is for — and
+                    // 40 games missing from Central Assign is money and coverage.
+                    // New games not yet in CA bring it straight back.
+                    try {
+                        const d = JSON.parse(localStorage.getItem('caBannerDismiss') || 'null');
+                        if (d && d.n === n && d.day === new Date().toDateString()) {
+                            banner.style.display = 'none';
+                            return;
+                        }
+                    } catch (_e) { /* a blocked or corrupt store just shows the bar */ }
                     banner.style.display = 'block';
                     // The whole bar is the link. A count that tells you there is
                     // work and then makes you go find the tool is half a feature.
@@ -1980,7 +1996,12 @@
                         ? `<span style="font-size:0.78rem;font-weight:800;color:#2a1a00;background:#ffd479;
                              border-radius:6px;padding:3px 10px;white-space:nowrap;">${awaiting} sent, awaiting your confirmation</span>`
                         : '';
-                    banner.innerHTML = `<a href="central-assign-export.html" style="text-decoration:none; display:block;">
+                    banner.innerHTML = `<div style="position:relative;">
+                        <button onclick="dismissCABanner(event, ${n})" title="Hide this until the number changes, or tomorrow"
+                            style="position:absolute; top:6px; right:8px; z-index:2; background:rgba(0,0,0,0.25); color:#fff;
+                                   border:none; width:22px; height:22px; border-radius:50%; font-size:0.85rem; font-weight:900;
+                                   line-height:1; cursor:pointer; font-family:inherit;">×</button>
+                        <a href="central-assign-export.html" style="text-decoration:none; display:block;">
                         <div style="background:#c0392b; border-radius:10px; padding:12px 24px;
                             display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                             <span style="font-size:0.82rem;font-weight:900;letter-spacing:1.5px;color:rgba(255,255,255,0.85);">⬆ CENTRAL ASSIGN</span>
@@ -1989,11 +2010,24 @@
                             ${awaitingLine}
                             <span style="font-size:0.8rem;font-weight:800;color:#fff;background:rgba(0,0,0,0.22);
                                 border-radius:6px;padding:4px 12px;white-space:nowrap;">Export Games →</span>
-                        </div></a>`;
+                        </div></a></div>`;
                 }
             } catch (e) {
                 console.warn('CA pending count unavailable', e);
             }
+        }
+
+        // ⚠️ The whole bar is a link, so the × has to stop the click reaching it
+        // — otherwise dismissing it navigates to the export page instead.
+        function dismissCABanner(ev, n) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            try {
+                localStorage.setItem('caBannerDismiss',
+                    JSON.stringify({ n: n, day: new Date().toDateString() }));
+            } catch (_e) { /* can't remember it — hide it for this view anyway */ }
+            const b = document.getElementById('caPendingBanner');
+            if (b) b.style.display = 'none';
         }
 
         async function loadRefAvailTools() {
