@@ -70,6 +70,10 @@
         .new-dot { display:inline-block; width:8px; height:8px; background:#e94560; border-radius:50%; flex-shrink:0; }
         .empty-dot { display:inline-block; width:8px; height:8px; flex-shrink:0; }
         .divider { border:none; border-top:1px solid #eee; margin:16px 0; }
+    .lead-copy { margin-left:7px; background:#fff; border:1px solid #d7d0c6; color:#4a443c;
+        border-radius:5px; padding:1px 7px; font-size:0.7rem; font-weight:700; cursor:pointer;
+        font-family:inherit; vertical-align:middle; }
+    .lead-copy:hover { background:#f3efe9; }
     </style>
 </head>
 <body>
@@ -206,9 +210,23 @@
                 <div class="lead-expand" id="lead-detail-${l.id}">
 
                     <!-- Contact info + message -->
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 24px; margin-bottom:12px; font-size:0.875rem;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; margin-bottom:12px; font-size:0.875rem;">
                         <div><span class="lead-field-label">Role:</span> ${l.role || '—'}</div>
                         <div><span class="lead-field-label">Club:</span> ${l.club || '—'}</div>
+                        <!-- ⭐ The address is in the header already, but as a mailto
+                             inside a row that toggles open and shut — dragging to
+                             select it starts a link drag instead. Tod, 2026-10-26:
+                             "there is no way for me to copy and paste the email or
+                             contact info." So it is repeated here as plain selectable
+                             text with a button that puts it on the clipboard. -->
+                        <div><span class="lead-field-label">Email:</span>
+                            <span style="user-select:all; font-family:'JetBrains Mono',monospace; font-size:0.82rem;">${l.email || '—'}</span>
+                            ${l.email ? `<button onclick="copyLeadBit(event, '${String(l.email).replace(/'/g, "\'")}', this)" class="lead-copy">copy</button>` : ''}
+                        </div>
+                        <div><span class="lead-field-label">Phone:</span>
+                            <span style="user-select:all; font-family:'JetBrains Mono',monospace; font-size:0.82rem;">${l.phone || '—'}</span>
+                            ${l.phone ? `<button onclick="copyLeadBit(event, '${String(l.phone).replace(/'/g, "\'")}', this)" class="lead-copy">copy</button>` : ''}
+                        </div>
                     </div>
                     <div class="field-label">Their Message</div>
                     <div class="lead-message">${l.message ? l.message.replace(/</g,'&lt;').replace(/\n/g,'<br>') : '—'}</div>
@@ -268,6 +286,30 @@
                 if (dot) dot.className = 'empty-dot';
             });
         });
+    }
+
+    // ⚠️ The card toggles on click, so the copy must not reach it — otherwise
+    // copying an address shuts the lead you are reading.
+    function copyLeadBit(ev, text, btn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const done = () => {
+            const was = btn.textContent;
+            btn.textContent = 'copied';
+            setTimeout(() => { btn.textContent = was; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(() => fallback());
+        } else { fallback(); }
+        function fallback() {
+            const t = document.createElement('textarea');
+            t.value = text;
+            t.style.cssText = 'position:fixed;top:-1000px;';
+            document.body.appendChild(t);
+            t.select();
+            try { document.execCommand('copy'); done(); } catch (_e) { /* nothing more to try */ }
+            t.remove();
+        }
     }
 
     function toggleLead(id) {
