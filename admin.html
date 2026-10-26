@@ -697,12 +697,15 @@
             const wrap = document.getElementById('bannerEditorClubPicker');
             if (!wrap) return;
             const allMode   = _editingClubs.length === 0;
+            const _mine = restrictedClubs();
             const clubNames = personSearchClubs
                 .map(c => c.fields['Name'] || c.fields['Club Name'] || '')
-                .filter(n => n && (!adminUserClubs || adminUserClubs.includes(n)))
+                .filter(n => n && (!_mine || _mine.includes(n)))
                 .sort();
-            // Restricted assignors can only target their own clubs — no "All Clubs" option
-            const showAllOption = !adminUserClubs;
+            // Restricted assignors can only target their own clubs — no "All Clubs"
+            // option. ⭐ An Admin always gets both: Tod, 2026-10-26, "should be able
+            // to pick individual clubs or all".
+            const showAllOption = !_mine;
             wrap.innerHTML = `
                 ${showAllOption ? `<div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
                     <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; cursor:pointer; font-weight:600;">
@@ -898,6 +901,19 @@
         // ── Person search — module-level data so search works anytime ──────────
         let personSearchRefs      = [];
         let personSearchClubs     = [];
+
+        // ⭐ ADMIN MEANS UNRESTRICTED. adminUserClubs is set for an Admin too if the
+        // account happens to carry a clubs list, and Tod's @admin row carries 'kova'
+        // — the TEST club. That scoped the whole portal to one club whose name does
+        // not even match, which is why the person search read "3550 referees & 0
+        // clubs" and the banner's Send To had nothing to tick.
+        //
+        // ⚠️ Returns null for unrestricted, an array otherwise. Read it; do not test
+        // adminUserClubs directly, which is the mistake that caused this.
+        function restrictedClubs() {
+            if (adminUserRole === 'Admin') return null;
+            return (Array.isArray(adminUserClubs) && adminUserClubs.length) ? adminUserClubs : null;
+        }
         let personSearchGames     = [];
         let personSearchAssignors = [];
         let proximityVenues   = []; // { name, zip } for venue-name lookup
@@ -1246,10 +1262,11 @@
 
                 // Populate module-level search data
                 personSearchRefs  = allReferees;
-                personSearchClubs = adminUserClubs
+                const _mine = restrictedClubs();
+                personSearchClubs = _mine
                     ? allClubs.filter(c => {
                         const n = c.fields['Name'] || c.fields['Club Name'] || '';
-                        return adminUserClubs.includes(n);
+                        return _mine.includes(n);
                     })
                     : allClubs;
                 personSearchGames     = allGames;
