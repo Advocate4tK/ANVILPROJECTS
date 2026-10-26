@@ -1913,6 +1913,9 @@
         // worse than no number.
         async function loadCAPending() {
             const el = document.getElementById('caPendingLine');
+            // ⚠️ Read before the query, not after — the scope check below has to be
+            // able to hide the bar and leave.
+            const banner0 = document.getElementById('caPendingBanner');
             if (!el || !window.supabaseClient) return;
             try {
                 const today = new Date().toISOString().slice(0, 10);
@@ -1927,15 +1930,29 @@
                     .is('ca_imported_at', null)
                     .gte('date', today);
                 // Restricted assignors see only their own clubs, same rule as the
-                // rest of this portal.
-                if (adminUserRole !== 'Admin' && Array.isArray(adminUserClubs) && adminUserClubs.length) {
-                    q = q.in('Source Club', adminUserClubs);
+                // rest of this portal. Tod, 2026-10-26: "if Eric's logged in, it
+                // should only show his clubs that need to have games uploaded."
+                //
+                // ⛔ AN EMPTY CLUBS LIST NOW MEANS NONE, NOT ALL. It used to skip
+                // the filter altogether, so an assignor with no clubs against their
+                // name saw every club's missing games — Eric's row has none, which
+                // is the same clubs = null that leaves him unscoped elsewhere. A bar
+                // telling him about Griswold's backlog is not his work and not his
+                // business.
+                if (adminUserRole !== 'Admin') {
+                    const mine = Array.isArray(adminUserClubs) ? adminUserClubs.filter(Boolean) : [];
+                    if (!mine.length) {
+                        el.style.display = 'none';
+                        if (banner0) banner0.style.display = 'none';
+                        return;
+                    }
+                    q = q.in('Source Club', mine);
                 }
                 const { data, error } = await q;
                 if (error) throw new Error(error.message);
                 const pending = (data || []).filter(g => (g['Game Status'] || '') !== 'Cancelled');
                 const n = pending.length;
-                const banner = document.getElementById('caPendingBanner');
+                const banner = banner0;
                 if (!n) {
                     el.style.display = 'block';
                     el.innerHTML = `<span style="display:inline-block;background:#e8f8ef;border:1px solid #1e8449;color:#1e8449;
@@ -1978,7 +1995,7 @@
                     // 40 games missing from Central Assign is money and coverage.
                     // New games not yet in CA bring it straight back.
                     try {
-                        const d = JSON.parse(localStorage.getItem('caBannerDismiss') || 'null');
+                        const d = JSON.parse(localStorage.getItem(_caDismissKey()) || 'null');
                         if (d && d.n === n && d.day === new Date().toDateString()) {
                             banner.style.display = 'none';
                             return;
@@ -2017,13 +2034,20 @@
             }
         }
 
-        // ⚠️ The whole bar is a link, so the × has to stop the click reaching it
+        // ⚠️ Per account. Tod and Eric share machines, and a bar Eric dismissed
+        // must not stay hidden when Tod signs in on the same browser — their
+        // backlogs are different clubs and different work.
+        function _caDismissKey() {
+            return 'caBannerDismiss:' + (currentUserId() || 'anon');
+        }
+
+        // ⚠️ The whole bar is a link, so the button has to stop the click reaching it
         // — otherwise dismissing it navigates to the export page instead.
         function dismissCABanner(ev, n) {
             ev.preventDefault();
             ev.stopPropagation();
             try {
-                localStorage.setItem('caBannerDismiss',
+                localStorage.setItem(_caDismissKey(),
                     JSON.stringify({ n: n, day: new Date().toDateString() }));
             } catch (_e) { /* can't remember it — hide it for this view anyway */ }
             const b = document.getElementById('caPendingBanner');
