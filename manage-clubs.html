@@ -3973,7 +3973,13 @@
                     cutoff:  nameOf(c.cancellation_cutoff_day),
                 },
                 portals: {
-                    audit:   !!c.presidents_portal_enabled,
+                    // ⛔ THERE IS NO AUDIT-PAGE FLAG. presidents-portal.html gates on
+                    // the president's NAME matching the club record, not on a column,
+                    // and presidents_portal_enabled has never existed — it appeared
+                    // only here and in the promoter, both written by Ralph. Asking
+                    // the club whether they want the page is still worth doing; it is
+                    // a stated preference for Tod to act on, not a switch.
+                    audit:   false,
                     payment: !!c.payment_portal_enabled,
                     notes:   '',
                 },
@@ -4581,18 +4587,29 @@
             key: 'portals', title: 'Pages they want',
             rows(cur, sub) {
                 const P = sub.portals || {}, D = cur.portals || {};
-                return [['audit', 'Audit page'], ['payment', 'Payment page']].map(r => {
-                    const a = P[r[0]] ? 'yes' : 'no', b = D[r[0]] ? 'yes' : 'no';
-                    return { label: r[1], now: b, sub: a, state: a === b ? 'same' : 'change' };
-                });
+                const pay = { label: 'Payment page', now: D.payment ? 'yes' : 'no',
+                              sub: P.payment ? 'yes' : 'no' };
+                pay.state = pay.now === pay.sub ? 'same' : 'change';
+                // ⛔ NOT WRITABLE, AND SAYING SO. The audit page has no enable column
+                // — it is reached by the president's name matching the club record —
+                // so promoting this answer tried to write a column that does not
+                // exist and the whole section refused. Their answer is still worth
+                // seeing, as a request to act on, so the row stays and never counts
+                // as something to apply.
+                return [
+                    { label: 'Audit page', now: 'not a setting',
+                      sub: (P.audit ? 'they want it' : 'not asked for') + ' — tell them, no switch to flip',
+                      state: 'same' },
+                    pay,
+                ];
             },
             async write(clubId, sub) {
                 const P = sub.portals || {};
                 const { error } = await supabaseClient.client.from('clubs')
-                    .update({ presidents_portal_enabled: !!P.audit, payment_portal_enabled: !!P.payment })
+                    .update({ payment_portal_enabled: !!P.payment })
                     .eq('id', clubId);
                 if (error) throw new Error(error.message);
-                return 2;
+                return 1;
             },
         },
     ];
