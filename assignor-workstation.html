@@ -7027,6 +7027,30 @@
         let clubsList     = KNOWN_CLUBS.slice(); // pre-seeded so pills render on page load
         let _liveClubNames = new Set();   // enabled (live) clubs+events. When populated, club pills are filtered to these — so unbuilt/not-live clubs don't show.
         let selectedClubs = new Set(clubsList); // default: all selected
+
+        // ⭐ "IS EVERYTHING SELECTED?" BY MEMBERSHIP, NEVER BY COUNT.
+        // Five places asked `selectedClubs.size === clubsList.length`, which is only
+        // the same question while the two lists hold the same names. They stop
+        // agreeing the moment clubsList is rebuilt smaller — which is exactly what
+        // happened when Valley came off Eric's clubs on 2026-10-27: the selection
+        // still carried it, the pill list no longer did, the sizes differed by one,
+        // and so the pill click fell through to the "already selected, remove it"
+        // branch. Clicking Stonington DELETED Stonington from the filter instead of
+        // isolating it, and every other club stayed on screen.
+        //
+        // Tod: "No, it didn't sort just Stonington. Something's wrong with the filter."
+        //
+        // ⚠️ Empty clubsList is NOT "all selected" — that would make an unloaded page
+        // claim every club is showing.
+        const allClubsSelected = () =>
+            clubsList.length > 0 && clubsList.every(c => selectedClubs.has(c));
+
+        // ⛔ A name that is no longer a pill must not sit in the selection. Called
+        // wherever clubsList is rebuilt, so the two can never drift again.
+        const pruneSelectedClubs = () => {
+            const live = new Set(clubsList);
+            [...selectedClubs].forEach(c => { if (!live.has(c)) selectedClubs.delete(c); });
+        };
         let userHasFilteredClubs = false; // true once user manually picks specific clubs
         let assignorClubRestriction = null; // set when a non-Admin assignor logs in — limits visible clubs
         let knownEventsList = []; // ALL event "Club Name" values — identity ("is this an event?"), never filtered by enabled
@@ -7466,7 +7490,10 @@
                     let merged = [...new Set([...dbClubs, ...dbEvents])].sort();   // live only — dropped hardcoded KNOWN_CLUBS so unbuilt clubs (RHAMYS etc.) no longer show
                     if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
                     clubsList = merged;
+                    // ⚠️ Drop anything the live list no longer holds BEFORE deciding
+                    // whether everything is selected — see allClubsSelected above.
                     if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);
+                    else pruneSelectedClubs();
                     const pillsWrap = document.getElementById('clubPills');
                     if (pillsWrap) { pillsWrap.innerHTML = ''; buildClubPills(); }
                 } catch(e) { /* keep KNOWN_CLUBS pills on error */ }
@@ -7561,7 +7588,7 @@
             if (!allGames.length) { alert('Load games first.'); return; }
 
             // Use currently selected clubs (or all if all selected)
-            const isAllClubs = selectedClubs.size === clubsList.length;
+            const isAllClubs = allClubsSelected();
             const targetClubs = isAllClubs ? [...clubsList] : [...selectedClubs];
 
             // Only games with at least one open slot
@@ -8022,7 +8049,7 @@
         function buildClubPills() {
             if (window.tournamentMode) return; // tournament workstation has no club pills
             const wrap = document.getElementById('clubPills');
-            const allSelected = selectedClubs.size === clubsList.length;
+            const allSelected = allClubsSelected();
 
             // "All Clubs" master toggle — visually distinct, restores original toggle behavior
             const all = document.createElement('span');
@@ -8030,7 +8057,7 @@
             all.textContent = 'All Clubs';
             all.dataset.club = '__all__';
             all.addEventListener('click', () => {
-                if (selectedClubs.size === clubsList.length) {
+                if (allClubsSelected()) {
                     // Deselect all — user is about to pick specific clubs
                     selectedClubs.clear();
                     userHasFilteredClubs = true;
@@ -8078,7 +8105,7 @@
                     // yet, so the search stopped working altogether. Picking a
                     // club is the unambiguous "I am done with that one game".
                     releaseGameFocusLock();
-                    if (selectedClubs.size === clubsList.length && selectedClubs.has(club)) {
+                    if (allClubsSelected()) {
                         // All clubs active → first click = "show only this club"
                         selectedClubs.clear();
                         selectedClubs.add(club);
@@ -8093,7 +8120,7 @@
                         pill.classList.add('active');
                     }
                     // Sync "All Clubs" pill
-                    const isAll = selectedClubs.size === clubsList.length;
+                    const isAll = allClubsSelected();
                     const allPill = document.querySelector('[data-club="__all__"]');
                     if (allPill) allPill.className = isAll ? 'club-pill-all' : 'club-pill-all inactive';
                     if (isAll) userHasFilteredClubs = false;
