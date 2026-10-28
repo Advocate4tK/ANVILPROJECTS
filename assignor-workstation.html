@@ -1298,7 +1298,7 @@
         </main>
 
         <footer>
-            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"><span id="buildStamp" style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; opacity:0.55; margin-left:10px;" title="Which copy of this page your browser is running. If this is older than a fix you were told about, you are on a cached copy - hard refresh.">build 2026-10-28 13:16</span></p>
+            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"><span id="buildStamp" style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; opacity:0.55; margin-left:10px;" title="Which copy of this page your browser is running. If this is older than a fix you were told about, you are on a cached copy - hard refresh.">build 2026-10-28 13:25</span></p>
         </footer>
     </div>
 
@@ -7521,10 +7521,23 @@
                     let merged = [...new Set([...dbClubs, ...dbEvents])].sort();   // live only — dropped hardcoded KNOWN_CLUBS so unbuilt clubs (RHAMYS etc.) no longer show
                     if (assignorClubRestriction) merged = merged.filter(c => assignorClubRestriction.includes(c));
                     clubsList = merged;
-                    // ⚠️ Drop anything the live list no longer holds BEFORE deciding
-                    // whether everything is selected — see allClubsSelected above.
-                    if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);
-                    else pruneSelectedClubs();
+                    // ⛔ A LATE ANSWER MUST NOT OVERWRITE A CHOICE ALREADY MADE.
+                    // Tod, 2026-10-28: "it even takes a good 20 to 30 seconds to load
+                    // the clubs." This fetch routinely lands long after he has picked a
+                    // club, and resetting the selection here is what made the filter
+                    // look broken: click Stonington, watch it work, then twenty seconds
+                    // later the list arrives and puts everything back.
+                    //
+                    // ⚠️ Keeping the intersection, not the whole list — a club that is
+                    // no longer live cannot stay selected, but the INTENT survives. If
+                    // nothing of the choice survives, fall back to everything rather
+                    // than leaving a board that is empty for no visible reason.
+                    if (userHasFilteredClubs) {
+                        pruneSelectedClubs();
+                        if (selectedClubs.size === 0) selectedClubs = new Set(clubsList);
+                    } else {
+                        selectedClubs = new Set(clubsList);
+                    }
                     // ⭐ The real list is in. The pills become clickable now, and only
                     // now, so every click lands on a club that actually exists.
                     clubPillsProvisional = false;
@@ -7551,16 +7564,21 @@
             })();
 
             // ⚠️ AND A DEADLINE, because "finally" only runs once the promise settles.
-            // A request that hangs rather than fails would leave the row inert for as
-            // long as the tab is open. Four seconds is far beyond a normal response and
-            // far below anybody's patience.
+            // A request that hangs rather than fails would leave the row blank for as
+            // long as the tab is open.
+            //
+            // ⚠️ TWELVE seconds, not four. Four was chosen as "far beyond a normal
+            // response" — but this fetch takes twenty to thirty in practice, so the
+            // deadline was firing on every single load and the fallback list became the
+            // normal case rather than the emergency one. A deadline shorter than the
+            // thing it is guarding is not a safety net, it is a second bug.
             setTimeout(() => {
                 if (!clubPillsProvisional) return;
                 console.warn('live club list slow — enabling the account pill list');
                 clubPillsProvisional = false;
                 const w = document.getElementById('clubPills');
                 if (w) { w.innerHTML = ''; buildClubPills(); }
-            }, 4000);
+            }, 12000);
 
             document.getElementById('loadBtn').addEventListener('click', loadAll);
             document.getElementById('refSearch').addEventListener('input', function() {
