@@ -7527,8 +7527,37 @@
                     clubPillsProvisional = false;
                     const pillsWrap = document.getElementById('clubPills');
                     if (pillsWrap) { pillsWrap.innerHTML = ''; buildClubPills(); }
-                } catch(e) { /* keep KNOWN_CLUBS pills on error */ }
+                } catch(e) {
+                    console.warn('live club list unavailable — pills left as the account list', e);
+                } finally {
+                    // ⛔ THE PILLS MUST NEVER STAY DEAD. Clearing the flag only on the
+                    // success path turned a fetch failure into a filter nobody can use
+                    // — strictly worse than the bug this was fixing. Tod, within the
+                    // hour: "they are all greyed out now".
+                    //
+                    // ⚠️ An unverified pill row is better than an inert one: at worst a
+                    // click lands on a club that is not enabled and shows no games,
+                    // which is honest and visible. A row that cannot be clicked at all
+                    // tells you nothing and blocks the page.
+                    if (clubPillsProvisional) {
+                        clubPillsProvisional = false;
+                        const w = document.getElementById('clubPills');
+                        if (w) { w.innerHTML = ''; buildClubPills(); }
+                    }
+                }
             })();
+
+            // ⚠️ AND A DEADLINE, because "finally" only runs once the promise settles.
+            // A request that hangs rather than fails would leave the row inert for as
+            // long as the tab is open. Four seconds is far beyond a normal response and
+            // far below anybody's patience.
+            setTimeout(() => {
+                if (!clubPillsProvisional) return;
+                console.warn('live club list slow — enabling the account pill list');
+                clubPillsProvisional = false;
+                const w = document.getElementById('clubPills');
+                if (w) { w.innerHTML = ''; buildClubPills(); }
+            }, 4000);
 
             document.getElementById('loadBtn').addEventListener('click', loadAll);
             document.getElementById('refSearch').addEventListener('input', function() {
