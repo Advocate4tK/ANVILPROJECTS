@@ -1298,7 +1298,7 @@
         </main>
 
         <footer>
-            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"><span id="buildStamp" style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; opacity:0.55; margin-left:10px;" title="Which copy of this page your browser is running. If this is older than a fix you were told about, you are on a cached copy - hard refresh.">build 2026-10-28 12:54</span></p>
+            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"><span id="buildStamp" style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; opacity:0.55; margin-left:10px;" title="Which copy of this page your browser is running. If this is older than a fix you were told about, you are on a cached copy - hard refresh.">build 2026-10-28 13:11</span></p>
         </footer>
     </div>
 
@@ -8126,14 +8126,28 @@
         function buildClubPills() {
             if (window.tournamentMode) return; // tournament workstation has no club pills
             const wrap = document.getElementById('clubPills');
+
+            // ⛔ NOTHING TO CLICK UNTIL THE REAL LIST IS IN.
+            // The first attempt at this drew the provisional row greyed with
+            // pointer-events:none. That is WORSE than the bug: a click on it lands on
+            // nothing, the page never hears it, and a second later the live list
+            // arrives with everything selected — so the board stays full and it looks
+            // like the filter ignored you. Tod, 2026-10-28, after three days of it:
+            // "the pill is there and I'm sorting ONLY for stonington and yet all these
+            // clubs are showing in the results."
+            //
+            // A word is honest. An inert control is a lie.
+            if (clubPillsProvisional) {
+                wrap.innerHTML = '<span style="font-size:0.82rem; color:#6b6459;">Loading your clubs…</span>';
+                return;
+            }
+
             const allSelected = allClubsSelected();
 
             // "All Clubs" master toggle — visually distinct, restores original toggle behavior
             const all = document.createElement('span');
-            all.className = (allSelected ? 'club-pill-all' : 'club-pill-all inactive')
-                + (clubPillsProvisional ? ' provisional' : '');
+            all.className = allSelected ? 'club-pill-all' : 'club-pill-all inactive';
             all.textContent = 'All Clubs';
-            if (clubPillsProvisional) all.title = 'Loading your clubs…';
             all.dataset.club = '__all__';
             all.addEventListener('click', () => {
                 if (allClubsSelected()) {
@@ -8167,9 +8181,7 @@
                 const pill = document.createElement('span');
                 const isEvent = knownEventsList.includes(club);
                 const baseClass = isEvent ? 'club-pill event-pill' : 'club-pill';
-                pill.className = (selectedClubs.has(club) ? `${baseClass} active` : baseClass)
-                    + (clubPillsProvisional ? ' provisional' : '');
-                if (clubPillsProvisional) pill.title = 'Loading your clubs…';
+                pill.className = selectedClubs.has(club) ? `${baseClass} active` : baseClass;
                 const _lbl = PILL_LABELS[club] || club;
                 pill.innerHTML = `${String(_lbl).replace(/&/g,'&amp;').replace(/</g,'&lt;')}`
                     + `<span class="ca-pill-count" style="display:none;margin-left:6px;background:#c0392b;color:#fff;`
