@@ -67,6 +67,12 @@
         }
         .club-pill:hover { border-color: #d4ac0d; color: #222; background: #f5e97a; }
         .club-pill.active { background: #f1c40f; color: #222; border-color: #c9a200; }
+        /* ⛔ Drawn before the live club list has arrived. Not clickable, because
+           clicking one did nothing you could see: the selection was real for about
+           a second and then thrown away when the real list replaced it. */
+        .club-pill.provisional, .club-pill-all.provisional {
+            opacity: 0.45; cursor: progress; pointer-events: none; filter: grayscale(0.6);
+        }
         /* Event pills — light blue */
         .club-pill.event-pill:hover { border-color: #0369a1; color: #0369a1; background: #e0f2fe; }
         .club-pill.event-pill.active { background: #0ea5e9; color: #fff; border-color: #0369a1; }
@@ -1476,7 +1482,11 @@
             } else {
                 assignorClubRestriction = null;
             }
-            // Rebuild pills immediately so the restricted set shows before loadAll completes
+            // Rebuild pills immediately so the restricted set shows before loadAll
+            // completes. ⚠️ PROVISIONAL — this list is the assignor's clubs, not the
+            // LIVE ones, and the two differ. Shown so the row is not empty; inert so
+            // nothing can be chosen from it and silently discarded.
+            clubPillsProvisional = true;
             const pillsWrapEarly = document.getElementById('clubPills');
             if (pillsWrapEarly) { pillsWrapEarly.innerHTML = ''; buildClubPills(); }
 
@@ -7048,6 +7058,18 @@
         //
         // ⚠️ Empty clubsList is NOT "all selected" — that would make an unloaded page
         // claim every club is showing.
+        // ⛔ TRUE UNTIL THE DATABASE HAS SAID WHICH CLUBS ARE LIVE.
+        // The first pill row is drawn from the assignor's OWN club list, which is
+        // every club they are responsible for — including ones that are not enabled.
+        // Eric's account carries eleven; only seven are enabled. So Stonington,
+        // Haddam-Killingworth, New London and Portland were drawn, were clickable,
+        // and then vanished when the live list landed, taking the click with them.
+        //
+        // Tod spent two days clicking Stonington and watching nothing happen:
+        // "No, it didn't sort just Stonington. Something's wrong with the filter."
+        // It had sorted. The list it sorted against was replaced a second later.
+        let clubPillsProvisional = false;
+
         const allClubsSelected = () =>
             clubsList.length > 0 && clubsList.every(c => selectedClubs.has(c));
 
@@ -7500,6 +7522,9 @@
                     // whether everything is selected — see allClubsSelected above.
                     if (!userHasFilteredClubs) selectedClubs = new Set(clubsList);
                     else pruneSelectedClubs();
+                    // ⭐ The real list is in. The pills become clickable now, and only
+                    // now, so every click lands on a club that actually exists.
+                    clubPillsProvisional = false;
                     const pillsWrap = document.getElementById('clubPills');
                     if (pillsWrap) { pillsWrap.innerHTML = ''; buildClubPills(); }
                 } catch(e) { /* keep KNOWN_CLUBS pills on error */ }
@@ -8059,8 +8084,10 @@
 
             // "All Clubs" master toggle — visually distinct, restores original toggle behavior
             const all = document.createElement('span');
-            all.className = allSelected ? 'club-pill-all' : 'club-pill-all inactive';
+            all.className = (allSelected ? 'club-pill-all' : 'club-pill-all inactive')
+                + (clubPillsProvisional ? ' provisional' : '');
             all.textContent = 'All Clubs';
+            if (clubPillsProvisional) all.title = 'Loading your clubs…';
             all.dataset.club = '__all__';
             all.addEventListener('click', () => {
                 if (allClubsSelected()) {
@@ -8094,7 +8121,9 @@
                 const pill = document.createElement('span');
                 const isEvent = knownEventsList.includes(club);
                 const baseClass = isEvent ? 'club-pill event-pill' : 'club-pill';
-                pill.className = selectedClubs.has(club) ? `${baseClass} active` : baseClass;
+                pill.className = (selectedClubs.has(club) ? `${baseClass} active` : baseClass)
+                    + (clubPillsProvisional ? ' provisional' : '');
+                if (clubPillsProvisional) pill.title = 'Loading your clubs…';
                 const _lbl = PILL_LABELS[club] || club;
                 pill.innerHTML = `${String(_lbl).replace(/&/g,'&amp;').replace(/</g,'&lt;')}`
                     + `<span class="ca-pill-count" style="display:none;margin-left:6px;background:#c0392b;color:#fff;`
