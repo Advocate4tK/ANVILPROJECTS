@@ -1298,7 +1298,7 @@
         </main>
 
         <footer>
-            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"><span id="buildStamp" style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; opacity:0.55; margin-left:10px;" title="Which copy of this page your browser is running. If this is older than a fix you were told about, you are on a cached copy - hard refresh.">build 2026-10-28 13:25</span></p>
+            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"><span id="buildStamp" style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; opacity:0.55; margin-left:10px;" title="Which copy of this page your browser is running. If this is older than a fix you were told about, you are on a cached copy - hard refresh.">build 2026-10-28 13:27</span></p>
         </footer>
     </div>
 
@@ -1486,7 +1486,6 @@
             // completes. ⚠️ PROVISIONAL — this list is the assignor's clubs, not the
             // LIVE ones, and the two differ. Shown so the row is not empty; inert so
             // nothing can be chosen from it and silently discarded.
-            clubPillsProvisional = true;
             const pillsWrapEarly = document.getElementById('clubPills');
             if (pillsWrapEarly) { pillsWrapEarly.innerHTML = ''; buildClubPills(); }
 
@@ -7071,7 +7070,17 @@
         // Tod spent two days clicking Stonington and watching nothing happen:
         // "No, it didn't sort just Stonington. Something's wrong with the filter."
         // It had sorted. The list it sorted against was replaced a second later.
-        let clubPillsProvisional = false;
+        // ⛔ ONE-WAY LATCH, SET WHEN THE LIVE LIST ARRIVES — never unset, and never
+        // set by anything downstream of it.
+        //
+        // This used to be a "provisional" flag switched ON when a profile was chosen.
+        // The code that switched it OFF runs at page start, which is BEFORE a profile
+        // is chosen — so it was turned on after the only thing that could turn it off
+        // had already run, and the pill row sat on "Loading your clubs…" for ever.
+        // Tod, 2026-10-28, blocked on his own profile: "It's still not done loading."
+        //
+        // Asking "has the live list arrived yet" has no ordering to get wrong.
+        let clubsLiveLoaded = false;
 
         const allClubsSelected = () =>
             clubsList.length > 0 && clubsList.every(c => selectedClubs.has(c));
@@ -7538,9 +7547,8 @@
                     } else {
                         selectedClubs = new Set(clubsList);
                     }
-                    // ⭐ The real list is in. The pills become clickable now, and only
-                    // now, so every click lands on a club that actually exists.
-                    clubPillsProvisional = false;
+                    // ⭐ The real list is in.
+                    clubsLiveLoaded = true;
                     const pillsWrap = document.getElementById('clubPills');
                     if (pillsWrap) { pillsWrap.innerHTML = ''; buildClubPills(); }
                 } catch(e) {
@@ -7555,8 +7563,8 @@
                     // click lands on a club that is not enabled and shows no games,
                     // which is honest and visible. A row that cannot be clicked at all
                     // tells you nothing and blocks the page.
-                    if (clubPillsProvisional) {
-                        clubPillsProvisional = false;
+                    if (!clubsLiveLoaded) {
+                        clubsLiveLoaded = true;
                         const w = document.getElementById('clubPills');
                         if (w) { w.innerHTML = ''; buildClubPills(); }
                     }
@@ -7573,9 +7581,9 @@
             // normal case rather than the emergency one. A deadline shorter than the
             // thing it is guarding is not a safety net, it is a second bug.
             setTimeout(() => {
-                if (!clubPillsProvisional) return;
-                console.warn('live club list slow — enabling the account pill list');
-                clubPillsProvisional = false;
+                if (clubsLiveLoaded) return;
+                console.warn('live club list slow — showing the account pill list');
+                clubsLiveLoaded = true;
                 const w = document.getElementById('clubPills');
                 if (w) { w.innerHTML = ''; buildClubPills(); }
             }, 12000);
@@ -8161,7 +8169,7 @@
             // clubs are showing in the results."
             //
             // A word is honest. An inert control is a lie.
-            if (clubPillsProvisional) {
+            if (!clubsLiveLoaded) {
                 wrap.innerHTML = '<span style="font-size:0.82rem; color:#6b6459;">Loading your clubs…</span>';
                 return;
             }
