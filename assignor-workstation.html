@@ -2832,6 +2832,9 @@
         let sheet3ZoomGames       = 1.0;
         let sheet3ZoomRefs        = 1.0;
         let sheet3LastFiltered    = null;
+        // How many games the LAST render actually kept, so the filter bar can show it
+        // beside how many were loaded. See updateFiltersSummary.
+        let _lastRenderedGameCount = null;
         // Eric Baughman by phone, 2026-10-01: the opt queue should re-sort —
         // by years, by how many games they are already carrying, or scrambled.
         // The point is the SIX CELLS ARE A WINDOW onto a longer queue: when more
@@ -7987,15 +7990,29 @@
             };
             const dateStr = from === to ? fmtD(from) : `${fmtD(from)} – ${fmtD(to)}`;
 
-            // active club pills
-            const activePills = [...document.querySelectorAll('.club-pill.active')].map(p => p.textContent.trim());
-            const clubStr = activePills.length === 0 || activePills.includes('All Clubs')
+            // ⚠️ READ THE STATE, NOT THE SCREEN. This used to describe the filter by
+            // scraping `.club-pill.active` out of the DOM — a second opinion about a
+            // fact `selectedClubs` already holds. So when the two disagreed the bar
+            // reported the pills while the grid obeyed the set, and three days went
+            // into arguing about which was lying. Tod, 2026-10-28: "I'm sorting ONLY
+            // for stonington and yet all these clubs are showing in the results."
+            const sel = [...selectedClubs].sort();
+            const clubStr = allClubsSelected()
                 ? 'All Clubs'
-                : activePills.length <= 2
-                    ? activePills.join(', ')
-                    : `${activePills.slice(0,2).join(', ')} +${activePills.length - 2}`;
+                : sel.length === 0
+                    ? 'No clubs selected'
+                    : sel.length <= 2
+                        ? sel.join(', ')
+                        : `${sel.slice(0,2).join(', ')} +${sel.length - 2}`;
 
-            summary.textContent = `📅 ${dateStr}  ·  ${clubStr}  ·  ${count} game${count !== 1 ? 's' : ''}`;
+            // ⭐ What the SELECTION says, next to what the BOARD actually kept. If the
+            // two ever disagree it is visible on the page instead of needing a console.
+            const shown = typeof _lastRenderedGameCount === 'number' ? _lastRenderedGameCount : null;
+            const countStr = (shown !== null && shown !== count)
+                ? `${count} loaded · ${shown} shown`
+                : `${count} game${count !== 1 ? 's' : ''}`;
+
+            summary.textContent = `📅 ${dateStr}  ·  ${clubStr}  ·  ${countStr}`;
             bar.style.display = 'flex';
         }
 
@@ -9022,6 +9039,8 @@
                 return;
             }
             if (viewMode === 'sheet3') {
+                _lastRenderedGameCount = filtered.length;
+                updateFiltersSummary();
                 if (sheet3StagingLoaded) { renderSheet3View(filtered); } else { sheet3FetchStaging().then(() => renderSheet3View(filtered)); }
                 return;
             }
