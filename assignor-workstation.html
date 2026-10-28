@@ -1298,7 +1298,7 @@
         </main>
 
         <footer>
-            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"><span id="buildStamp" style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; opacity:0.55; margin-left:10px;" title="Which copy of this page your browser is running. If this is older than a fix you were told about, you are on a cached copy - hard refresh.">build 2026-10-28 13:27</span></p>
+            <p style="display:flex;align-items:center;justify-content:center;gap:10px;">&copy; 2026 Referee Scheduling System by <a href="mailto:tod@anvil-arts.com" style="color:#d4845a;font-weight:700;text-decoration:none;">Anvil Arts</a> <img src="PICS/anvil.png" height="28" style="opacity:0.75;" title="Built by Ralph E. Smith / Anvil Arts"><span id="buildStamp" style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; opacity:0.55; margin-left:10px;" title="Which copy of this page your browser is running. If this is older than a fix you were told about, you are on a cached copy - hard refresh.">build 2026-10-28 13:36</span></p>
         </footer>
     </div>
 
@@ -2834,6 +2834,9 @@
         // How many games the LAST render actually kept, so the filter bar can show it
         // beside how many were loaded. See updateFiltersSummary.
         let _lastRenderedGameCount = null;
+        // Clubs the user picked that turned out not to be enabled. Named on the filter
+        // bar so an empty board explains itself.
+        let _droppedClubs = [];
         // Eric Baughman by phone, 2026-10-01: the opt queue should re-sort —
         // by years, by how many games they are already carrying, or scrambled.
         // The point is the SIX CELLS ARE A WINDOW onto a longer queue: when more
@@ -7542,10 +7545,25 @@
                     // nothing of the choice survives, fall back to everything rather
                     // than leaving a board that is empty for no visible reason.
                     if (userHasFilteredClubs) {
+                        const _wanted = [...selectedClubs];
                         pruneSelectedClubs();
-                        if (selectedClubs.size === 0) selectedClubs = new Set(clubsList);
+                        // ⛔ DO NOT SELECT EVERYTHING WHEN THE CHOICE TURNS OUT NOT TO BE
+                        // LIVE. That line is what produced three days of "I sorted for
+                        // Stonington and got all the clubs": the watchdog offers the
+                        // ACCOUNT list while this fetch is slow, Stonington is on it, the
+                        // click lands, and then the live list arrives without it — and
+                        // falling back to everything turned "that club is not enabled"
+                        // into "here is every game you have".
+                        //
+                        // ⭐ An empty board with a reason beats a full board with none.
+                        if (selectedClubs.size === 0 && _wanted.length) {
+                            _droppedClubs = _wanted.filter(c => !clubsList.includes(c));
+                        } else {
+                            _droppedClubs = [];
+                        }
                     } else {
                         selectedClubs = new Set(clubsList);
+                        _droppedClubs = [];
                     }
                     // ⭐ The real list is in.
                     clubsLiveLoaded = true;
@@ -8026,7 +8044,9 @@
             const clubStr = allClubsSelected()
                 ? 'All Clubs'
                 : sel.length === 0
-                    ? 'No clubs selected'
+                    ? (_droppedClubs.length
+                        ? `${_droppedClubs.join(', ')} — not enabled, so nothing to show`
+                        : 'No clubs selected')
                     : sel.length <= 2
                         ? sel.join(', ')
                         : `${sel.slice(0,2).join(', ')} +${sel.length - 2}`;
