@@ -2770,9 +2770,30 @@
         const STALL_MS = 120000;
         let lastDone = -1, lastMove = Date.now(), stalled = false;
         const tick = async () => {
-            const { data, error } = await asUser
-                .from('blast_recipients').select('status,email,error').eq('blast_id', blastId);
-            if (error || !data) return;
+            // ⚠️ PAGED. A plain .select() stops at 1000 rows — PostgREST's cap — with
+            // no error and no indication. Blast #578 went to 871 referees + 206
+            // parents = 1077, and this reported a flat "1000 delivered" because that
+            // is all it could see. Tod, 2026-10-29: "is this supposed to max out at
+            // 1000 emails?"
+            //
+            // ⛔ Worse than a wrong number: `expected` was set from the short read, so
+            // the watcher could call a blast finished while 77 recipients were still
+            // queued — and the stall detector would never notice them.
+            //
+            // ⭐ Same cap the referee list already pages past with selectAll(). This
+            // read uses its own JWT client, so it pages by hand.
+            const PAGE = 1000;
+            let data = [], error = null;
+            for (let from = 0; ; from += PAGE) {
+                const r = await asUser.from('blast_recipients')
+                    .select('status,email,error').eq('blast_id', blastId)
+                    .range(from, from + PAGE - 1);
+                if (r.error) { error = r.error; break; }
+                const got = r.data || [];
+                data = data.concat(got);
+                if (got.length < PAGE) break;
+            }
+            if (error || !data.length) return;
             if (expected == null) expected = data.length;
             if (data.length < expected) return;              // partial read — wait for the next tick
             const n = { queued: 0, sent: 0, failed: 0, skipped: 0 };
