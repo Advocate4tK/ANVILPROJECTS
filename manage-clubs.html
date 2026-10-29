@@ -1936,7 +1936,7 @@
         const wrap = document.getElementById('clubStatusList');
         wrap.innerHTML = '<p style="color:#4a443c; font-size:0.85rem;">Checking completeness…</p>';
         try {
-            const [clubsRes, tournsRes, eventsRes, payRes, crewRes, venueRes, billingRes, questRes, assignorRes] = await Promise.all([
+            const [clubsRes, tournsRes, eventsRes, payRes, crewRes, venueRes, billingRes, questRes, assignorRes, clubVenueRes] = await Promise.all([
                 supabaseClient.client.from('clubs').select('id, name, "Club Name", enabled, president, "Club Admin", assignor, age_groups, ca_league, ca_league_primary, rule_set, uses_central_assign').order('name'),
                 supabaseClient.client.from('tournaments').select('id, name, status').order('name'),
                 supabaseClient.client.from('events').select('id, name, "Club Name", enabled, assignor, start_date, end_date').order('name'),
@@ -1952,6 +1952,19 @@
                     .select('entity_id,status,updated_at').eq('entity_kind', 'club')
                     .then(r => r, () => ({ data: [] })),
                 supabaseClient.client.from('assignors').select('id, name, clubs, auth_user_id').order('name'),
+                // ⭐ WHERE A CLUB'S VENUES ACTUALLY LIVE. Readiness asked
+                // venues.club_name — the single-text column club_venues replaced
+                // because it is 91% NULL and cannot say a venue is shared by two
+                // clubs. Everything else in the tool, the questionnaire and its
+                // promotion included, reads club_venues. So Haddam-Killingworth had
+                // Killingworth Rec Park linked, the review said "nothing to apply",
+                // and Entity Status still demanded Venues. Tod, 2026-10-29: "it says
+                // it still needs venues but it shows that one is picked."
+                //
+                // ⚠️ Tolerated if it fails — an older database may not have the table,
+                // and a missing marker must never take the status list down.
+                supabaseClient.client.from('club_venues').select('club_id')
+                    .then(r => r, () => ({ data: [] })),
             ]);
             if (clubsRes.error) throw clubsRes.error;
             const eventsData = eventsRes?.data || [];
@@ -1969,6 +1982,8 @@
             const payClubIds     = new Set((payRes.data     || []).map(r => r.club_id));
             const crewClubIds    = new Set((crewRes.data    || []).map(r => r.club_id));
             const venueNames     = new Set((venueRes.data   || []).map(r => (r.club_name || '').toLowerCase()));
+            // Ids, the way payClubIds and crewClubIds already work.
+            const venueClubIds   = new Set((clubVenueRes?.data || []).map(r => r.club_id));
             const billingClubIds = new Set((billingRes.data || []).filter(r => Array.isArray(r.rate_tiers) && r.rate_tiers.length).map(r => r.club_id));
 
             const clubs = (clubsRes.data || [])
@@ -2006,7 +2021,11 @@
                 // patched at the wrong end.)
                 if ((!Array.isArray(c.age_groups) || c.age_groups.length === 0) && !payClubIds.has(c.id))
                     missing.push('Age Groups');
-                if (!venueNames.has(c.name.toLowerCase()) && !venueNames.has(c.rawName.toLowerCase())) missing.push('Venues');
+                // club_venues first; the legacy name match stays as a fallback so a club
+                // whose venues were never migrated is not suddenly reported incomplete.
+                if (!venueClubIds.has(c.id)
+                    && !venueNames.has(c.name.toLowerCase())
+                    && !venueNames.has(c.rawName.toLowerCase())) missing.push('Venues');
                 if (!payClubIds.has(c.id))     missing.push('Referee Pay');
                 if (!crewClubIds.has(c.id))    missing.push('Crew Rules');
                 if (!billingClubIds.has(c.id)) missing.push('Billing');
