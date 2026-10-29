@@ -1357,24 +1357,37 @@
         return new Set(games.map(g => g['Source Club']).filter(Boolean));
     }
 
-    // Rebuild the club/event/tournament selector + rotator to ONLY leagues with games in the current week
-    // view. Enabled-but-empty leagues don't appear at all; if the active selection goes dry, reset to All.
+    // ⭐ EVERY CLUB WE SERVE IS LISTED, WITH OR WITHOUT GAMES.
+    //
+    // This used to rebuild the selector to ONLY leagues with games in the current
+    // week, and an enabled-but-empty club did not appear at all. Tod, 2026-10-29:
+    // "would be nice if in the drop down it has all the clubs that are active and if
+    // no games then it just shows no games... the rotator would show all the clubs
+    // serving."
+    //
+    // ⚠️ A missing club tells a referee nothing — they cannot tell "nothing on this
+    // week" from "we don't do that club". One of those is worth waiting for and the
+    // other is not. Same reasoning as the club pills on the workstation.
+    //
+    // ⛔ And the selection is no longer reset when it goes dry. Picking a club and
+    // being silently moved back to All, because this week happens to be empty, is
+    // the page overruling you.
     function refreshLeagueSelector() {
         const activeSrc    = activeLeaguesForWeek();
-        const activeClubs  = CLUBS.filter(c => activeSrc.has(c));
-        const activeTourns = TOURNAMENTS.filter(t => activeSrc.has(t.name));
-        const activeEvents = EVENTS.filter(e => activeSrc.has(e['Club Name'] || e.name));
-        const activeRec    = _recOrgs.length && activeSrc.has('RECREATION');
-        const activeNames  = [...activeClubs, ...(activeRec ? ['RECREATION'] : []),
-                              ...activeTourns.map(t => t.name), ...activeEvents.map(e => e['Club Name'] || e.name)];
-        if (_clubFilter !== 'all' && !activeNames.includes(_clubFilter)) _clubFilter = 'all';
+        const hasGames     = n => activeSrc.has(n);
+        const dry          = n => hasGames(n) ? '' : ' — no games';
+        const activeRec    = _recOrgs.length;
+        const allNames     = [...CLUBS, ...(activeRec ? ['RECREATION'] : []),
+                              ...TOURNAMENTS.map(t => t.name),
+                              ...EVENTS.map(e => e['Club Name'] || e.name)];
+        if (_clubFilter !== 'all' && !allNames.includes(_clubFilter)) _clubFilter = 'all';
         const sel = document.getElementById('clubSelectNative');
         if (sel) {
             sel.innerHTML = `<option value="all">All</option>` +
-                activeClubs.map(c => `<option value="${c}">${c}</option>`).join('') +
-                (activeRec ? `<option value="RECREATION">Recreation</option>` : '') +
-                activeTourns.map(t => `<option value="${t.name}">🏆 ${t.name}</option>`).join('') +
-                activeEvents.map(e => `<option value="${e['Club Name'] || e.name}">☀️ ${e['Club Name'] || e.name}</option>`).join('');
+                CLUBS.map(c => `<option value="${c}">${c}${dry(c)}</option>`).join('') +
+                (activeRec ? `<option value="RECREATION">Recreation${dry('RECREATION')}</option>` : '') +
+                TOURNAMENTS.map(t => `<option value="${t.name}">🏆 ${t.name}${dry(t.name)}</option>`).join('') +
+                EVENTS.map(e => { const n = e['Club Name'] || e.name; return `<option value="${n}">☀️ ${n}${dry(n)}</option>`; }).join('');
             sel.value = _clubFilter;
         }
         const selector = document.getElementById('clubSelector');
@@ -1386,7 +1399,9 @@
             selector.classList.remove('has-selection');
             document.getElementById('clubRotatorName').textContent = 'All';
         }
-        setRotatorClubs(activeNames.map(c => c === 'RECREATION' ? 'Recreation' : c));
+        // ⭐ The rotator cycles every club we serve, not only this week's — it is the
+        // page saying who we cover, which does not change with the fixture list.
+        setRotatorClubs(allNames.map(c => c === 'RECREATION' ? 'Recreation' : c));
     }
 
     function setWeekFilter(val, btn) {
