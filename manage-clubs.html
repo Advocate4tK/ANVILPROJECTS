@@ -473,6 +473,11 @@
 
                     <!-- Assignor -->
                     <div style="font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800; color:#09142a; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; border-bottom:1px solid #e2d9ce; padding-bottom:6px;">Assignor</div>
+                    <div id="cAssignorLocked" style="display:none; background:#fff8e1; border:1.5px solid #f1c40f; border-radius:8px; padding:9px 13px; margin-bottom:12px; font-size:0.84rem; color:#7a5c00; line-height:1.45;">
+                        🔒 <b>Set with the Change button on this club's row</b>, under Entity Status — not here.
+                        That one also tells the assignor's workstation, so the club appears on their board.
+                        Typing a name here would only relabel the card and the workstation would never hear about it.
+                    </div>
                     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:24px;">
                         <div class="fg" style="margin:0;"><label>Name</label><input type="text" id="cAssignorName" placeholder="First Last"></div>
                         <div class="fg" style="margin:0;"><label>Email</label><input type="email" id="cAssignorEmail" placeholder="assignor@email.com"></div>
@@ -6091,6 +6096,7 @@
                 document.getElementById('cPayCoordEmail').value = '';
                 document.getElementById('cPayCoordPhone').value = '';
                 document.getElementById('cPayCoordPin').value   = '';
+                _lockClubAssignorFields(false);
                 document.getElementById('cAssignorName').value  = data.assignor               || '';
                 document.getElementById('cAssignorEmail').value = data['Assignor Email']      || '';
                 document.getElementById('cAssignorPhone').value = data['Assignor Phone']      || '';
@@ -6108,6 +6114,7 @@
                 document.getElementById('cPayCoordEmail').value  = data.payment_coordinator_email  || '';
                 document.getElementById('cPayCoordPhone').value  = data.payment_coordinator_phone  || '';
                 document.getElementById('cPayCoordPin').value    = data.payment_portal_pin || '';
+                _lockClubAssignorFields(false);
                 document.getElementById('cAssignorName').value   = data.assignor                   || '';
                 document.getElementById('cAssignorEmail').value  = data.assignor_email             || '';
                 document.getElementById('cAssignorPhone').value  = data.assignor_phone             || '';
@@ -6130,11 +6137,43 @@
                 document.getElementById('cAssignorName').value  = data.assignor || '';
                 document.getElementById('cAssignorEmail').value = data['Assignor Email'] || '';
                 document.getElementById('cAssignorPhone').value = data['Assignor Phone'] || '';
+                // ⛔ ONE WRITER FOR THE FIELD THAT HAS TEETH.
+                // Two routes set a club's assignor. The Change button on the club's
+                // row writes assignors.clubs — which is what the workstation actually
+                // enforces — AND the card label. This editor wrote the label only, so
+                // naming yourself here relabelled the card and your workstation never
+                // heard about it. Tod did exactly that with Plainfield on 2026-10-29:
+                // the card read "David Hurteau + Tod" and the pill never appeared.
+                //
+                // ⚠️ The note at line ~1603 has warned about this since August — "who
+                // assigns a club lives in FOUR places with nothing keeping them in
+                // step… the card and the enforced list disagreed on 11 of 16 clubs".
+                // Syncing a fifth writer would have made that worse. Removing one
+                // makes it better.
+                //
+                // ⚠️ CLUBS ONLY. Events and tournaments have no allocation picker, so
+                // this stays the place they are edited.
+                _lockClubAssignorFields(true);
             }
             form.style.display = 'block';
         } catch(e) {
             alert('Could not load contacts: ' + e.message);
         }
+    }
+
+    // Read-only, greyed, with the reason shown — rather than hidden, so you can
+    // still SEE who the assignor is while you are editing the other contacts.
+    function _lockClubAssignorFields(locked) {
+        const note = document.getElementById('cAssignorLocked');
+        if (note) note.style.display = locked ? 'block' : 'none';
+        ['cAssignorName', 'cAssignorEmail', 'cAssignorPhone'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.readOnly = locked;
+            el.style.background = locked ? '#f3efe9' : '';
+            el.style.color      = locked ? '#6b6459' : '';
+            el.title = locked ? "Set with the Change button on this club's row" : '';
+        });
     }
 
     async function saveContacts() {
