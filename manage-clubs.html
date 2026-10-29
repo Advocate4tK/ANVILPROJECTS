@@ -4676,6 +4676,38 @@
             + '<p style="font-size:0.82rem; color:#3f3a33; margin:-2px 0 12px;">Nothing here is in the club\'s record yet. Promote a section and it is written; leave it and nothing happens. Anything they left blank is never used to erase what you already hold.</p>'
             + blocks
             + '<div id="promoteMsg" style="font-size:0.85rem; font-weight:700; margin-top:4px;"></div>';
+
+        // ⛔ A SUBMISSION THAT MATCHES THE RECORD MUST STILL BE ABLE TO LEAVE THE
+        // QUEUE. status only flipped to 'promoted' inside promoteSection, which runs
+        // when a Promote button is pressed — and a club with nothing to apply has
+        // every button disabled. So it sat in "clubs have sent their details in" for
+        // ever, asking to be reviewed with nothing to review.
+        //
+        // Tod, 2026-10-29, after re-saving Portland's form: "when I click the link to
+        // promote it has nothing to promote because there already were venues... so
+        // it remaining on the page as needing to be reviewed."
+        //
+        // ⚠️ Only when there is genuinely nothing outstanding, and only from
+        // 'submitted'. It is not a shortcut past review — it is the review finishing
+        // with the answer "already true".
+        if (total === 0 && row.status === 'submitted') {
+            try {
+                await supabaseClient.client.from('club_questionnaires')
+                    .update({ status: 'promoted', promoted_at: new Date().toISOString() })
+                    .eq('id', row.id);
+                row.status = 'promoted';
+                const m = document.getElementById('promoteMsg');
+                if (m) {
+                    m.style.color = '#0b7a3b';
+                    m.textContent = '✓ Nothing to apply — the club record already matches what they sent. Marked as reviewed.';
+                }
+                // The green queue above is built from status, so refresh it.
+                if (typeof loadClubStatus === 'function') setTimeout(loadClubStatus, 400);
+            } catch (e) {
+                console.warn('could not mark questionnaire as reviewed', e);
+            }
+        }
+
         // ⭐ What is still waiting. promoteSection uses it to decide whether this
         // club is finished with or still belongs in the queue.
         return total;
