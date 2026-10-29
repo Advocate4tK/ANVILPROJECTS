@@ -98,6 +98,33 @@ type Recipient = {
   minor_name?:  string;
 };
 
+// ⛔ EVERY READ OF blast_recipients MUST PAGE. PostgREST caps a select at 1000
+// rows and says nothing about it. Blast #578 went to 871 referees + 206 parents
+// = 1077; the insert wrote all 1077, the .select() after it returned 1000, and
+// the function sent to exactly those — 77 people were never attempted and sat
+// queued with nothing watching them. Tod: "is this supposed to max out at 1000
+// emails?"
+//
+// ⚠️ It bites three places here: the send loop, Resume, and the read-back after
+// the insert. All three go through this.
+async function queueRows(db: any, blastId: number, statuses: string[]): Promise<Row[]> {
+  const PAGE = 1000;
+  const out: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db.from("blast_recipients")
+      .select("id,email,is_guardian,merge")
+      .eq("blast_id", blastId)
+      .in("status", statuses)
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) break;
+    const got = (data || []) as Row[];
+    out.push(...got);
+    if (got.length < PAGE) break;
+  }
+  return out;
+}
+
 // What a blast_recipients row has to carry so a retry can rebuild the merge
 // without the page re-sending the list. name/town/token/minor_name live in
 // the row's `merge` json column.
@@ -360,7 +387,7 @@ Deno.serve(async (req) => {
     const db = createClient(SUPABASE_URL, SERVICE_KEY);
     const { data: log } = await db.from("blast_log").select("id,subject,body,sent_by").eq("id", blastId).maybeSingle();
     if (!log) return json({ error: `Blast #${blastId} not found` }, 404);
-    const { data: rows } = await db.from("blast_recipients").select("id,email,is_guardian,merge").eq("blast_id", blastId).eq("status", "queued").order("id");
+    const rows = await queueRows(db, blastId, ["queued"]);
     if (!rows?.length) return json({ ok: true, blast_id: blastId, queued: 0, message: "Nothing left to send" });
     const { senderDisplay, replyTo } = await replyToFor(db, log.sent_by);
     EdgeRuntime.waitUntil(work(db, blastId, rows as Row[], log.subject, log.body, replyTo, senderDisplay));
@@ -401,7 +428,7 @@ Deno.serve(async (req) => {
     const blastId = Number(p.retry_blast_id);
     const { data: log } = await db.from("blast_log").select("id,subject,body").eq("id", blastId).maybeSingle();
     if (!log) return json({ error: `Blast #${blastId} not found` }, 404);
-    const { data: rows } = await db.from("blast_recipients").select("id,email,is_guardian,merge").eq("blast_id", blastId).in("status", ["failed", "queued"]).order("id");
+    const rows = await queueRows(db, blastId, ["failed", "queued"]);
     if (!rows?.length) return json({ ok: true, blast_id: blastId, queued: 0, message: "Nothing failed or waiting on that blast" });
     // Flip to queued BEFORE answering, and only start the worker once the
     // flip has landed — the page's watcher polls the moment it gets this
@@ -493,14 +520,26 @@ Deno.serve(async (req) => {
   }).select("id").single();
   if (lErr || !log) return json({ error: "Could not write blast_log: " + (lErr?.message || "?") }, 500);
 
-  const { data: rows, error: rErr } = await db.from("blast_recipients").insert(
+  // ⛔ INSERT WITHOUT A RETURNING SELECT. Asking for the rows back capped the
+  // answer at 1000 while happily writing all of them — which is precisely how 77
+  // recipients of blast #578 were written and then ignored.
+  const { error: rErr } = await db.from("blast_recipients").insert(
     recips.map(r => ({
       blast_id: log.id, referee_id: r.referee_id ?? null, email: r.email.trim(),
       is_guardian: !!r.is_guardian,
       merge: { name: r.name || "", town: r.town || "", token: r.token ?? null, minor_name: r.minor_name || "" },
     }))
-  ).select("id,email,is_guardian,merge");
-  if (rErr || !rows) return json({ error: "Could not write blast_recipients: " + (rErr?.message || "?") }, 500);
+  );
+  if (rErr) return json({ error: "Could not write blast_recipients: " + rErr.message }, 500);
+
+  // Read them back PAGED, so the send works from the whole list.
+  const rows = await queueRows(db, log.id, ["queued"]);
+  if (!rows.length) return json({ error: "Could not read back blast_recipients" }, 500);
+  // ⚠️ Say so rather than silently sending short. If these ever disagree, the
+  // number in the log is the one that was actually attempted.
+  if (rows.length !== recips.length) {
+    console.warn(`blast ${log.id}: queued ${rows.length} of ${recips.length} recipients`);
+  }
 
   // ── THE ASSIGNOR'S OWN COPY ────────────────────────────
   // Tod, 2026-10-13: "I would also like to receive an actual copy of the email
