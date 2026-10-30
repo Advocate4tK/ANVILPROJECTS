@@ -234,22 +234,34 @@ function footerFor(r: Recipient, sender?: { name?: string; mail?: string }): { t
   // has neither a reply_to nor an email on it.
   const mail = (sender?.mail || "").trim() || SENDER_MAIL_FALLBACK;
   const name = (sender?.name || "").trim() || "your assignor";
+  // ⛔ TOD'S WORDS, VERBATIM. Rewritten by him 2026-10-30 and pasted in whole.
+  // ⚠️ This footer is the one that drew the complaint from the state office —
+  // nothing in it gets reworded, tightened or "improved" without him writing the
+  // replacement himself. See project_csrp_complaint_optout.
   const why = r.is_guardian && r.minor_name
     ? `You are receiving this because you are listed as the parent or guardian of ${r.minor_name}, a referee I assign games to.`
-    : `You are receiving this because you are an official in or near the areas I assign, and this is an offer of games.`;
-  const whoFrom = `Sent by ${name}, a youth soccer assignor, using Referee Tool (${SENDER_ORG}).`;
+    : `You are receiving this email because you are an official in or near my assignment areas and are being offered game assignments.`;
+  const whoFrom = `Sent by ${name}, Youth Soccer Assignor, using Referee Tool (${SENDER_ORG}).`;
   // ⚠️ Say the negative explicitly. Leaving it to be inferred is what caused
-  // the complaint in the first place.
-  const notUs = `Referee Tool is not affiliated with, endorsed by, or operated by the Connecticut State Referee Program or any state association. Please send any questions about these emails to me at ${mail} — not to them.`;
-  const lines = [whoFrom, why, notUs];
+  // the complaint in the first place. The Central Assign sentence is his too —
+  // it tells an official where a confirmed assignment will actually appear.
+  const notUs = `Referee Tool is an independent service and is not affiliated with or endorsed by the Connecticut State Referee Program or any state referee association. Confirmed game assignments will also be uploaded to Central Assign.`;
+  const ask = `Questions? Contact me directly at ${mail}, not ${SENDER_ORG}.`;
+  const lines = [whoFrom, why, notUs, ask];
+
+  // ⚠️ His sentence reads "use your individual unsubscribe link" — so the plain
+  // text version still has to CARRY the link, or there is nothing to use. The
+  // HTML version makes those words the link itself.
+  const stopText = `To stop receiving these emails, use your individual unsubscribe link: ${unsub}`;
+  const stopHtml = `To stop receiving these emails, use your <a href="${unsub}" style="color:#777">individual unsubscribe link</a>.`;
 
   return {
     text: unsub
-      ? `${lines.join("\n")}\nTo stop receiving these emails: ${unsub}`
-      : lines.join("\n"),
+      ? `${lines.join("\n\n")}\n\n${stopText}`
+      : lines.join("\n\n"),
     html: unsub
-      ? `${lines.map(esc).join("<br>")}<br><a href="${unsub}" style="color:#777">Unsubscribe</a>`
-      : lines.map(esc).join("<br>"),
+      ? `${lines.map(esc).join("<br><br>")}<br><br>${stopHtml}`
+      : lines.map(esc).join("<br><br>"),
   };
 }
 
